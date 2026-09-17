@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -11,6 +12,7 @@ import threading
 from typing import Awaitable, Callable
 
 from deeptutor.services.path_service import get_path_service
+from deeptutor.services.workspace.execution import prepare_workspace_execution_env
 
 from .models import RenderedArtifact, RenderResult
 from .utils import slugify_filename, trim_error_message
@@ -56,6 +58,18 @@ class ManimRenderService:
         self.meta_dir = self.base_dir / "meta"
         for path in (self.source_dir, self.artifacts_dir, self.media_dir, self.meta_dir):
             path.mkdir(parents=True, exist_ok=True)
+
+    def _build_process_env(self) -> dict[str, str]:
+        """Use the standard per-turn environment for model-authored programs."""
+
+        env = os.environ.copy()
+        env.update(
+            prepare_workspace_execution_env(
+                self.base_dir,
+                workspace_root=self.workspace_root,
+            )
+        )
+        return env
 
     async def render(self, *, code: str, output_mode: str, quality: str) -> RenderResult:
         await self._emit_progress(f"Preparing {output_mode} render workspace (quality={quality}).")
@@ -171,6 +185,7 @@ class ManimRenderService:
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=self._build_process_env(),
         )
 
         _SENTINEL = None
