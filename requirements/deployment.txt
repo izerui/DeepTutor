@@ -7,5 +7,9 @@
 -r math-animator.txt
 
 # Settings -> Knowledge Base -> Document Parsing
-markitdown[all]>=0.1.7
+# MarkItDown 0.1.7's aggregate `all` extra incorrectly pins
+# youtube-transcript-api~=1.0.0, conflicting with DeepTutor's >=1.2,<2.
+# Listing every individual extra preserves the same format support while its
+# youtube-transcription extra accepts DeepTutor's newer compatible version.
+markitdown[audio-transcription,az-content-understanding,az-doc-intel,docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7
 pymupdf4llm>=1.28.2
