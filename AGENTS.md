@@ -136,3 +136,21 @@ Source extras (.[ extra ], defined in pyproject.toml):
 .[dev]            — Test / lint tooling
 .[all]            — Everything above
 ```
+
+## Local k3s Deployment
+
+Use these fixed entry points when the user asks to inspect the deployed service:
+
+- kubeconfig: `/Users/liuyuhua/.kube/config_k3s`
+- namespace: `prod`
+- Deployment: `deeptutor`
+- Pod selector: `app=deeptutor`
+- application container: `deeptutor`
+- deployed image: `serv999.com/ghcr/izerui/deeptutor:develop`
+- Kubernetes manifest: `/Users/liuyuhua/IdeaProjects/kubernetes/cluster/k3s/init/prod/deeptutor/app.yaml`
+
+```bash
+export KUBECONFIG=/Users/liuyuhua/.kube/config_k3s
+kubectl -n prod get pods -l app=deeptutor
+kubectl -n prod logs deploy/deeptutor --since=30m
+```
