@@ -1,0 +1,11 @@
+# Personal Docker deployment bundle.
+#
+# Keep the upstream runtime intact, then bake in the optional features used by
+# the Kubernetes deployment so pods never install packages during startup.
+
+-r ../requirements.txt
+-r math-animator.txt
+
+# Settings -> Knowledge Base -> Document Parsing
+markitdown[all]>=0.1.7
+pymupdf4llm>=1.28.2

@@ -63,6 +63,9 @@ FROM node:22-slim AS node-runtime
 # ============================================
 FROM python:3.11-slim AS python-base
 
+ARG DEEPTUTOR_REQUIREMENTS_FILE=requirements.txt
+ARG DEEPTUTOR_BUILD_APT_PACKAGES=""
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -86,6 +89,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     pkg-config \
     libssl-dev \
+    ${DEEPTUTOR_BUILD_APT_PACKAGES} \
     && rm -rf /var/lib/apt/lists/* \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
@@ -96,12 +100,15 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 COPY requirements/ ./requirements/
 COPY requirements.txt ./
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r "${DEEPTUTOR_REQUIREMENTS_FILE}"
 
 # ============================================
 # Stage 3: Production Image
 # ============================================
 FROM python:3.11-slim AS production
+
+ARG DEEPTUTOR_RUNTIME_APT_PACKAGES=""
+ARG DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS=0
 
 # Labels
 LABEL maintainer="DeepTutor Team" \
@@ -143,6 +150,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
+    ${DEEPTUTOR_RUNTIME_APT_PACKAGES} \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Node.js from node-runtime stage (platform-matched binary)
@@ -155,6 +163,13 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # Copy Python packages from builder stage
 COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=python-base /usr/local/bin /usr/local/bin
+
+RUN if [ "${DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS}" = "1" ]; then \
+        python -c "import manim, markitdown, pymupdf4llm"; \
+        command -v latex; \
+        command -v dvisvgm; \
+        command -v ffmpeg; \
+    fi
 
 # Copy built frontend from frontend-builder stage (standalone mode)
 # The standalone output contains a self-contained server.js + minimal node_modules
