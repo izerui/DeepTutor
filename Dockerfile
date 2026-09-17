@@ -108,6 +108,7 @@ RUN pip install --upgrade pip && \
 FROM python:3.11-slim AS production
 
 ARG DEEPTUTOR_RUNTIME_APT_PACKAGES=""
+ARG DEEPTUTOR_RUNTIME_FONT_PACKAGES=""
 ARG DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS=0
 
 # Labels
@@ -153,6 +154,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ${DEEPTUTOR_RUNTIME_APT_PACKAGES} \
     && rm -rf /var/lib/apt/lists/*
 
+RUN if [ -n "${DEEPTUTOR_RUNTIME_FONT_PACKAGES}" ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends ${DEEPTUTOR_RUNTIME_FONT_PACKAGES} \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Copy Node.js from node-runtime stage (platform-matched binary)
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
@@ -169,6 +176,7 @@ RUN if [ "${DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS}" = "1" ]; then \
         command -v latex; \
         command -v dvisvgm; \
         command -v ffmpeg; \
+        fc-list :lang=zh | grep -q .; \
     fi
 
 # Copy built frontend from frontend-builder stage (standalone mode)

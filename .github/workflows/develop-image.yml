@@ -72,6 +72,7 @@ jobs:
             DEEPTUTOR_REQUIREMENTS_FILE=requirements/deployment.txt
             DEEPTUTOR_BUILD_APT_PACKAGES=cmake libcairo2-dev libpango1.0-dev libffi-dev libegl-dev
             DEEPTUTOR_RUNTIME_APT_PACKAGES=ffmpeg libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libegl1 ghostscript fontconfig fonts-noto-core texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra texlive-science dvisvgm tipa
+            DEEPTUTOR_RUNTIME_FONT_PACKAGES=fonts-noto-cjk
             DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS=1
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
