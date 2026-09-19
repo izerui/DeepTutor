@@ -355,6 +355,8 @@ async def run_agentic_loop(
                 feedback = await on_intermediate(step.label, step.text)
                 if feedback:
                     messages.append({"role": "user", "content": feedback})
+            if messages and messages[-1].get("role") == "assistant":
+                messages.append({"role": "user", "content": "Continue."})
             continue
 
         # Defensive fallback for any future label value not covered above.
