@@ -126,7 +126,7 @@ class LLMConfig:
     context_window: int | None = None
     max_tokens: int = 4096
     temperature: float = 0.7
-    max_concurrency: int = 20
+    max_concurrency: int = 5
     requests_per_minute: int = 600
     traffic_controller: TrafficController | None = None
 
