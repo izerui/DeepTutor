@@ -494,6 +494,9 @@ function BookPageInner() {
         tone: 'error',
         durationMs: 8000,
       })
+      if (err instanceof BookApiError && err.status === 409) {
+        await loadBookDetail(detail.book.id)
+      }
     } finally {
       setResumingBook(false)
     }
@@ -513,6 +516,9 @@ function BookPageInner() {
         tone: 'error',
         durationMs: 8000,
       })
+      if (err instanceof BookApiError && err.status === 409) {
+        await loadBookDetail(detail.book.id)
+      }
     } finally {
       setPausingBook(false)
     }
@@ -603,6 +609,15 @@ function BookPageInner() {
         void compilePage(firstPage.id)
       }
       await refreshBooks()
+    } catch (err) {
+      const msg = bookErrorMessage(err, t)
+      notify(t('Confirm spine failed: {{message}}', { message: msg }), {
+        tone: 'error',
+        durationMs: 8000,
+      })
+      if (err instanceof BookApiError && err.status === 409) {
+        await loadBookDetail(detail.book.id)
+      }
     } finally {
       setConfirmingSpine(false)
     }
@@ -764,6 +779,9 @@ function BookPageInner() {
         tone: 'error',
         durationMs: 8000,
       })
+      if (err instanceof BookApiError && err.status === 409) {
+        await loadBookDetail(detail.book.id)
+      }
       console.error('regenerateBlock failed:', err)
     } finally {
       await hydratePage(pageId)
@@ -898,6 +916,9 @@ function BookPageInner() {
         tone: 'error',
         durationMs: 8000,
       })
+      if (err instanceof BookApiError && err.status === 409 && detail) {
+        await loadBookDetail(detail.book.id)
+      }
     } finally {
       setSupplementingBlockId(null)
     }
