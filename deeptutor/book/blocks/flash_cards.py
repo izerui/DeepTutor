@@ -51,15 +51,33 @@ class FlashCardsGenerator(BlockGenerator):
             for item in cards_raw[:count]:
                 if not isinstance(item, dict):
                     continue
-                front = str(item.get("front") or "").strip()
-                back = str(item.get("back") or "").strip()
+                front = str(
+                    item.get("front")
+                    or item.get("question")
+                    or item.get("term")
+                    or item.get("问题")
+                    or ""
+                ).strip()
+                back = str(
+                    item.get("back")
+                    or item.get("answer")
+                    or item.get("definition")
+                    or item.get("答案")
+                    or ""
+                ).strip()
                 if not front or not back:
                     continue
                 cards.append(
                     {
                         "front": front[:300],
                         "back": back[:600],
-                        "hint": str(item.get("hint") or "").strip()[:200],
+                        "hint": str(
+                            item.get("hint")
+                            or item.get("tip")
+                            or item.get("clue")
+                            or item.get("提示")
+                            or ""
+                        ).strip()[:200],
                     }
                 )
         if not cards:

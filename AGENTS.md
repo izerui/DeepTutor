@@ -212,6 +212,6 @@ When the user says "热部署" or "hot deploy", run the hot-deploy script to pus
 ```
 
 How it works:
-- **Backend**: `kubectl cp` changed `.py` files to `/app/deeptutor/` in the Pod, then kill the uvicorn process. Supervisor (`autorestart=true`) restarts it automatically.
-- **Frontend**: local `npm run build` in `web/`, tar the `.next/` directory (excluding cache), `kubectl cp` to Pod, replace `/app/web/.next/`, kill `next-server`. Supervisor restarts it. Includes automatic rollback on failure.
+- **Backend**: archive and atomically replace the complete local `deeptutor/` package, including untracked additions and local deletions, then restart uvicorn. The previous package is retained until `/health/ready` is stable and is restored automatically on failure.
+- **Frontend**: intended only for application-code debugging. It refuses to run when `package.json`, a lockfile, or `next.config.*` has local changes; those require a Linux-targeted image build. Otherwise it builds locally, preserves the Pod's image-provided Linux `node_modules`, and replaces only `server.js`, `.next`, and `public`. Those three paths are retained until the same `next-server` PID serves successful HTTP checks for several consecutive seconds and are restored automatically on failure.
 - Process manager: supervisord (PID 1), programs: `backend` (uvicorn) and `frontend` (node server.js).

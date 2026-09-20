@@ -5,6 +5,22 @@ import pytest
 from deeptutor.book.blocks import _llm_writer
 
 
+def test_single_flashcard_object_is_wrapped_without_a_retry() -> None:
+    card = {"front": "Question", "back": "Answer", "hint": "Clue"}
+
+    assert _llm_writer._normalize_json_payload(card, expected_key="cards") == {
+        "cards": [card]
+    }
+
+
+def test_flashcard_list_alias_is_normalized() -> None:
+    cards = [{"question": "Question", "answer": "Answer"}]
+
+    assert _llm_writer._normalize_json_payload(
+        {"flashcards": cards}, expected_key="cards"
+    ) == {"cards": cards}
+
+
 @pytest.mark.asyncio
 async def test_llm_json_normalizes_array_to_expected_key(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_llm_text(**_: object) -> str:

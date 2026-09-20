@@ -70,6 +70,18 @@ async def llm_text(
 def _normalize_json_payload(data: Any, expected_key: str | None = None) -> dict[str, Any]:
     """Normalize common LLM JSON shapes into an object for block generators."""
     if isinstance(data, dict):
+        if expected_key == "cards" and expected_key not in data:
+            for alias in ("flashcards", "flash_cards", "items", "闪卡"):
+                if isinstance(data.get(alias), list):
+                    return {expected_key: data[alias]}
+            card_key_pairs = (
+                ("front", "back"),
+                ("question", "answer"),
+                ("term", "definition"),
+                ("问题", "答案"),
+            )
+            if any(first in data and second in data for first, second in card_key_pairs):
+                return {expected_key: [data]}
         return data
 
     if isinstance(data, list):
