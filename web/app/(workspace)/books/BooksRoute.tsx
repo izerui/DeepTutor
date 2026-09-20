@@ -1136,7 +1136,7 @@ function BookPageInner() {
                     bookLanguage={detail?.book.language}
                     loading={!!compilingPageId && compilingPageId === selectedPage?.id}
                     onRegenerateBlock={
-                      canEditBook ? block => void handleRegenerateBlock(block) : undefined
+                      canEditBook ? block => handleRegenerateBlock(block) : undefined
                     }
                     onDeleteBlock={canEditBook ? block => void handleDeleteBlock(block) : undefined}
                     onMoveBlock={(block, dir) =>

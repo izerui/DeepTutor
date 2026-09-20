@@ -80,7 +80,7 @@ function hasPendingChapterEnd(bookId: string, pageId: string): boolean {
 
 export interface PageReaderProps {
   page: Page | null;
-  onRegenerateBlock?: (block: Block) => void;
+  onRegenerateBlock?: (block: Block) => Promise<void> | void;
   onDeleteBlock?: (block: Block) => void;
   onMoveBlock?: (block: Block, direction: "up" | "down") => void;
   onChangeBlockType?: (block: Block, newType: BlockType) => void;
@@ -148,6 +148,7 @@ export default function PageReader({
   /** The chapter outline starts parked so it never covers the prose unasked. */
   const [outlineCollapsed, setOutlineCollapsed] = useState(true);
   const [inserting, setInserting] = useState(false);
+  const [regeneratingBlockId, setRegeneratingBlockId] = useState<string | null>(null);
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(
     null,
   );
@@ -629,10 +630,23 @@ export default function PageReader({
                         </span>
                         {onRegenerateBlock && (
                           <button
-                            onClick={() => onRegenerateBlock(block)}
-                            className="rounded border border-current px-1.5 py-0.5 text-[11px] font-medium hover:bg-white/40 dark:hover:bg-white/10"
+                            onClick={async () => {
+                              setRegeneratingBlockId(block.id);
+                              try {
+                                await onRegenerateBlock(block);
+                              } finally {
+                                setRegeneratingBlockId(null);
+                              }
+                            }}
+                            disabled={regeneratingBlockId === block.id}
+                            className="inline-flex items-center gap-1 rounded border border-current px-1.5 py-0.5 text-[11px] font-medium hover:bg-white/40 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {t("Retry block")}
+                            {regeneratingBlockId === block.id && (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            )}
+                            {regeneratingBlockId === block.id
+                              ? t("Retrying…")
+                              : t("Retry block")}
                           </button>
                         )}
                       </div>
