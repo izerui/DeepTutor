@@ -50,6 +50,20 @@ RUN printf 'NEXT_PUBLIC_APP_VERSION=\n' > .env.local
 # This allows runtime environment variable injection
 RUN npm run build
 
+# Keep a content-addressed record of inputs whose changes require rebuilding
+# the image-provided Linux node_modules or Next.js runtime configuration.
+RUN for file in \
+        package.json \
+        package-lock.json \
+        npm-shrinkwrap.json \
+        pnpm-lock.yaml \
+        yarn.lock \
+        bun.lock \
+        bun.lockb \
+        next.config.*; do \
+        if [ -f "$file" ]; then sha256sum "$file"; fi; \
+    done | LC_ALL=C sort > /tmp/frontend-runtime-inputs.sha256
+
 # ============================================
 # Stage 1b: Node Runtime for Target Platform
 # ============================================
@@ -185,6 +199,7 @@ RUN if [ "${DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS}" = "1" ]; then \
 COPY --from=frontend-builder /app/web/.next/standalone/ ./web/
 COPY --from=frontend-builder /app/web/.next/static/ ./web/.next/static/
 COPY --from=frontend-builder /app/web/public/ ./web/public/
+COPY --from=frontend-builder /tmp/frontend-runtime-inputs.sha256 ./web/.hot-deploy-runtime-inputs.sha256
 
 # Copy application source code
 COPY deeptutor/ ./deeptutor/
