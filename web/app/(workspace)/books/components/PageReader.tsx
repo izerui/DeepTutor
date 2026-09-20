@@ -91,6 +91,7 @@ export interface PageReaderProps {
   /** Reader asked for extra practice on a quiz they got wrong. */
   onRequestSupplement?: (block: Block) => void;
   supplementingBlockId?: string | null;
+  regeneratingBlockId?: string | null;
   onUpdateBody?: (block: Block, body: string) => Promise<void> | void;
   /** Previous quiz answers, so they survive leaving and returning. */
   attempts?: QuizAttempt[];
@@ -128,6 +129,7 @@ export default function PageReader({
   onQuizAttempt,
   onRequestSupplement,
   supplementingBlockId,
+  regeneratingBlockId,
   onUpdateBody,
   attempts,
   onRecompile,
@@ -148,7 +150,6 @@ export default function PageReader({
   /** The chapter outline starts parked so it never covers the prose unasked. */
   const [outlineCollapsed, setOutlineCollapsed] = useState(true);
   const [inserting, setInserting] = useState(false);
-  const [regeneratingBlockId, setRegeneratingBlockId] = useState<string | null>(null);
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(
     null,
   );
@@ -630,15 +631,8 @@ export default function PageReader({
                         </span>
                         {onRegenerateBlock && (
                           <button
-                            onClick={async () => {
-                              setRegeneratingBlockId(block.id);
-                              try {
-                                await onRegenerateBlock(block);
-                              } finally {
-                                setRegeneratingBlockId(null);
-                              }
-                            }}
-                            disabled={regeneratingBlockId === block.id}
+                            onClick={() => onRegenerateBlock(block)}
+                            disabled={regeneratingBlockId !== null}
                             className="inline-flex items-center gap-1 rounded border border-current px-1.5 py-0.5 text-[11px] font-medium hover:bg-white/40 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {regeneratingBlockId === block.id && (
@@ -664,6 +658,8 @@ export default function PageReader({
                 <BlockRenderer
                   block={block}
                   onRegenerate={onRegenerateBlock}
+                  regenerating={regeneratingBlockId === block.id}
+                  regenerateDisabled={regeneratingBlockId !== null}
                   onDelete={onDeleteBlock}
                   onMove={onMoveBlock}
                   onChangeType={onChangeBlockType}

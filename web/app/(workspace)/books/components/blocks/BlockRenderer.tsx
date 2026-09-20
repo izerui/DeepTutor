@@ -63,6 +63,8 @@ const CHANGEABLE_TYPES: BlockType[] = [
 export interface BlockRendererProps {
   block: Block;
   onRegenerate?: (block: Block) => Promise<void> | void;
+  regenerating?: boolean;
+  regenerateDisabled?: boolean;
   onDelete?: (block: Block) => void;
   onMove?: (block: Block, direction: "up" | "down") => void;
   onChangeType?: (block: Block, newType: BlockType) => void;
@@ -84,6 +86,8 @@ export interface BlockRendererProps {
 export default function BlockRenderer({
   block,
   onRegenerate,
+  regenerating = false,
+  regenerateDisabled = false,
   onDelete,
   onMove,
   onChangeType,
@@ -103,7 +107,6 @@ export default function BlockRenderer({
   const [showTypeMenu, setShowTypeMenu] = useState(false);
   const [editingBody, setEditingBody] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
 
   // The delete control lives in a toolbar that only exists while the pointer is
   // over the block. Auto-disarm so an armed state can never outlive the
@@ -143,15 +146,8 @@ export default function BlockRenderer({
         </div>
         {onRegenerate && (
           <button
-            onClick={async () => {
-              setRegenerating(true);
-              try {
-                await onRegenerate(block);
-              } finally {
-                setRegenerating(false);
-              }
-            }}
-            disabled={regenerating}
+            onClick={() => onRegenerate(block)}
+            disabled={regenerateDisabled}
             className="mt-2 inline-flex items-center gap-1 rounded-md border border-rose-400/60 bg-white/40 px-2 py-1 text-xs font-medium hover:bg-white/60 dark:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {regenerating && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -337,15 +333,8 @@ export default function BlockRenderer({
           )}
           {onRegenerate && (
             <button
-              onClick={async () => {
-                setRegenerating(true);
-                try {
-                  await onRegenerate(block);
-                } finally {
-                  setRegenerating(false);
-                }
-              }}
-              disabled={regenerating}
+              onClick={() => onRegenerate(block)}
+              disabled={regenerateDisabled}
               className="pointer-events-auto rounded p-1 hover:bg-[var(--background)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-50"
               title={t("Regenerate")}
             >

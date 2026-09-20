@@ -137,7 +137,7 @@ Source extras (.[ extra ], defined in pyproject.toml):
 .[all]            — Everything above
 ```
 
-## Local k3s Deployment
+## Production k3s Deployment (生产环境)
 
 Use these fixed entry points when the user asks to inspect the deployed service:
 
@@ -154,3 +154,64 @@ export KUBECONFIG=/Users/liuyuhua/.kube/config_k3s
 kubectl -n prod get pods -l app=deeptutor
 kubectl -n prod logs deploy/deeptutor --since=30m
 ```
+
+### Debugging & Troubleshooting (线上调试)
+
+Always set `KUBECONFIG` first:
+```bash
+export KUBECONFIG=/Users/liuyuhua/.kube/config_k3s
+POD=$(kubectl -n prod get pods -l app=deeptutor -o jsonpath='{.items[0].metadata.name}')
+```
+
+Common operations:
+```bash
+# View recent backend logs (filter by keyword)
+kubectl -n prod logs $POD -c deeptutor --since=10m | grep -i "error\|fail\|warning"
+
+# Tail logs in real time
+kubectl -n prod logs $POD -c deeptutor -f
+
+# Check process status inside the Pod
+kubectl -n prod exec $POD -c deeptutor -- ps aux
+
+# Exec into the Pod for interactive debugging
+kubectl -n prod exec -it $POD -c deeptutor -- bash
+
+# Check a specific Python file on the Pod
+kubectl -n prod exec $POD -c deeptutor -- cat /app/deeptutor/path/to/file.py
+
+# Check frontend build on the Pod
+kubectl -n prod exec $POD -c deeptutor -- cat /app/web/.next/BUILD_ID
+
+# Restart backend only (supervisor auto-restarts)
+kubectl -n prod exec $POD -c deeptutor -- bash -c 'kill $(pgrep -f uvicorn)'
+
+# Restart frontend only
+kubectl -n prod exec $POD -c deeptutor -- bash -c 'kill -9 $(pgrep -f next-server)'
+
+# View Pod events and resource usage
+kubectl -n prod describe pod $POD
+kubectl -n prod top pod $POD
+```
+
+When investigating bugs reported by the user, check the Pod logs first to find backend errors, then correlate with the frontend behavior.
+
+### Hot Deploy (热部署)
+
+When the user says "热部署" or "hot deploy", run the hot-deploy script to push local changes to the running Pod without rebuilding the image.
+
+```bash
+# Deploy both frontend and backend
+./scripts/hot-deploy.sh
+
+# Backend only (seconds, just cp Python files + restart uvicorn)
+./scripts/hot-deploy.sh backend
+
+# Frontend only (requires local npm run build, ~1-2 min)
+./scripts/hot-deploy.sh frontend
+```
+
+How it works:
+- **Backend**: `kubectl cp` changed `.py` files to `/app/deeptutor/` in the Pod, then kill the uvicorn process. Supervisor (`autorestart=true`) restarts it automatically.
+- **Frontend**: local `npm run build` in `web/`, tar the `.next/` directory (excluding cache), `kubectl cp` to Pod, replace `/app/web/.next/`, kill `next-server`. Supervisor restarts it. Includes automatic rollback on failure.
+- Process manager: supervisord (PID 1), programs: `backend` (uvicorn) and `frontend` (node server.js).

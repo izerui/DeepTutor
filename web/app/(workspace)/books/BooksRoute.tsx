@@ -131,6 +131,8 @@ function BookPageInner() {
   const [resumingBook, setResumingBook] = useState(false)
   const [pausingBook, setPausingBook] = useState(false)
   const [supplementingBlockId, setSupplementingBlockId] = useState<string | null>(null)
+  const [regeneratingBlockId, setRegeneratingBlockId] = useState<string | null>(null)
+  const regeneratingBlockIdRef = useRef<string | null>(null)
   const [learningCaptures, setLearningCaptures] = useState<LearningCapture[]>([])
   const [loadingLearningCaptures, setLoadingLearningCaptures] = useState(false)
 
@@ -762,8 +764,10 @@ function BookPageInner() {
     })
 
   const handleRegenerateBlock = async (block: Block) => {
-    if (!detail || !selectedPage) return
+    if (!detail || !selectedPage || regeneratingBlockIdRef.current) return
     const pageId = selectedPage.id
+    regeneratingBlockIdRef.current = block.id
+    setRegeneratingBlockId(block.id)
     try {
       const { book_revision } = await bookApi.regenerateBlock(
         detail.book.id,
@@ -785,6 +789,8 @@ function BookPageInner() {
       console.error('regenerateBlock failed:', err)
     } finally {
       await hydratePage(pageId)
+      regeneratingBlockIdRef.current = null
+      setRegeneratingBlockId(null)
     }
   }
 
@@ -1155,6 +1161,7 @@ function BookPageInner() {
                       canEditBook ? block => void handleRequestSupplement(block) : undefined
                     }
                     supplementingBlockId={supplementingBlockId}
+                    regeneratingBlockId={regeneratingBlockId}
                     onUpdateBody={canEditBook ? handleUpdateBody : undefined}
                     attempts={detail?.progress.quiz_attempts}
                     previousPage={pageNeighbours.previous}
