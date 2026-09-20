@@ -32,3 +32,16 @@ test('the retry lock is released only after the regenerated page is hydrated', (
       handler.indexOf('regeneratingBlockIdRef.current = null')
   )
 })
+
+test('personal-book regeneration retries once with the server revision after a stale-token conflict', () => {
+  const route = source('app/(workspace)/books/BooksRoute.tsx')
+  const handlerStart = route.indexOf('const handleRegenerateBlock')
+  const handlerEnd = route.indexOf('const handleDeleteBlock', handlerStart)
+  const handler = route.slice(handlerStart, handlerEnd)
+
+  assert.ok(handler.includes("err.code !== 'book_revision_conflict'"))
+  assert.ok(handler.includes("detail.book.source === 'shared'"))
+  assert.ok(handler.includes('applyBookRevision(err.currentRevision)'))
+  assert.ok(handler.includes('return regenerate(err.currentRevision)'))
+  assert.ok(handler.includes('const msg = bookErrorMessage(err, t)'))
+})

@@ -765,26 +765,43 @@ function BookPageInner() {
 
   const handleRegenerateBlock = async (block: Block) => {
     if (!detail || !selectedPage || regeneratingBlockIdRef.current) return
+    const bookId = detail.book.id
+    const isSharedBook = detail.book.source === 'shared'
     const pageId = selectedPage.id
     regeneratingBlockIdRef.current = block.id
     setRegeneratingBlockId(block.id)
     try {
-      const { book_revision } = await bookApi.regenerateBlock(
-        detail.book.id,
-        pageId,
-        block.id,
-        undefined,
-        currentRevision()
-      )
+      const regenerate = (expectedRevision: number | undefined) =>
+        bookApi.regenerateBlock(bookId, pageId, block.id, undefined, expectedRevision)
+
+      const result = await regenerate(currentRevision()).catch(err => {
+        // Background chapter generation also advances the book revision. For
+        // a personal book there is no collaborator to overwrite, so catch up
+        // to the server token and transparently retry the requested action.
+        // Shared books keep the conflict visible to protect another editor's
+        // newly-written content.
+        if (
+          !(err instanceof BookApiError) ||
+          err.code !== 'book_revision_conflict' ||
+          isSharedBook ||
+          err.currentRevision === undefined
+        ) {
+          return Promise.reject(err)
+        }
+        applyBookRevision(err.currentRevision)
+        return regenerate(err.currentRevision)
+      })
+
+      const { book_revision } = result
       applyBookRevision(book_revision)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = bookErrorMessage(err, t)
       notify(t('Regenerate block failed: {{message}}', { message: msg }), {
         tone: 'error',
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(bookId)
       }
       console.error('regenerateBlock failed:', err)
     } finally {
