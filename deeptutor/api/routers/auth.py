@@ -576,6 +576,16 @@ async def auth_status(
     )
 
 
+def _run_post_login_migrations(user_id: str) -> None:
+    """Persist any pending grant schema migrations for this user."""
+    try:
+        from deeptutor.multi_user.grants import migrate_learner_grant
+
+        migrate_learner_grant(user_id)
+    except Exception:
+        logger.debug("Post-login grant migration skipped for %s", user_id, exc_info=True)
+
+
 @router.post("/login")
 async def login(body: LoginRequest, response: Response) -> dict:
     """Validate credentials and set a JWT cookie."""
@@ -593,6 +603,7 @@ async def login(body: LoginRequest, response: Response) -> dict:
             )
         payload, pb_token = pb_result
         response.set_cookie(value=pb_token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
+        _run_post_login_migrations(payload.user_id)
         logger.info(f"User '{payload.username}' logged in via PocketBase (role={payload.role!r})")
         return {
             "ok": True,
@@ -613,6 +624,7 @@ async def login(body: LoginRequest, response: Response) -> dict:
     token = create_token(result.username, result.role, result.user_id)
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
 
+    _run_post_login_migrations(result.user_id)
     logger.info(f"User '{result.username}' logged in (role={result.role!r})")
     return {
         "ok": True,
@@ -656,6 +668,7 @@ async def device_login(body: DeviceLoginRequest, response: Response) -> dict:
         device_session_nonce=payload.device_session_nonce,
     )
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
+    _run_post_login_migrations(payload.user_id)
     logger.info(f"User '{payload.username}' logged in with a device credential")
     return {
         "ok": True,

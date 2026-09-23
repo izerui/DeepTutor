@@ -1327,3 +1327,243 @@ def test_resolve_persona_missing_error_is_not_retryable(
 
     assert exc_info.value.error_code == "learning_persona_missing"
     assert exc_info.value.retryable is False
+
+
+# ---------------------------------------------------------------------------
+# Regression: default learner v2 includes settings surface (#settings-403)
+# ---------------------------------------------------------------------------
+
+
+def test_default_learner_grant_includes_settings_surface(mu_isolated_root, seed_user):
+    """learner_grant() must include 'settings' so the UI settings page loads."""
+    from deeptutor.multi_user.grants import learner_grant
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+    grant = learner_grant(learner["id"])
+    surfaces = grant["learning_policy"]["allowed_surfaces"]
+    assert "settings" in surfaces
+
+
+def test_learner_get_settings_allowed_put_catalog_denied(
+    mu_isolated_root, seed_user, monkeypatch
+):
+    """Default learner can GET /api/settings but PUT /api/settings/catalog is 403."""
+    from deeptutor.multi_user.grants import learner_grant
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+    grant = learner_grant(learner["id"])
+    save_grant(learner["id"], grant)
+
+    client = _settings_http_client(monkeypatch, learner["id"])
+
+    get_resp = client.get(
+        "/api/settings",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert get_resp.status_code == 200
+
+    put_resp = client.put(
+        "/api/settings/catalog",
+        headers={"Authorization": "Bearer test-token"},
+        json={"catalog": {}},
+    )
+    assert put_resp.status_code == 403
+
+
+def test_migrate_backfills_settings_surface(mu_isolated_root, seed_user):
+    """migrate_learner_grant adds 'settings' to a v2 grant that lacks it."""
+    import json as _json
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+    v2_grant_without_settings = {
+        "version": 2,
+        "user_id": learner["id"],
+        "models": {"llm": []},
+        "knowledge_bases": [],
+        "skills": [],
+        "partners": [],
+        "enabled_tools": [],
+        "mcp_tools": [],
+        "cli_apps": [],
+        "exec_enabled": False,
+        "learning_policy": {
+            "policy_version": 2,
+            "age_band": "9-12",
+            "locked_persona": "teacher",
+            "allowed_capabilities": ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
+            "default_capability": "immersive_reading",
+            "allowed_surfaces": [
+                "chat", "reading", "mastery", "books", "watching",
+                "partners", "agents", "writing", "notebook", "dashboard",
+                "voice", "knowledge", "memory", "files",
+            ],
+            "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+        },
+    }
+    path = grant_path(learner["id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps(v2_grant_without_settings, indent=2), encoding="utf-8")
+
+    assert migrate_learner_grant(learner["id"]) is True
+
+    on_disk = _json.loads(path.read_text(encoding="utf-8"))
+    assert "settings" in on_disk["learning_policy"]["allowed_surfaces"]
+
+
+def test_custom_v2_policy_without_settings_unchanged(mu_isolated_root, seed_user):
+    """An admin-customized v2 policy that removed 'settings' must not be altered."""
+    import json as _json
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+    custom_v2_grant = {
+        "version": 2,
+        "user_id": learner["id"],
+        "models": {"llm": []},
+        "knowledge_bases": [],
+        "skills": [],
+        "partners": [],
+        "enabled_tools": [],
+        "mcp_tools": [],
+        "cli_apps": [],
+        "exec_enabled": False,
+        "learning_policy": {
+            "policy_version": 2,
+            "age_band": "9-12",
+            "locked_persona": "teacher",
+            "allowed_capabilities": ["chat", "immersive_reading"],
+            "default_capability": "immersive_reading",
+            "allowed_surfaces": ["chat", "reading", "mastery"],
+            "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+        },
+    }
+    path = grant_path(learner["id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    original_bytes = _json.dumps(custom_v2_grant, indent=2).encode("utf-8")
+    path.write_bytes(original_bytes)
+
+    assert migrate_learner_grant(learner["id"]) is False
+    assert path.read_bytes() == original_bytes
+
+    loaded = normalize_grant(learner["id"], custom_v2_grant)
+    assert "settings" not in loaded["learning_policy"]["allowed_surfaces"]
+
+
+def test_anomalous_surfaces_not_migrated(mu_isolated_root, seed_user):
+    """A v2 grant with non-string or empty-string surfaces must not be silently cleaned and migrated."""
+    import json as _json
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+
+    old_default_surfaces = [
+        "chat", "reading", "mastery", "books", "watching",
+        "partners", "agents", "writing", "notebook", "dashboard",
+        "voice", "knowledge", "memory", "files",
+    ]
+
+    for anomalous_surfaces in [
+        old_default_surfaces + [""],
+        old_default_surfaces + [123],
+        old_default_surfaces + ["chat"],
+        list(reversed(old_default_surfaces)),
+    ]:
+        grant_data = {
+            "version": 2,
+            "user_id": learner["id"],
+            "models": {"llm": []},
+            "knowledge_bases": [],
+            "skills": [],
+            "partners": [],
+            "enabled_tools": [],
+            "mcp_tools": [],
+            "cli_apps": [],
+            "exec_enabled": False,
+            "learning_policy": {
+                "policy_version": 2,
+                "age_band": "9-12",
+                "locked_persona": "teacher",
+                "allowed_capabilities": ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
+                "default_capability": "immersive_reading",
+                "allowed_surfaces": anomalous_surfaces,
+                "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+            },
+        }
+        path = grant_path(learner["id"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        original_bytes = _json.dumps(grant_data, indent=2).encode("utf-8")
+        path.write_bytes(original_bytes)
+
+        assert migrate_learner_grant(learner["id"]) is False, (
+            f"Should not migrate anomalous surfaces: {anomalous_surfaces!r}"
+        )
+        assert path.read_bytes() == original_bytes
+
+        loaded = normalize_grant(learner["id"], grant_data)
+        assert "settings" not in loaded["learning_policy"]["allowed_surfaces"], (
+            f"normalize_grant should not backfill settings for: {anomalous_surfaces!r}"
+        )
+
+
+def test_login_persists_settings_surface_migration(mu_isolated_root, seed_user, monkeypatch):
+    """POST /api/auth/login triggers migrate_learner_grant, persisting 'settings' to disk."""
+    import json as _json
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import deeptutor.api.routers.auth as auth_mod
+    from deeptutor.services.auth import TokenPayload
+
+    learner = _seed_learner(seed_user, "student")
+    set_preset("student", "learner")
+
+    v2_grant_without_settings = {
+        "version": 2,
+        "user_id": learner["id"],
+        "models": {"llm": []},
+        "knowledge_bases": [],
+        "skills": [],
+        "partners": [],
+        "enabled_tools": [],
+        "mcp_tools": [],
+        "cli_apps": [],
+        "exec_enabled": False,
+        "learning_policy": {
+            "policy_version": 2,
+            "age_band": "9-12",
+            "locked_persona": "teacher",
+            "allowed_capabilities": ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
+            "default_capability": "immersive_reading",
+            "allowed_surfaces": [
+                "chat", "reading", "mastery", "books", "watching",
+                "partners", "agents", "writing", "notebook", "dashboard",
+                "voice", "knowledge", "memory", "files",
+            ],
+            "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+        },
+    }
+    path = grant_path(learner["id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps(v2_grant_without_settings, indent=2), encoding="utf-8")
+
+    assert "settings" not in _json.loads(path.read_text())["learning_policy"]["allowed_surfaces"]
+
+    payload = TokenPayload(username="student", role="user", user_id=learner["id"])
+    monkeypatch.setattr(auth_mod, "AUTH_ENABLED", True)
+    monkeypatch.setattr(auth_mod, "POCKETBASE_ENABLED", False)
+    monkeypatch.setattr(auth_mod, "authenticate", lambda _u, _p: payload)
+    monkeypatch.setattr(auth_mod, "create_token", lambda *a, **kw: "fake-jwt-token")
+
+    app = FastAPI()
+    app.include_router(auth_mod.router, prefix="/api/auth")
+    client = TestClient(app)
+
+    resp = client.post("/api/auth/login", json={"username": "student", "password": "pass"})
+    assert resp.status_code == 200
+
+    on_disk = _json.loads(path.read_text(encoding="utf-8"))
+    assert "settings" in on_disk["learning_policy"]["allowed_surfaces"]

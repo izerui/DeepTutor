@@ -176,8 +176,11 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
         base[key] = _normalize_tool_list(payload.get(key))
     exec_enabled = payload.get("exec_enabled")
     base["exec_enabled"] = bool(exec_enabled) if isinstance(exec_enabled, bool) else None
-    base["learning_policy"] = _normalize_learning_policy(payload.get("learning_policy"))
+    raw_lp = payload.get("learning_policy")
+    raw_surfaces = raw_lp.get("allowed_surfaces") if isinstance(raw_lp, dict) else None
+    base["learning_policy"] = _normalize_learning_policy(raw_lp)
     _migrate_learner_v1_to_v2(user_id, base["learning_policy"])
+    _migrate_learner_v2_add_settings(user_id, base["learning_policy"], raw_surfaces)
     return base
 
 
@@ -198,7 +201,7 @@ _LEARNER_V2_CAPABILITIES = ["chat", "immersive_reading", "mastery_path", "immers
 _LEARNER_V2_SURFACES = [
     "chat", "reading", "mastery", "books", "watching",
     "partners", "agents", "writing", "notebook", "dashboard",
-    "voice", "knowledge", "memory", "files",
+    "voice", "knowledge", "memory", "files", "settings",
 ]
 
 
@@ -222,6 +225,43 @@ def _migrate_learner_v1_to_v2(user_id: str, policy: dict[str, Any] | None) -> No
         policy["policy_version"] = 2
 
 
+_LEARNER_V2_SURFACES_BEFORE_SETTINGS = [
+    "chat", "reading", "mastery", "books", "watching",
+    "partners", "agents", "writing", "notebook", "dashboard",
+    "voice", "knowledge", "memory", "files",
+]
+
+
+def _migrate_learner_v2_add_settings(
+    user_id: str,
+    policy: dict[str, Any] | None,
+    raw_surfaces: Any = None,
+) -> None:
+    """Back-fill "settings" into v2 learner accounts whose raw on-disk surfaces
+    exactly match the old default (before "settings" was added).
+
+    The check uses the pre-normalization ``raw_surfaces`` so that anomalous
+    data (empty strings, non-string values) is never silently cleaned into the
+    old default and mistaken for an unmodified policy. Admin-customized
+    policies are never touched.  Pinned to ``policy_version == 2`` so future
+    schema versions are not accidentally matched.
+    """
+    if not isinstance(policy, dict):
+        return
+    if policy.get("policy_version", 1) != 2:
+        return
+    user = get_user_by_id(user_id)
+    if user is None or str(user[1].get("preset") or "standard") != "learner":
+        return
+    if not isinstance(raw_surfaces, list):
+        return
+    if raw_surfaces != _LEARNER_V2_SURFACES_BEFORE_SETTINGS:
+        return
+    surfaces = policy.get("allowed_surfaces")
+    if isinstance(surfaces, list) and "settings" not in surfaces:
+        surfaces.append("settings")
+
+
 def learner_grant(user_id: str) -> dict[str, Any]:
     """Return the conservative server-enforced expansion of the learner preset."""
     return normalize_grant(
@@ -240,7 +280,7 @@ def learner_grant(user_id: str) -> dict[str, Any]:
                 "allowed_surfaces": [
                     "chat", "reading", "mastery", "books", "watching",
                     "partners", "agents", "writing", "notebook", "dashboard",
-                    "voice", "knowledge", "memory", "files",
+                    "voice", "knowledge", "memory", "files", "settings",
                 ],
                 "reading": {
                     "allow_upload": False,
@@ -253,7 +293,7 @@ def learner_grant(user_id: str) -> dict[str, Any]:
 
 
 def migrate_learner_grant(user_id: str) -> bool:
-    """Persist a v1→v2 learner policy upgrade atomically.
+    """Persist learner policy upgrades atomically (v1→v2 and surface back-fills).
 
     Returns True if the file was rewritten, False if no migration was needed
     or the account is not a learner. Leaves the original file intact on any
@@ -270,12 +310,22 @@ def migrate_learner_grant(user_id: str) -> bool:
         raw_policy = raw.get("learning_policy") if isinstance(raw, dict) else None
         if not isinstance(raw_policy, dict):
             return False
-        if raw_policy.get("policy_version", 1) >= 2:
-            return False
         try:
             migrated = normalize_grant(user_id, raw)
             migrated_policy = migrated.get("learning_policy")
-            if not isinstance(migrated_policy, dict) or migrated_policy.get("policy_version", 1) < 2:
+            if not isinstance(migrated_policy, dict):
+                return False
+            raw_version = raw_policy.get("policy_version", 1)
+            migrated_version = migrated_policy.get("policy_version", 1)
+            v1_to_v2 = raw_version < 2 and migrated_version >= 2
+            raw_surfaces = raw_policy.get("allowed_surfaces")
+            settings_backfill = (
+                raw_version == 2
+                and isinstance(raw_surfaces, list)
+                and raw_surfaces == _LEARNER_V2_SURFACES_BEFORE_SETTINGS
+            )
+            changed = v1_to_v2 or settings_backfill
+            if not changed:
                 return False
             validate_grant(migrated)
             _atomic_write_json(path, migrated)
