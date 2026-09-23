@@ -432,13 +432,13 @@ class TurnExecutor:
 
             # Persona: at most one behaviour preset per turn, eagerly
             # injected (a persona must shape the voice from the first
-            # token). Resolution: the user's own workspace first; non-admin
-            # users fall back to admin-authored presets (personas carry no
-            # privileged workflow, so no grant gate applies).
+            # token). Resolution: learning-policy accounts always load
+            # from the admin persona directory (prevents user-side
+            # overrides of protected presets). Other non-admin users
+            # try own workspace first, then fall back to admin presets.
             from deeptutor.multi_user.context import get_current_user
             from deeptutor.multi_user.paths import get_admin_path_service
             from deeptutor.multi_user.skill_access import assigned_skill_ids
-            from deeptutor.services.persona import PersonaService, get_persona_service
             from deeptutor.services.skill.service import SkillService, render_skills_manifest
 
             current_user = get_current_user()
@@ -451,14 +451,11 @@ class TurnExecutor:
                 if account and str(account[1].get("preset") or "standard") == "learner":
                     learner_profile_prompt = prompt_block(account[1].get("learner_profile"))
             requested_persona = str(payload.get("persona") or "").strip()
-            persona_context = ""
-            if requested_persona:
-                persona_context = get_persona_service().load_for_context(requested_persona)
-                if not persona_context and not current_user.is_admin:
-                    persona_context = PersonaService(
-                        root=get_admin_path_service().get_workspace_dir() / "personas"
-                    ).load_for_context(requested_persona)
-            active_persona = requested_persona if persona_context else ""
+            from deeptutor.multi_user.learning_access import resolve_persona_context
+
+            persona_context, active_persona = resolve_persona_context(
+                requested_persona, is_admin=current_user.is_admin
+            )
 
             # Skills: never user-selected per turn. The model sees a
             # one-line manifest of every skill visible to this user (own +
