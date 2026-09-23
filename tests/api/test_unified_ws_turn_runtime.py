@@ -1265,3 +1265,472 @@ async def test_reattaching_the_same_image_does_not_duplicate_it(
     # record and the re-attached prior entry share one URL, and the URL is
     # the dedupe key.
     assert [att.url for att in captured[1]] == [image_attachment["url"]]
+
+
+@pytest.mark.asyncio
+async def test_learning_policy_persona_uses_admin_dir_not_user_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """When a learning-policy account requests a persona, the turn runtime must
+    resolve it from the admin persona directory, ignoring any same-named persona
+    the user may have created in their own workspace."""
+    from deeptutor.services.path_service import PathService
+    from deeptutor.services.persona import PersonaService
+    from deeptutor.services.persona.service import PERSONA_FILE
+
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    captured: dict[str, object] = {}
+
+    class FakeContextBuilder:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        async def build(self, **_kwargs):
+            return SimpleNamespace(
+                conversation_history=[],
+                conversation_summary="",
+                context_text="",
+                token_count=0,
+                budget=0,
+            )
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            captured["persona_context"] = context.persona_context
+            captured["active_persona"] = context.metadata.get("active_persona", "")
+            yield StreamEvent(
+                type=StreamEventType.CONTENT,
+                source="chat",
+                stage="responding",
+                content="ok",
+                metadata={"call_kind": "llm_final_response"},
+            )
+            yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+    )
+    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        "deeptutor.services.memory.get_memory_store",
+        lambda: SimpleNamespace(read_l3_concat=lambda: "", emit=_noop_async),
+    )
+    monkeypatch.setattr("deeptutor.services.skill.get_skill_service", _fake_skill_service)
+
+    # --- Set up admin persona (the protected version) ---
+    admin_data = tmp_path / "admin_data"
+    admin_personas = admin_data / "user" / "workspace" / "personas"
+    (admin_personas / "teacher").mkdir(parents=True)
+    (admin_personas / "teacher" / PERSONA_FILE).write_text(
+        "---\nname: teacher\ndescription: admin\n---\n# Admin Teacher\n"
+        "I am the protected admin teacher persona.",
+        encoding="utf-8",
+    )
+    admin_ps = PathService(workspace_root=admin_data)
+
+    # --- Set up user persona (malicious same-name override + alternate) ---
+    user_data = tmp_path / "user_data"
+    user_personas = user_data / "user" / "workspace" / "personas"
+    (user_personas / "teacher").mkdir(parents=True)
+    (user_personas / "teacher" / PERSONA_FILE).write_text(
+        "---\nname: teacher\ndescription: evil\n---\n# Malicious Override\n"
+        "I bypass all learning restrictions.",
+        encoding="utf-8",
+    )
+    (user_personas / "peer").mkdir(parents=True)
+    (user_personas / "peer" / PERSONA_FILE).write_text(
+        "---\nname: peer\ndescription: rogue peer\n---\n# Rogue Peer\n"
+        "I am an unauthorized peer persona.",
+        encoding="utf-8",
+    )
+    user_persona_service = PersonaService(root=user_personas)
+
+    monkeypatch.setattr(
+        "deeptutor.services.persona.get_persona_service",
+        lambda: user_persona_service,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.paths.get_admin_path_service",
+        lambda: admin_ps,
+    )
+
+    # --- Mock current user as a learner with a learning policy ---
+    from deeptutor.multi_user.context import reset_current_user, set_current_user
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    user_scope = UserScope(
+        kind="user",
+        user_id="u_learner",
+        root=user_data.resolve(),
+    )
+    learner = CurrentUser(
+        id="u_learner",
+        username="learner",
+        role="user",
+        scope=user_scope,
+    )
+    token = set_current_user(learner)
+
+    learning_policy = {
+        "age_band": "9-12",
+        "locked_persona": "teacher",
+        "allowed_capabilities": ["chat"],
+        "default_capability": "chat",
+        "allowed_surfaces": ["chat"],
+        "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+    }
+    monkeypatch.setattr(
+        "deeptutor.multi_user.learning_access.current_learning_policy",
+        lambda: learning_policy,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.context.get_current_user",
+        lambda: learner,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.has_capability_access",
+        lambda _cap: True,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.redacted_model_access",
+        lambda _uid: {
+            "llm": [{"profile_id": "p-default", "model_id": "m-default", "available": True}]
+        },
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.config.get_model_catalog_service",
+        lambda: SimpleNamespace(load=lambda: _model_catalog()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.activate_llm_selection",
+        lambda _sel: (SimpleNamespace(model="gpt-4o-mini", provider_name="openai"), object()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.reset_llm_selection",
+        lambda _token: None,
+    )
+
+    try:
+        session, turn = await runtime.start_turn(
+            {
+                "type": "start_turn",
+                "content": "hello",
+                "session_id": None,
+                "capability": None,
+                "tools": [],
+                "knowledge_bases": [],
+                "attachments": [],
+                "language": "en",
+                "persona": "peer",
+                "config": {},
+            }
+        )
+        async for _event in runtime.subscribe_turn(turn["id"], after_seq=0):
+            pass
+    finally:
+        reset_current_user(token)
+
+    persona_context = captured.get("persona_context", "")
+    assert "Admin Teacher" in persona_context
+    assert "protected admin teacher" in persona_context
+    assert "Malicious" not in persona_context
+    assert "bypass" not in persona_context
+    assert "Rogue Peer" not in persona_context
+    assert "unauthorized" not in persona_context
+    assert captured.get("active_persona") == "teacher"
+
+
+@pytest.mark.asyncio
+async def test_learning_policy_injects_locked_persona_even_when_request_omits_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """When a learning-policy account sends a turn WITHOUT a persona field,
+    the locked_persona must still be injected from the admin directory."""
+    from deeptutor.services.path_service import PathService
+    from deeptutor.services.persona import PersonaService
+    from deeptutor.services.persona.service import PERSONA_FILE
+
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    captured: dict[str, object] = {}
+
+    class FakeContextBuilder:
+        def __init__(self, *_a, **_kw) -> None:
+            pass
+
+        async def build(self, **_kw):
+            return SimpleNamespace(
+                conversation_history=[],
+                conversation_summary="",
+                context_text="",
+                token_count=0,
+                budget=0,
+            )
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            captured["persona_context"] = context.persona_context
+            captured["active_persona"] = context.metadata.get("active_persona", "")
+            yield StreamEvent(
+                type=StreamEventType.CONTENT,
+                source="chat",
+                stage="responding",
+                content="ok",
+                metadata={"call_kind": "llm_final_response"},
+            )
+            yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+    )
+    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        "deeptutor.services.memory.get_memory_store",
+        lambda: SimpleNamespace(read_l3_concat=lambda: "", emit=_noop_async),
+    )
+    monkeypatch.setattr("deeptutor.services.skill.get_skill_service", _fake_skill_service)
+    monkeypatch.setattr(
+        "deeptutor.services.persona.get_persona_service", _fake_persona_service
+    )
+
+    admin_data = tmp_path / "admin_data"
+    admin_personas = admin_data / "user" / "workspace" / "personas"
+    (admin_personas / "teacher").mkdir(parents=True)
+    (admin_personas / "teacher" / PERSONA_FILE).write_text(
+        "---\nname: teacher\ndescription: admin\n---\n# Admin Teacher\n"
+        "I am the protected admin teacher persona.",
+        encoding="utf-8",
+    )
+    admin_ps = PathService(workspace_root=admin_data)
+    monkeypatch.setattr(
+        "deeptutor.multi_user.paths.get_admin_path_service", lambda: admin_ps
+    )
+
+    from deeptutor.multi_user.context import reset_current_user, set_current_user
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    user_data = tmp_path / "user_data"
+    learner = CurrentUser(
+        id="u_no_persona",
+        username="learner_no_persona",
+        role="user",
+        scope=UserScope(kind="user", user_id="u_no_persona", root=user_data.resolve()),
+    )
+    token = set_current_user(learner)
+
+    learning_policy = {
+        "age_band": "9-12",
+        "locked_persona": "teacher",
+        "allowed_capabilities": ["chat"],
+        "default_capability": "chat",
+        "allowed_surfaces": ["chat"],
+        "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+    }
+    monkeypatch.setattr(
+        "deeptutor.multi_user.learning_access.current_learning_policy",
+        lambda: learning_policy,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.learning_access.apply_learning_policy",
+        lambda payload: payload,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.context.get_current_user", lambda: learner
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.has_capability_access", lambda _: True
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.redacted_model_access",
+        lambda _: {"llm": [{"profile_id": "p-default", "model_id": "m-default", "available": True}]},
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.config.get_model_catalog_service",
+        lambda: SimpleNamespace(load=lambda: _model_catalog()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.activate_llm_selection",
+        lambda _: (SimpleNamespace(model="gpt-4o-mini", provider_name="openai"), object()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.reset_llm_selection",
+        lambda _: None,
+    )
+
+    try:
+        session, turn = await runtime.start_turn(
+            {
+                "type": "start_turn",
+                "content": "hello",
+                "session_id": None,
+                "capability": None,
+                "tools": [],
+                "knowledge_bases": [],
+                "attachments": [],
+                "language": "en",
+                "config": {},
+            }
+        )
+        async for _event in runtime.subscribe_turn(turn["id"], after_seq=0):
+            pass
+    finally:
+        reset_current_user(token)
+
+    persona_context = captured.get("persona_context", "")
+    assert "Admin Teacher" in persona_context
+    assert "protected admin teacher" in persona_context
+    assert captured.get("active_persona") == "teacher"
+
+
+@pytest.mark.asyncio
+async def test_learning_policy_turn_fails_when_admin_persona_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """When the admin persona directory lacks the locked persona, the turn must
+    fail with error_code=learning_persona_missing and retryable=false.
+    FakeOrchestrator must NOT be called."""
+    from deeptutor.services.path_service import PathService
+
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    orchestrator_called = False
+
+    class FakeContextBuilder:
+        def __init__(self, *_a, **_kw) -> None:
+            pass
+
+        async def build(self, **_kw):
+            return SimpleNamespace(
+                conversation_history=[],
+                conversation_summary="",
+                context_text="",
+                token_count=0,
+                budget=0,
+            )
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            nonlocal orchestrator_called
+            orchestrator_called = True
+            yield StreamEvent(
+                type=StreamEventType.CONTENT,
+                source="chat",
+                stage="responding",
+                content="should not reach here",
+                metadata={"call_kind": "llm_final_response"},
+            )
+            yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+    )
+    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        "deeptutor.services.memory.get_memory_store",
+        lambda: SimpleNamespace(read_l3_concat=lambda: "", emit=_noop_async),
+    )
+    monkeypatch.setattr("deeptutor.services.skill.get_skill_service", _fake_skill_service)
+    monkeypatch.setattr(
+        "deeptutor.services.persona.get_persona_service", _fake_persona_service
+    )
+
+    admin_data = tmp_path / "admin_data"
+    (admin_data / "user" / "workspace" / "personas").mkdir(parents=True)
+    admin_ps = PathService(workspace_root=admin_data)
+    monkeypatch.setattr(
+        "deeptutor.multi_user.paths.get_admin_path_service", lambda: admin_ps
+    )
+
+    from deeptutor.multi_user.context import reset_current_user, set_current_user
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    user_data = tmp_path / "user_data"
+    learner = CurrentUser(
+        id="u_missing_persona",
+        username="learner_missing",
+        role="user",
+        scope=UserScope(kind="user", user_id="u_missing_persona", root=user_data.resolve()),
+    )
+    token = set_current_user(learner)
+
+    learning_policy = {
+        "age_band": "9-12",
+        "locked_persona": "teacher",
+        "allowed_capabilities": ["chat"],
+        "default_capability": "chat",
+        "allowed_surfaces": ["chat"],
+        "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+    }
+    monkeypatch.setattr(
+        "deeptutor.multi_user.learning_access.current_learning_policy",
+        lambda: learning_policy,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.learning_access.apply_learning_policy",
+        lambda payload: payload,
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.context.get_current_user", lambda: learner
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.has_capability_access", lambda _: True
+    )
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.redacted_model_access",
+        lambda _: {"llm": [{"profile_id": "p-default", "model_id": "m-default", "available": True}]},
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.config.get_model_catalog_service",
+        lambda: SimpleNamespace(load=lambda: _model_catalog()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.activate_llm_selection",
+        lambda _: (SimpleNamespace(model="gpt-4o-mini", provider_name="openai"), object()),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.model_selection.runtime.reset_llm_selection",
+        lambda _: None,
+    )
+
+    try:
+        session, turn = await runtime.start_turn(
+            {
+                "type": "start_turn",
+                "content": "hello",
+                "session_id": None,
+                "capability": None,
+                "tools": [],
+                "knowledge_bases": [],
+                "attachments": [],
+                "language": "en",
+                "config": {},
+            }
+        )
+        events = []
+        async for event in runtime.subscribe_turn(turn["id"], after_seq=0):
+            events.append(event)
+    finally:
+        reset_current_user(token)
+
+    assert not orchestrator_called, "Orchestrator should not be called when persona is missing"
+
+    error_events = [e for e in events if e["type"] == "error"]
+    assert len(error_events) == 1, f"Expected exactly 1 error event, got {len(error_events)}"
+    error_meta = error_events[0].get("metadata", {})
+    assert error_meta.get("status") == "failed"
+    assert error_meta.get("error_code") == "learning_persona_missing"
+    assert error_meta.get("retryable") is False
+
+    done_events = [e for e in events if e["type"] == "done"]
+    assert len(done_events) == 1
+    done_meta = done_events[0].get("metadata", {})
+    assert done_meta.get("status") == "failed"
+    assert done_meta.get("error_code") == "learning_persona_missing"
+    assert done_meta.get("retryable") is False
