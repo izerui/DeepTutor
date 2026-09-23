@@ -89,6 +89,8 @@ def test_quiz_attempt_syncs_focus_check_to_question_bank(tmp_path, monkeypatch) 
     assert entry["session_title"] == "Page 1 chat"
     assert entry["question"] == "Which chapter?"
     assert entry["source"] == "book"
+    assert entry["assessment_type"] == "focus_check"
+    assert entry["result"] == "incorrect"
     assert entry["material_id"] == "book-1"
     assert entry["material_title"] == "Compiled Book"
     assert entry["section_id"] == "page-1"
@@ -122,4 +124,8 @@ def test_quiz_attempt_does_not_create_a_synthetic_chat_session(tmp_path, monkeyp
     assert response.status_code == 200
     assert len(resolved.learning.saved) == 1
     assert asyncio.run(store.get_session("book_book-1")) is None
-    assert asyncio.run(store.list_notebook_entries(source="book"))["total"] == 0
+    entries = asyncio.run(store.list_notebook_entries(source="book"))
+    assert entries["total"] == 1
+    assert entries["items"][0]["session_id"] == ""
+    assert entries["items"][0]["origin_type"] == "document_analysis"
+    assert entries["items"][0]["origin_ref"] == "book:book-1"

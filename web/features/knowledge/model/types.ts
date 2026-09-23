@@ -1,4 +1,6 @@
 export type {
+  EmbeddingModelSelection,
+  EmbeddingUsage,
   AddGitHubSourcePayload,
   AddWebSourcePayload,
   EnginePreflight,
@@ -15,6 +17,9 @@ export type {
   KnowledgeTaskResponse,
   KnowledgeUploadPolicy,
   LightRagConfig,
+  LightRagRoleModel,
+  LightRagRoleModels,
+  LightRagIndexingSelection,
   LightRagServerConfig,
   LightRagServerProbe,
   LinkedFolderProbe,

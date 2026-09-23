@@ -123,6 +123,10 @@ class QuizAttempt(BaseModel):
     self_attribution: str = ""
     mastery_estimate: float = 0.0
     timestamp: float = Field(default_factory=time.time)
+    # Invalid questions / wrong answer keys are kept for audit, but voided
+    # attempts are excluded from mastery, errors, and spaced repetition.
+    voided: bool = False
+    void_reason: str = ""
 
 
 class RetryAttempt(BaseModel):
@@ -148,6 +152,31 @@ class ErrorRecord(BaseModel):
     created_at: float = Field(default_factory=time.time)
 
 
+class LearningEvidence(BaseModel):
+    """One durable review/assessment event that can recompute retention state.
+
+    Mastery Path is the only writer in this phase. Quality is a normalized
+    0..1 review strength inferred from the outcome (not a learner self-rating).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    evidence_id: str = ""
+    question_id: str = ""
+    knowledge_point_id: str
+    timestamp: float = Field(default_factory=time.time)
+    source: str = "mastery_path"
+    assessment_type: Literal["quiz", "qualitative", "review"] = "quiz"
+    result: Literal["correct", "incorrect", "partial"] = "incorrect"
+    quality: float | None = None
+    hints_used: int = 0
+    attempt_count: int = 1
+    confidence: float | None = None
+    response_time: float | None = None
+    session_id: str = ""
+    turn_id: str = ""
+
+
 class RepetitionState(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -155,6 +184,16 @@ class RepetitionState(BaseModel):
     consecutive_correct: int = 0
     consecutive_wrong: int = 0
     next_review_at: float
+    # Retention fields. Absent on state written before adaptive SRS; defaults
+    # keep old JSON loadable. ``stability == 0`` means "never hydrated" —
+    # the scheduler fills it from ``interval_index`` without changing due time.
+    difficulty: float = 0.3
+    stability: float = 0.0
+    retrievability: float = 1.0
+    desired_retention: float = 0.9
+    review_count: int = 0
+    lapse_count: int = 0
+    last_review_at: float | None = None
 
 
 class ReviewTask(BaseModel):
@@ -166,6 +205,8 @@ class ReviewTask(BaseModel):
     due_at: float
     priority: int
     state: RepetitionState
+    forgetting_risk: float = 0.0
+    reason: str = ""
 
 
 class PendingOption(BaseModel):
@@ -372,6 +413,16 @@ class LearnerMasteryOverride(BaseModel):
     created_at: float = Field(default_factory=time.time)
 
 
+class DeferredObjective(BaseModel):
+    """Learner asked to leave this objective for now without claiming mastery."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    knowledge_point_id: str
+    note: str = ""
+    created_at: float = Field(default_factory=time.time)
+
+
 class LearnerProfile(BaseModel):
     """Who is learning this goal — collected once, honoured every turn.
 
@@ -444,12 +495,18 @@ class LearningProgress(BaseModel):
     knowledge_types: dict[str, KnowledgeType] = Field(default_factory=dict)
     quiz_attempts: list[QuizAttempt] = Field(default_factory=list)
     error_records: list[ErrorRecord] = Field(default_factory=list)
+    # Durable review history used to recompute retention. Distinct from
+    # ``quiz_attempts`` (mastery evidence) so the two can evolve separately.
+    learning_evidence: list[LearningEvidence] = Field(default_factory=list)
     repetition_states: dict[str, RepetitionState] = Field(default_factory=dict)
     review_queue: list[ReviewTask] = Field(default_factory=list)
     # A learner may explicitly claim prior mastery.  Policy exposes this as a
     # separate provenance (``mastery_source=learner``); assessed mastery and
     # its evidence remain untouched and can take over later.
     learner_mastery_overrides: dict[str, LearnerMasteryOverride] = Field(default_factory=dict)
+    # Temporarily skipped objectives. These never count as mastered; routing
+    # just prefers any other eligible waypoint until only deferred ones remain.
+    deferred_objectives: dict[str, DeferredObjective] = Field(default_factory=dict)
     # A single outstanding question; grading reads its expected answer so the
     # model never has to recall it across turns.
     pending_question: PendingQuestion | None = None
@@ -473,6 +530,7 @@ __all__ = [
     "QuizAttempt",
     "RetryAttempt",
     "ErrorRecord",
+    "LearningEvidence",
     "RepetitionState",
     "ReviewTask",
     "PendingQuestion",
@@ -485,5 +543,6 @@ __all__ = [
     "TopicMetadata",
     "MasteryTopic",
     "LearnerMasteryOverride",
+    "DeferredObjective",
     "LearningProgress",
 ]

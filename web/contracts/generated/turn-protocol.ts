@@ -19,6 +19,7 @@ export type ClientCommand =
   | PingCommand;
 export type Base64 = string | null;
 export type Filename = string | null;
+export type Id = string | null;
 export type MimeType = string | null;
 export type Type = string;
 export type Url = string | null;
@@ -28,6 +29,7 @@ export type BookId = string;
 export type PageIds = string[];
 export type BookReferences = BookReference[];
 export type Capability = string | null;
+export type ConsultPartnerId = string | null;
 export type Content = string;
 export type CourseId = string | null;
 export type FollowupQuestionContext = {
@@ -44,6 +46,7 @@ export type MasteryPathId = string | null;
 export type MasteryPathLeaseManaged = boolean;
 export type MasterySessionMode = string | null;
 export type QuestionId1 = string;
+export type Mcp = string[];
 export type MemoryReferences = (
   "recent" | "profile" | "scope" | "preferences" | "summary"
 )[];
@@ -51,6 +54,7 @@ export type NotebookId = string;
 export type RecordIds = string[];
 export type NotebookReferences = NotebookReference[];
 export type ParentMessageId = number | null;
+export type PartnerDiscussionGroupId = string | null;
 export type PartnerGroupReferences = {
   [k: string]: unknown;
 }[];
@@ -80,6 +84,7 @@ export type TimedMediaId = string | null;
 export type TimeSeconds = number;
 export type Tools = string[] | null;
 export type Type1 = "message" | "start_turn";
+export type WorkspaceId = string | null;
 export type WorkspaceMode = string | null;
 export type AfterSeq = number;
 export type ProtocolVersion1 = "2.0";
@@ -227,7 +232,7 @@ export type TurnFailureCode =
   | "internal_error"
   | "rejected"
   | "server_shutdown";
-export type Id = string;
+export type Id1 = string;
 export type LastSeq = number;
 export type OwnerId1 = string;
 export type Retryable2 = boolean;
@@ -240,14 +245,14 @@ export type TurnStatus =
   "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled";
 export type UpdatedAt = number | null;
 export type CreatedAt1 = number | null;
-export type Id1 = string;
+export type Id2 = string;
 export type Messages = {
   [k: string]: unknown;
 }[];
 export type Title = string;
 export type UpdatedAt1 = number | null;
 export type CreatedAt2 = number | null;
-export type Id2 = string;
+export type Id3 = string;
 export type Title1 = string;
 export type UpdatedAt2 = number | null;
 
@@ -271,6 +276,7 @@ export interface StartTurnCommand {
   book_references?: BookReferences;
   capability?: Capability;
   config?: Config;
+  consult_partner_id?: ConsultPartnerId;
   content: Content;
   course_id?: CourseId;
   followup_question_context?: FollowupQuestionContext;
@@ -283,9 +289,11 @@ export interface StartTurnCommand {
   mastery_path_lease_managed?: MasteryPathLeaseManaged;
   mastery_session_mode?: MasterySessionMode;
   mastery_skip?: MasteryCardSkip | null;
+  mcp?: Mcp;
   memory_references?: MemoryReferences;
   notebook_references?: NotebookReferences;
   parent_message_id?: ParentMessageId;
+  partner_discussion_group_id?: PartnerDiscussionGroupId;
   partner_group_references?: PartnerGroupReferences;
   persist_user_message?: PersistUserMessage;
   persona?: Persona;
@@ -307,6 +315,7 @@ export interface StartTurnCommand {
   timed_media_viewport?: TimedMediaViewport | null;
   tools?: Tools;
   type?: Type1;
+  workspace_id?: WorkspaceId;
   workspace_mode?: WorkspaceMode;
 }
 /**
@@ -316,6 +325,7 @@ export interface StartTurnCommand {
 export interface OutgoingAttachment {
   base64?: Base64;
   filename?: Filename;
+  id?: Id;
   mime_type?: MimeType;
   type: Type;
   url?: Url;
@@ -614,7 +624,7 @@ export interface ProtocolErrorEvent {
 export interface SessionDetail {
   active_turn?: TurnSummary | null;
   created_at?: CreatedAt1;
-  id: Id1;
+  id: Id2;
   messages?: Messages;
   preferences?: Preferences;
   title: Title;
@@ -629,7 +639,7 @@ export interface TurnSummary {
   created_at?: CreatedAt;
   error?: Error;
   error_code?: TurnFailureCode | null;
-  id: Id;
+  id: Id1;
   last_seq?: LastSeq;
   owner_id?: OwnerId1;
   query_state?: TurnQueryState | null;
@@ -648,7 +658,7 @@ export interface Preferences {
 export interface SessionSummary {
   active_turn?: TurnSummary | null;
   created_at?: CreatedAt2;
-  id: Id2;
+  id: Id3;
   title: Title1;
   updated_at?: UpdatedAt2;
 }

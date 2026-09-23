@@ -1553,7 +1553,18 @@ def test_reindex_error_status_bypasses_existing_match_noop(monkeypatch, tmp_path
     assert manager.config["knowledge_bases"]["failed-kb"]["status"] == "initializing"
 
 
-def test_reindex_task_persists_completed_progress(monkeypatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("embedding_changed", [False, True])
+def test_reindex_task_persists_completed_progress(
+    monkeypatch, tmp_path: Path, embedding_changed: bool
+) -> None:
+    from deeptutor.services.embedding.config import EmbeddingConfig
+    from deeptutor.services.rag.pipelines.lightrag import storage
+
+    embedding = EmbeddingConfig(model="original", dim=3, api_key="test-key")
+    monkeypatch.setattr("deeptutor.services.embedding.get_embedding_config", lambda: embedding)
+    monkeypatch.setattr(
+        "deeptutor.services.rag.pipelines.lightrag.engine.installed_version", lambda: "1.5.7rc2"
+    )
     base_dir = tmp_path / "knowledge_bases"
     raw_dir = base_dir / "kb" / "raw"
     raw_dir.mkdir(parents=True)
@@ -1581,6 +1592,14 @@ def test_reindex_task_persists_completed_progress(monkeypatch, tmp_path: Path) -
 
         async def initialize(self, *_args, **kwargs) -> bool:
             kwargs["progress_callback"](1, 1)
+            version = base_dir / "kb" / "version-1"
+            version.mkdir()
+            (version / "kv_store_doc_status.json").write_text(
+                json.dumps({"fixture": {"status": "processed"}}), encoding="utf-8"
+            )
+            storage.write_meta(version)
+            if embedding_changed:
+                embedding.model = "later-default"
             return True
 
     rag_service_module = importlib.import_module("deeptutor.services.rag.service")
@@ -1633,8 +1652,8 @@ def test_reindex_task_persists_completed_progress(monkeypatch, tmp_path: Path) -
     assert "progress" not in entry
     assert entry["last_indexed_count"] == 1
     assert entry["last_indexed_action"] == "reindex"
-    assert entry["needs_reindex"] is False
-    assert "embedding_mismatch" not in entry
+    assert bool(entry.get("needs_reindex")) is embedding_changed
+    assert bool(entry.get("embedding_mismatch")) is embedding_changed
 
 
 def test_reindex_task_preserves_prepublication_failure(monkeypatch, tmp_path: Path) -> None:
@@ -2245,6 +2264,10 @@ def test_create_pageindex_oss_persists_optional_mode(monkeypatch, tmp_path: Path
 
 
 def test_create_mode_aware_kb_persists_per_kb_search_mode(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "deeptutor.services.rag.pipelines.lightrag.indexing_policy.bind_target",
+        lambda snapshot, _kb_dir, **_kwargs: snapshot,
+    )
     manager = _FakeKBManager(tmp_path / "knowledge_bases")
     snapshot = SimpleNamespace(
         persisted_policy=lambda: {
@@ -2287,9 +2310,13 @@ def test_create_mode_aware_kb_persists_per_kb_search_mode(monkeypatch, tmp_path:
     assert manager.config["knowledge_bases"]["kb-light"]["search_mode"] == "hybrid"
 
 
-def test_create_empty_lightrag_kb_persists_redacted_pending_policy(
+def test_create_empty_lightrag_kb_does_not_persist_creation_time_policy(
     monkeypatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setattr(
+        "deeptutor.services.rag.pipelines.lightrag.indexing_policy.bind_target",
+        lambda snapshot, _kb_dir, **_kwargs: snapshot,
+    )
     manager = _FakeKBManager(tmp_path / "knowledge_bases")
     snapshot = SimpleNamespace(
         persisted_policy=lambda: {
@@ -2300,17 +2327,11 @@ def test_create_empty_lightrag_kb_persists_redacted_pending_policy(
             "vision_available": True,
         }
     )
-    seen: list[str] = []
-
-    def freeze_form(raw: str):
-        seen.append(raw)
-        return {"profile_id": "profile-1", "model_id": "model-1"}, snapshot
-
     monkeypatch.setattr(knowledge_router_module, "get_kb_manager", lambda: manager)
     monkeypatch.setattr(knowledge_router_module, "KnowledgeBaseInitializer", _FakeInitializer)
     monkeypatch.setattr(knowledge_router_module, "_kb_base_dir", manager.base_dir)
     monkeypatch.setattr(knowledge_router_module, "_assert_provider_ready", lambda _provider: None)
-    monkeypatch.setattr(knowledge_router_module, "_freeze_indexing_llm_form", freeze_form)
+    monkeypatch.setattr(knowledge_router_module, "_freeze_default_indexing_llm", lambda: snapshot)
 
     with TestClient(_build_app()) as client:
         response = client.post(
@@ -2318,16 +2339,12 @@ def test_create_empty_lightrag_kb_persists_redacted_pending_policy(
             data={
                 "name": "kb-pending",
                 "rag_provider": "lightrag",
-                "indexing_llm": json.dumps({"profile_id": "profile-1", "model_id": "model-1"}),
             },
         )
 
     assert response.status_code == 200
-    assert len(seen) == 1
-    pending = manager.config["knowledge_bases"]["kb-pending"]["pending_indexing_policy"]
-    assert pending["policy"] == "pending_pinned"
-    assert pending["fingerprint"] == "a" * 64
-    assert pending["selection"] == {"profile_id": "profile-1", "model_id": "model-1"}
+    assert response.json()["task_id"] is None
+    assert "pending_indexing_policy" not in manager.config["knowledge_bases"]["kb-pending"]
     assert not list((manager.base_dir / "kb-pending").glob("version-*"))
 
 
@@ -2352,7 +2369,9 @@ def test_create_rejects_indexing_selection_for_other_provider_before_registratio
     assert manager.config["knowledge_bases"] == {}
 
 
-def test_empty_lightrag_kb_can_update_pending_indexing_policy(monkeypatch, tmp_path: Path) -> None:
+def test_empty_lightrag_kb_rejects_obsolete_pending_model_edits(
+    monkeypatch, tmp_path: Path
+) -> None:
     manager = _FakeKBManager(tmp_path / "knowledge_bases")
     manager.config["knowledge_bases"]["empty"] = {
         "rag_provider": "lightrag",
@@ -2391,9 +2410,9 @@ def test_empty_lightrag_kb_can_update_pending_indexing_policy(monkeypatch, tmp_p
             },
         )
 
-    assert response.status_code == 200
-    assert response.json()["indexing_policy"] == policy
-    assert manager.config["knowledge_bases"]["empty"]["pending_indexing_policy"] == policy
+    assert response.status_code == 409
+    assert "Settings" in response.json()["detail"]
+    assert "pending_indexing_policy" not in manager.config["knowledge_bases"]["empty"]
 
 
 @pytest.mark.parametrize("reason", ["published", "documents", "active"])
@@ -2435,6 +2454,10 @@ def test_reindex_passes_frozen_lightrag_snapshot_to_background_task(
         "status": "ready",
     }
     (manager.base_dir / "kb" / "raw").mkdir(parents=True)
+    monkeypatch.setattr(
+        "deeptutor.services.rag.pipelines.lightrag.indexing_policy.bind_target",
+        lambda snapshot, _kb_dir, **_kwargs: snapshot,
+    )
     snapshot = object()
     captured: dict[str, object] = {}
 
@@ -2446,15 +2469,21 @@ def test_reindex_passes_frozen_lightrag_snapshot_to_background_task(
     monkeypatch.setattr(knowledge_router_module, "_assert_provider_ready", lambda _provider: None)
     monkeypatch.setattr(
         knowledge_router_module,
-        "_freeze_indexing_llm_form",
-        lambda _raw: ({"profile_id": "profile-1", "model_id": "model-1"}, snapshot),
+        "_freeze_default_indexing_llm",
+        lambda: snapshot,
     )
     monkeypatch.setattr(knowledge_router_module, "run_reindex_task", capture_task)
+    monkeypatch.setattr(
+        "deeptutor.services.rag.pipelines.lightrag.indexing_policy.public_rebuild_config",
+        lambda accepted, selection=None: (
+            {"fingerprint": "confirmed"} if accepted is snapshot else {}
+        ),
+    )
 
     with TestClient(_build_app()) as client:
         response = client.post(
             "/api/knowledge-bases/kb/reindex",
-            data={"indexing_llm": json.dumps({"profile_id": "profile-1", "model_id": "model-1"})},
+            data={"config_fingerprint": "confirmed"},
         )
 
     assert response.status_code == 200
@@ -2719,6 +2748,7 @@ def test_lightrag_config_validates_dedicated_llm_selection(monkeypatch, tmp_path
     from deeptutor.services.config.model_catalog import ModelCatalogService
 
     settings_service = RuntimeSettingsService(tmp_path, process_env={})
+    settings_service.save_lightrag({"version": 1})
     catalog_service = ModelCatalogService(tmp_path / "model_catalog.json")
     catalog_service.save(
         {
@@ -2763,6 +2793,89 @@ def test_lightrag_config_validates_dedicated_llm_selection(monkeypatch, tmp_path
     assert cleared.status_code == 200
 
 
+@pytest.mark.parametrize("role, expected", [("user", 403), ("admin", 200)])
+def test_shared_lightrag_settings_require_admin_over_http(monkeypatch, tmp_path, role, expected):
+    auth = importlib.import_module("deeptutor.api.routers.auth")
+    service = RuntimeSettingsService(tmp_path, process_env={})
+    monkeypatch.setattr(config_module, "get_runtime_settings_service", lambda: service)
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    app = _build_app()
+
+    async def authenticated():
+        return SimpleNamespace(role=role)
+
+    app.dependency_overrides[auth.require_auth] = authenticated
+    before = service.load_lightrag()
+    response = TestClient(app).put(
+        "/api/knowledge-bases/rag-pipelines/lightrag/config", json={"top_k": 31}
+    )
+    assert response.status_code == expected
+    assert service.load_lightrag()["top_k"] == (31 if role == "admin" else before["top_k"])
+
+
+def test_lightrag_role_settings_validate_before_save(monkeypatch, tmp_path):
+    from deeptutor.services.rag.pipelines.lightrag import roles
+
+    service = RuntimeSettingsService(tmp_path, process_env={})
+    monkeypatch.setattr(config_module, "get_runtime_settings_service", lambda: service)
+    observed = []
+
+    def validate(models):
+        observed.append(models)
+        if models.base.model_id == "deleted":
+            raise ValueError("Selected model is unavailable.")
+
+    monkeypatch.setattr(roles, "validate_models", validate)
+    client = TestClient(_build_app())
+    url = "/api/knowledge-bases/rag-pipelines/lightrag/config"
+    fresh = client.get(url).json()
+    assert fresh["version"] == 2
+    assert (
+        client.put(url, json={"llm_profile_id": "public", "llm_model_id": "ok"}).status_code == 422
+    )
+    assert client.get(url).json() == fresh
+    models = {
+        "base": {"profile_id": "public", "model_id": "ok"},
+        "query": {"mode": "inherit", "reasoning_effort": "adaptive"},
+    }
+    response = client.put(url, json={"role_models": models})
+    assert response.status_code == 200
+    before = client.get(url).json()
+    assert before["role_models"]["query"]["reasoning_effort"] == "adaptive"
+    assert before["role_models"]["vlm"]["mode"] == "disabled"
+    assert len(observed) == 1
+    for invalid in (
+        {"role_models": {**models, "base": {"profile_id": "public", "model_id": "deleted"}}},
+        {"role_models": {**models, "vlm": {"mode": "disabled", "selection": models["base"]}}},
+        {"role_models": None},
+        {"llm_profile_id": "other", "llm_model_id": "other"},
+    ):
+        assert client.put(url, json=invalid).status_code == 422
+        assert client.get(url).json() == before
+
+
+def test_lightrag_retry_requires_confirmed_rebuild(monkeypatch, tmp_path: Path) -> None:
+    manager = _FakeKBManager(tmp_path / "knowledge_bases")
+    manager.config["knowledge_bases"]["failed-kb"] = {
+        "path": "failed-kb",
+        "status": "error",
+        "rag_provider": "lightrag",
+    }
+    monkeypatch.setattr(knowledge_router_module, "get_kb_manager", lambda: manager)
+    calls = []
+
+    async def reindex(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(knowledge_router_module, "reindex_knowledge_base", reindex)
+    with TestClient(_build_app()) as client:
+        response = client.post("/api/knowledge-bases/failed-kb/retry")
+    assert response.status_code == 409
+    assert "confirm" in response.json()["detail"]
+    assert calls == []
+    assert manager.config["knowledge_bases"]["failed-kb"]["status"] == "error"
+
+
 def test_delete_by_body_reaches_a_name_the_path_route_cannot(monkeypatch, tmp_path: Path) -> None:
     """A slash in the name breaks path addressing, not the manager.
 
@@ -2800,3 +2913,79 @@ def test_delete_reports_a_missing_knowledge_base_as_404(monkeypatch, tmp_path: P
     with TestClient(_build_app()) as client:
         response = client.post("/api/knowledge-bases/delete", json={"name": "never-created"})
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("first_upload_fails", [False, True])
+def test_create_empty_llamaindex_kb_then_upload_and_retry(
+    monkeypatch, tmp_path, first_upload_fails
+):
+    """The Web's empty-KB workflow can index, retry, and add another file (#1458)."""
+    from fastapi import BackgroundTasks
+
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.knowledge.progress_tracker import ProgressTracker
+
+    base = tmp_path / "knowledge_bases"
+    base.mkdir()
+    manager = KnowledgeBaseManager(base_dir=str(base))
+    monkeypatch.setattr(knowledge_router_module, "get_kb_manager", lambda: manager)
+    monkeypatch.setattr(knowledge_router_module, "_current_kb_base_dir", lambda: base)
+    monkeypatch.setattr(knowledge_router_module, "_assert_provider_ready", lambda *_a, **_k: None)
+    calls = []
+
+    class Rag:
+        def __init__(self, *_a, **_k):
+            pass
+
+        async def add_documents(self, kb_name, files, **_kwargs):
+            calls.append(list(files))
+            if first_upload_fails and len(calls) == 1:
+                raise RuntimeError("temporary indexing failure")
+            version = base / kb_name / "version-1"
+            version.mkdir(exist_ok=True)
+            for name in ("docstore.json", "index_store.json"):
+                (version / name).write_text("{}")
+            (version / "meta.json").write_text(
+                json.dumps({"provider": "llamaindex", "version": "version-1"})
+            )
+            return True
+
+    monkeypatch.setattr("deeptutor.knowledge.add_documents.RAGService", Rag)
+
+    async def workflow():
+        await knowledge_router_module.create_knowledge_base(
+            BackgroundTasks(),
+            name="Medicine",
+            files=[],
+            rag_provider="llamaindex",
+            pageindex_mode="",
+            search_mode="",
+            rel_paths=None,
+            indexing_llm="",
+        )
+        kb_dir = base / "Medicine"
+        assert not (kb_dir / "version-1").exists()
+        source = kb_dir / "raw" / "first.txt"
+        source.write_text("First document", encoding="utf-8")
+
+        async def upload(file, task):
+            await knowledge_router_module.run_upload_processing_task(
+                "Medicine", str(base), [str(file)], task, rag_provider="llamaindex"
+            )
+
+        await upload(source, "empty-kb-first")
+        if first_upload_fails:
+            assert ProgressTracker("Medicine", base).get_progress()["stage"] == "error"
+            metadata = json.loads((kb_dir / "metadata.json").read_text())
+            assert not metadata.get("file_hashes", {}).get("first.txt")
+            await upload(source, "empty-kb-retry")
+        assert ProgressTracker("Medicine", base).get_progress()["stage"] == "completed"
+        second = kb_dir / "raw" / "second.txt"
+        second.write_text("Second document", encoding="utf-8")
+        await upload(second, "empty-kb-second")
+        assert ProgressTracker("Medicine", base).get_progress()["stage"] == "completed"
+        metadata = json.loads((kb_dir / "metadata.json").read_text())
+        assert set(metadata["file_hashes"]) == {"first.txt", "second.txt"}
+        assert len(calls) == (3 if first_upload_fails else 2)
+
+    asyncio.run(workflow())
