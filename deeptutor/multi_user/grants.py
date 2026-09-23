@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import re
+import tempfile
+import threading
 from typing import Any
 
 from .identity import get_user_by_id
@@ -13,10 +17,56 @@ from .paths import SYSTEM_ROOT, ensure_system_dirs
 
 GRANTS_DIR = SYSTEM_ROOT / "grants"
 
-LEARNING_CAPABILITIES = {"chat", "immersive_reading"}
+_grant_locks: dict[str, threading.Lock] = {}
+_grant_locks_guard = threading.Lock()
+
+
+def _grant_lock(user_id: str) -> threading.Lock:
+    """Per-user in-process lock serializing save_grant and migrate_learner_grant.
+
+    Only serializes threads within a single Python process. Multi-worker or
+    multi-process deployments sharing the same grant directory require a
+    filesystem lock (e.g. fcntl.flock) for cross-process safety.
+    """
+    with _grant_locks_guard:
+        lock = _grant_locks.get(user_id)
+        if lock is None:
+            lock = threading.Lock()
+            _grant_locks[user_id] = lock
+        return lock
+
+
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.stem}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, str(path))
+    except Exception:
+        with suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+
+LEARNING_CAPABILITIES = {"chat", "immersive_reading", "mastery_path", "immersive_watching"}
 LEARNING_AGE_BANDS = {"6-8", "9-12", "13-15"}
-LEARNING_PERSONAS = {"teacher"}
-LEARNING_SURFACES = {"chat", "reading"}
+LEARNING_PERSONAS = {"teacher", "peer", "research-assistant"}
+_CAP_REQUIRED_SURFACE: dict[str, str] = {
+    "chat": "chat",
+    "immersive_reading": "reading",
+    "mastery_path": "mastery",
+    "immersive_watching": "watching",
+}
+LEARNING_SURFACES = {
+    "chat", "reading", "mastery", "books", "watching",
+    "partners", "agents", "writing", "notebook", "dashboard",
+    "personas", "settings", "voice", "knowledge", "memory",
+    "skills", "tools", "system", "imports", "files",
+}
 _EXTENSION_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
 
@@ -89,6 +139,9 @@ def _normalize_learning_policy(value: Any) -> dict[str, Any] | None:
     }
     if surfaces is not None:
         normalized["allowed_surfaces"] = surfaces
+    pv = value.get("policy_version")
+    if isinstance(pv, int) and pv >= 1:
+        normalized["policy_version"] = pv
     normalized["reading"] = {
         "allow_upload": bool(raw_reading.get("allow_upload", True)),
         "material_ids": material_ids,
@@ -130,7 +183,49 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
     exec_enabled = payload.get("exec_enabled")
     base["exec_enabled"] = bool(exec_enabled) if isinstance(exec_enabled, bool) else None
     base["learning_policy"] = _normalize_learning_policy(payload.get("learning_policy"))
+    _migrate_learner_v1_to_v2(user_id, base["learning_policy"])
     return base
+
+
+_LEARNER_V1_POLICY = {
+    "age_band": "9-12",
+    "locked_persona": "teacher",
+    "allowed_capabilities": ["chat", "immersive_reading"],
+    "default_capability": "immersive_reading",
+    "allowed_surfaces": ["chat", "reading"],
+    "reading": {
+        "allow_upload": False,
+        "material_ids": [],
+        "extensions": [],
+    },
+}
+
+_LEARNER_V2_CAPABILITIES = ["chat", "immersive_reading", "mastery_path", "immersive_watching"]
+_LEARNER_V2_SURFACES = [
+    "chat", "reading", "mastery", "books", "watching",
+    "partners", "agents", "writing", "notebook", "dashboard",
+    "voice", "knowledge", "memory", "files",
+]
+
+
+def _migrate_learner_v1_to_v2(user_id: str, policy: dict[str, Any] | None) -> None:
+    """Upgrade learner-preset accounts from v1 (chat/reading only) to v2 (all learning surfaces).
+
+    Only fires when the account is preset=learner AND the normalized policy
+    exactly matches the original v1 defaults. Admin-customized policies and
+    non-learner accounts are never touched.
+    """
+    if not isinstance(policy, dict):
+        return
+    user = get_user_by_id(user_id)
+    if user is None or str(user[1].get("preset") or "standard") != "learner":
+        return
+    if policy.get("policy_version", 1) >= 2:
+        return
+    if policy == _LEARNER_V1_POLICY:
+        policy["allowed_capabilities"] = list(_LEARNER_V2_CAPABILITIES)
+        policy["allowed_surfaces"] = list(_LEARNER_V2_SURFACES)
+        policy["policy_version"] = 2
 
 
 def learner_grant(user_id: str) -> dict[str, Any]:
@@ -143,11 +238,16 @@ def learner_grant(user_id: str) -> dict[str, Any]:
             "cli_apps": [],
             "exec_enabled": False,
             "learning_policy": {
+                "policy_version": 2,
                 "age_band": "9-12",
                 "locked_persona": "teacher",
-                "allowed_capabilities": ["chat", "immersive_reading"],
+                "allowed_capabilities": ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
                 "default_capability": "immersive_reading",
-                "allowed_surfaces": ["chat", "reading"],
+                "allowed_surfaces": [
+                    "chat", "reading", "mastery", "books", "watching",
+                    "partners", "agents", "writing", "notebook", "dashboard",
+                    "voice", "knowledge", "memory", "files",
+                ],
                 "reading": {
                     "allow_upload": False,
                     "material_ids": [],
@@ -156,6 +256,38 @@ def learner_grant(user_id: str) -> dict[str, Any]:
             },
         },
     )
+
+
+def migrate_learner_grant(user_id: str) -> bool:
+    """Persist a v1→v2 learner policy upgrade atomically.
+
+    Returns True if the file was rewritten, False if no migration was needed
+    or the account is not a learner. Leaves the original file intact on any
+    failure. Serialized against ``save_grant`` via a shared per-user lock.
+    """
+    path = grant_path(user_id)
+    if not path.exists():
+        return False
+    with _grant_lock(user_id):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        raw_policy = raw.get("learning_policy") if isinstance(raw, dict) else None
+        if not isinstance(raw_policy, dict):
+            return False
+        if raw_policy.get("policy_version", 1) >= 2:
+            return False
+        try:
+            migrated = normalize_grant(user_id, raw)
+            migrated_policy = migrated.get("learning_policy")
+            if not isinstance(migrated_policy, dict) or migrated_policy.get("policy_version", 1) < 2:
+                return False
+            validate_grant(migrated)
+            _atomic_write_json(path, migrated)
+            return True
+        except Exception:
+            return False
 
 
 def load_grant(user_id: str) -> dict[str, Any]:
@@ -177,9 +309,8 @@ def save_grant(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Admin users use the main workspace and cannot receive assignments.")
     grant = normalize_grant(user_id, payload)
     validate_grant(grant)
-    path = grant_path(user_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(grant, indent=2, ensure_ascii=False), encoding="utf-8")
+    with _grant_lock(user_id):
+        _atomic_write_json(grant_path(user_id), grant)
     return grant
 
 
@@ -236,6 +367,12 @@ def validate_grant(grant: dict[str, Any]) -> None:
             "learning_policy.allowed_surfaces contains unsupported values: "
             f"{', '.join(sorted(unknown_surfaces))}"
         )
+    surface_set = set(surfaces)
+    for cap, required_surface in _CAP_REQUIRED_SURFACE.items():
+        if cap in capability_set and required_surface not in surface_set:
+            raise ValueError(
+                f"Capability '{cap}' requires surface '{required_surface}' in allowed_surfaces"
+            )
     reading = policy.get("reading", {})
     if not isinstance(reading, dict):
         raise ValueError("learning_policy.reading must be an object")

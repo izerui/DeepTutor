@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  GraduationCap,
   Loader2,
   Save,
 } from "lucide-react";
@@ -36,14 +35,24 @@ function emptyGrant(userId: string): GrantPayload {
 }
 
 const LEARNING_AGE_BANDS = ["6-8", "9-12", "13-15"] as const;
+const LEARNING_PERSONAS = [
+  { value: "teacher", label: "Teacher" },
+  { value: "peer", label: "Peer" },
+  { value: "research-assistant", label: "Research assistant" },
+] as const;
 
 function conservativeLearningPolicy(): LearningPolicy {
   return {
+    policy_version: 2,
     age_band: "9-12",
     locked_persona: "teacher",
-    allowed_capabilities: ["chat", "immersive_reading"],
+    allowed_capabilities: ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
     default_capability: "immersive_reading",
-    allowed_surfaces: ["chat", "reading"],
+    allowed_surfaces: [
+      "chat", "reading", "mastery", "books", "watching",
+      "partners", "agents", "writing", "notebook", "dashboard",
+      "voice", "knowledge", "memory", "files",
+    ],
     reading: {
       allow_upload: false,
       material_ids: [],
@@ -78,12 +87,14 @@ function CheckRow({
   checked,
   disabled,
   onToggle,
+  noTruncate,
 }: {
   label: string;
   description?: string;
   checked: boolean;
   disabled: boolean;
   onToggle: () => void;
+  noTruncate?: boolean;
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-[var(--border)]/60 p-2 text-[var(--foreground)]">
@@ -95,7 +106,7 @@ function CheckRow({
         className="mt-0.5"
       />
       <span className="min-w-0">
-        <span className="block truncate">{label}</span>
+        <span className={`block ${noTruncate ? "text-sm leading-tight" : "truncate"}`}>{label}</span>
         {description ? (
           <span className="block truncate text-[11px] text-[var(--muted-foreground)]">
             {description}
@@ -332,6 +343,17 @@ export function GrantEditor({
     );
   }
 
+  function setLearningPersona(persona: LearningPolicy["locked_persona"]) {
+    setGrant((current) =>
+      current.learning_policy
+        ? {
+            ...current,
+            learning_policy: { ...current.learning_policy, locked_persona: persona },
+          }
+        : current,
+    );
+  }
+
   function updateReadingPolicy(
     update: (reading: LearningPolicy["reading"]) => LearningPolicy["reading"],
   ) {
@@ -368,6 +390,55 @@ export function GrantEditor({
         ? reading.extensions.filter((id) => id !== extensionId)
         : [...reading.extensions, extensionId],
     }));
+  }
+
+  const CAP_TO_SURFACE: Record<string, string> = {
+    chat: "chat",
+    immersive_reading: "reading",
+    mastery_path: "mastery",
+    immersive_watching: "watching",
+  };
+
+  function toggleCapability(cap: LearningPolicy["allowed_capabilities"][number]) {
+    setGrant((current) => {
+      if (!current.learning_policy) return current;
+      const caps = current.learning_policy.allowed_capabilities;
+      const surfs = current.learning_policy.allowed_surfaces ?? ["chat", "reading"];
+      const adding = !caps.includes(cap);
+      const newCaps = adding ? [...caps, cap] : caps.filter((c) => c !== cap);
+      if (!adding && current.learning_policy.default_capability === cap) return current;
+      let newSurfs = surfs;
+      const mapped = CAP_TO_SURFACE[cap];
+      if (mapped) {
+        newSurfs = adding
+          ? surfs.includes(mapped as typeof surfs[number]) ? surfs : [...surfs, mapped as typeof surfs[number]]
+          : surfs.filter((s) => s !== mapped);
+      }
+      return {
+        ...current,
+        learning_policy: {
+          ...current.learning_policy,
+          allowed_capabilities: newCaps,
+          allowed_surfaces: newSurfs,
+        },
+      };
+    });
+  }
+
+  function toggleSurface(surface: LearningPolicy["allowed_surfaces"][number]) {
+    setGrant((current) => {
+      if (!current.learning_policy) return current;
+      const surfs = current.learning_policy.allowed_surfaces ?? ["chat", "reading"];
+      return {
+        ...current,
+        learning_policy: {
+          ...current.learning_policy,
+          allowed_surfaces: surfs.includes(surface)
+            ? surfs.filter((s) => s !== surface)
+            : [...surfs, surface],
+        },
+      };
+    });
   }
 
   // Named apart from the imported `toggleName` helper it wraps, and narrowed to
@@ -479,7 +550,7 @@ export function GrantEditor({
                 <CheckRow
                   label={t("Enable learning policy")}
                   description={t(
-                    "Teacher persona; Chat and Immersive Reading only",
+                    "Protected persona and learning surfaces",
                   )}
                   checked={Boolean(grant.learning_policy)}
                   disabled={controlsDisabled || lockLearningPolicy}
@@ -518,22 +589,83 @@ export function GrantEditor({
                       </span>
                       <select
                         value={grant.learning_policy.locked_persona}
-                        disabled
+                        disabled={controlsDisabled}
+                        onChange={(event) =>
+                          setLearningPersona(
+                            event.target.value as LearningPolicy["locked_persona"],
+                          )
+                        }
                         className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2"
                       >
-                        <option value="teacher">{t("Teacher")}</option>
+                        {LEARNING_PERSONAS.map((p) => (
+                          <option key={p.value} value={p.value}>
+                            {t(p.label)}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <div className="text-xs">
                       <span className="mb-1 block text-[11px] text-[var(--muted-foreground)]">
                         {t("Modes")}
                       </span>
-                      <div className="flex h-8 items-center gap-1.5">
-                        <GraduationCap
-                          size={14}
-                          className="text-[var(--muted-foreground)]"
-                        />
-                        <span>{t("Chat · Immersive Reading")}</span>
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        {(
+                          [
+                            { id: "chat", label: "Chat" },
+                            { id: "immersive_reading", label: "Immersive Reading" },
+                            { id: "mastery_path", label: "Mastery Path" },
+                            { id: "immersive_watching", label: "Immersive Watching" },
+                          ] as const
+                        ).map((cap) => (
+                          <CheckRow
+                            key={cap.id}
+                            label={t(cap.label)}
+                            checked={grant.learning_policy!.allowed_capabilities.includes(cap.id)}
+                            disabled={saving || cap.id === grant.learning_policy!.default_capability}
+                            onToggle={() => toggleCapability(cap.id)}
+                            noTruncate
+                          />
+                        ))
+                        }
+                      </div>
+                    </div>
+                    <div className="text-xs sm:col-span-3">
+                      <span className="mb-1 block text-[11px] text-[var(--muted-foreground)]">
+                        {t("Allowed surfaces")}
+                      </span>
+                      <div className="grid gap-1 grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
+                        {(
+                          [
+                            { id: "chat", label: "Chat" },
+                            { id: "reading", label: "Reading" },
+                            { id: "mastery", label: "Mastery" },
+                            { id: "books", label: "Books" },
+                            { id: "watching", label: "Watching" },
+                            { id: "partners", label: "Partners" },
+                            { id: "agents", label: "Agents" },
+                            { id: "writing", label: "Writing" },
+                            { id: "notebook", label: "Notebook" },
+                            { id: "dashboard", label: "Dashboard" },
+                            { id: "voice", label: "Voice" },
+                            { id: "knowledge", label: "Knowledge" },
+                            { id: "memory", label: "Memory" },
+                            { id: "files", label: "Files" },
+                          ] as const
+                        ).map((surf) => {
+                          const lockedByCap = Object.entries(CAP_TO_SURFACE).some(
+                            ([cap, s]) => s === surf.id && grant.learning_policy!.allowed_capabilities.includes(cap as typeof grant.learning_policy.allowed_capabilities[number])
+                          );
+                          return (
+                            <CheckRow
+                              key={surf.id}
+                              label={t(surf.label)}
+                              checked={(grant.learning_policy!.allowed_surfaces ?? []).includes(surf.id)}
+                              disabled={saving || lockedByCap}
+                              onToggle={() => toggleSurface(surf.id)}
+                              noTruncate
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                     <div className="grid gap-3 sm:col-span-3 lg:grid-cols-2">

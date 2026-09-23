@@ -377,6 +377,27 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
     return _install_current_user(payload)
 
 
+async def ws_require_learning_surface(
+    ws: WebSocket,
+    surface: str,
+) -> _CtxToken | _WsAuthFailed:
+    """Authenticate a WebSocket and enforce the learner surface check."""
+    user_token = await ws_require_auth(ws)
+    if user_token is ws_auth_failed:
+        return ws_auth_failed
+
+    from deeptutor.multi_user.context import reset_current_user
+    from deeptutor.multi_user.learning_access import assert_learning_surface
+
+    try:
+        assert_learning_surface(surface)
+    except PermissionError:
+        reset_current_user(user_token)
+        await ws.close(code=4403)
+        return ws_auth_failed
+    return user_token
+
+
 async def require_admin(
     payload: TokenPayload | None = Depends(require_auth),
 ) -> TokenPayload:
@@ -406,10 +427,35 @@ def _learning_surface_for_path(path: str) -> str:
     for root, surface in (
         ("/api/reading", "reading"),
         ("/api/courses", "reading"),
+        ("/api/mastery-paths", "mastery"),
+        ("/api/books", "books"),
+        ("/api/video-learning", "watching"),
+        ("/api/partners", "partners"),
+        ("/api/partner-groups", "partners"),
+        ("/api/subagents", "agents"),
+        ("/api/agent-config", "agents"),
+        ("/api/documents", "writing"),
+        ("/api/notebooks", "notebook"),
+        ("/api/dashboard", "dashboard"),
         ("/api/chat", "chat"),
         ("/api/question", "chat"),
         ("/api/question-notebook", "chat"),
         ("/api/sessions", "chat"),
+        ("/api/personas", "personas"),
+        ("/api/settings", "settings"),
+        ("/api/voice", "voice"),
+        ("/api/knowledge-bases", "knowledge"),
+        ("/api/memory", "memory"),
+        ("/api/skills", "skills"),
+        ("/api/tools", "tools"),
+        ("/api/system", "system"),
+        ("/api/imports", "imports"),
+        ("/api/capabilities", "settings"),
+        ("/api/space", "dashboard"),
+        ("/api/visualizers", "dashboard"),
+        ("/api/marginnote4", "reading"),
+        ("/files/library", "files"),
+        ("/files/attachments", "files"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):
             return surface

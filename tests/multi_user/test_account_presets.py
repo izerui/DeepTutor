@@ -37,9 +37,20 @@ def test_learning_surface_routing_matches_complete_path_segments():
 
     assert _learning_surface_for_path("/api/reading/materials") == "reading"
     assert _learning_surface_for_path("/api/courses/course/state") == "reading"
+    assert _learning_surface_for_path("/api/mastery-paths/topics") == "mastery"
+    assert _learning_surface_for_path("/api/mastery-paths") == "mastery"
+    assert _learning_surface_for_path("/api/books") == "books"
+    assert _learning_surface_for_path("/api/books/some-id") == "books"
+    assert _learning_surface_for_path("/api/video-learning/materials") == "watching"
     assert _learning_surface_for_path("/api/question-notebook/entries") == "chat"
+    assert _learning_surface_for_path("/api/partners") == "partners"
+    assert _learning_surface_for_path("/api/partner-groups/g1") == "partners"
+    assert _learning_surface_for_path("/api/settings/ui") == "settings"
+    assert _learning_surface_for_path("/api/knowledge-bases") == "knowledge"
+    assert _learning_surface_for_path("/api/memory/doc/a/b") == "memory"
     assert _learning_surface_for_path("/api/reading-private") == ""
     assert _learning_surface_for_path("/api/questions") == ""
+    assert _learning_surface_for_path("/api/multi-user/users") == ""
 
 
 @pytest.mark.parametrize("preset", ["standard", "custom"])
@@ -90,11 +101,16 @@ def test_learner_preset_expands_to_a_conservative_grant(preset_client):
     assert grant["cli_apps"] == []
     assert grant["exec_enabled"] is False
     assert grant["learning_policy"] == {
+        "policy_version": 2,
         "age_band": "9-12",
         "locked_persona": "teacher",
-        "allowed_capabilities": ["chat", "immersive_reading"],
+        "allowed_capabilities": ["chat", "immersive_reading", "mastery_path", "immersive_watching"],
         "default_capability": "immersive_reading",
-        "allowed_surfaces": ["chat", "reading"],
+        "allowed_surfaces": [
+            "chat", "reading", "mastery", "books", "watching",
+            "partners", "agents", "writing", "notebook", "dashboard",
+            "voice", "knowledge", "memory", "files",
+        ],
         "reading": {
             "allow_upload": False,
             "material_ids": [],

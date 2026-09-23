@@ -37,13 +37,30 @@ test("admin user creation sends the selected preset", () => {
 
 test("grant editing exposes the server-enforced learning policy controls", () => {
   assert.match(grantEditor, /learning_policy: conservativeLearningPolicy\(\)/);
-  assert.match(grantEditor, /allowed_surfaces: \["chat", "reading"\]/);
   assert.match(grantEditor, /toggleReadingMaterial/);
   assert.match(grantEditor, /toggleReadingExtension/);
   assert.match(
     grantEditor,
     /checked=\{grant\.learning_policy\.reading\.allow_upload\}/,
   );
+});
+
+test("grant editor exposes capability and surface controls", () => {
+  assert.match(grantEditor, /toggleCapability/);
+  assert.match(grantEditor, /toggleSurface/);
+  assert.match(grantEditor, /mastery_path/);
+  assert.match(grantEditor, /immersive_watching/);
+  assert.match(grantEditor, /CAP_TO_SURFACE/);
+  assert.match(grantEditor, /Allowed surfaces/);
+});
+
+test("grant editor prevents unchecking the default capability", () => {
+  assert.match(grantEditor, /disabled=\{saving \|\| cap\.id === grant\.learning_policy!\.default_capability\}/);
+});
+
+test("grant editor locks surfaces mapped to enabled capabilities", () => {
+  assert.match(grantEditor, /lockedByCap/);
+  assert.match(grantEditor, /disabled=\{saving \|\| lockedByCap\}/);
 });
 
 test("account preset copy is present in both supported locales", () => {

@@ -1668,12 +1668,14 @@ async def resolve_model_capabilities(payload: ModelCapabilitiesQuery):
 
 @router.put("/theme")
 async def update_theme(update: ThemeUpdate):
+    _assert_isolated_workspace()
     patch_ui_settings(theme=update.theme)
     return {"theme": update.theme}
 
 
 @router.put("/language")
 async def update_language(update: LanguageUpdate):
+    _assert_isolated_workspace()
     patch_ui_settings(language=update.language)
     return {"language": update.language}
 
@@ -1685,6 +1687,7 @@ async def update_voice_autoplay(update: VoiceAutoplayUpdate):
     A personal UI preference (any authenticated user); the chat surface layers
     a per-session override on top of this value.
     """
+    _assert_isolated_workspace()
     patch_ui_settings(voice_autoplay=update.voice_autoplay)
     return {"voice_autoplay": update.voice_autoplay}
 
@@ -1697,6 +1700,7 @@ async def update_chat_response_timeout(update: ChatResponseTimeoutUpdate):
     video generation can take longer than the old 60s default, so this is
     user-adjustable; the chat surface reads it client-side.
     """
+    _assert_isolated_workspace()
     patch_ui_settings(chat_response_timeout=update.chat_response_timeout)
     return {"chat_response_timeout": update.chat_response_timeout}
 
@@ -1725,6 +1729,15 @@ async def get_ui_settings():
     return {field: settings.get(field) for field in PRESESSION_UI_FIELDS}
 
 
+def _assert_isolated_workspace() -> None:
+    from deeptutor.multi_user.learning_access import assert_workspace_isolated
+
+    try:
+        assert_workspace_isolated()
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
 @router.put("/ui")
 async def update_ui_settings(update: UISettingsUpdate):
     """Merge frontend partial update into current UI settings.
@@ -1733,6 +1746,7 @@ async def update_ui_settings(update: UISettingsUpdate):
     by the frontend override saved values. Fields not in the frontend payload
     (even if they equal the model defaults) are omitted from the merge.
     """
+    _assert_isolated_workspace()
     dump = update.model_dump(exclude_unset=True)  # Only merge explicitly provided fields
     # Merged into the stored document, not into the defaults-merged view: saving
     # that view back would freeze today's defaults as this user's explicit
@@ -1743,6 +1757,7 @@ async def update_ui_settings(update: UISettingsUpdate):
 
 @router.post("/reset")
 async def reset_settings():
+    _assert_isolated_workspace()
     save_ui_settings(DEFAULT_UI_SETTINGS)
     return DEFAULT_UI_SETTINGS
 
@@ -1772,18 +1787,21 @@ async def get_sidebar_settings():
 
 @router.put("/sidebar/description")
 async def update_sidebar_description(update: SidebarDescriptionUpdate):
+    _assert_isolated_workspace()
     patch_ui_settings(sidebar_description=update.description)
     return {"description": update.description}
 
 
 @router.put("/sidebar/nav-order")
 async def update_sidebar_nav_order(update: SidebarNavOrderUpdate):
+    _assert_isolated_workspace()
     patch_ui_settings(sidebar_nav_order=update.nav_order.model_dump())
     return {"nav_order": update.nav_order.model_dump()}
 
 
 @router.put("/enabled-tools")
 async def update_enabled_tools(update: EnabledToolsUpdate):
+    _assert_isolated_workspace()
     sanitized = sanitize_enabled_tools(update.enabled_tools)
     patch_ui_settings(enabled_optional_tools=sanitized)
     return {"enabled_optional_tools": sanitized}

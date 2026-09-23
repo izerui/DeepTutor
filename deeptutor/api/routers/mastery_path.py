@@ -596,11 +596,11 @@ async def get_topic_ask_hint(path_id: str, session_id: str = ""):
 async def mastery_topic_websocket(ws: WebSocket) -> None:
     """Subscribe to one living topic with durable revision replay."""
 
-    from deeptutor.api.routers.auth import ws_auth_failed, ws_require_auth
+    from deeptutor.api.routers.auth import ws_auth_failed, ws_require_learning_surface
     from deeptutor.learning.event_hub import mastery_topic_event_hub
     from deeptutor.multi_user.context import reset_current_user
 
-    user_token = await ws_require_auth(ws)
+    user_token = await ws_require_learning_surface(ws, "mastery")
     if user_token is ws_auth_failed:
         return
     await ws.accept()
