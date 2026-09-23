@@ -372,7 +372,7 @@ activate_frontend() {
     mv /app/web.hot-deploy.new/server.js /app/web/server.js
     mv /app/web.hot-deploy.new/.next /app/web/.next
     mv /app/web.hot-deploy.new/public /app/web/public
-    rmdir /app/web.hot-deploy.new
+    rm -rf /app/web.hot-deploy.new
     chown -R deeptutor:deeptutor /app/web/server.js /app/web/.next /app/web/public
     trap - ERR
   ' _ "$DEPLOY_ID"; then
