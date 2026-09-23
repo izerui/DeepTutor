@@ -309,6 +309,14 @@ def test_guardian_can_adjust_only_the_exposed_learning_restrictions(mu_isolated_
     assert before.status_code == 200
     assert before.json()["restrictions"]["age_band"] == "9-12"
 
+    from deeptutor.multi_user.grants import load_grant
+    from deeptutor.multi_user.learning_access import learning_policy_for_user
+
+    # Before the PUT the learner has no grant on disk yet — the policy comes
+    # from the preset expansion, so read it through the same fallback the
+    # endpoint uses.
+    capabilities_before = learning_policy_for_user(learner_id)["allowed_capabilities"]
+
     changed = client.put(
         url,
         headers=_auth("guardian-token"),
@@ -327,13 +335,11 @@ def test_guardian_can_adjust_only_the_exposed_learning_restrictions(mu_isolated_
         "extensions": [],
     }
 
-    from deeptutor.multi_user.grants import load_grant
-
     grant = load_grant(learner_id)
-    assert grant["learning_policy"]["allowed_capabilities"] == [
-        "chat",
-        "immersive_reading",
-    ]
+    # Capabilities are the admin's dimension: narrowing surfaces must leave
+    # them untouched. Asserted as "unchanged" rather than a hardcoded list so
+    # the contract still holds when the learner defaults change.
+    assert grant["learning_policy"]["allowed_capabilities"] == capabilities_before
     assert grant["learning_policy"]["reading"]["material_ids"] == []
 
 

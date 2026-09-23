@@ -55,12 +55,6 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 LEARNING_CAPABILITIES = {"chat", "immersive_reading", "mastery_path", "immersive_watching"}
 LEARNING_AGE_BANDS = {"6-8", "9-12", "13-15"}
 LEARNING_PERSONAS = {"teacher", "peer", "research-assistant"}
-_CAP_REQUIRED_SURFACE: dict[str, str] = {
-    "chat": "chat",
-    "immersive_reading": "reading",
-    "mastery_path": "mastery",
-    "immersive_watching": "watching",
-}
 LEARNING_SURFACES = {
     "chat", "reading", "mastery", "books", "watching",
     "partners", "agents", "writing", "notebook", "dashboard",
@@ -367,12 +361,13 @@ def validate_grant(grant: dict[str, Any]) -> None:
             "learning_policy.allowed_surfaces contains unsupported values: "
             f"{', '.join(sorted(unknown_surfaces))}"
         )
-    surface_set = set(surfaces)
-    for cap, required_surface in _CAP_REQUIRED_SURFACE.items():
-        if cap in capability_set and required_surface not in surface_set:
-            raise ValueError(
-                f"Capability '{cap}' requires surface '{required_surface}' in allowed_surfaces"
-            )
+    # allowed_capabilities and allowed_surfaces stay independent on purpose.
+    # A capability enabled without its surface is not a security hole: the
+    # surface guard (``require_learning_surface``) runs as a request-level
+    # dependency, before the route handler and before the capability check,
+    # so the page is already unreachable. Coupling them here would break the
+    # guardian endpoint, which may only edit surfaces — never capabilities.
+    # The admin UI still links them via CAP_TO_SURFACE for a clearer form.
     reading = policy.get("reading", {})
     if not isinstance(reading, dict):
         raise ValueError("learning_policy.reading must be an object")

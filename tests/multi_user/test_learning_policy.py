@@ -64,8 +64,14 @@ def test_learning_policy_validation_rejects_unsafe_values(mu_isolated_root):
         validate_grant(grant)
 
 
-def test_validate_grant_rejects_capability_without_surface(mu_isolated_root):
-    """validate_grant rejects mastery_path capability without mastery surface."""
+def test_validate_grant_allows_capability_without_its_surface(mu_isolated_root):
+    """Capabilities and surfaces are independent dimensions.
+
+    A capability enabled without its surface must validate: the surface guard
+    runs as a request-level dependency ahead of the route handler, so the page
+    is already unreachable. Coupling the two in validate_grant would break the
+    guardian endpoint, which may only edit surfaces — never capabilities.
+    """
     grant = normalize_grant(
         "u_student",
         {
@@ -74,14 +80,48 @@ def test_validate_grant_rejects_capability_without_surface(mu_isolated_root):
                 "locked_persona": "teacher",
                 "allowed_capabilities": ["chat", "immersive_reading", "mastery_path"],
                 "default_capability": "immersive_reading",
-                "allowed_surfaces": ["chat", "reading"],
+                "allowed_surfaces": ["reading"],
                 "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
             }
         },
     )
 
-    with pytest.raises(ValueError, match="requires surface"):
-        validate_grant(grant)
+    validate_grant(grant)
+
+
+def test_surface_guard_blocks_a_capability_whose_surface_is_off(
+    mu_isolated_root, seed_user, as_user
+):
+    """The runtime defence for the decoupled state: surface off => denied.
+
+    This is what makes the relaxed validate_grant safe — it is asserted here so
+    removing the surface guard cannot silently widen learner access.
+    """
+    learner = _seed_learner(seed_user, "student_decoupled")
+    save_grant(
+        learner["id"],
+        {
+            "enabled_tools": [],
+            "mcp_tools": [],
+            "cli_apps": [],
+            "exec_enabled": False,
+            "learning_policy": {
+                "age_band": "9-12",
+                "locked_persona": "teacher",
+                "allowed_capabilities": ["chat", "immersive_reading"],
+                "default_capability": "immersive_reading",
+                "allowed_surfaces": ["reading"],
+                "reading": {"allow_upload": False, "material_ids": [], "extensions": []},
+            },
+        },
+    )
+
+    with as_user(learner["id"], username="student_decoupled"):
+        # chat capability is granted, but its surface is not — the page is
+        # unreachable even though the capability check itself would pass.
+        with pytest.raises(PermissionError, match="chat surface"):
+            assert_learning_surface("chat")
+        assert_learning_surface("reading")
 
 
 def test_validate_grant_accepts_capability_with_surface(mu_isolated_root):
