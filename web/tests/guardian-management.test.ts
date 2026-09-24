@@ -11,6 +11,7 @@ import {
   isSettingsCategoryVisible,
   SETTINGS_CATEGORIES,
 } from "../features/settings/navigation/settings-nav";
+import { visibleSettingsPages } from "../features/settings/navigation/settings-pages";
 
 const readWebFile = (...parts: string[]) =>
   readFileSync(path.join(process.cwd(), ...parts), "utf8");
@@ -134,6 +135,49 @@ test("learner and guardian sections follow the resolved account type", () => {
   assert.equal(isSettingsCategoryVisible(learner, guardianAccount), false);
   assert.equal(isSettingsCategoryVisible(guardian, guardianAccount), true);
   assert.equal(isSettingsCategoryVisible(agents, guardianAccount), false);
+});
+
+test("learner hides model management entries, keeps self-service entries", () => {
+  const MODEL_ADMIN_KEYS = [
+    "connections", "llm", "task-models", "embedding",
+    "search", "voice", "multimodal",
+  ];
+
+  const learnerAccount = settingsAccessFromAuthStatus({
+    enabled: true,
+    authenticated: true,
+    is_admin: false,
+    preset: "learner",
+  });
+  const adminAccount = settingsAccessFromAuthStatus({
+    enabled: true,
+    authenticated: true,
+    is_admin: true,
+    preset: "standard",
+  });
+
+  const learnerKeys = visibleSettingsPages(learnerAccount).map(p => p.key);
+  const adminKeys = visibleSettingsPages(adminAccount).map(p => p.key);
+
+  for (const key of MODEL_ADMIN_KEYS) {
+    assert.ok(
+      !learnerKeys.includes(key),
+      `learner must not see ${key}`,
+    );
+    assert.ok(
+      adminKeys.includes(key),
+      `admin must still see ${key}`,
+    );
+  }
+
+  assert.ok(
+    learnerKeys.includes("learner-profile"),
+    "learner must still see learner-profile",
+  );
+  assert.ok(
+    learnerKeys.includes("memory"),
+    "learner must still see memory",
+  );
 });
 
 test("guardian management copy is localized", () => {

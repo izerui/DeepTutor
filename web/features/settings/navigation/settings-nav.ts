@@ -123,6 +123,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     },
     icon: AudioLines,
     tile: "bg-rose-500/10 text-rose-600",
+    adminOnly: true,
   },
   {
     key: "multimodal",
@@ -134,6 +135,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     },
     icon: ImageIcon,
     tile: "bg-violet-500/10 text-violet-600",
+    adminOnly: true,
   },
   {
     key: "connections",
@@ -145,6 +147,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     },
     icon: KeyRound,
     tile: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    adminOnly: true,
   },
   {
     key: "llm",
@@ -157,6 +160,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: Brain,
     tile: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     service: "llm",
+    adminOnly: true,
   },
   {
     key: "task-models",
@@ -168,6 +172,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     },
     icon: ListChecks,
     tile: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+    adminOnly: true,
   },
   {
     key: "embedding",
@@ -180,6 +185,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: Database,
     tile: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     service: "embedding",
+    adminOnly: true,
   },
   {
     key: "search",
@@ -189,6 +195,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: Search,
     tile: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     service: "search",
+    adminOnly: true,
   },
   {
     key: "tts",
@@ -201,6 +208,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: AudioLines,
     tile: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
     service: "tts",
+    adminOnly: true,
   },
   {
     key: "stt",
@@ -213,6 +221,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: Mic,
     tile: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
     service: "stt",
+    adminOnly: true,
   },
   {
     key: "imagegen",
@@ -225,6 +234,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: ImageIcon,
     tile: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400",
     service: "imagegen",
+    adminOnly: true,
   },
   {
     key: "videogen",
@@ -237,6 +247,7 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     icon: Clapperboard,
     tile: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
     service: "videogen",
+    adminOnly: true,
   },
 ];
 
