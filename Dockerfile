@@ -185,6 +185,13 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=python-base /usr/local/bin /usr/local/bin
 
+# Sandbox-only runtime deps: libraries the model's generated code commonly
+# imports (e.g. matplotlib for plotting). Installed here rather than in
+# pyproject.toml / requirements so they stay out of the public package
+# metadata — they are only needed inside the Docker image's sandbox.
+RUN pip install --no-cache-dir matplotlib \
+    && python -c "import matplotlib"
+
 RUN if [ "${DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS}" = "1" ]; then \
         python -c "import manim, markitdown, pymupdf4llm"; \
         command -v latex; \

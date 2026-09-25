@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir \
         numpy \
         pandas \
+        matplotlib \
         python-docx \
         python-pptx \
         openpyxl \
@@ -72,7 +73,8 @@ RUN pip install --no-cache-dir \
         reportlab \
         lxml \
         defusedxml \
-        Pillow
+        Pillow \
+    && python -c "import matplotlib, numpy, pandas"
 
 # Optional, NOT installed by default: LibreOffice (`soffice`) for format
 # conversion (.doc→.docx, →PDF) and Excel formula recalculation. It is large
