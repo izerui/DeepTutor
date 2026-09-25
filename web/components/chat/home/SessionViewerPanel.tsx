@@ -59,6 +59,7 @@ import type { QuizFollowupTabContext } from "@/context/QuizFollowupContext";
 import type { GeogebraTabPayload } from "@/context/GeogebraTabContext";
 import { apiUrl } from "@/lib/api";
 import type { MessageAttachment } from "@/features/chat/ChatStateAdapter";
+import { fileTabIdFor } from "@/lib/viewer-tab-id";
 import type { StreamEvent } from "@/features/chat/model/protocol";
 import {
   normalizeSelectedText,
@@ -204,10 +205,6 @@ interface SessionViewerPanelProps {
   configSection?: ReactNode;
 }
 
-function fileTabIdFor(a: MessageAttachment, fallback: number): string {
-  return `file:${a.id ?? a.filename ?? `idx-${fallback}`}`;
-}
-
 function webTabIdFor(url: string): string {
   return `web:${url}`;
 }
@@ -338,9 +335,16 @@ function SessionViewerPanelInner(
     (a: MessageAttachment) => {
       setTabs((prev) => {
         const id = fileTabIdFor(a, prev.length);
+        const newSource = attachmentToPreviewSource(a);
         const existingIdx = prev.findIndex((tab) => tab.id === id);
         if (existingIdx >= 0) {
           setActiveTabId(id);
+          const existing = prev[existingIdx];
+          if (existing.kind === "file" && existing.source.url !== newSource.url) {
+            const updated = [...prev];
+            updated[existingIdx] = { ...existing, source: newSource };
+            return updated;
+          }
           return prev;
         }
         const label = a.filename || "Attachment";
@@ -348,7 +352,7 @@ function SessionViewerPanelInner(
           kind: "file",
           id,
           label,
-          source: attachmentToPreviewSource(a),
+          source: newSource,
         };
         setActiveTabId(id);
         return [...prev, next];
