@@ -210,9 +210,9 @@ import pathlib
 rc = pathlib.Path(matplotlib.matplotlib_fname())
 text = rc.read_text()
 if '#font.sans-serif:' in text:
-    text = text.replace('#font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+    text = text.replace('#font.sans-serif:', 'font.sans-serif: Noto Sans CJK SC, WenQuanYi Zen Hei,')
 else:
-    text = text.replace('font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+    text = text.replace('font.sans-serif:', 'font.sans-serif: Noto Sans CJK SC, WenQuanYi Zen Hei,')
 rc.write_text(text)
 PYEOF
 
