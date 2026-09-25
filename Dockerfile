@@ -185,12 +185,59 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=python-base /usr/local/bin /usr/local/bin
 
+# CJK font so matplotlib/Pillow render Chinese/Japanese/Korean text instead of
+# tofu boxes. Must match the font installed in Dockerfile.runner (fonts-wqy-zenhei).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -fv
+
 # Sandbox-only runtime deps: libraries the model's generated code commonly
 # imports (e.g. matplotlib for plotting). Installed here rather than in
 # pyproject.toml / requirements so they stay out of the public package
 # metadata — they are only needed inside the Docker image's sandbox.
 RUN pip install --no-cache-dir matplotlib \
     && python -c "import matplotlib"
+
+# Pre-configure matplotlib to use the CJK font so generated charts render
+# Chinese text out of the box without per-script font configuration.
+# The verify step renders actual Chinese glyphs to a throwaway PNG — a real
+# proof that fc-list → matplotlib font resolution → glyph rendering all work.
+RUN python <<'PYEOF'
+import matplotlib
+import pathlib
+
+rc = pathlib.Path(matplotlib.matplotlib_fname())
+text = rc.read_text()
+if '#font.sans-serif:' in text:
+    text = text.replace('#font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+else:
+    text = text.replace('font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+rc.write_text(text)
+PYEOF
+
+RUN python <<'PYEOF'
+import warnings, os
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.set_title('中文标题验证')
+ax.set_xlabel('横轴')
+ax.set_ylabel('纵轴')
+ax.plot([1, 2, 3], [1, 4, 9])
+
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter('always')
+    fig.savefig('/tmp/_font_check.png')
+    glyph_warnings = [x for x in w if 'missing' in str(x.message).lower() or 'glyph' in str(x.message).lower()]
+    assert not glyph_warnings, f'CJK glyph warnings: {glyph_warnings}'
+
+plt.close()
+os.remove('/tmp/_font_check.png')
+print('matplotlib CJK rendering verified (no missing-glyph warnings)')
+PYEOF
 
 RUN if [ "${DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS}" = "1" ]; then \
         python -c "import manim, markitdown, pymupdf4llm"; \

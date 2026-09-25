@@ -76,6 +76,47 @@ RUN pip install --no-cache-dir \
         Pillow \
     && python -c "import matplotlib, numpy, pandas"
 
+# Pre-configure matplotlib to use the CJK font installed above so generated
+# charts render Chinese text out of the box. The verify step renders actual
+# Chinese glyphs to a throwaway PNG — a real proof that fc-list → matplotlib
+# font resolution → glyph rendering all work, not just an rcParams echo.
+RUN fc-cache -fv \
+    && python <<'PYEOF'
+import matplotlib
+import pathlib
+
+rc = pathlib.Path(matplotlib.matplotlib_fname())
+text = rc.read_text()
+if '#font.sans-serif:' in text:
+    text = text.replace('#font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+else:
+    text = text.replace('font.sans-serif:', 'font.sans-serif: WenQuanYi Zen Hei,')
+rc.write_text(text)
+PYEOF
+
+RUN python <<'PYEOF'
+import warnings, os
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.set_title('中文标题验证')
+ax.set_xlabel('横轴')
+ax.set_ylabel('纵轴')
+ax.plot([1, 2, 3], [1, 4, 9])
+
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter('always')
+    fig.savefig('/tmp/_font_check.png')
+    glyph_warnings = [x for x in w if 'missing' in str(x.message).lower() or 'glyph' in str(x.message).lower()]
+    assert not glyph_warnings, f'CJK glyph warnings: {glyph_warnings}'
+
+plt.close()
+os.remove('/tmp/_font_check.png')
+print('matplotlib CJK rendering verified (no missing-glyph warnings)')
+PYEOF
+
 # Optional, NOT installed by default: LibreOffice (`soffice`) for format
 # conversion (.doc→.docx, →PDF) and Excel formula recalculation. It is large
 # (~400MB+), so the office skills gate every use on `command -v soffice` and
