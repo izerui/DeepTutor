@@ -1643,6 +1643,21 @@ def test_get_ui_settings_is_public_without_auth(monkeypatch: pytest.MonkeyPatch,
     assert payload["theme"] == "dark"
 
 
+@pytest.mark.asyncio
+async def test_update_ui_settings_persists_voice_autoplay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    settings_file = tmp_path / "interface.json"
+    monkeypatch.setattr(settings_router, "_settings_file", lambda: settings_file)
+
+    await settings_router.update_ui_settings(
+        settings_router.UISettingsUpdate(voice_autoplay=True)
+    )
+
+    persisted = settings_router.load_ui_settings()
+    assert persisted["voice_autoplay"] is True
+
+
 def test_auth_disabled_settings_endpoint_does_not_expose_provider_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

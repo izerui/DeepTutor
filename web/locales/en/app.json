@@ -257,6 +257,7 @@
   "Network changes take effect after restart.": "Network changes take effect after restart.",
   "Per-capability LLM parameters and runtime knobs.": "Per-capability LLM parameters and runtime knobs.",
   "Read each assistant reply aloud automatically. You can also toggle this per conversation from the speaker button.": "Read each assistant reply aloud automatically. You can also toggle this per conversation from the speaker button.",
+  "Read each assistant reply aloud automatically. When this is off, the speaker button can enable auto-play for the current conversation.": "Read each assistant reply aloud automatically. When this is off, the speaker button can enable auto-play for the current conversation.",
   "Status": "Status",
   "Not configured": "Not configured",
   "REQUIRED": "REQUIRED",

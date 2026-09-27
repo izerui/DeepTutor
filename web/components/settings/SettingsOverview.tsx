@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SettingRow, SettingSection, SettingsPageHeader } from "./shared";
+import { VoiceAutoplaySetting } from "./VoiceAutoplaySetting";
 import { useUiSettings } from "@/features/settings/store";
 import { useSettings } from "@/features/settings/store/SettingsStore";
 
@@ -72,6 +73,7 @@ export default function SettingsOverview() {
           }
         />
       </SettingSection>
+      <VoiceAutoplaySetting />
       {catalogEditable && <SettingSection
         title={t("Set up chat first")}
         description={t("Connect a provider and choose a language model. Other services are optional.")}

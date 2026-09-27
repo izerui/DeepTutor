@@ -6092,6 +6092,21 @@
             "title": "Options",
             "type": "object"
           },
+          "origin_ref": {
+            "default": "",
+            "title": "Origin Ref",
+            "type": "string"
+          },
+          "origin_type": {
+            "default": "conversation",
+            "enum": [
+              "conversation",
+              "external_import",
+              "document_analysis"
+            ],
+            "title": "Origin Type",
+            "type": "string"
+          },
           "practice": {
             "anyOf": [
               {
@@ -6186,6 +6201,7 @@
             "type": "string"
           },
           "session_id": {
+            "default": "",
             "title": "Session Id",
             "type": "string"
           },
@@ -6232,7 +6248,6 @@
         },
         "required": [
           "id",
-          "session_id",
           "question",
           "created_at",
           "updated_at"
@@ -10124,6 +10139,17 @@
               }
             ],
             "title": "Theme"
+          },
+          "voice_autoplay": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Autoplay"
           }
         },
         "title": "UISettingsUpdate",
@@ -11004,6 +11030,21 @@
             ],
             "title": "Options"
           },
+          "origin_ref": {
+            "default": "",
+            "title": "Origin Ref",
+            "type": "string"
+          },
+          "origin_type": {
+            "default": "conversation",
+            "enum": [
+              "conversation",
+              "external_import",
+              "document_analysis"
+            ],
+            "title": "Origin Type",
+            "type": "string"
+          },
           "quality": {
             "anyOf": [
               {
@@ -11055,6 +11096,7 @@
             "type": "string"
           },
           "session_id": {
+            "default": "",
             "title": "Session Id",
             "type": "string"
           },
@@ -11097,7 +11139,6 @@
           }
         },
         "required": [
-          "session_id",
           "question_id",
           "question"
         ],
@@ -37260,9 +37301,35 @@
           {
             "in": "query",
             "name": "session_id",
-            "required": true,
+            "required": false,
             "schema": {
+              "default": "",
               "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin_type",
+            "required": false,
+            "schema": {
+              "default": "conversation",
+              "enum": [
+                "conversation",
+                "external_import",
+                "document_analysis"
+              ],
+              "title": "Origin Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin_ref",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Origin Ref",
               "type": "string"
             }
           },

@@ -23,6 +23,7 @@ import {
   writeStoredResponseLanguage,
 } from "@/context/app-shell-storage";
 import { useAppShell } from "@/context/AppShellContext";
+import { syncVoiceAutoplayPreference } from "@/hooks/useVoiceAutoplay";
 import { apiFetch, apiUrl } from "@/lib/api";
 import { invalidateLLMOptionsCache } from "@/lib/llm-options";
 import { setModelReasoningEffort } from "@/lib/reasoning-effort";
@@ -88,6 +89,7 @@ export type UiSettings = {
   theme: "light" | "dark" | "glass" | "snow";
   language: "en" | "zh";
   response_language: "en" | "zh";
+  voice_autoplay: boolean;
   code_block_theme: string;
   code_block_show_line_numbers: boolean;
   code_block_wrap_long_lines: boolean;
@@ -439,6 +441,7 @@ export type SettingsContextValue = {
   theme: UiSettings["theme"];
   language: UiSettings["language"];
   responseLanguage: UiSettings["response_language"];
+  voiceAutoplay: UiSettings["voice_autoplay"];
   codeBlockTheme: UiSettings["code_block_theme"];
   codeBlockShowLineNumbers: UiSettings["code_block_show_line_numbers"];
   codeBlockWrapLongLines: UiSettings["code_block_wrap_long_lines"];
@@ -451,6 +454,7 @@ export type SettingsContextValue = {
   updateResponseLanguage: (
     next: UiSettings["response_language"],
   ) => Promise<void>;
+  updateVoiceAutoplay: (next: UiSettings["voice_autoplay"]) => Promise<void>;
   updateCodeBlockTheme: (next: CodeBlockThemeId) => Promise<void>;
   updateCodeBlockShowLineNumbers: (next: boolean) => Promise<void>;
   updateCodeBlockWrapLongLines: (next: boolean) => Promise<void>;
@@ -613,6 +617,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<UiSettings["language"]>("en");
   const [responseLanguage, setResponseLanguage] =
     useState<UiSettings["response_language"]>("en");
+  const [voiceAutoplay, setVoiceAutoplay] =
+    useState<UiSettings["voice_autoplay"]>(false);
   const [catalog, setCatalog] = useState<Catalog>(defaultCatalog());
   const [draft, setDraft] = useState<Catalog>(defaultCatalog());
   const [catalogEditable, setCatalogEditable] = useState<boolean | null>(null);
@@ -740,6 +746,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const loadedResponseLanguage =
         payload.ui.response_language ?? payload.ui.language;
       setResponseLanguage(loadedResponseLanguage);
+      const loadedVoiceAutoplay = Boolean(payload.ui.voice_autoplay);
+      setVoiceAutoplay(loadedVoiceAutoplay);
+      syncVoiceAutoplayPreference(loadedVoiceAutoplay);
       // Reconcile the browser's copy with the server's. Without this the two
       // inherit differently and drift permanently: the server derives
       // `response_language` from `language` on every read, while the browser
@@ -875,10 +884,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // when Apply succeeds, so Discard has no global side effects to undo.
   const liveUi = useMemo<UiSettings>(() => ({
     theme, language, response_language: responseLanguage,
+    voice_autoplay: voiceAutoplay,
     code_block_theme: codeBlockTheme,
     code_block_show_line_numbers: codeBlockShowLineNumbers,
     code_block_wrap_long_lines: codeBlockWrapLongLines,
-  }), [theme, language, responseLanguage, codeBlockTheme, codeBlockShowLineNumbers, codeBlockWrapLongLines]);
+  }), [theme, language, responseLanguage, voiceAutoplay, codeBlockTheme, codeBlockShowLineNumbers, codeBlockWrapLongLines]);
   const applyUi = useCallback((ui: UiSettings) => {
     setTheme(ui.theme);
     setLanguage(ui.language);
@@ -886,6 +896,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     applyThemePreference(ui.theme);
     writeStoredLanguage(ui.language);
     writeStoredResponseLanguage(ui.response_language);
+    if (typeof ui.voice_autoplay === "boolean") {
+      setVoiceAutoplay(ui.voice_autoplay);
+      syncVoiceAutoplayPreference(ui.voice_autoplay);
+    }
     syncLoadedCodeBlockSettingsToAppShell(ui);
   }, []);
   const stageUi = useCallback(async (patch: Partial<UiSettings>) => {
@@ -899,6 +913,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateTheme = useCallback(async (theme: UiSettings["theme"]) => stageUi({ theme }), [stageUi]);
   const updateLanguage = useCallback(async (language: UiSettings["language"]) => stageUi({ language }), [stageUi]);
   const updateResponseLanguage = useCallback(async (response_language: UiSettings["response_language"]) => stageUi({ response_language }), [stageUi]);
+  const updateVoiceAutoplay = useCallback(async (voice_autoplay: UiSettings["voice_autoplay"]) => stageUi({ voice_autoplay }), [stageUi]);
   const updateCodeBlockTheme = useCallback(async (code_block_theme: CodeBlockThemeId) => stageUi({ code_block_theme }), [stageUi]);
   const updateCodeBlockShowLineNumbers = useCallback(async (code_block_show_line_numbers: boolean) => stageUi({ code_block_show_line_numbers }), [stageUi]);
   const updateCodeBlockWrapLongLines = useCallback(async (code_block_wrap_long_lines: boolean) => stageUi({ code_block_wrap_long_lines }), [stageUi]);
@@ -2084,6 +2099,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       theme: editedUi.theme,
       language: editedUi.language,
       responseLanguage: editedUi.response_language,
+      voiceAutoplay: editedUi.voice_autoplay,
       codeBlockTheme: editedUi.code_block_theme,
       codeBlockShowLineNumbers: editedUi.code_block_show_line_numbers,
       codeBlockWrapLongLines: editedUi.code_block_wrap_long_lines,
@@ -2092,6 +2108,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateTheme,
       updateLanguage,
       updateResponseLanguage,
+      updateVoiceAutoplay,
       updateCodeBlockTheme,
       updateCodeBlockShowLineNumbers,
       updateCodeBlockWrapLongLines,
@@ -2206,6 +2223,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateModelCapability,
       updateLanguage,
       updateResponseLanguage,
+      updateVoiceAutoplay,
       updateModelBoolField,
       updateModelField,
       updateProfileField,

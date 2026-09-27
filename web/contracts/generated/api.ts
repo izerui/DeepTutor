@@ -12756,6 +12756,18 @@ export interface components {
       readonly options: {
         readonly [key: string]: string;
       };
+      /**
+       * Origin Ref
+       * @default
+       */
+      readonly origin_ref: string;
+      /**
+       * Origin Type
+       * @default conversation
+       * @enum {string}
+       */
+      readonly origin_type:
+        "conversation" | "external_import" | "document_analysis";
       /** Practice */
       readonly practice?: {
         readonly [key: string]: unknown;
@@ -12803,7 +12815,10 @@ export interface components {
        * @default
        */
       readonly section_title: string;
-      /** Session Id */
+      /**
+       * Session Id
+       * @default
+       */
       readonly session_id: string;
       /**
        * Session Title
@@ -14570,6 +14585,8 @@ export interface components {
         components["schemas"]["SidebarNavOrder"] | null;
       /** Theme */
       readonly theme?: ("light" | "dark" | "glass" | "snow") | null;
+      /** Voice Autoplay */
+      readonly voice_autoplay?: boolean | null;
     };
     /** UnitText */
     readonly UnitText: {
@@ -14835,6 +14852,18 @@ export interface components {
       readonly options?: {
         readonly [key: string]: string;
       } | null;
+      /**
+       * Origin Ref
+       * @default
+       */
+      readonly origin_ref: string;
+      /**
+       * Origin Type
+       * @default conversation
+       * @enum {string}
+       */
+      readonly origin_type:
+        "conversation" | "external_import" | "document_analysis";
       /** Quality */
       readonly quality?: number | null;
       /** Question */
@@ -14863,7 +14892,10 @@ export interface components {
        * @default
        */
       readonly section_title: string;
-      /** Session Id */
+      /**
+       * Session Id
+       * @default
+       */
       readonly session_id: string;
       /**
        * Source
@@ -28135,8 +28167,11 @@ export interface operations {
       readonly query: {
         /** @description Return 204 No Content instead of 404 when the entry is absent — used by the quiz viewer to probe not-yet-saved questions without logging noisy 404s. */
         readonly missing_ok?: boolean;
+        readonly origin_ref?: string;
+        readonly origin_type?:
+          "conversation" | "external_import" | "document_analysis";
         readonly question_id: string;
-        readonly session_id: string;
+        readonly session_id?: string;
         readonly turn_id?: string | null;
       };
       readonly header?: {

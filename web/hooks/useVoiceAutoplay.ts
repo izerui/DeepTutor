@@ -72,42 +72,14 @@ function writeSession(value: boolean, scopeKey?: string): void {
   }
 }
 
-/**
- * Settings-page hook: read/write the persisted global default.
- */
-export function useVoiceAutoplayPreference() {
-  const [value, setVal] = useState<boolean>(cachedGlobal ?? false);
-  const [loading, setLoading] = useState<boolean>(cachedGlobal === null);
-
-  useEffect(() => {
-    let active = true;
-    fetchGlobalDefault().then((v) => {
-      if (active) {
-        setVal(v);
-        setLoading(false);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const setValue = useCallback(async (next: boolean) => {
-    setVal(next);
-    cachedGlobal = next;
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
-      );
-    }
-    await apiFetch(apiUrl("/api/settings/voice-autoplay"), {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voice_autoplay: next }),
-    });
-  }, []);
-
-  return { value, setValue, loading };
+/** Keep mounted chat surfaces and the module cache aligned with applied settings. */
+export function syncVoiceAutoplayPreference(next: boolean): void {
+  cachedGlobal = next;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
+    );
+  }
 }
 
 /**

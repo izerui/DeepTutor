@@ -257,6 +257,7 @@
   "Network changes take effect after restart.": "网络改动重启后生效。",
   "Per-capability LLM parameters and runtime knobs.": "各能力的 LLM 参数与运行时旋钮。",
   "Read each assistant reply aloud automatically. You can also toggle this per conversation from the speaker button.": "自动朗读每条助手回复。你也可以在每个对话中通过喇叭按钮单独开关。",
+  "Read each assistant reply aloud automatically. When this is off, the speaker button can enable auto-play for the current conversation.": "自动朗读每条助手回复。关闭全局开关后，仍可通过喇叭按钮为当前对话临时开启。",
   "Status": "状态",
   "Not configured": "未配置",
   "REQUIRED": "必填",

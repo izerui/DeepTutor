@@ -141,6 +141,7 @@ class UISettings(BaseModel):
     theme: Literal["light", "dark", "glass", "snow"] = "snow"
     language: Literal["zh", "en"] = "en"
     response_language: Literal["zh", "en"] = "en"
+    voice_autoplay: bool = False
     sidebar_description: Optional[str] = None
     sidebar_nav_order: Optional[SidebarNavOrder] = None
     code_block_theme: Optional[str] = None
@@ -164,6 +165,7 @@ class UISettingsUpdate(BaseModel):
     theme: Literal["light", "dark", "glass", "snow"] | None = None
     language: Literal["zh", "en"] | None = None
     response_language: Literal["zh", "en"] | None = None
+    voice_autoplay: bool | None = None
     sidebar_description: str | None = None
     sidebar_nav_order: SidebarNavOrder | None = None
     code_block_theme: str | None = None
