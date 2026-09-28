@@ -28,7 +28,9 @@ def _cli_requirement_lines() -> list[str]:
 def test_parser_extras_track_current_upstream_floors() -> None:
     extras = _project(REPOSITORY_ROOT / "pyproject.toml")["optional-dependencies"]
 
-    assert extras["parse-markitdown"] == ["markitdown[all]>=0.1.7"]
+    assert extras["parse-markitdown"] == [
+        "markitdown[audio-transcription,az-content-understanding,az-doc-intel,docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7"
+    ]
     assert extras["parse-pymupdf4llm"] == ["pymupdf4llm>=1.28.2"]
     assert extras["parse-liteparse"] == ["liteparse>=2.14.2"]
     assert extras["parse-docling"] == [

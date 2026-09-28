@@ -949,7 +949,9 @@ def test_install_manager_spec_allowlist() -> None:
 
     # Only optional pip-backed engines are installable; built-in / external are not.
     assert installable_engines() == {"pymupdf4llm", "markitdown", "docling", "liteparse"}
-    assert ENGINE_PIP_SPECS["markitdown"] == ["markitdown[all]>=0.1.7"]
+    assert ENGINE_PIP_SPECS["markitdown"] == [
+        "markitdown[audio-transcription,az-content-understanding,az-doc-intel,docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7"
+    ]
     assert ENGINE_PIP_SPECS["pymupdf4llm"] == ["pymupdf4llm>=1.28.2"]
     assert ENGINE_PIP_SPECS["liteparse"] == ["liteparse>=2.14.2"]
     assert ENGINE_PIP_SPECS["docling"] == [

@@ -38,9 +38,13 @@ logger = logging.getLogger(__name__)
 # CLI/API) have no one-click install.
 ENGINE_PIP_SPECS: dict[str, list[str]] = {
     "pymupdf4llm": ["pymupdf4llm>=1.28.2"],
-    # ``all`` is upstream's supported way to install every built-in converter
-    # dependency (PDF, Office, Outlook, audio, and future additions).
-    "markitdown": ["markitdown[all]>=0.1.7"],
+    # Every converter extra spelled out: upstream's ``all`` pins
+    # youtube-transcript-api~=1.0.0, which would downgrade DeepTutor's core
+    # >=1.2 pin. The local-format subset is already a core dependency.
+    "markitdown": [
+        "markitdown[audio-transcription,az-content-understanding,az-doc-intel,"
+        "docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7"
+    ],
     # Keep the base converter and every format-specific dependency aligned
     # with the Docling compatibility floor.  ``format-video`` also brings the
     # ASR dependencies used by audio; legacy Office still needs LibreOffice

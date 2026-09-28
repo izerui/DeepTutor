@@ -33,6 +33,11 @@ json-repair>=0.57.0,<1.0.0
 # Built-in cron service (chat & partner scheduled tasks)
 croniter>=6.0.0,<7.0.0
 
+# --- Document parsing (Settings -> Document Parsing, default-on MarkItDown) ---
+# Local-format extras only; `all` pins youtube-transcript-api~=1.0.0 (conflicts
+# with cli.txt) and pulls Azure SDKs + audio transcription.
+markitdown[docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7
+
 # --- Runtime observability ---
 # Process-tree memory readings behind /api/system/memory. Imported lazily
 # with a /proc fallback, so it is soft rather than required.
