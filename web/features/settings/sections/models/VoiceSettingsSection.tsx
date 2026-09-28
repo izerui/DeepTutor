@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ModelsWorkspace } from "@/components/settings/ModelsWorkspace";
 import { SettingsPageHeader } from "@/components/settings/shared";
 import { VoiceAutoplaySetting } from "@/components/settings/VoiceAutoplaySetting";
-
+import { VoicePlaybackPrefs } from "./VoicePlaybackPrefs";
 export default function VoiceSettingsPage() {
   const { t } = useTranslation();
 
@@ -18,6 +18,7 @@ export default function VoiceSettingsPage() {
         )}
       />
       <VoiceAutoplaySetting />
+      <VoicePlaybackPrefs includeAutoplay={false} />
       <ModelsWorkspace page="voice" />
     </div>
   );
