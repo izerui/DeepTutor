@@ -10820,17 +10820,6 @@
               }
             ],
             "title": "Theme"
-          },
-          "voice_autoplay": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Voice Autoplay"
           }
         },
         "title": "UISettingsUpdate",

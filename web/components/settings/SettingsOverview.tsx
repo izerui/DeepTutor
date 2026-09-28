@@ -13,7 +13,6 @@ import {
   selectOptionClass,
 } from "./shared";
 import { RESPONSE_LANGUAGE_OPTIONS, useUiSettings } from "@/features/settings/store";
-import { VoiceAutoplaySetting } from "./VoiceAutoplaySetting";
 import { useSettings } from "@/features/settings/store/SettingsStore";
 
 function LanguageSelect({
@@ -97,7 +96,6 @@ export default function SettingsOverview() {
           }
         />
       </SettingSection>
-      <VoiceAutoplaySetting />
       {catalogEditable === true && <SettingsPresetsPanel enabled={true} />}
       {catalogEditable && <SettingSection
         title={t("Set up chat first")}

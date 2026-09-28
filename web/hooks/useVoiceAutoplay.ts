@@ -72,42 +72,34 @@ function writeSession(value: boolean, scopeKey?: string): void {
   }
 }
 
-/** Keep mounted chat surfaces and the module cache aligned with applied settings. */
-export function syncVoiceAutoplayPreference(next: boolean): void {
-  cachedGlobal = next;
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
-    );
-  }
-}
-
-/** Settings-page hook for the persisted global autoplay preference. */
+/**
+ * Settings-page hook: read/write the persisted global default.
+ */
 export function useVoiceAutoplayPreference() {
-  const [value, setValueState] = useState<boolean>(cachedGlobal ?? false);
+  const [value, setVal] = useState<boolean>(cachedGlobal ?? false);
   const [loading, setLoading] = useState<boolean>(cachedGlobal === null);
 
   useEffect(() => {
     let active = true;
-    fetchGlobalDefault().then((next) => {
+    fetchGlobalDefault().then((v) => {
       if (active) {
-        setValueState(next);
+        setVal(v);
         setLoading(false);
       }
     });
-    const onGlobal = (event: Event) => {
-      setValueState(Boolean((event as CustomEvent).detail?.value));
-    };
-    window.addEventListener(GLOBAL_EVENT, onGlobal);
     return () => {
       active = false;
-      window.removeEventListener(GLOBAL_EVENT, onGlobal);
     };
   }, []);
 
   const setValue = useCallback(async (next: boolean) => {
-    setValueState(next);
-    syncVoiceAutoplayPreference(next);
+    setVal(next);
+    cachedGlobal = next;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(GLOBAL_EVENT, { detail: { value: next } }),
+      );
+    }
     await apiFetch(apiUrl("/api/settings/voice-autoplay"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

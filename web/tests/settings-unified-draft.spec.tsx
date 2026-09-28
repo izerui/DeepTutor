@@ -62,12 +62,7 @@ beforeEach(() => {
     if (url === "/api/settings")
       return reply({
         catalog: live,
-        ui: {
-          theme: "snow",
-          language: "en",
-          response_language: "en",
-          voice_autoplay: false,
-        },
+        ui: { theme: "snow", language: "en", response_language: "en" },
       });
     if (url === "/api/settings/draft") {
       if (method === "PUT") stored = JSON.parse(String(init?.body));
@@ -204,29 +199,19 @@ it("stages language and appearance without changing browser preferences until Ap
   await act(async () => {
     await settings.updateTheme("dark");
     await settings.updateLanguage("zh");
-    await settings.updateVoiceAutoplay(true);
     await settings.updateCodeBlockShowLineNumbers(true);
   });
   expect(settings.theme).toBe("dark");
   expect(settings.language).toBe("zh");
-  expect(settings.voiceAutoplay).toBe(true);
   expect(settings.codeBlockShowLineNumbers).toBe(true);
   expect(mocks.theme).not.toHaveBeenCalled();
   expect(writes("/api/settings/ui")).toHaveLength(0);
-  await act(() => settings.saveDraft());
-  expect(stored.extensions.ui.voice_autoplay).toBe(true);
-  expect(writes("/api/settings/ui")).toHaveLength(0);
   await act(() => settings.discardDraft());
   expect(settings.theme).toBe("snow");
-  expect(settings.voiceAutoplay).toBe(false);
-  await act(async () => {
-    await settings.updateTheme("dark");
-    await settings.updateVoiceAutoplay(true);
-  });
+  await act(() => settings.updateTheme("dark"));
   await act(() => settings.applyCatalog());
   expect(mocks.theme).toHaveBeenCalledWith("dark");
   expect(resources.ui.theme).toBe("dark");
-  expect(resources.ui.voice_autoplay).toBe(true);
 });
 
 it("removes pending state when an edit is reverted", async () => {

@@ -49,7 +49,7 @@ function PlaybackToggle({
   );
 }
 
-export function VoicePlaybackPrefs({ includeAutoplay = true }: { includeAutoplay?: boolean }) {
+export function VoicePlaybackPrefs() {
   const { t } = useTranslation();
   const autoplay = useVoiceAutoplayPreference();
   const mathSpeak = useVoiceMathSpeakPreference();
@@ -64,17 +64,15 @@ export function VoicePlaybackPrefs({ includeAutoplay = true }: { includeAutoplay
         </p>
       </div>
       <div className="space-y-3">
-        {includeAutoplay && (
-          <PlaybackToggle
-            label={t("Auto-play replies")}
-            description={t(
-              "Read each assistant reply aloud automatically. You can also toggle this per conversation from the speaker button.",
-            )}
-            value={autoplay.value}
-            loading={autoplay.loading}
-            onChange={autoplay.setValue}
-          />
-        )}
+        <PlaybackToggle
+          label={t("Auto-play replies")}
+          description={t(
+            "Read each assistant reply aloud automatically. You can also toggle this per conversation from the speaker button.",
+          )}
+          value={autoplay.value}
+          loading={autoplay.loading}
+          onChange={autoplay.setValue}
+        />
         <PlaybackToggle
           label={t("Math speak")}
           description={t(

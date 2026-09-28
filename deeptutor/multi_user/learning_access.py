@@ -51,46 +51,17 @@ def apply_learning_policy(payload: dict[str, Any]) -> dict[str, Any]:
             "This learning account cannot use this mode. Please choose an allowed learning mode."
         )
 
-    from fastapi import HTTPException
-
-    from .knowledge_access import resolve_kb
-    from .partner_access import can_use_partner
-
-    requested_partner = str(payload.get("partner_id") or "").strip()
-    partner_allowed = bool(requested_partner) and can_use_partner(requested_partner)
-
-    raw_kbs = payload.get("knowledge_bases")
-    validated_kbs: list[str] = []
-    if isinstance(raw_kbs, (list, tuple)):
-        for entry in raw_kbs:
-            if not isinstance(entry, str) or not entry.strip():
-                continue
-            try:
-                resolve_kb(entry.strip(), require_write=False)
-                validated_kbs.append(entry.strip())
-            except HTTPException:
-                pass
-
-    raw_kb_name = str(payload.get("kb_name") or "").strip()
-    kb_name = ""
-    if raw_kb_name:
-        try:
-            resolve_kb(raw_kb_name, require_write=False)
-            kb_name = raw_kb_name
-        except HTTPException:
-            pass
-
     return {
         **payload,
         "persona": str(policy.get("locked_persona") or ""),
         "tools": [],
         "enabled_tools": [],
         "enable_web_search": False,
-        "partner_id": requested_partner if partner_allowed else None,
+        "partner_id": None,
         "bot_id": None,
-        "knowledge_bases": validated_kbs,
-        "kb_name": kb_name,
-        "enable_rag": bool(validated_kbs or kb_name) and payload.get("enable_rag", False),
+        "knowledge_bases": [],
+        "kb_name": "",
+        "enable_rag": False,
     }
 
 
@@ -99,7 +70,7 @@ def assert_learning_surface(surface: str) -> None:
     policy = current_learning_policy()
     if policy is None:
         return
-    if surface not in set(policy.get("allowed_surfaces") or ["chat", "reading"]):
+    if surface not in set(policy.get("allowed_surfaces", ["chat", "reading"])):
         target = f"{surface} surface" if surface else "requested server surface"
         raise PermissionError(f"This learning account cannot use the {target}.")
 
@@ -161,7 +132,11 @@ def assert_workspace_isolated() -> None:
         return
     from deeptutor.services.path_service import PathService, get_path_service
 
-    if get_path_service() is PathService.get_instance():
+    try:
+        isolated = get_path_service() is not PathService.get_instance()
+    except Exception as exc:
+        raise PermissionError("Workspace isolation failed; write refused.") from exc
+    if not isolated:
         raise PermissionError("Workspace isolation failed; write refused.")
 
 
@@ -177,8 +152,7 @@ def resolve_persona_context(
     request omits persona entirely.  If the locked persona file is missing from
     the admin directory, the turn is aborted (fail closed).
 
-    Other non-admin users try own workspace first, then fall back to admin
-    presets.
+    Other accounts use the upstream workspace-first, admin-preset fallback.
 
     Returns ``(persona_context, effective_persona_name)``.
     """
@@ -201,11 +175,9 @@ def resolve_persona_context(
     if not requested_persona:
         return "", ""
 
-    context = get_persona_service().load_for_context(requested_persona)
-    if not context and not is_admin:
-        context = PersonaService(
-            root=get_admin_path_service().get_workspace_dir() / "personas"
-        ).load_for_context(requested_persona)
+    from deeptutor.services.persona import load_visible_for_context
+
+    context = load_visible_for_context(requested_persona, workspace=get_persona_service())
     return context, requested_persona if context else ""
 
 

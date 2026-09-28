@@ -570,27 +570,6 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
     return user_token
 
 
-async def ws_require_learning_surface(
-    ws: WebSocket,
-    surface: str,
-) -> _CtxToken | _WsAuthFailed:
-    """Authenticate a WebSocket and enforce the learner surface check."""
-    user_token = await ws_require_auth(ws)
-    if user_token is ws_auth_failed:
-        return ws_auth_failed
-
-    from deeptutor.multi_user.context import reset_current_user
-    from deeptutor.multi_user.learning_access import assert_learning_surface
-
-    try:
-        assert_learning_surface(surface)
-    except PermissionError:
-        reset_current_user(user_token)
-        await ws.close(code=4403)
-        return ws_auth_failed
-    return user_token
-
-
 async def require_admin(
     payload: TokenPayload | None = Depends(require_auth),
 ) -> TokenPayload:
@@ -635,35 +614,10 @@ def _learning_surface_for_path(
     for root, surface in (
         ("/api/reading", "reading"),
         ("/api/courses", "reading"),
-        ("/api/mastery-paths", "mastery"),
-        ("/api/books", "books"),
-        ("/api/video-learning", "watching"),
-        ("/api/partners", "partners"),
-        ("/api/partner-groups", "partners"),
-        ("/api/subagents", "agents"),
-        ("/api/agent-config", "agents"),
-        ("/api/documents", "writing"),
-        ("/api/notebooks", "notebook"),
-        ("/api/dashboard", "dashboard"),
         ("/api/chat", "chat"),
         ("/api/question", "chat"),
         ("/api/question-notebook", "chat"),
         ("/api/sessions", "chat"),
-        ("/api/personas", "personas"),
-        ("/api/settings", "settings"),
-        ("/api/voice", "voice"),
-        ("/api/knowledge-bases", "knowledge"),
-        ("/api/memory", "memory"),
-        ("/api/skills", "skills"),
-        ("/api/tools", "tools"),
-        ("/api/system", "system"),
-        ("/api/imports", "imports"),
-        ("/api/capabilities", "settings"),
-        ("/api/space", "dashboard"),
-        ("/api/visualizers", "dashboard"),
-        ("/api/marginnote4", "reading"),
-        ("/files/library", "files"),
-        ("/files/attachments", "files"),
         # Task cards are private to the learner's current content workspace.
         ("/api/task-board", "chat"),
         # Mastery Path progress/topics are the learner's own per-user data;
@@ -810,16 +764,6 @@ async def auth_status(
     )
 
 
-def _run_post_login_migrations(user_id: str) -> None:
-    """Persist any pending grant schema migrations for this user."""
-    try:
-        from deeptutor.multi_user.grants import migrate_learner_grant
-
-        migrate_learner_grant(user_id)
-    except Exception:
-        logger.debug("Post-login grant migration skipped for %s", user_id, exc_info=True)
-
-
 @router.post("/login")
 async def login(body: LoginRequest, request: Request, response: Response) -> dict:
     """Validate credentials and set a JWT cookie."""
@@ -840,7 +784,6 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
             )
         payload, pb_token = pb_result
         response.set_cookie(value=pb_token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
-        _run_post_login_migrations(payload.user_id)
         logger.info(f"User '{payload.username}' logged in via PocketBase (role={payload.role!r})")
         return {
             "ok": True,
@@ -861,7 +804,6 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     token = create_token(result.username, result.role, result.user_id)
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
 
-    _run_post_login_migrations(result.user_id)
     logger.info(f"User '{result.username}' logged in (role={result.role!r})")
     return {
         "ok": True,
@@ -905,7 +847,6 @@ async def device_login(body: DeviceLoginRequest, response: Response) -> dict:
         device_session_nonce=payload.device_session_nonce,
     )
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
-    _run_post_login_migrations(payload.user_id)
     logger.info(f"User '{payload.username}' logged in with a device credential")
     return {
         "ok": True,

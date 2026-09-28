@@ -9,6 +9,30 @@ through three entry points: CLI, WebSocket API, and Python SDK. All three
 enter the durable turn application service before the shared turn engine
 routes a normalized context to the selected capability.
 
+## Branch Maintenance Policy
+
+`main` is the upstream baseline. `develop` builds on it with only necessary
+local adaptations and extensions; it must not maintain a parallel implementation
+of functionality already covered by `main`.
+
+- When `main` provides the required capability, adopt its implementation directly
+  and remove the corresponding local duplicate. Prefer upstream code unchanged
+  over a locally rewritten equivalent.
+- Retain local extensions only for requirements or safeguards that `main` does
+  not yet cover. Keep these changes narrowly scoped, isolate them in dedicated
+  modules where practical, and minimize edits to upstream-owned code.
+- On every merge from `main`, reassess existing local extensions. If upstream
+  now covers them, retire them instead of preserving both implementations.
+- Verify behavioral and security coverage, not just matching feature names,
+  before replacing a local implementation. Preserve required safeguards that
+  upstream has not yet implemented.
+- Preserve compatibility with existing local data and settings when retiring
+  extensions. Add explicit compatibility handling where needed; do not silently
+  discard data or broaden permissions.
+- Validate both newly adopted upstream behavior and retained local extensions.
+  Document any remaining differences; a conflict-free Git merge alone does not
+  prove functional compatibility.
+
 ## Architecture
 
 ```

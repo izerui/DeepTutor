@@ -8,9 +8,9 @@ function source(file: string): string {
 }
 
 test('block regeneration has one shared in-flight lock across every retry entry', () => {
-  const route = source('app/(workspace)/books/BooksRoute.tsx')
-  const reader = source('app/(workspace)/books/components/PageReader.tsx')
-  const renderer = source('app/(workspace)/books/components/blocks/BlockRenderer.tsx')
+  const route = source('app/(workspace)/learning/books/BooksRoute.tsx')
+  const reader = source('app/(workspace)/learning/books/components/PageReader.tsx')
+  const renderer = source('app/(workspace)/learning/books/components/blocks/BlockRenderer.tsx')
 
   assert.match(route, /const regeneratingBlockIdRef = useRef/)
   assert.match(route, /regeneratingBlockIdRef\.current\) return/)
@@ -21,7 +21,7 @@ test('block regeneration has one shared in-flight lock across every retry entry'
 })
 
 test('the retry lock is released only after the regenerated page is hydrated', () => {
-  const route = source('app/(workspace)/books/BooksRoute.tsx')
+  const route = source('app/(workspace)/learning/books/BooksRoute.tsx')
   const handlerStart = route.indexOf('const handleRegenerateBlock')
   const handlerEnd = route.indexOf('const handleDeleteBlock', handlerStart)
   const handler = route.slice(handlerStart, handlerEnd)
@@ -34,7 +34,7 @@ test('the retry lock is released only after the regenerated page is hydrated', (
 })
 
 test('personal-book regeneration retries once with the server revision after a stale-token conflict', () => {
-  const route = source('app/(workspace)/books/BooksRoute.tsx')
+  const route = source('app/(workspace)/learning/books/BooksRoute.tsx')
   const handlerStart = route.indexOf('const handleRegenerateBlock')
   const handlerEnd = route.indexOf('const handleDeleteBlock', handlerStart)
   const handler = route.slice(handlerStart, handlerEnd)

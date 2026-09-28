@@ -8,9 +8,7 @@ const readWebFile = (...parts: string[]) =>
 
 test("voice settings expose the persisted reply auto-play preference", () => {
   const control = readWebFile(
-    "components",
-    "settings",
-    "VoiceAutoplaySetting.tsx",
+    "features", "settings", "sections", "models", "VoicePlaybackPrefs.tsx",
   );
   const general = readWebFile("components", "settings", "SettingsOverview.tsx");
   const voice = readWebFile(
@@ -21,16 +19,15 @@ test("voice settings expose the persisted reply auto-play preference", () => {
     "VoiceSettingsSection.tsx",
   );
 
-  assert.ok(control.includes("useUiSettings"));
-  assert.ok(control.includes('title={t("Auto-play replies")}'));
-  assert.ok(control.includes("checked={voiceAutoplay}"));
-  assert.ok(control.includes('ariaLabel={t("Auto-play replies")}'));
-  assert.ok(
-    control.includes("onChange={(next) => void updateVoiceAutoplay(next)}"),
-  );
-  assert.ok(!control.includes("useVoiceAutoplayPreference"));
-  assert.ok(general.includes("<VoiceAutoplaySetting />"));
-  assert.ok(voice.includes("<VoiceAutoplaySetting />"));
+  assert.ok(control.includes("useVoiceAutoplayPreference"));
+  assert.ok(control.includes("useVoiceMathSpeakPreference"));
+  assert.ok(control.includes("onChange={autoplay.setValue}"));
+  assert.ok(!general.includes("VoiceAutoplaySetting"));
+  assert.ok(!voice.includes("VoiceAutoplaySetting"));
+  assert.ok(voice.includes("<VoicePlaybackPrefs />"));
+  const store = readWebFile("features", "settings", "store", "SettingsStore.tsx");
+  assert.ok(!store.includes("voice_autoplay"));
+  assert.ok(!store.includes("updateVoiceAutoplay"));
 });
 
 test("voice auto-play remains off by default on the backend", () => {

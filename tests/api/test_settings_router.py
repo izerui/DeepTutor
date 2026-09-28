@@ -1712,18 +1712,28 @@ def test_get_ui_settings_is_public_without_auth(monkeypatch: pytest.MonkeyPatch,
 
 
 @pytest.mark.asyncio
-async def test_update_ui_settings_persists_voice_autoplay(
+async def test_voice_autoplay_endpoint_persists_without_ui_draft_overwrite(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     settings_file = tmp_path / "interface.json"
     monkeypatch.setattr(settings_router, "_settings_file", lambda: settings_file)
 
+    await settings_router.update_voice_autoplay(
+        settings_router.VoiceAutoplayUpdate(voice_autoplay=True)
+    )
+    # A draft from the retired implementation must not overwrite a newer
+    # preference saved through the dedicated upstream endpoint.
     await settings_router.update_ui_settings(
-        settings_router.UISettingsUpdate(voice_autoplay=True)
+        settings_router.UISettingsUpdate(theme="dark", voice_autoplay=False)
     )
 
     persisted = settings_router.load_ui_settings()
     assert persisted["voice_autoplay"] is True
+    assert persisted["theme"] == "dark"
+    await settings_router.update_voice_autoplay(
+        settings_router.VoiceAutoplayUpdate(voice_autoplay=False)
+    )
+    assert settings_router.load_ui_settings()["voice_autoplay"] is False
 
 
 def test_auth_disabled_settings_endpoint_does_not_expose_provider_secrets(

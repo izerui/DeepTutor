@@ -174,7 +174,6 @@ class UISettings(BaseModel):
     theme: Literal["light", "dark", "glass", "snow"] = "snow"
     language: UiLanguage = "en"
     response_language: ResponseLanguage = "en"
-    voice_autoplay: bool = False
     sidebar_description: Optional[str] = None
     sidebar_nav_order: Optional[SidebarNavOrder] = None
     code_block_theme: Optional[str] = None
@@ -198,7 +197,6 @@ class UISettingsUpdate(BaseModel):
     theme: Literal["light", "dark", "glass", "snow"] | None = None
     language: UiLanguage | None = None
     response_language: ResponseLanguage | None = None
-    voice_autoplay: bool | None = None
     sidebar_description: str | None = None
     sidebar_nav_order: SidebarNavOrder | None = None
     code_block_theme: str | None = None

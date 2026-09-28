@@ -15378,8 +15378,6 @@ export interface components {
         components["schemas"]["SidebarNavOrder"] | null;
       /** Theme */
       readonly theme?: ("light" | "dark" | "glass" | "snow") | null;
-      /** Voice Autoplay */
-      readonly voice_autoplay?: boolean | null;
     };
     /** UnitText */
     readonly UnitText: {

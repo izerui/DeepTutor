@@ -8,14 +8,12 @@ type UiSettingsSlice = Pick<
   | "theme"
   | "language"
   | "responseLanguage"
-  | "voiceAutoplay"
   | "codeBlockTheme"
   | "codeBlockShowLineNumbers"
   | "codeBlockWrapLongLines"
   | "updateTheme"
   | "updateLanguage"
   | "updateResponseLanguage"
-  | "updateVoiceAutoplay"
   | "updateCodeBlockTheme"
   | "updateCodeBlockShowLineNumbers"
   | "updateCodeBlockWrapLongLines"
@@ -30,14 +28,12 @@ export function UiSettingsProvider({ children }: { children: ReactNode }) {
       theme: source.theme,
       language: source.language,
       responseLanguage: source.responseLanguage,
-      voiceAutoplay: source.voiceAutoplay,
       codeBlockTheme: source.codeBlockTheme,
       codeBlockShowLineNumbers: source.codeBlockShowLineNumbers,
       codeBlockWrapLongLines: source.codeBlockWrapLongLines,
       updateTheme: source.updateTheme,
       updateLanguage: source.updateLanguage,
       updateResponseLanguage: source.updateResponseLanguage,
-      updateVoiceAutoplay: source.updateVoiceAutoplay,
       updateCodeBlockTheme: source.updateCodeBlockTheme,
       updateCodeBlockShowLineNumbers: source.updateCodeBlockShowLineNumbers,
       updateCodeBlockWrapLongLines: source.updateCodeBlockWrapLongLines,
@@ -46,14 +42,12 @@ export function UiSettingsProvider({ children }: { children: ReactNode }) {
       source.theme,
       source.language,
       source.responseLanguage,
-      source.voiceAutoplay,
       source.codeBlockTheme,
       source.codeBlockShowLineNumbers,
       source.codeBlockWrapLongLines,
       source.updateTheme,
       source.updateLanguage,
       source.updateResponseLanguage,
-      source.updateVoiceAutoplay,
       source.updateCodeBlockTheme,
       source.updateCodeBlockShowLineNumbers,
       source.updateCodeBlockWrapLongLines,
