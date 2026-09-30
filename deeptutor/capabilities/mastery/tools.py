@@ -52,6 +52,7 @@ from deeptutor.core.tool_protocol import BaseTool, ToolDefinition, ToolParameter
 # are imported lazily inside the call paths instead (same pattern as the other
 # builtin tools).
 from deeptutor.learning.models import (
+    ErrorType,
     InteractionStatus,
     KnowledgePoint,
     KnowledgeType,
@@ -96,6 +97,7 @@ MASTERY_TOOL_NAMES: tuple[str, ...] = (
     "mastery_skip_question",
     "mastery_repair_question",
     "mastery_defer_objective",
+    "mastery_diagnose",
     "mastery_assess",
     "mastery_build",
     "mastery_mode",
@@ -1248,6 +1250,12 @@ class MasteryGradeTool(BaseTool):
                 "explanation, so do not restate the answer key. Say what this "
                 "attempt tells you about their grasp of the objective, then keep "
                 + next_move
+                + (
+                    ""
+                    if is_correct
+                    else " Once you have named the slip, record it with "
+                    "mastery_diagnose (before any mastery_quiz, which ends the turn)."
+                )
                 + " Never end the turn without saying anything."
             ),
         }
@@ -1592,6 +1600,103 @@ class MasteryDeferObjectiveTool(BaseTool):
             ),
         }
         return _json_result(payload, meta_key="mastery_defer_objective")
+
+
+class MasteryDiagnoseTool(BaseTool):
+    """Record why a graded wrong answer was wrong (the four-type taxonomy)."""
+
+    def get_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name="mastery_diagnose",
+            description=(
+                "After mastery_grade marks an answer wrong, record why it was "
+                "wrong. The engine only knows blank vs. not blank; you saw the "
+                "answer. Types: structural (the knowledge itself is missing or "
+                "mis-remembered), deviation (a misconception — they understood "
+                "it wrongly), application (they know it but slipped applying "
+                "it), metacognitive (they cannot tell what they do not know, "
+                "e.g. a blank or a guess). This never changes the grade or "
+                "mastery; it is what the learner sees next to the mistake."
+            ),
+            parameters=[
+                ToolParameter(
+                    name="error_type",
+                    type="string",
+                    description="One of the four error types.",
+                    enum=[t.value for t in ErrorType],
+                ),
+                ToolParameter(
+                    name="diagnosis",
+                    type="string",
+                    description=(
+                        "One sentence, in the learner's language, naming the "
+                        "exact slip — what they confused with what."
+                    ),
+                ),
+                ToolParameter(
+                    name="learner_reason",
+                    type="string",
+                    description=(
+                        "Only when the learner themselves said why they got it "
+                        "wrong: their words, lightly trimmed. Never invent it."
+                    ),
+                    required=False,
+                ),
+                ToolParameter(
+                    name="question_id",
+                    type="string",
+                    description=(
+                        "question_id from the mastery_grade result. Defaults to "
+                        "the most recent unresolved wrong answer."
+                    ),
+                    required=False,
+                ),
+            ],
+        )
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        refusal = _wrong_mode_result("mastery_diagnose", kwargs)
+        if refusal is not None:
+            return refusal
+        path_id = _resolve_path_id(kwargs)
+        if not path_id:
+            return _no_path_result()
+        try:
+            error_type = ErrorType(str(kwargs.get("error_type") or "").strip())
+        except ValueError:
+            return ToolResult(
+                content=(
+                    "error_type must be one of: " + ", ".join(t.value for t in ErrorType)
+                ),
+                success=False,
+            )
+        from deeptutor.learning.service import MasteryInteractionError
+
+        service = _new_service()
+        if _load_path(service, path_id) is None:
+            return _no_built_path_result("mastery_diagnose")
+        try:
+            progress, details = service.diagnose_error(
+                path_id,
+                error_type=error_type,
+                diagnosis=str(kwargs.get("diagnosis") or ""),
+                learner_reason=str(kwargs.get("learner_reason") or ""),
+                question_id=str(kwargs.get("question_id") or "").strip(),
+                session_id=_resolve_session_id(kwargs),
+                turn_id=_resolve_turn_id(kwargs),
+            )
+        except MasteryInteractionError as exc:
+            return ToolResult(content=str(exc), success=False)
+        payload = {
+            "status": "diagnosed",
+            **details,
+            "path_revision": progress.version,
+            "instruction": (
+                "Recorded. The grade and mastery are unchanged. Carry on "
+                "teaching the gap you just named."
+            ),
+        }
+        return _json_result(payload, meta_key="mastery_diagnose")
 
 
 class MasteryBuildTool(BaseTool):
@@ -2682,6 +2787,7 @@ MASTERY_TOOL_TYPES: tuple[type[BaseTool], ...] = (
     MasterySkipQuestionTool,
     MasteryRepairQuestionTool,
     MasteryDeferObjectiveTool,
+    MasteryDiagnoseTool,
     MasteryAssessTool,
     MasteryBuildTool,
     MasteryModeTool,
@@ -2699,6 +2805,7 @@ __all__ = [
     "MasteryAssessTool",
     "MasteryBuildTool",
     "MasteryDeferObjectiveTool",
+    "MasteryDiagnoseTool",
     "MasteryGradeTool",
     "MasteryLeaveTool",
     "MasteryPathsTool",

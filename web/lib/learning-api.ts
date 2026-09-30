@@ -275,6 +275,7 @@ export interface ObjectiveErrorRecord {
   error_type: string;
   status: string;
   self_attribution: string;
+  ai_confirmation?: string;
   retries: number;
   created_at: number;
 }

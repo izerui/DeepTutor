@@ -10,6 +10,7 @@ from deeptutor.learning.mastery import compute_mastery
 from deeptutor.learning.models import (
     DeferredObjective,
     ErrorRecord,
+    ErrorType,
     InteractionStatus,
     KnowledgePoint,
     LearnerMasteryOverride,
@@ -1674,6 +1675,74 @@ class LearningService:
             return {"knowledge_point_id": target_id, "abandoned_question": abandoned}
 
         return self._store.mutate(book_id, defer)
+
+    def diagnose_error(
+        self,
+        book_id: str,
+        *,
+        error_type: ErrorType,
+        diagnosis: str = "",
+        learner_reason: str = "",
+        question_id: str = "",
+        session_id: str = "",
+        turn_id: str = "",
+    ) -> tuple[LearningProgress, dict]:
+        """Replace the coarse error class with the tutor's diagnosis.
+
+        Grading stays deterministic; this only refines *why* an already
+        recorded wrong answer was wrong. Without ``question_id`` it targets the
+        most recent unresolved error.
+        """
+
+        def diagnose(tx):
+            target = str(question_id or "").strip()
+            open_records = [
+                rec
+                for rec in tx.progress.error_records
+                if rec.status != "graduated" and (not target or rec.question_id == target)
+            ]
+            if not open_records:
+                raise MasteryInteractionError(
+                    f"No unresolved wrong answer for question {target!r}"
+                    if target
+                    else "No unresolved wrong answer to diagnose"
+                )
+            record = open_records[-1]
+            record.error_type = error_type
+            if diagnosis.strip():
+                record.ai_confirmation = diagnosis.strip()[:500]
+            if learner_reason.strip():
+                record.self_attribution = learner_reason.strip()[:500]
+            for attempt in reversed(tx.progress.quiz_attempts):
+                if (
+                    attempt.question_id == record.question_id
+                    and attempt.knowledge_point_id == record.knowledge_point_id
+                    and not attempt.is_correct
+                ):
+                    attempt.error_type = error_type
+                    if learner_reason.strip():
+                        attempt.self_attribution = record.self_attribution
+                    break
+            tx.touch()
+            tx.emit(
+                "error.diagnosed",
+                {
+                    "error_id": record.id,
+                    "question_id": record.question_id,
+                    "knowledge_point_id": record.knowledge_point_id,
+                    "error_type": error_type.value,
+                },
+                session_id=session_id,
+                turn_id=turn_id,
+            )
+            return {
+                "error_id": record.id,
+                "question_id": record.question_id,
+                "knowledge_point_id": record.knowledge_point_id,
+                "error_type": error_type.value,
+            }
+
+        return self._store.mutate(book_id, diagnose)
 
     def record_qualitative(
         self,

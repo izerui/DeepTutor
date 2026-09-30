@@ -33,6 +33,7 @@ from deeptutor.learning.storage import LearningStore
 from deeptutor.tools.mastery_tool import (
     MasteryBuildTool,
     MasteryDeferObjectiveTool,
+    MasteryDiagnoseTool,
     MasteryGradeTool,
     MasteryQuizTool,
     MasteryRepairQuestionTool,
@@ -650,6 +651,55 @@ async def test_skip_question_stays_on_the_same_objective(path_id):
     assert "different question" in skipped["instruction"]
     assert is_mastered(progress, progress.modules[0].knowledge_points[0]) is False
     assert not getattr(progress, "deferred_objectives", {})
+
+
+@pytest.mark.asyncio
+async def test_diagnose_refines_error_without_touching_the_grade(path_id):
+    await _build(
+        path_id,
+        [{"name": "Logic", "knowledge_points": [{"name": "Truth tables", "type": "memory"}]}],
+    )
+    status = json.loads((await MasteryStatusTool().execute(_mastery_path_id=path_id)).content)
+    kp_id = status["next"]["knowledge_point_id"]
+    await MasteryQuizTool().execute(
+        _mastery_path_id=path_id,
+        knowledge_point_id=kp_id,
+        question="2+2?",
+        expected_answer="4",
+    )
+    graded = json.loads(
+        (await MasteryGradeTool().execute(_mastery_path_id=path_id, answer="5")).content
+    )
+    assert graded["is_correct"] is False
+    assert "mastery_diagnose" in graded["instruction"]
+    before = LearningStore().load(path_id)
+    assert before is not None
+    assert before.error_records[0].error_type.value == "application"
+    mastery_before = dict(before.mastery_levels)
+
+    diagnosed = json.loads(
+        (
+            await MasteryDiagnoseTool().execute(
+                _mastery_path_id=path_id,
+                error_type="deviation",
+                diagnosis="Added instead of counting.",
+                learner_reason="I rushed it",
+            )
+        ).content
+    )
+    progress = LearningStore().load(path_id)
+    assert progress is not None
+    record = progress.error_records[0]
+    assert diagnosed["error_type"] == "deviation"
+    assert record.error_type.value == "deviation"
+    assert record.ai_confirmation == "Added instead of counting."
+    assert record.self_attribution == "I rushed it"
+    assert progress.quiz_attempts[-1].error_type.value == "deviation"
+    assert progress.mastery_levels == mastery_before
+    assert len(progress.error_records) == 1
+
+    bad = await MasteryDiagnoseTool().execute(_mastery_path_id=path_id, error_type="nope")
+    assert bad.success is False
 
 
 def test_legacy_quiz_attempt_without_voided_stays_counted():

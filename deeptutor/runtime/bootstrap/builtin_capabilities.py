@@ -171,6 +171,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "mastery_skip_question",
                 "mastery_repair_question",
                 "mastery_defer_objective",
+                "mastery_diagnose",
                 "mastery_assess",
                 "mastery_build",
                 "mastery_mode",

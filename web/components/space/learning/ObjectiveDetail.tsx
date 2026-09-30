@@ -105,11 +105,22 @@ export function ObjectiveDetail({
       {report.errors.length > 0 && (
         <Row label={t("Error diagnosis")}>
           {report.errors.map((record) => (
-            <span key={record.id} className="mr-2">
+            <span key={record.id} className="mb-1 block">
               {t(record.error_type)}
               {record.retries > 0 &&
                 t(" · {{count}} retries", { count: record.retries })}
               {record.status === "graduated" && t(" · cleared")}
+              {record.ai_confirmation && (
+                <span className="block text-[var(--muted-foreground)]">
+                  {record.ai_confirmation}
+                </span>
+              )}
+              {record.self_attribution && (
+                <span className="block text-[var(--muted-foreground)] italic">
+                  {t("Your reason: ")}
+                  {record.self_attribution}
+                </span>
+              )}
             </span>
           ))}
         </Row>

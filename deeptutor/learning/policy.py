@@ -486,6 +486,7 @@ def objective_report(
                 "error_type": record.error_type.value,
                 "status": record.status,
                 "self_attribution": record.self_attribution,
+                "ai_confirmation": record.ai_confirmation,
                 "retries": len(record.retry_history),
                 "created_at": record.created_at,
             }
