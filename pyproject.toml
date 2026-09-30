@@ -142,6 +142,8 @@ cli = [
     "reportlab>=4.0.0",
     "defusedxml>=0.7.1",
     "youtube-transcript-api>=1.2.0,<2.0.0",
+    # MarkItDown parse engine (local-format extras; see core deps for why not `all`)
+    "markitdown[docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7",
 ]
 
 # CodeBuddy chat works over HTTP with the login state the IDE plugin / CLI
