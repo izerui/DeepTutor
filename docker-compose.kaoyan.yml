@@ -33,13 +33,40 @@
 # ============================================
 
 services:
+  # Initialize auth settings on first run (skipped if auth.json already exists).
+  # Equivalent to the initContainers.init-auth in the k3s app.yaml.
+  init-auth:
+    image: busybox:1.36
+    container_name: deeptutor-kaoyan-init
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /app/data/user/settings
+        if [ ! -f /app/data/user/settings/auth.json ]; then
+          cat > /app/data/user/settings/auth.json << 'AUTHEOF'
+        {
+          "enabled": true,
+          "token_expire_hours": 24,
+          "cookie_secure": true
+        }
+        AUTHEOF
+          echo "auth.json created"
+        else
+          echo "auth.json already exists, skipping"
+        fi
+    volumes:
+      - ./data:/app/data
+
   deeptutor:
     # Use the -kaoyan image tag (basePath=/kaoyan baked in at build time).
-    # Replace with your registry if using a private mirror.
     image: ${DEEPTUTOR_IMAGE:-serv999.com/ghcr/izerui/deeptutor:develop-kaoyan}
     pull_policy: always
     container_name: deeptutor-kaoyan
     restart: unless-stopped
+    depends_on:
+      init-auth:
+        condition: service_completed_successfully
     ports:
       - "${DEEPTUTOR_FRONTEND_PORT:-3782}:3782"
       - "${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
