@@ -33,6 +33,27 @@ of functionality already covered by `main`.
   Document any remaining differences; a conflict-free Git merge alone does not
   prove functional compatibility.
 
+### CI / Docker Workflow Maintenance
+
+本项目是从上游 clone 过来的独立部署实例。上游的正式发布流程（`docker-release.yml`、
+`pypi-release.yml`、`tests.yml`、`repository-hygiene.yml`）由源工程负责，本项目
+不需要保留这些文件。
+
+- **`develop-image.yml`** 是本项目自有的镜像构建工作流，独立于上游的
+  `docker-release.yml`，两者触发条件、平台、build-args 完全不同，不要改名合并。
+- 每次从 `main` 合并后，检查 **Dockerfile** 是否新增了 `ARG` 或构建阶段变化：
+  ```bash
+  git diff HEAD~1..HEAD -- Dockerfile
+  ```
+  如果 Dockerfile 新增了 build-arg，评估是否需要同步到 `develop-image.yml` 的
+  `build-args` 中。
+- `develop-image.yml` 已经传递了完整的 build-args（`DEEPTUTOR_REQUIREMENTS_FILE`、
+  `DEEPTUTOR_BUILD_APT_PACKAGES`、`DEEPTUTOR_RUNTIME_APT_PACKAGES`、
+  `DEEPTUTOR_RUNTIME_FONT_PACKAGES`、`DEEPTUTOR_VERIFY_DEPLOYMENT_EXTRAS`），
+  覆盖范围比上游的正式发布镜像更全（含 CJK 字体、LaTeX 渲染、完整 deployment 依赖）。
+- 合并 `main` 时如果 git 试图恢复上游已删除的 CI 工作流文件，应继续保持删除，
+  不要恢复。
+
 ## Architecture
 
 ```
