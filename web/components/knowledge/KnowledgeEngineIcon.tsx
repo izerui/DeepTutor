@@ -1,4 +1,5 @@
 import { Database } from "lucide-react";
+import { assetPath } from "@/lib/workspace-scope";
 
 /**
  * Brand marks for knowledge engines and live knowledge sources.
@@ -51,7 +52,7 @@ export default function KnowledgeEngineIcon({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={source}
+      src={assetPath(source)}
       alt=""
       aria-hidden
       width={size}
