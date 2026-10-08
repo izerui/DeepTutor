@@ -27,6 +27,7 @@ import {
   useInlineFileCardContext,
 } from "@/components/common/InlineFileCard";
 import type { MarkdownRendererProps } from "./markdown-renderer-types";
+import { assetPath } from "@/lib/workspace-scope";
 import {
   extractMarkdownText as extractText,
   hasRenderableDetailsBody,
@@ -615,7 +616,7 @@ export default function RichMarkdownRenderer({
       }
       return (
         <img
-          src={src}
+          src={assetPath(src)}
           alt={alt || ""}
           loading="lazy"
           className={className}
