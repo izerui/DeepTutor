@@ -1,0 +1,71 @@
+# ============================================
+# DeepTutor Docker Compose — Sub-Path Deployment (/kaoyan)
+# ============================================
+# Deploy DeepTutor under a domain sub-path (e.g. https://example.com/kaoyan).
+# Uses the pre-built -kaoyan image tag with basePath baked in at build time.
+#
+# Usage:
+#   docker compose -f docker-compose.kaoyan.yml up -d
+#
+# Prerequisites:
+#   1. Build or pull the -kaoyan image:
+#      - CI: develop-image.yml builds it automatically (tag: develop-kaoyan)
+#      - Local: docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+#   2. Configure Nginx to proxy /kaoyan/ to the frontend port (see below)
+#   3. Configure providers in data/user/settings/model_catalog.json or the UI
+#
+# Nginx config (do NOT strip the /kaoyan prefix):
+#
+#   location /kaoyan/ {
+#       proxy_pass http://127.0.0.1:3782/kaoyan/;
+#       proxy_http_version 1.1;
+#       proxy_set_header Upgrade $http_upgrade;
+#       proxy_set_header Connection "upgrade";
+#       proxy_set_header Host $host;
+#       proxy_set_header X-Real-IP $remote_addr;
+#       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#       proxy_set_header X-Forwarded-Proto $scheme;
+#       proxy_read_timeout 3600s;
+#       proxy_send_timeout 600s;
+#       client_max_body_size 200M;
+#   }
+#
+# ============================================
+
+services:
+  deeptutor:
+    # Use the -kaoyan image tag (basePath=/kaoyan baked in at build time).
+    # Replace with your registry if using a private mirror.
+    image: ${DEEPTUTOR_IMAGE:-serv999.com/ghcr/izerui/deeptutor:develop-kaoyan}
+    pull_policy: always
+    container_name: deeptutor-kaoyan
+    restart: unless-stopped
+    ports:
+      - "${DEEPTUTOR_FRONTEND_PORT:-3782}:3782"
+      - "${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
+
+    volumes:
+      - ./data:/app/data
+      - "${DEEPTUTOR_WORKSPACE_HOST:-./data/user/workspace}:/workspace"
+
+    environment:
+      # Backend root_path — must match the image's basePath.
+      - CONTEXT_PATH=/kaoyan
+      # Workspace isolation
+      - DEEPTUTOR_WORKSPACE_ROOT=/workspace
+      - DEEPTUTOR_WORKSPACE_ALLOWED_ROOTS=/workspace
+      # Multi-worker turn coordination (uncomment to enable):
+      #   - DEEPTUTOR_REDIS_URL=redis://redis:6379/0
+      # Optional extras:
+      #   - DEEPTUTOR_EXTRAS=math-animator,partners
+      #   - DEEPTUTOR_APT_PACKAGES=ffmpeg
+      # Unraid / NAS bind mounts:
+      #   - PUID=99
+      #   - PGID=100
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

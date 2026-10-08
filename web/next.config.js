@@ -72,8 +72,17 @@ const NEXT_PUBLIC_AUTH_ENABLED = normalizeBoolean(
   ),
 );
 
+const CONTEXT_PATH = firstNonEmpty(
+  process.env.NEXT_PUBLIC_CONTEXT_PATH,
+  "",
+);
+const BASE_PATH = CONTEXT_PATH
+  ? `/${CONTEXT_PATH.replace(/^\/|\/$/g, "")}`
+  : "";
+
 process.env.NEXT_PUBLIC_API_BASE = NEXT_PUBLIC_API_BASE;
 process.env.NEXT_PUBLIC_AUTH_ENABLED = NEXT_PUBLIC_AUTH_ENABLED;
+process.env.NEXT_PUBLIC_BASE_PATH = BASE_PATH;
 
 // Resolve the build-time application version from the single source of
 // truth at ``deeptutor/__version__.py``. The Python file is parsed with a
@@ -91,6 +100,8 @@ const APP_VERSION = (() => {
 })();
 
 const nextConfig = {
+  basePath: BASE_PATH || undefined,
+
   // Keep the production build used by `deeptutor start` separate from the
   // `.next` development cache used by the explicit `deeptutor start --dev`.
   // Without separate directories either command can invalidate the other
@@ -109,6 +120,7 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: APP_VERSION,
     NEXT_PUBLIC_API_BASE,
     NEXT_PUBLIC_AUTH_ENABLED,
+    NEXT_PUBLIC_BASE_PATH: BASE_PATH,
   },
 
   // Standalone output: self-contained server.js + minimal node_modules

@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 افتح [http://127.0.0.1:3782](http://127.0.0.1:3782)، وهيّئ مزودي النماذج في **الإعدادات ← المزودون**، واضغط `Ctrl+C` عند الانتهاء. تحتفظ وحدة التخزين المسماة `deeptutor-data` بالإعدادات والبيانات المحلية للتشغيل التالي.
 
+### النشر تحت مسار فرعي (Context Path)
+
+للنشر تحت مسار فرعي في النطاق (مثل `https://example.com/kaoyan`)، استخدم وسم الصورة المُعدّ مسبقاً `-kaoyan`:
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+هيّئ Nginx لتمرير المسار الفرعي (**لا** تزل البادئة):
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+basePath هو معامل وقت البناء مضمّن في الصورة ولا يمكن تغييره أثناء التشغيل. لبناء صورة بالبادئة محلياً:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+للتفاصيل الكاملة، راجع [الحاويات — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment).
+
 ### مساحة عمل المحتوى
 
 **مساحة عمل المحتوى** منفصلة عن مساحة عمل DeepTutor الخاصة لوقت التشغيل. إنها المجلد الذي يمكن للوكلاء قراءته، وتوضع الملفات المُولَّدة تحت `outputs/<capability>/<session>/<turn>/`. تعزل مساحات العمل المخصصة المحادثات والمواد التعليمية والتقدم والذاكرات المؤقتة في شجرة خاصة `.deeptutor/data/` لا تستطيع أدوات الملفات تصفحها. وتبقى الإعدادات وبيانات الاعتماد وMemory مشتركة على مستوى الحساب.

@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 開啟 [http://127.0.0.1:3782](http://127.0.0.1:3782)，在 **Settings → Providers** 設定模型供應商，使用完畢後按下 `Ctrl+C`。具名的 `deeptutor-data` volume 會保留設定與本機資料，供下次執行使用。
 
+### 子路徑部署（Context Path）
+
+在網域子路徑下部署（如 `https://example.com/kaoyan`），使用預建的 `-kaoyan` 映像標籤：
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+設定 Nginx 代理子路徑（**不要** strip 前綴）：
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+basePath 是建置時參數，烘焙在映像中，執行階段不可變更。本機建置帶前綴的映像：
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+完整說明請參閱 [容器化文件 — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment)。
+
 ### 內容工作區
 
 **內容工作區（Content Workspace）**與 DeepTutor 的私有執行環境目錄是分開的。這是代理程式可以讀取的資料夾，生成的檔案會放在 `outputs/<capability>/<session>/<turn>/` 下。自訂工作區會將對話、學習素材、進度與快取隔離在私有的 `.deeptutor/data/` 目錄樹中，檔案工具無法瀏覽此目錄。設定、憑證與 Memory 則維持帳號層級共用。

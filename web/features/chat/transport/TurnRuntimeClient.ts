@@ -9,7 +9,7 @@ import {
   newCommandId,
 } from "@/contracts/parse/turn-command";
 import { parseTurnEvent } from "@/contracts/parse/turn-event";
-import { scopedUrl } from "@/lib/workspace-scope";
+import { wsUrl } from "@/shared/api/client";
 
 import {
   browserSocketFactory,
@@ -130,7 +130,7 @@ export class TurnRuntimeClient {
 
   constructor(options: TurnRuntimeClientOptions) {
     this.options = {
-      url: scopedUrl("/ws"),
+      url: wsUrl("/ws"),
       socketFactory: browserSocketFactory,
       scheduler: defaultScheduler,
       random: Math.random,

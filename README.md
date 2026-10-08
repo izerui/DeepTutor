@@ -263,6 +263,45 @@ docker run --rm --name deeptutor \
 
 Open [http://127.0.0.1:3782](http://127.0.0.1:3782), configure model providers in **Settings → Providers**, and press `Ctrl+C` when you are done. The named `deeptutor-data` volume keeps settings and local data for the next run.
 
+### Sub-Path Deployment (Context Path)
+
+To deploy under a domain sub-path like `https://example.com/kaoyan`, use the pre-built `-kaoyan` image tag:
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+Then configure Nginx to proxy the sub-path (do **not** strip the prefix):
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+The basePath is baked into the image at build time and cannot be changed at runtime. To build locally with a custom prefix:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+A ready-to-use `docker-compose.kaoyan.yml` is also provided:
+
+```bash
+docker compose -f docker-compose.kaoyan.yml up -d
+```
+
+For full details (multi-instance setup, hot-deploy, local build), see [Containerization — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment).
+
 ### Content Workspace
 
 The **Content Workspace** is separate from DeepTutor's private runtime home. It

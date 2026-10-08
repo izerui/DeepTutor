@@ -535,3 +535,133 @@ renormalized on save.
 - CORS uses frontend **origins**, not API URLs. With auth enabled, set
   `cors_origins` in `system.json` to the exact frontend origins the
   deployment serves.
+
+---
+
+## Context Path (Sub-Path Deployment)
+
+Deploy DeepTutor under a domain sub-path such as `https://example.com/kaoyan`.
+
+### CI Images
+
+`develop-image.yml` builds two images in parallel:
+
+| Image Tag | basePath | Purpose |
+|-----------|----------|---------|
+| `develop` | `/` (root) | Direct domain access |
+| `develop-kaoyan` | `/kaoyan` | Sub-path deployment at `example.com/kaoyan/` |
+
+basePath is a **build-time** parameter baked into the Next.js bundle.
+It **cannot be changed at runtime**. Changing the prefix requires rebuilding
+the image.
+
+### Deployment Steps
+
+**1. Start the container**
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -p 127.0.0.1:8001:8001 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+`CONTEXT_PATH` is a runtime environment variable that sets the backend's
+`root_path` (affects the `/docs` page URL prefix).
+
+Or use Docker Compose with the provided `docker-compose.kaoyan.yml`:
+
+```bash
+docker compose -f docker-compose.kaoyan.yml up -d
+```
+
+This file pre-configures the `-kaoyan` image tag, `CONTEXT_PATH`, Redis,
+health checks, and workspace mounts. See the file header for Nginx setup
+instructions.
+
+**2. Configure Nginx**
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 600s;
+    client_max_body_size 200M;
+}
+```
+
+Nginx must **not** strip the prefix — Next.js needs the full `/kaoyan/...`
+path. The middleware strips the basePath internally before forwarding to
+FastAPI.
+
+**3. Access**
+
+- Application root: `https://example.com/kaoyan/`
+- Login page: `https://example.com/kaoyan/login`
+- Unprefixed paths like `https://example.com/chat` return 404
+
+### Multiple Instances on One Domain
+
+Each instance uses its own prefixed image and port pair:
+
+```bash
+docker run -d -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 -p 127.0.0.1:8001:8001 \
+  deeptutor:develop-kaoyan
+
+docker run -d -e CONTEXT_PATH=/gaokao \
+  -p 127.0.0.1:3783:3782 -p 127.0.0.1:8002:8001 \
+  deeptutor:develop-gaokao
+```
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    # ... (same headers as above)
+}
+location /gaokao/ {
+    proxy_pass http://127.0.0.1:3783/gaokao/;
+    # ... (same headers as above)
+}
+```
+
+To add a new prefix, append one entry to the `matrix.variant` list in
+`.github/workflows/develop-image.yml`.
+
+### Local Build
+
+```bash
+# Build with prefix
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+
+# Root-path build (default)
+docker build -t deeptutor:latest .
+```
+
+### Hot-Deploy Notes
+
+`scripts/hot-deploy.sh` automatically reads the basePath from the running
+Pod's image and requires the local build to match. Set the environment
+variable before hot-deploying:
+
+```bash
+export NEXT_PUBLIC_CONTEXT_PATH=/kaoyan
+bash scripts/hot-deploy.sh frontend
+```
+
+The script aborts with a diagnostic message if the local value does not
+match the Pod image.
+
+### No Sub-Path
+
+Leave all prefix parameters unset and use the `develop`-tagged image.
+Behavior is identical to the original deployment.

@@ -1,3 +1,5 @@
+import { stripBasePath } from "@/lib/workspace-scope";
+
 const RETURN_URL_BASE = "https://deeptutor.invalid";
 
 export interface BrowserLocationParts {
@@ -39,16 +41,16 @@ export function normalizeInternalReturnPath(
 }
 
 export function browserReturnPath(location: BrowserLocationParts): string {
-  return normalizeInternalReturnPath(
-    `${location.pathname}${location.search ?? ""}${location.hash ?? ""}`,
-  );
+  const raw = `${location.pathname}${location.search ?? ""}${location.hash ?? ""}`;
+  return normalizeInternalReturnPath(stripBasePath(raw));
 }
 
 export function loginHref(returnPath: string): string {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const query = new URLSearchParams({
     next: normalizeInternalReturnPath(returnPath),
   });
-  return `/login?${query.toString()}`;
+  return `${basePath}/login?${query.toString()}`;
 }
 
 /**

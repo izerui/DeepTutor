@@ -77,6 +77,7 @@ def main() -> None:
             "Development reload and backend_workers > 1 are mutually exclusive. "
             "Set backend_workers=1 or disable DEEPTUTOR_DEV_RELOAD."
         )
+    context_path = os.getenv("CONTEXT_PATH", "")
     uvicorn.run(
         "deeptutor.api.main:app",
         host="0.0.0.0",
@@ -91,6 +92,7 @@ def main() -> None:
         proxy_headers=False,
         ws_max_size=get_ws_max_size(),
         timeout_keep_alive=HTTP_KEEP_ALIVE_TIMEOUT,
+        root_path=context_path,
     )
 
 

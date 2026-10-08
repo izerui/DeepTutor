@@ -88,6 +88,45 @@ docker run --rm --name deeptutor \
 
 打开 [http://127.0.0.1:3782](http://127.0.0.1:3782)，在 **Settings → Providers** 中配置模型提供商；体验结束后在该终端按 `Ctrl+C` 停止。名为 `deeptutor-data` 的卷会保留设置和本地数据，供下次启动复用。
 
+### 子路径部署（Context Path）
+
+在域名子路径下部署（如 `https://example.com/kaoyan`），使用预构建的 `-kaoyan` 镜像标签：
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+配置 Nginx 代理子路径（**不要** strip 前缀）：
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+basePath 是构建时参数，烘焙在镜像中，运行时不可修改。本地构建带前缀的镜像：
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+也可以直接使用现成的 `docker-compose.kaoyan.yml`：
+
+```bash
+docker compose -f docker-compose.kaoyan.yml up -d
+```
+
+完整说明（多实例、热部署、本地构建）请参阅 [容器化文档 — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment)。
+
 ### 内容工作区
 
 **内容工作区（Content Workspace）** 与 DeepTutor 的私有运行时主目录相互独立。它是智能体可以读取的文件夹，生成的文件位于 `outputs/<capability>/<session>/<turn>/` 下。自定义工作区将对话、学习素材、进度和缓存隔离在私有的 `.deeptutor/data/` 目录树中，文件工具无法浏览该目录树。设置、凭证和 Memory 仍在账号层面共享。

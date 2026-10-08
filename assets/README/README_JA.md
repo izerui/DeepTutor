@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 [http://127.0.0.1:3782](http://127.0.0.1:3782)を開き、**Settings → Providers**でモデルプロバイダーを設定してください。終了するには`Ctrl+C`を押します。名前付きの`deeptutor-data`ボリュームに、次回の実行に向けて設定とローカルデータが保持されます。
 
+### サブパスデプロイ（Context Path）
+
+ドメインのサブパス（例：`https://example.com/kaoyan`）にデプロイするには、ビルド済みの `-kaoyan` イメージタグを使用します：
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+Nginx でサブパスをプロキシします（プレフィックスを strip **しないで**ください）：
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+basePath はビルド時のパラメータでイメージに焼き込まれており、実行時に変更できません。ローカルでプレフィックス付きイメージをビルドするには：
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+詳細は [コンテナ化ドキュメント — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment) を参照してください。
+
 ### コンテンツワークスペース
 
 **コンテンツワークスペース**は、DeepTutorのプライベートなランタイムホームとは別のものです。エージェントが読み取れるフォルダで、生成ファイルは`outputs/<capability>/<session>/<turn>/`に置かれます。カスタムワークスペースでは、会話、学習教材、進捗、キャッシュが、ファイルツールから参照できないプライベートな`.deeptutor/data/`ツリーに分離されます。設定、認証情報、Memoryは引き続きアカウント単位で共有されます。

@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 Abre [http://127.0.0.1:3782](http://127.0.0.1:3782), configura los proveedores de modelos en **Settings → Providers** y pulsa `Ctrl+C` cuando termines. El volumen con nombre `deeptutor-data` conserva la configuración y los datos locales para la próxima ejecución.
 
+### Despliegue en subruta (Context Path)
+
+Para desplegar bajo una subruta de dominio (ej.: `https://example.com/kaoyan`), usa la etiqueta de imagen preconstruida `-kaoyan`:
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+Configura Nginx para hacer proxy de la subruta (**no** elimines el prefijo):
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+El basePath es un parámetro de compilación incorporado en la imagen y no puede cambiarse en tiempo de ejecución. Para compilar localmente una imagen con prefijo:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+Para más detalles, consulta [Contenedorización — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment).
+
 ### Espacio de Trabajo de Contenido
 
 El **Espacio de Trabajo de Contenido** es independiente del hogar de ejecución privado de DeepTutor. Es la carpeta que los agentes pueden leer, con los archivos generados bajo `outputs/<capability>/<session>/<turn>/`. Los espacios de trabajo personalizados aíslan conversaciones, materiales de aprendizaje, progreso y cachés en un árbol privado `.deeptutor/data/` que las herramientas de archivos no pueden explorar. La configuración, las credenciales y Memory siguen compartiéndose a nivel de cuenta.

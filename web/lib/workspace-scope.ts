@@ -5,8 +5,64 @@ export function activeWorkspaceId(): string {
   return query.get('dt_workspace') ?? query.get('workspace') ?? ''
 }
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+
+/** Extract the pathname portion before any '?' or '#'. */
+function pathnamePart(path: string): string {
+  const q = path.indexOf('?')
+  const h = path.indexOf('#')
+  const end = q >= 0 && h >= 0 ? Math.min(q, h) : q >= 0 ? q : h >= 0 ? h : path.length
+  return path.slice(0, end)
+}
+
+function hasBasePath(pathname: string): boolean {
+  return pathname === BASE_PATH || pathname.startsWith(BASE_PATH + '/')
+}
+
+/** Prepend basePath to a public asset path (e.g. "/logo.png" → "/kaoyan/logo.png"). */
+export function assetPath(path: string): string {
+  if (!BASE_PATH || !path.startsWith('/') || path.startsWith('//')) return path
+  if (hasBasePath(pathnamePart(path))) return path
+  return BASE_PATH + path
+}
+
+/**
+ * Prepend basePath for paths that go directly to the browser (fetch, WebSocket,
+ * window.location). Handles both relative paths ("/api/...") and absolute
+ * same-origin URLs ("http://localhost:3000/api/...").
+ * Next.js router.push/replace auto-prepends basePath, so navigation paths
+ * must NOT use this.
+ */
+export function browserPath(path: string): string {
+  if (!BASE_PATH) return path
+  if (path.startsWith('//')) return path
+  if (path.startsWith('/')) {
+    if (hasBasePath(pathnamePart(path))) return path
+    return BASE_PATH + path
+  }
+  if (/^https?:\/\//.test(path)) {
+    try {
+      const url = new URL(path)
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      if (origin && url.origin === origin && !hasBasePath(url.pathname)) {
+        url.pathname = BASE_PATH + url.pathname
+        return url.toString()
+      }
+    } catch { /* not a parseable URL */ }
+  }
+  return path
+}
+
+/** Strip basePath from a browser-captured path so it can be used for Next.js navigation. */
+export function stripBasePath(path: string): string {
+  if (!BASE_PATH) return path
+  const pn = pathnamePart(path)
+  if (pn === BASE_PATH) return '/' + path.slice(BASE_PATH.length)
+  if (pn.startsWith(BASE_PATH + '/')) return path.slice(BASE_PATH.length)
+  return path
+}
+
 export function scopedUrl(path: string, workspaceId = activeWorkspaceId()): string {
-  // Never attach local identity to third-party URLs (including signed media).
   const origin = typeof window === 'undefined' ? 'http://workspace.local' : window.location.origin
   if (path.startsWith('//')) return path
   const absolute = /^https?:\/\//.test(path)

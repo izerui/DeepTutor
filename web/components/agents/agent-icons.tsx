@@ -1,6 +1,7 @@
 "use client";
 
 import { type ComponentType, type SVGProps, useId } from "react";
+import { assetPath } from "@/lib/workspace-scope";
 
 /**
  * Brand glyphs for connected-agent backends. The real marks (Claude's sunburst,
@@ -170,7 +171,7 @@ function OfficialAssetGlyph({
       {...props}
     >
       <image
-        href={src}
+        href={assetPath(src)}
         width="24"
         height="24"
         preserveAspectRatio="xMidYMid meet"

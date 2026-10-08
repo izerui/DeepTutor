@@ -19,7 +19,8 @@ CONTAINER="deeptutor"
 BACKEND_PROCESS_PATTERN='^python -m uvicorn deeptutor\.api\.main:app'
 FRONTEND_PROCESS_PATTERN='^next-server'
 BACKEND_HEALTH_URL='http://127.0.0.1:8001/health/ready'
-FRONTEND_HEALTH_URL='http://127.0.0.1:3782/login'
+CONTEXT_PATH="${NEXT_PUBLIC_CONTEXT_PATH:-}"
+FRONTEND_HEALTH_URL="http://127.0.0.1:3782${CONTEXT_PATH}/login"
 HEALTH_ATTEMPTS=45
 HEALTH_STABLE_CHECKS=5
 
@@ -257,15 +258,65 @@ prepare_frontend_archive() {
 
   validate_frontend_runtime_inputs "$pod"
 
+  # Detect the basePath baked into the running pod's build and ensure the
+  # local build will use the same value.  A mismatch would push root-path
+  # assets into a prefixed pod (or vice versa), breaking all page loads.
+  # If reading the manifest fails, abort — silent fallback to "" could
+  # push root-path assets into a prefixed instance.
+  local pod_base_path
+  if ! pod_base_path=$(kubectl -n "$NAMESPACE" exec "$pod" -c "$CONTAINER" -- \
+    python3 -c "
+import json,pathlib,sys
+m=json.loads(pathlib.Path('/app/web/.next/routes-manifest.json').read_text())
+if 'basePath' not in m:
+    print('ERROR:missing',file=sys.stderr);sys.exit(1)
+v=m['basePath']
+if not isinstance(v,str):
+    print('ERROR:not-string',file=sys.stderr);sys.exit(1)
+print(v)
+"); then
+    echo "✗ 无法读取 Pod 镜像的 basePath（routes-manifest.json）。"
+    echo "  不能确认前缀一致性，中止热部署。"
+    return 1
+  fi
+  if [ "${CONTEXT_PATH}" != "${pod_base_path}" ]; then
+    echo "✗ basePath 不匹配: 本地 NEXT_PUBLIC_CONTEXT_PATH='${CONTEXT_PATH}', Pod 镜像='${pod_base_path}'"
+    echo "  热部署必须使用与镜像相同的 basePath 构建前端。"
+    echo "  设置 NEXT_PUBLIC_CONTEXT_PATH='${pod_base_path}' 后重试。"
+    return 1
+  fi
+
   echo "==> [前端] 本地构建..."
   (
     cd "$PROJECT_ROOT/web"
-    npm run build
+    NEXT_PUBLIC_CONTEXT_PATH="${CONTEXT_PATH}" npm run build
   )
 
   test -f "$PROJECT_ROOT/web/.next/standalone/server.js"
   test -d "$PROJECT_ROOT/web/.next/static"
   test -d "$PROJECT_ROOT/web/public"
+
+  # Verify the local build produced the same basePath — catches cases where
+  # the env var was set but next.config.js failed to pick it up.
+  local local_base_path
+  if ! local_base_path=$(python3 -c "
+import json,pathlib,sys
+m=json.loads(pathlib.Path('$PROJECT_ROOT/web/.next/routes-manifest.json').read_text())
+if 'basePath' not in m:
+    print('ERROR:missing',file=sys.stderr);sys.exit(1)
+v=m['basePath']
+if not isinstance(v,str):
+    print('ERROR:not-string',file=sys.stderr);sys.exit(1)
+print(v)
+"); then
+    echo "✗ 无法解析本地构建产物的 basePath。中止热部署。"
+    return 1
+  fi
+  if [ "${local_base_path}" != "${pod_base_path}" ]; then
+    echo "✗ 本地构建产物的 basePath='${local_base_path}' 与 Pod 镜像='${pod_base_path}' 不一致。"
+    echo "  构建可能未正确接收 NEXT_PUBLIC_CONTEXT_PATH。中止热部署。"
+    return 1
+  fi
 
   echo "==> [前端] 组装完整 standalone 产物..."
   mkdir -p "$stage/.next"

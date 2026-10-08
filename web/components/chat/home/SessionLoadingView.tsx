@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, RotateCw, TriangleAlert, X } from "lucide-react";
+import { assetPath } from "@/lib/workspace-scope";
 
 /**
  * Indeterminate loading overlay shown while a chat session is fetched from
@@ -59,7 +60,7 @@ export default function SessionLoadingView({
       {/* Logo + spinner (or the failure mark) */}
       <div className="flex items-center gap-3">
         <img
-          src="/logo_black.png"
+          src={assetPath("/logo_black.png")}
           alt="DeepTutor"
           width={32}
           height={32}

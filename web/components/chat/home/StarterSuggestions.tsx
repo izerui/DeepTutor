@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import Tooltip from "@/shared/ui/Tooltip";
 import { Loader2, Sparkles } from "lucide-react";
 import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
-import { apiFetch, apiUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 interface Suggestion {
   /** The line the learner reads — names the specific thing worth doing next. */
@@ -89,7 +89,7 @@ export default function StarterSuggestions({
   const load = useCallback(
     async (signal?: AbortSignal): Promise<SuggestionPayload | null> => {
       try {
-        const response = await apiFetch(apiUrl(scopedUrl("/api/dashboard/suggestions", workspaceId)), {
+        const response = await apiFetch(scopedUrl("/api/dashboard/suggestions", workspaceId), {
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           cache: "no-store",
         });
@@ -161,7 +161,7 @@ export default function StarterSuggestions({
     setView({ kind: "working" });
     try {
       const response = await apiFetch(
-        apiUrl(scopedUrl("/api/dashboard/suggestions/refresh", workspaceId)),
+        scopedUrl("/api/dashboard/suggestions/refresh", workspaceId),
         { method: "POST", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(REFRESH_TIMEOUT_MS)]) },
       );
       if (!response.ok) throw new Error('Suggestion refresh failed');

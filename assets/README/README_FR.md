@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 Ouvrez [http://127.0.0.1:3782](http://127.0.0.1:3782), configurez les fournisseurs de modèles dans **Paramètres → Fournisseurs**, puis appuyez sur `Ctrl+C` quand vous avez terminé. Le volume nommé `deeptutor-data` conserve les paramètres et les données locales pour la prochaine exécution.
 
+### Déploiement sous un sous-chemin (Context Path)
+
+Pour déployer sous un sous-chemin de domaine (ex. : `https://example.com/kaoyan`), utilisez le tag d'image pré-construit `-kaoyan` :
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+Configurez Nginx pour proxifier le sous-chemin (ne **pas** supprimer le préfixe) :
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Le basePath est un paramètre de construction intégré à l'image et ne peut pas être modifié au moment de l'exécution. Pour construire localement une image avec préfixe :
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+Pour les détails complets, voir [Conteneurisation — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment).
+
 ### Content Workspace
 
 Le **Content Workspace** est distinct du répertoire d'exécution privé de DeepTutor. C'est le dossier que les agents peuvent lire, avec les fichiers générés sous `outputs/<capability>/<session>/<turn>/`. Les espaces de travail personnalisés isolent les conversations, les supports pédagogiques, la progression et les caches dans une arborescence privée `.deeptutor/data/` que les outils de fichiers ne peuvent pas parcourir. Les paramètres, les identifiants et Memory restent partagés au niveau du compte.

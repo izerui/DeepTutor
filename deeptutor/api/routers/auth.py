@@ -691,12 +691,14 @@ async def require_learning_surface(
     _: TokenPayload | None = Depends(require_auth),
 ) -> None:
     """Second-stage default-deny guard for configured learning accounts."""
+    from starlette._utils import get_route_path
+
     from deeptutor.multi_user.learning_access import assert_learning_surface
 
     try:
         assert_learning_surface(
             _learning_surface_for_path(
-                request.url.path,
+                get_route_path(request.scope),
                 request.method,
                 route_path=_resolved_route_path(request),
             )

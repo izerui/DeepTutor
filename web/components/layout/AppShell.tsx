@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import Image from "next/image";
+import { assetPath } from "@/lib/workspace-scope";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
@@ -112,14 +113,14 @@ export default function AppShell({ sidebar, children }: AppShellProps) {
             </button>
             <Link href="/" className="flex items-center gap-1.5">
               <Image
-                src="/logo.png"
+                src={assetPath("/logo.png")}
                 alt="DeepTutor"
                 width={20}
                 height={20}
                 className="h-5 w-5"
               />
               <Image
-                src="/banner.png"
+                src={assetPath("/banner.png")}
                 alt="DeepTutor"
                 width={897}
                 height={236}

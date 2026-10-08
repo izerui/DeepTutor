@@ -88,6 +88,39 @@ docker run --rm --name deeptutor \
 
 Откройте [http://127.0.0.1:3782](http://127.0.0.1:3782), настройте провайдеров моделей в разделе **Настройки → Провайдеры** и нажмите `Ctrl+C`, когда закончите. Именованный том `deeptutor-data` сохраняет настройки и локальные данные для следующего запуска.
 
+### Развёртывание по подпути (Context Path)
+
+Для развёртывания по подпути домена (напр., `https://example.com/kaoyan`) используйте предварительно собранный тег образа `-kaoyan`:
+
+```bash
+docker run -d \
+  -e CONTEXT_PATH=/kaoyan \
+  -p 127.0.0.1:3782:3782 \
+  -v deeptutor-data:/app/data \
+  ghcr.io/<your-org>/deeptutor:develop-kaoyan
+```
+
+Настройте Nginx для проксирования подпути (**не** удаляйте префикс):
+
+```nginx
+location /kaoyan/ {
+    proxy_pass http://127.0.0.1:3782/kaoyan/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+basePath — это параметр сборки, встроенный в образ, и его нельзя изменить во время выполнения. Для локальной сборки образа с префиксом:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_CONTEXT_PATH=/kaoyan -t deeptutor:kaoyan .
+```
+
+Подробности см. в [Контейнеризация — Context Path](docs-for-user/CONTAINERIZATION.md#context-path-sub-path-deployment).
+
 ### Рабочее пространство для контента
 
 **Рабочее пространство для контента** отделено от приватного каталога среды выполнения DeepTutor. Это папка, которую могут читать агенты; созданные файлы находятся в `outputs/<capability>/<session>/<turn>/`. Пользовательские рабочие пространства изолируют разговоры, учебные материалы, прогресс и кэши в приватном дереве `.deeptutor/data/`, недоступном файловым инструментам. Настройки, учётные данные и Memory остаются общими на уровне аккаунта.

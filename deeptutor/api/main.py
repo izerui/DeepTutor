@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 import logging
+import os
 import sys
 
 from fastapi import Depends, FastAPI, Request
@@ -410,6 +411,7 @@ app = FastAPI(
     # Without this, FastAPI's 307 redirects may change HTTPS to HTTP.
     # See: https://github.com/HKUDS/DeepTutor/issues/112
     redirect_slashes=False,
+    root_path=os.getenv("CONTEXT_PATH", ""),
 )
 app.add_middleware(WorkspaceActivityMiddleware)
 
