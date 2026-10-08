@@ -54,6 +54,38 @@ of functionality already covered by `main`.
 - 合并 `main` 时如果 git 试图恢复上游已删除的 CI 工作流文件，应继续保持删除，
   不要恢复。
 
+### Context Path (子路径部署) 兼容注意
+
+本项目支持通过 `NEXT_PUBLIC_CONTEXT_PATH` 构建参数在域名子路径下部署
+（如 `/kaoyan`）。basePath 烘焙在 Next.js bundle 中，运行时不可修改。
+
+开发和合并 `main` 时必须注意以下兼容性要求：
+
+- **新增前端路径引用时**：`fetch()`、`new WebSocket()`、`window.location.href`
+  赋值必须通过 `browserPath()` 或 `apiUrl()`/`wsUrl()` 加前缀；`<img src>`
+  和 SVG `<image href>` 使用 `assetPath()`；`router.push()`/`router.replace()`
+  和 `<Link href>` **不要**加前缀（Next.js 自动处理）。
+- **`scopedUrl()` 不加 basePath**：它只负责添加 workspace 参数，用于 Next.js
+  内部导航。需要浏览器直接请求的路径用 `browserPath(scopedUrl(path))`。
+- **从浏览器 URL 提取路径后用于导航时**（如登录回跳的 `?next=` 参数），必须
+  先用 `stripBasePath()` 去除前缀，否则 `router.replace()` 会双前缀。
+- **后端路径分类**（如 `_learning_surface_for_path`）必须使用
+  `get_route_path(request.scope)` 获取应用内路径，不能用 `request.url.path`
+  或 `request.scope["path"]`——uvicorn 的 `scope["path"]` 包含 root_path 前缀。
+- **上游合并后检查新增的硬编码路径**：
+  ```bash
+  git diff HEAD~1..HEAD -- 'web/**' | grep -E 'src="|href="|"/api/|"/ws/|"/files/'
+  ```
+  任何新增的绝对路径引用都需要评估是否需要加 basePath 处理。
+- **热部署脚本**（`hot-deploy.sh`）会严格校验 Pod 镜像和本地构建产物的
+  basePath 一致性：`basePath` 字段必须存在且为字符串，缺字段或类型不对直接
+  中止。健康检查 URL 自动拼接 `${CONTEXT_PATH}/login`。
+- **测试覆盖**：修改路径相关逻辑后运行：
+  ```bash
+  cd web && npx vitest run tests/context-path.spec.ts tests/context-path-apifetch.spec.ts
+  .venv/bin/python3 -m pytest tests/api/test_context_path_auth.py tests/test_hot_deploy_script.py
+  ```
+
 ## Architecture
 
 ```
