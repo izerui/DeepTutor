@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -170,7 +171,7 @@ async def invidious_account_callback(token: str = "", state: str = "") -> Redire
     except Exception as exc:
         result = invidious_account.authorization_failure_code(exc, has_token=bool(token))
     return RedirectResponse(
-        f"/watching?account={result}",
+        f"{os.getenv('CONTEXT_PATH', '')}/watching?account={result}",
         status_code=303,
         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
     )
