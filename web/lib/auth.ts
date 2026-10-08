@@ -1,4 +1,5 @@
 import { apiFetch, apiUrl, setRuntimeAuthEnabled } from "@/lib/api";
+import { invalidateClientCache } from "@/lib/client-cache";
 
 // Auth state is resolved at runtime from the backend (`/api/auth/status`),
 // not from a build-time/env constant: the browser bundle never sees
@@ -36,10 +37,17 @@ const AUTH_STATUS_CACHE_MS = 5_000;
 let authStatusRequest: Promise<AuthStatus | null> | null = null;
 let cachedAuthStatus: { value: AuthStatus | null; expiresAt: number } | null =
   null;
+let authStatusGeneration = 0;
 
 export function invalidateAuthStatusCache(): void {
+  authStatusGeneration += 1;
   authStatusRequest = null;
   cachedAuthStatus = null;
+}
+
+function invalidateSessionCaches(): void {
+  invalidateAuthStatusCache();
+  invalidateClientCache("");
 }
 
 /**
@@ -51,6 +59,7 @@ export function fetchAuthStatus(): Promise<AuthStatus | null> {
     return Promise.resolve(cachedAuthStatus.value);
   }
   if (!authStatusRequest) {
+    const generation = authStatusGeneration;
     authStatusRequest = (async () => {
       try {
         const res = await apiFetch(apiUrl("/api/auth/status"));
@@ -58,13 +67,16 @@ export function fetchAuthStatus(): Promise<AuthStatus | null> {
         const status: AuthStatus = await res.json();
         // Record the real auth state so apiFetch's in-session 401 → /login redirect
         // fires only when auth is actually enabled.
-        setRuntimeAuthEnabled(Boolean(status.enabled));
+        if (generation === authStatusGeneration) {
+          setRuntimeAuthEnabled(Boolean(status.enabled));
+        }
         return status;
       } catch {
         return null;
       }
     })()
       .then((status) => {
+        if (generation !== authStatusGeneration) return null;
         cachedAuthStatus = {
           value: status,
           // Retry unavailable backends quickly; stable answers can be shared
@@ -74,7 +86,7 @@ export function fetchAuthStatus(): Promise<AuthStatus | null> {
         return status;
       })
       .finally(() => {
-        authStatusRequest = null;
+        if (generation === authStatusGeneration) authStatusRequest = null;
       });
   }
   return authStatusRequest;
@@ -98,7 +110,7 @@ export async function login(
     });
 
     if (res.ok) {
-      invalidateAuthStatusCache();
+      invalidateSessionCaches();
       return { ok: true };
     }
 
@@ -148,7 +160,7 @@ export async function register(
 
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      invalidateAuthStatusCache();
+      invalidateSessionCaches();
       return { ok: true, role: data.role, is_first_user: data.is_first_user };
     }
     return { ok: false, error: extractDetail(data.detail) };
@@ -182,6 +194,6 @@ export async function logout(): Promise<void> {
   } catch {
     // Ignore — we'll redirect regardless
   } finally {
-    invalidateAuthStatusCache();
+    invalidateSessionCaches();
   }
 }

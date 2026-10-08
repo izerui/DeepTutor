@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { login, fetchAuthStatus, checkIsFirstUser } from "@/lib/auth";
+import { browserPath } from "@/lib/workspace-scope";
 import {
   inheritLoginHash,
   normalizeInternalReturnPath,
@@ -53,7 +54,8 @@ function LoginPageContent() {
     const result = await login(username, password);
 
     if (result.ok) {
-      router.replace(resolvedNext());
+      // Account changes must discard providers, module caches and router state.
+      window.location.replace(browserPath(resolvedNext()));
     } else {
       setError(result.error ?? t("Login failed"));
       setLoading(false);

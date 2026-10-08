@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { ArrowLeft, ImageUp, KeyRound, LogOut, ShieldCheck, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { fetchAuthStatus, logout } from "@/lib/auth";
+import { browserPath } from "@/lib/workspace-scope";
 import {
   getProfile,
   removeAvatarImage,
@@ -180,8 +181,8 @@ export default function ProfilePage() {
 
   const handleSignOut = useCallback(async () => {
     await logout();
-    router.replace("/login");
-  }, [router]);
+    window.location.replace(browserPath("/login"));
+  }, []);
 
   const descriptor = parseAvatarMarker(profile?.avatar);
   const hasImage = descriptor.kind === "image";

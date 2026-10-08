@@ -2,17 +2,16 @@
 
 import Tooltip from "@/shared/ui/Tooltip";
 import { LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { logout } from "@/lib/auth";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { browserPath } from "@/lib/workspace-scope";
 
 interface LogoutButtonProps {
   collapsed?: boolean;
 }
 
 export function LogoutButton({ collapsed = false }: LogoutButtonProps) {
-  const router = useRouter();
   const { t } = useTranslation();
   const { enabled } = useAuthStatus();
 
@@ -20,7 +19,7 @@ export function LogoutButton({ collapsed = false }: LogoutButtonProps) {
 
   async function handleLogout() {
     await logout();
-    router.replace("/login");
+    window.location.replace(browserPath("/login"));
   }
 
   if (collapsed) {
