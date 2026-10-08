@@ -36,7 +36,7 @@ services:
   # Initialize auth settings on first run (skipped if auth.json already exists).
   # Equivalent to the initContainers.init-auth in the k3s app.yaml.
   init-auth:
-    image: busybox:1.36
+    image: serv999.com/hub/busybox:1.36
     container_name: deeptutor-kaoyan-init
     command:
       - sh
