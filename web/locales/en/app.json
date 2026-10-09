@@ -5717,5 +5717,18 @@
   "Has updates": "Has updates",
   "Favorites with updates": "Favorites with updates",
   "Back to the introduction": "Back to the introduction",
-  "You are reading the first chapter. Join to read the whole book.": "You are reading the first chapter. Join to read the whole book."
+  "You are reading the first chapter. Join to read the whole book.": "You are reading the first chapter. Join to read the whole book.",
+  "Strategy": "Strategy",
+  "rounds (days)": "rounds (days)",
+  "Use 1-16 non-decreasing whole-day rounds from 0-365 in every row.": "Use 1-16 non-decreasing whole-day rounds from 0-365 in every row.",
+  "Save as custom": "Save as custom",
+  "Delete and use default": "Delete and use default",
+  "Edit strategy": "Edit strategy",
+  "Duplicate": "Duplicate",
+  "No custom strategies yet": "No custom strategies yet",
+  "Close strategy editor": "Close strategy editor",
+  "Could not load review strategies. Try again.": "Could not load review strategies. Try again.",
+  "Could not save review strategy. Try again.": "Could not save review strategy. Try again.",
+  "Could not duplicate review strategy. Try again.": "Could not duplicate review strategy. Try again.",
+  "Could not delete review strategy. Try again.": "Could not delete review strategy. Try again."
 }

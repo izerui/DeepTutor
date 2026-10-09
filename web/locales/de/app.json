@@ -5717,5 +5717,18 @@
   "Has updates": "Neu aktualisiert",
   "Favorites with updates": "Aktualisierte Favoriten",
   "Back to the introduction": "Zurück zur Vorstellung",
-  "You are reading the first chapter. Join to read the whole book.": "Du liest das erste Kapitel. Tritt bei, um das ganze Buch zu lesen."
+  "You are reading the first chapter. Join to read the whole book.": "Du liest das erste Kapitel. Tritt bei, um das ganze Buch zu lesen.",
+  "Strategy": "Strategie",
+  "rounds (days)": "Runden (Tage)",
+  "Use 1-16 non-decreasing whole-day rounds from 0-365 in every row.": "Verwende in jeder Zeile 1-16 nicht abnehmende ganztägige Runden von 0-365.",
+  "Save as custom": "Als benutzerdefiniert speichern",
+  "Delete and use default": "Löschen und Standard verwenden",
+  "Edit strategy": "Strategie bearbeiten",
+  "Duplicate": "Duplizieren",
+  "No custom strategies yet": "Noch keine benutzerdefinierten Strategien",
+  "Close strategy editor": "Strategie-Editor schließen",
+  "Could not load review strategies. Try again.": "Wiederholungsstrategien konnten nicht geladen werden. Versuche es erneut.",
+  "Could not save review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht gespeichert werden. Versuche es erneut.",
+  "Could not duplicate review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht dupliziert werden. Versuche es erneut.",
+  "Could not delete review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht gelöscht werden. Versuche es erneut."
 }
