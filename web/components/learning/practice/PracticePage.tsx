@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, CalendarCheck, Check, ClipboardList, FileUp, Loader2, X } from "lucide-react";
@@ -135,7 +136,7 @@ function ScopedPracticePage({ mode, initialImport }: { mode: "practice" | "libra
         )
       }
     >
-      {!libraryOnly && <div className="mb-4 flex items-center gap-3 text-xs"><a href="/learning/practice" className="underline">{t("All workspaces")}</a><WorkspaceLabel row={{ content_workspace_id: activeWorkspaceId() }} /></div>}
+      {!libraryOnly && <div className="mb-4 flex items-center gap-3 text-xs"><Link href="/learning/practice" className="underline">{t("All workspaces")}</Link><WorkspaceLabel row={{ content_workspace_id: activeWorkspaceId() }} /></div>}
       {session ? (
         <PracticeSession ids={session} onClose={closeSession} backLabel={libraryOnly ? t("Back to library") : undefined} />
       ) : (

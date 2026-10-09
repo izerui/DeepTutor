@@ -481,7 +481,14 @@ def _install_request_workspace(request) -> None:
     if header is not None and query is not None and header != query:
         raise HTTPException(status_code=400, detail="Conflicting workspace scopes.")
     try:
-        path = getattr(getattr(request, "url", None), "path", "")
+        # Strip root_path (context-path deployments) so the prefixes below match.
+        scope = getattr(request, "scope", None)
+        if isinstance(scope, dict) and "path" in scope:
+            from starlette._utils import get_route_path
+
+            path = get_route_path(scope)
+        else:
+            path = getattr(getattr(request, "url", None), "path", "")
         from deeptutor.services.workspace.knowledge import library_request
 
         library_request.set(

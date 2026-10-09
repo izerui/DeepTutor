@@ -582,7 +582,9 @@ export default function RichMarkdownRenderer({
 
       return (
         <a
-          href={href}
+          // Root-relative in-app links (e.g. /api/... source documents) need
+          // the context-path prefix; external and hash links pass through.
+          href={href && !isHashLink && !external ? assetPath(href) : href}
           {...(external
             ? { target: "_blank", rel: "noopener noreferrer" }
             : {})}

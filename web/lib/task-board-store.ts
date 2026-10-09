@@ -8,6 +8,7 @@ import {
   taskBoardUrl,
   type TaskBoard,
 } from './task-board-api'
+import { browserPath } from './workspace-scope'
 
 interface State {
   board: TaskBoard | null
@@ -53,7 +54,7 @@ export function startTaskBoardSync() {
     void refreshTaskBoard()
     const source =
       typeof EventSource !== 'undefined'
-        ? new EventSource(taskBoardUrl('/events'), { withCredentials: true })
+        ? new EventSource(browserPath(taskBoardUrl('/events')), { withCredentials: true })
         : null
     let fallback: ReturnType<typeof setInterval> | undefined
     const startFallback = () => {

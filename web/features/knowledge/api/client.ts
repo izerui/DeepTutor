@@ -1,11 +1,12 @@
 import { apiFetch, apiUrl as baseApiUrl } from "@/lib/api";
 import { invalidateClientCache, withClientCache } from "@/lib/client-cache";
 import type { ImaKnowledgeBaseOption } from "@/lib/ima-connection";
+import { stripBasePath } from "@/lib/workspace-scope";
 
 function inKnowledgeLibrary(): boolean {
   return (
     typeof window !== "undefined" &&
-    /^\/knowledge-bases(?:\/|$)/.test(window.location.pathname)
+    /^\/knowledge-bases(?:\/|$)/.test(stripBasePath(window.location.pathname))
   );
 }
 

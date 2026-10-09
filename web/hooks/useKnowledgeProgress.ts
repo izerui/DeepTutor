@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiUrl, wsUrl } from "@/lib/api";
+import { stripBasePath } from "@/lib/workspace-scope";
 import {
   progressMessage,
   taskFailureMessage,
@@ -168,7 +169,7 @@ export function useKnowledgeProgress(options?: UseKnowledgeProgressOptions) {
       };
       const queryParams = new URLSearchParams();
       if (expectedTaskId) queryParams.set("task_id", expectedTaskId);
-      if (/^\/knowledge-bases(?:\/|$)/.test(window.location.pathname)) queryParams.set("resource_library", "true");
+      if (/^\/knowledge-bases(?:\/|$)/.test(stripBasePath(window.location.pathname))) queryParams.set("resource_library", "true");
       const query = queryParams.size ? `?${queryParams}` : "";
       const socket = new WebSocket(
         wsUrl(

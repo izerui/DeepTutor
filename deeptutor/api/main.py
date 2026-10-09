@@ -7,6 +7,7 @@ import sys
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette._utils import get_route_path
 
 from deeptutor.logging import configure_logging
 from deeptutor.services.config import (
@@ -476,7 +477,7 @@ async def selective_access_log(request, call_next):
     # An expired app login must not strand provider credentials in a callback URL.
     # Authentication still runs normally; only its failure presentation changes.
     if (
-        request.url.path == "/api/video-learning/invidious/account/callback"
+        get_route_path(request.scope) == "/api/video-learning/invidious/account/callback"
         and response.status_code in {401, 403}
     ):
         response = RedirectResponse(

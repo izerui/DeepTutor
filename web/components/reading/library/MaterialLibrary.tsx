@@ -7,7 +7,7 @@ import {
 } from "@/components/learning/LearningShell";
 
 import { learningLibrary, libraryItemKey } from "@/lib/learning-library";
-import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
+import { activeWorkspaceId, scopedUrl, stripBasePath } from "@/lib/workspace-scope";
 import { useLearningCreation, requestedLearningCreation, useLibraryFilter } from "@/components/learning/LibraryWorkspace";
 import { readingCollectionRoute, readingFolderRoute } from "@/lib/learning-routes";
 
@@ -95,7 +95,7 @@ export function MaterialLibraryPage() {
         setAssignFor(library.items.find(row => row.material_id === requested && row.content_workspace_id === activeWorkspaceId()) ?? null);
         const next = new URLSearchParams(window.location.search);
         next.delete('assign');
-        router.replace(`${window.location.pathname}${next.size ? `?${next}` : ''}`, { scroll: false });
+        router.replace(`${stripBasePath(window.location.pathname)}${next.size ? `?${next}` : ''}`, { scroll: false });
       }
     } catch (caught) {
       setError(

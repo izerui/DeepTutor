@@ -111,5 +111,5 @@ export default function OfficePdfPreview({
 }
 
 function apiUrlForLocalFile(): string {
-  return "/api/file-preview/pdf";
+  return scopedUrl("/api/file-preview/pdf");
 }

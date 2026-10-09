@@ -122,4 +122,36 @@ describe("context-path /kaoyan", () => {
     expect(rootHref).toMatch(/^\/kaoyan\/login\?/);
     expect(rootHref).not.toContain("/kaoyan/kaoyan");
   });
+
+  // --- task board live stream ---
+
+  it("task board EventSource connects under basePath", async () => {
+    vi.resetModules();
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "EventSource",
+      class {
+        onmessage: unknown = null;
+        onerror: unknown = null;
+        onopen: unknown = null;
+        close = vi.fn();
+        constructor(url: string) {
+          urls.push(url);
+        }
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ tasks: [], revision: 0 }))),
+    );
+    try {
+      const { startTaskBoardSync } = await import("@/lib/task-board-store");
+      const stop = startTaskBoardSync();
+      stop();
+      expect(urls).toHaveLength(1);
+      expect(urls[0]).toMatch(/^\/kaoyan\/api\/task-board\/events/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

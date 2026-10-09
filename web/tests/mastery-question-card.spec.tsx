@@ -100,3 +100,23 @@ describe("MasteryQuestionCard", () => {
     });
   });
 });
+
+describe("MasteryQuestionCard under a context path", () => {
+  it("prefixes original evidence image and document links with basePath", async () => {
+    const original = process.env.NEXT_PUBLIC_BASE_PATH;
+    process.env.NEXT_PUBLIC_BASE_PATH = "/kaoyan";
+    vi.resetModules();
+    try {
+      const { MasteryQuestionCard: Card } = await import("@/components/chat/home/MasteryQuestionCard");
+      render(<Card question={question({ visual: { task: "identification", answerCues: "visible", keyStatus: "verified", hintsUsed: 0, sources: [{ imageUrl: "/api/knowledge-bases/kb/visual-assets/known?dt_workspace=w1", url: "/api/knowledge-bases/kb/files/book.pdf?dt_workspace=w1#page=4", sourcePath: "book.pdf", page: 4 }] } })} grade={null} answered={false} submittedAnswer="" onSubmit={() => true} />);
+      const image = screen.getByRole("img", { name: "Original source evidence" });
+      expect(image).toHaveAttribute("src", "/kaoyan/api/knowledge-bases/kb/visual-assets/known?dt_workspace=w1");
+      expect(image.closest("a")).toHaveAttribute("href", "/kaoyan/api/knowledge-bases/kb/visual-assets/known?dt_workspace=w1");
+      expect(screen.getByText(/book\.pdf/).closest("a")).toHaveAttribute("href", "/kaoyan/api/knowledge-bases/kb/files/book.pdf?dt_workspace=w1#page=4");
+    } finally {
+      if (original === undefined) delete process.env.NEXT_PUBLIC_BASE_PATH;
+      else process.env.NEXT_PUBLIC_BASE_PATH = original;
+      vi.resetModules();
+    }
+  });
+});

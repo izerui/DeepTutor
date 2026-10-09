@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import InlineMarkdown from "@/components/common/InlineMarkdown";
 import { useCardSubmission } from "@/hooks/use-card-submission";
 import { REPLY_NOT_DELIVERED } from "@/lib/ask-user-state";
+import { browserPath } from "@/lib/workspace-scope";
 import type {
   MasteryGradeResult,
   MasteryQuestion,
@@ -212,8 +213,8 @@ export const MasteryQuestionCard = memo(function MasteryQuestionCard({
         {question.visual.pixelsInspected === false && <p>{t("Current model input has no verified source pixels. Retrieve the image again with a vision-capable model before grading.")}</p>}
         {question.visual.sources.map((source, index) => <figure key={`${source.imageUrl}-${index}`}>
           {/* Authenticated source endpoints need the browser's own cookies. */}
-          <a href={source.imageUrl} target="_blank" rel="noreferrer"><img src={source.imageUrl} alt={t("Original source evidence")} onError={() => setSourceUnavailable(true)} className="max-h-80 max-w-full object-contain" /></a>
-          <figcaption><a className="underline" href={source.url} target="_blank" rel="noreferrer">{source.sourcePath}{source.page ? ` · ${t("Page")} ${source.page}` : ""}</a></figcaption>
+          <a href={browserPath(source.imageUrl)} target="_blank" rel="noreferrer"><img src={browserPath(source.imageUrl)} alt={t("Original source evidence")} onError={() => setSourceUnavailable(true)} className="max-h-80 max-w-full object-contain" /></a>
+          <figcaption><a className="underline" href={browserPath(source.url)} target="_blank" rel="noreferrer">{source.sourcePath}{source.page ? ` · ${t("Page")} ${source.page}` : ""}</a></figcaption>
         </figure>)}
       </div>}
 

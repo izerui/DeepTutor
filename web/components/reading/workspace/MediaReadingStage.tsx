@@ -34,6 +34,7 @@ import {
   type ReaderActionPayload,
 } from "@/lib/reading-reader-action";
 import { setReadingViewport } from "@/lib/reading-turn-state";
+import { browserPath } from "@/lib/workspace-scope";
 import Tooltip from "@/shared/ui/Tooltip";
 import { useReading } from "@/context/ReadingContext";
 import type { AnnotationItem } from "@/lib/reading-api";
@@ -655,7 +656,7 @@ export function MediaReadingStage({
                 ref={videoRef}
                 controls
                 preload="metadata"
-                poster={material.cover_url || undefined}
+                poster={material.cover_url ? browserPath(material.cover_url) : undefined}
                 src={rawMaterialUrl(material.material_id)}
                 onError={handleUnplayable}
                 className={`aspect-video w-full bg-black object-contain shadow-[0_18px_50px_rgba(0,0,0,.18)] ${
