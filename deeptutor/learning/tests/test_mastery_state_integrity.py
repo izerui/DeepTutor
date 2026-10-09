@@ -680,7 +680,7 @@ async def test_diagnose_refines_error_without_touching_the_grade(path_id):
         (await MasteryGradeTool().execute(_mastery_path_id=path_id, answer="5")).content
     )
     assert graded["is_correct"] is False
-    assert "mastery_diagnose" in graded["instruction"]
+    assert f"mastery_diagnose(question_id={graded['question_id']!r})" in graded["instruction"]
     before = LearningStore().load(path_id)
     assert before is not None
     assert before.error_records[0].error_type.value == "application"

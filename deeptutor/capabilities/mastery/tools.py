@@ -1415,10 +1415,15 @@ class MasteryGradeTool(BaseTool):
                 "attempt tells you about their grasp of the objective, then keep "
                 + next_move
                 + (
-                    ""
+                    # An ungraded visual answer recorded no wrong attempt, so a
+                    # diagnosis here would land on some earlier error record.
+                    " It was not a wrong answer, so do not call mastery_diagnose."
+                    if interaction.result.get("result") == "ungraded"
+                    else ""
                     if is_correct
                     else " Once you have named the slip, record it with "
-                    "mastery_diagnose (before any mastery_quiz, which ends the turn)."
+                    f"mastery_diagnose(question_id={pending.question_id!r}) "
+                    "(before any mastery_quiz, which ends the turn)."
                 )
                 + " Never end the turn without saying anything."
             ),

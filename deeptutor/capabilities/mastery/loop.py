@@ -517,7 +517,11 @@ class MasteryLoopCapability:
         if not isinstance(grade, dict) or not grade:
             return ""
         result = grade.get("result") if isinstance(grade.get("result"), dict) else {}
-        verdict = "correct" if grade.get("is_correct") else "incorrect"
+        ungraded = result.get("result") == "ungraded"
+        if ungraded:
+            verdict = "ungraded (no evidence either way)"
+        else:
+            verdict = "correct" if grade.get("is_correct") else "incorrect"
         learner_answer = str(result.get("learner_answer") or "").strip()
         lines = [
             "[Mastery] The learner answered the open question on its card and the "
@@ -528,6 +532,11 @@ class MasteryLoopCapability:
             "explanation the question was registered with, so do not restate the "
             "answer key and do not call mastery_grade for it again.",
         ]
+        if ungraded:
+            lines.append(
+                "It was not a wrong answer and changed no mastery, so do not call "
+                "mastery_diagnose; clarify the source or explain instead."
+            )
         if grade.get("mastered"):
             lines.append(
                 "This cleared the objective's gate. Say what the attempt showed, "

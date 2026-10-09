@@ -438,3 +438,33 @@ async def test_canonical_writer_keeps_visual_context_and_ungraded_attempt_once(l
     payload = json.loads(row[0][0])
     assert payload["result"] == "ungraded"
     assert payload["visual_context"]["sources"][0]["asset_id"] == lesson.asset
+
+
+@pytest.mark.asyncio
+async def test_ungraded_answer_never_steers_the_tutor_to_diagnose(lesson):
+    # An ungraded answer records no error, so an unscoped mastery_diagnose
+    # would rewrite some earlier, unrelated wrong answer instead.
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+    from deeptutor.core.context import UnifiedContext
+
+    v = visual(lesson)
+    v["key_status"] = "unverified"
+    card = await pose(lesson, visual=v)
+    result = await tools.MasteryGradeTool().execute(
+        _mastery_path_id="visual", question_id=card["question_id"], answer="artery"
+    )
+    graded = json.loads(result.content)
+    assert graded["result"]["result"] == "ungraded"
+    assert "do not call mastery_diagnose" in graded["instruction"]
+    assert "record it with mastery_diagnose" not in graded["instruction"]
+
+    seed = MasteryLoopCapability._grade_seed(
+        MasteryLoopCapability.__new__(MasteryLoopCapability),
+        UnifiedContext(
+            user_message="artery",
+            metadata={"mastery_card_grade": result.metadata["mastery_grade"]},
+        ),
+    )
+    assert "graded it: ungraded" in seed
+    assert "incorrect" not in seed
+    assert "do not call mastery_diagnose" in seed
