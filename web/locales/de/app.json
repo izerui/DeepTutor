@@ -5506,5 +5506,15 @@
   "No durable indexing run recorded yet.": "Noch kein dauerhafter Indexierungslauf aufgezeichnet.",
   "Approve this MCP origin for private-network connections": "Diesen MCP-Ursprung für private Netzwerkverbindungen freigeben",
   "Use an administrator-approved private MCP origin": "Einen administrativ freigegebenen privaten MCP-Ursprung verwenden",
-  "Only this scheme, host and port can use private Docker or LAN addresses. Metadata addresses remain blocked.": "Nur dieses Schema, dieser Host und Port dürfen private Docker- oder LAN-Adressen verwenden. Metadatenadressen bleiben gesperrt."
+  "Only this scheme, host and port can use private Docker or LAN addresses. Metadata addresses remain blocked.": "Nur dieses Schema, dieser Host und Port dürfen private Docker- oder LAN-Adressen verwenden. Metadatenadressen bleiben gesperrt.",
+  "Confirm spine failed: {{message}}": "Buchrücken bestätigen fehlgeschlagen: {{message}}",
+  "Read each assistant reply aloud automatically. When this is off, the speaker button can enable auto-play for the current conversation.": "Jede Antwort des Assistenten automatisch vorlesen. Ist dies ausgeschaltet, kann die automatische Wiedergabe über die Lautsprecher-Schaltfläche für die aktuelle Unterhaltung aktiviert werden.",
+  "Peer": "Lernpartner",
+  "Research assistant": "Forschungsassistent",
+  "Protected persona and learning surfaces": "Geschützte Persona und Lernbereiche",
+  "Allowed surfaces": "Erlaubte Bereiche",
+  "Mastery": "Mastery",
+  "Watching": "Ansehen",
+  "Agents": "Agenten",
+  "Writing": "Schreiben"
 }

@@ -181,9 +181,10 @@ async def test_loop_without_on_intermediate_hook_preserves_legacy_behavior() -> 
     assistant_msgs = [m for m in iter2_msgs if m.get("role") == "assistant"]
     user_msgs = [m for m in iter2_msgs if m.get("role") == "user"]
     assert any("reasoning step" in (m.get("content") or "") for m in assistant_msgs)
-    # Only the original user prompt — no feedback injected.
-    assert len(user_msgs) == 1
-    assert user_msgs[0]["content"] == "hi"
+    # No feedback injected: only the original prompt, then the neutral
+    # "Continue." turn that keeps roles alternating after an assistant step.
+    assert [m["content"] for m in user_msgs] == ["hi", "Continue."]
+    assert iter2_msgs[-1] == {"role": "user", "content": "Continue."}
 
 
 @pytest.mark.asyncio
@@ -473,5 +474,6 @@ async def test_loop_on_intermediate_returning_none_injects_nothing() -> None:
 
     iter2_msgs = client.calls[1]
     user_msgs = [m for m in iter2_msgs if m.get("role") == "user"]
-    assert len(user_msgs) == 1
-    assert user_msgs[0]["content"] == "hi"
+    # A None hook result injects no feedback; only the role-alternation
+    # "Continue." follows the assistant step.
+    assert [m["content"] for m in user_msgs] == ["hi", "Continue."]

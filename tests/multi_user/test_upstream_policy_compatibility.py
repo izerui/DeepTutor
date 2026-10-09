@@ -35,7 +35,9 @@ def test_legacy_projection_preserves_file_and_persists_on_save(mu_isolated_root,
     grant = load_grant(user["id"])
     policy = grant["learning_policy"]
     assert policy["allowed_capabilities"] == ["chat", "immersive_reading"]
-    assert policy["allowed_surfaces"] == ["chat", "reading"]
+    # "books" is an upstream learner surface (c90fe4d0); only the retired
+    # develop extensions ("settings", "knowledge") are dropped.
+    assert policy["allowed_surfaces"] == ["chat", "reading", "books"]
     assert policy["locked_persona"] == "teacher"
     assert policy["default_capability"] == "chat"
     assert policy["reading"] == raw["learning_policy"]["reading"]
@@ -50,7 +52,7 @@ def test_removed_only_surfaces_do_not_grant_default_access(monkeypatch):
     from deeptutor.multi_user.grants import normalize_grant
 
     raw = legacy_policy()
-    raw["learning_policy"]["allowed_surfaces"] = ["books"]
+    raw["learning_policy"]["allowed_surfaces"] = ["settings", "knowledge"]
     before = deepcopy(raw)
     policy = normalize_grant("test", raw)["learning_policy"]
     assert raw == before
@@ -78,7 +80,7 @@ def test_removed_only_grant_requires_admin_review(mu_isolated_root, seed_user):
     seed_user("admin", role="admin")
     user = seed_user("custom_learner")
     raw = legacy_policy()
-    raw["learning_policy"]["allowed_surfaces"] = ["books"]
+    raw["learning_policy"]["allowed_surfaces"] = ["settings", "knowledge"]
     path = grant_path(user["id"])
     path.parent.mkdir(parents=True, exist_ok=True)
     original = json.dumps(raw)

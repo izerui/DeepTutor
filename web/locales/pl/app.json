@@ -5521,5 +5521,16 @@
   "No durable indexing run recorded yet.": "Nie zapisano jeszcze trwałego zadania indeksowania.",
   "Approve this MCP origin for private-network connections": "Zatwierdź ten origin MCP dla połączeń w sieci prywatnej",
   "Use an administrator-approved private MCP origin": "Użyj prywatnego originu MCP zatwierdzonego przez administratora",
-  "Only this scheme, host and port can use private Docker or LAN addresses. Metadata addresses remain blocked.": "Tylko ten schemat, host i port mogą korzystać z prywatnych adresów Docker lub LAN. Adresy metadanych pozostają zablokowane."
+  "Only this scheme, host and port can use private Docker or LAN addresses. Metadata addresses remain blocked.": "Tylko ten schemat, host i port mogą korzystać z prywatnych adresów Docker lub LAN. Adresy metadanych pozostają zablokowane.",
+  "Confirm spine failed: {{message}}": "Nie udało się potwierdzić struktury: {{message}}",
+  "Read each assistant reply aloud automatically. When this is off, the speaker button can enable auto-play for the current conversation.": "Automatycznie odczytuj na głos każdą odpowiedź asystenta. Gdy ta opcja jest wyłączona, przycisk głośnika może włączyć automatyczne odtwarzanie dla bieżącej rozmowy.",
+  "Your reason: ": "Twój powód: ",
+  "Peer": "Kolega",
+  "Research assistant": "Asystent badawczy",
+  "Protected persona and learning surfaces": "Chroniona persona i obszary nauki",
+  "Allowed surfaces": "Dozwolone obszary",
+  "Mastery": "Opanowanie",
+  "Watching": "Oglądanie",
+  "Agents": "Agenci",
+  "Writing": "Pisanie"
 }

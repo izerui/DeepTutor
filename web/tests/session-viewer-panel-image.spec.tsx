@@ -31,7 +31,8 @@ vi.mock("@/lib/api", () => ({
   apiUrl: (path: string) => `http://test${path}`,
 }));
 
-vi.mock("@/components/chat/home/SessionActivityPanel", () => ({
+vi.mock("@/components/chat/home/SessionActivityPanel", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/chat/home/SessionActivityPanel")>()),
   ActivityBody: () => <div data-testid="activity-body" />,
 }));
 
@@ -89,7 +90,7 @@ beforeEach(async () => {
   vi.mocked(resolveSourceUrl).mockClear();
 });
 
-it("clicking two same-name images delivers each source.url to the previewer", () => {
+it("clicking two same-name images delivers each source.url to the previewer", async () => {
   const ref = createRef<SessionViewerPanelHandle>();
 
   render(
@@ -127,10 +128,11 @@ it("clicking two same-name images delivers each source.url to the previewer", ()
   const lastSourceA = callsAfterA[callsAfterA.length - 1][0];
   expect(lastSourceA.url).toBe("/files/attachments/aaa");
 
-  // The download link corroborates
-  expect((screen.getByTitle("Download") as HTMLAnchorElement).href).toContain(
-    "/files/attachments/aaa",
-  );
+  // The download link corroborates (the panel is aria-hidden until its
+  // enter animation settles, so wait for it to become accessible).
+  expect(
+    ((await screen.findByRole("link", { name: "Download" })) as HTMLAnchorElement).href,
+  ).toContain("/files/attachments/aaa");
 
   // Open second image (same filename, different attachment)
   act(() => ref.current!.openFileTab(imgB));
@@ -139,12 +141,12 @@ it("clicking two same-name images delivers each source.url to the previewer", ()
   const lastSourceB = callsAfterB[callsAfterB.length - 1][0];
   expect(lastSourceB.url).toBe("/files/attachments/bbb");
 
-  expect((screen.getByTitle("Download") as HTMLAnchorElement).href).toContain(
-    "/files/attachments/bbb",
-  );
+  expect(
+    (screen.getByRole("link", { name: "Download" }) as HTMLAnchorElement).href,
+  ).toContain("/files/attachments/bbb");
 });
 
-it("clicking the same image twice does not duplicate tabs", () => {
+it("clicking the same image twice does not duplicate tabs", async () => {
   const ref = createRef<SessionViewerPanelHandle>();
 
   render(
@@ -169,7 +171,8 @@ it("clicking the same image twice does not duplicate tabs", () => {
   act(() => ref.current!.openFileTab(img));
   act(() => ref.current!.openFileTab(img));
 
-  const allButtons = screen.getAllByRole("button");
+  // Wait out the enter animation; until then the panel is aria-hidden.
+  const allButtons = await screen.findAllByRole("button");
   const fileTabs = allButtons.filter((b) =>
     b.textContent?.includes("photo.png"),
   );
