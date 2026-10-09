@@ -194,17 +194,33 @@ class PageIndexPipeline:
 
         client = self._get_client(storage_dir)
         total = len(supported)
+        succeeded = 0
+        failed: list[tuple[str, str]] = []
         for idx, fp in enumerate(supported, 1):
             path = Path(fp)
             self.logger.info("PageIndex: submitting %s (%d/%d)", path.name, idx, total)
-            doc_id = await client.submit_document(path, mode=mode)
+            try:
+                doc_id = await client.submit_document(path, mode=mode)
+            except Exception as exc:
+                self.logger.warning("PageIndex: skipping %s — %s", path.name, exc)
+                failed.append((path.name, str(exc)))
+                if progress_callback:
+                    progress_callback(idx, total)
+                continue
             size = path.stat().st_size if path.exists() else None
             storage.upsert_doc(manifest, path.name, doc_id, size=size)
             if submitted_by_name is not None:
                 submitted_by_name[path.name] = str(path)
+            succeeded += 1
             if progress_callback:
                 progress_callback(idx, total)
-        return total
+        if failed:
+            names = ", ".join(name for name, _ in failed)
+            self.logger.warning(
+                "PageIndex: %d/%d file(s) skipped due to errors: %s",
+                len(failed), total, names,
+            )
+        return succeeded
 
     # ----- retrieval ------------------------------------------------------
 

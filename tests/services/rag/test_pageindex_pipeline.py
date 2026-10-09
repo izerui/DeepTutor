@@ -340,3 +340,53 @@ def test_pageindex_ready_omits_embedding_identity(tmp_path, monkeypatch) -> None
         & entry.keys()
     )
     assert manager.get_info("page-kb")["statistics"]["active_signature"] is None
+
+
+# ---------------------------------------------------------------------------
+# Fault tolerance: one bad file must not abort the entire index
+# ---------------------------------------------------------------------------
+
+
+class FailOnSecondClient(FakeClient):
+    """Raises on a specific file name, succeeds for the rest."""
+
+    def __init__(self, fail_name: str) -> None:
+        super().__init__()
+        self.fail_name = fail_name
+
+    async def submit_document(self, file_path, *, mode=None) -> str:
+        if Path(file_path).name == self.fail_name:
+            raise RuntimeError("PDF has no content. All pages are blank.")
+        return await super().submit_document(file_path, mode=mode)
+
+
+def test_ingest_skips_failed_file_and_indexes_rest(tmp_path) -> None:
+    """A file that the SDK rejects (e.g. blank PDF) is skipped; siblings succeed."""
+    client = FailOnSecondClient("bad.pdf")
+    good = tmp_path / "good.pdf"
+    bad = tmp_path / "bad.pdf"
+    also_good = tmp_path / "also_good.pdf"
+    for f in (good, bad, also_good):
+        f.write_text("x")
+
+    ok = asyncio.run(
+        _pipe(tmp_path, client).initialize("kb", [str(good), str(bad), str(also_good)])
+    )
+
+    assert ok is True
+    assert sorted(Path(p).name for p in client.submitted) == ["also_good.pdf", "good.pdf"]
+    docs = _manifest(tmp_path, "kb")["docs"]
+    assert set(docs) == {"good.pdf", "also_good.pdf"}
+    assert "bad.pdf" not in docs
+
+
+def test_ingest_all_files_fail_returns_false(tmp_path) -> None:
+    """When every file fails, initialize returns False (no usable index)."""
+    client = FailOnSecondClient("only.pdf")
+    only = tmp_path / "only.pdf"
+    only.write_text("x")
+
+    ok = asyncio.run(_pipe(tmp_path, client).initialize("kb", [str(only)]))
+
+    assert ok is False
+    assert client.submitted == []
