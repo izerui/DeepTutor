@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from .context import get_current_user
-from .grants import load_grant
+from .grants import DEFAULT_LEARNING_CAPABILITIES, load_grant
 
 
 class LearningPersonaMissingError(RuntimeError):
@@ -30,7 +30,17 @@ def learning_policy_for_user(user_id: str, *, is_admin: bool = False) -> dict[st
             from .grants import learner_grant
 
             policy = learner_grant(user_id).get("learning_policy")
-    return deepcopy(policy) if isinstance(policy, dict) else None
+    if not isinstance(policy, dict):
+        return None
+    policy = deepcopy(policy)
+    # Policies saved before a capability became a learner default keep their
+    # stored list; widen it here so existing accounts match new ones without
+    # rewriting their grant files.
+    allowed = list(policy.get("allowed_capabilities") or [])
+    policy["allowed_capabilities"] = allowed + [
+        item for item in DEFAULT_LEARNING_CAPABILITIES if item not in allowed
+    ]
+    return policy
 
 
 def current_learning_policy() -> dict[str, Any] | None:

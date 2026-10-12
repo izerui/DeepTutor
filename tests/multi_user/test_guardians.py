@@ -333,6 +333,7 @@ def test_guardian_can_adjust_only_the_exposed_learning_restrictions(mu_isolated_
     assert grant["learning_policy"]["allowed_capabilities"] == [
         "chat",
         "immersive_reading",
+        "mastery_path",
     ]
     assert grant["learning_policy"]["reading"]["material_ids"] == []
 

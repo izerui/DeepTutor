@@ -46,6 +46,7 @@ from deeptutor.api.routers.auth import _learning_surface_for_path
         ("/api/mastery-paths/progress/book-1", "GET", "chat"),
         ("/api/mastery-paths/progress/book-1", "PATCH", "chat"),
         ("/api/mastery-paths/progress/book-1/redo", "POST", "chat"),
+        ("/api/dashboard/learning-library/mastery", "GET", "chat"),
         # KB writes stay denied, even when the route is otherwise browsable.
         ("/api/knowledge-bases", "POST", ""),
         ("/api/knowledge-bases/kb1/upload", "POST", ""),

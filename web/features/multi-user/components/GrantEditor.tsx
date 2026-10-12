@@ -41,7 +41,7 @@ function conservativeLearningPolicy(): LearningPolicy {
   return {
     age_band: "9-12",
     locked_persona: "teacher",
-    allowed_capabilities: ["chat", "immersive_reading"],
+    allowed_capabilities: ["chat", "immersive_reading", "mastery_path"],
     default_capability: "immersive_reading",
     allowed_surfaces: ["chat", "reading"],
     reading: {

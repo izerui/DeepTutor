@@ -19,7 +19,10 @@ from .paths import SYSTEM_ROOT, ensure_system_dirs
 
 GRANTS_DIR = SYSTEM_ROOT / "grants"
 
-LEARNING_CAPABILITIES = {"chat", "immersive_reading"}
+# Mastery Path is open to every learning account: its data routes already
+# ride the ``chat`` surface, and its tutor reads only the topic's own sources.
+LEARNING_CAPABILITIES = {"chat", "immersive_reading", "mastery_path"}
+DEFAULT_LEARNING_CAPABILITIES = ("mastery_path",)
 LEARNING_AGE_BANDS = {"6-8", "9-12", "13-15"}
 LEARNING_PERSONAS = {"teacher"}
 LEARNING_SURFACES = {"books", "chat", "reading"}
@@ -224,7 +227,7 @@ def learner_grant(user_id: str) -> dict[str, Any]:
             "learning_policy": {
                 "age_band": "9-12",
                 "locked_persona": "teacher",
-                "allowed_capabilities": ["chat", "immersive_reading"],
+                "allowed_capabilities": ["chat", "immersive_reading", "mastery_path"],
                 "default_capability": "immersive_reading",
                 "allowed_surfaces": ["chat", "reading"],
                 "reading": {

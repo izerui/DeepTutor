@@ -100,6 +100,25 @@ def test_apply_policy_rejects_unallowed_capabilities(mu_isolated_root, seed_user
             apply_learning_policy({"capability": "deep_research"})
 
 
+def test_policy_saved_before_mastery_path_default_still_allows_it(
+    mu_isolated_root, seed_user, as_user
+):
+    learner = _seed_learner(seed_user, "student")
+    # Stored the way accounts created before the default changed were.
+    save_grant(learner["id"], _policy_grant())
+
+    policy = learning_policy_for_user(learner["id"])
+    assert policy is not None
+    assert policy["allowed_capabilities"] == ["chat", "immersive_reading", "mastery_path"]
+
+    with as_user(learner["id"], username="student"):
+        result = apply_learning_policy({"capability": "mastery_path", "tools": ["web_search"]})
+
+    assert result["capability"] == "mastery_path"
+    assert result["tools"] == []
+    assert result["persona"] == "teacher"
+
+
 def test_surface_material_upload_and_extension_guards(mu_isolated_root, seed_user, as_user):
     learner = _seed_learner(seed_user, "student")
     grant = save_grant(

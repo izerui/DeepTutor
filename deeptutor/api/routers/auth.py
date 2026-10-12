@@ -654,6 +654,8 @@ def _learning_surface_for_path(
         ("/api/courses", "reading"),
         ("/api/dashboard/learning-library/materials", "reading"),
         ("/api/dashboard/learning-library/reading", "reading"),
+        # The Mastery Path list page; same per-user topics as /api/mastery-paths.
+        ("/api/dashboard/learning-library/mastery", "chat"),
         ("/api/books", "books"),
         ("/api/dashboard/learning-library/books", "books"),
         ("/api/chat", "chat"),

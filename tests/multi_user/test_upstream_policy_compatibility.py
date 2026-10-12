@@ -34,12 +34,13 @@ def test_legacy_projection_preserves_file_and_persists_on_save(mu_isolated_root,
     path.write_text(original)
     grant = load_grant(user["id"])
     policy = grant["learning_policy"]
-    assert policy["allowed_capabilities"] == ["chat", "immersive_reading"]
+    # mastery_path is a learner capability again; it survives the projection.
+    assert policy["allowed_capabilities"] == ["chat", "immersive_reading", "mastery_path"]
     # "books" is an upstream learner surface (c90fe4d0); only the retired
     # develop extensions ("settings", "knowledge") are dropped.
     assert policy["allowed_surfaces"] == ["chat", "reading", "books"]
     assert policy["locked_persona"] == "teacher"
-    assert policy["default_capability"] == "chat"
+    assert policy["default_capability"] == "mastery_path"
     assert policy["reading"] == raw["learning_policy"]["reading"]
     assert path.read_text() == original
     save_grant(user["id"], grant)

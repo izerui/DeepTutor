@@ -92,7 +92,7 @@ def test_learner_preset_expands_to_a_conservative_grant(preset_client):
     assert grant["learning_policy"] == {
         "age_band": "9-12",
         "locked_persona": "teacher",
-        "allowed_capabilities": ["chat", "immersive_reading"],
+        "allowed_capabilities": ["chat", "immersive_reading", "mastery_path"],
         "default_capability": "immersive_reading",
         "allowed_surfaces": ["chat", "reading"],
         "reading": {
