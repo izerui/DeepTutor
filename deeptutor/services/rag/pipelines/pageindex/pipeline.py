@@ -21,7 +21,7 @@ from deeptutor.services.rag.index_versioning import (
 from deeptutor.services.rag.kb_paths import resolve_kb_dir
 
 from . import storage
-from .client import PageIndexClient
+from .client import PageIndexClient, is_flash_structure_rejection
 from .config import get_pageindex_config
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,9 @@ SUPPORTED_EXTENSIONS = {
     ".csv",
 }
 OSS_SUPPORTED_EXTENSIONS = {".pdf"}
+_STANDARD_FALLBACK_DETAIL = (
+    "Indexed with mode='standard': Flash found no layout structure in this document."
+)
 
 
 def is_supported_file(path: str | Path, provider: str = storage.CLOUD_PROVIDER) -> bool:
@@ -196,7 +199,12 @@ class PageIndexPipeline:
         if not supported:
             return 0
 
-        from deeptutor.knowledge.indexing_run import _redact, current_run, failure_code
+        from deeptutor.knowledge.indexing_run import (
+            IndexingCancelled,
+            _redact,
+            current_run,
+            failure_code,
+        )
 
         run = current_run()
         client = self._get_client(storage_dir)
@@ -211,7 +219,10 @@ class PageIndexPipeline:
                 run.phase("parsing", source=path, current=idx - 1, total=total)
                 run.document(path, "parsing")
             try:
-                doc_id = await client.submit_document(path, mode=mode)
+                doc_id, used_standard = await self._submit(client, path, mode, run)
+            except IndexingCancelled:
+                # A user cancel is not a failure of this file; let it end the run.
+                raise
             except Exception as exc:
                 self.logger.warning("PageIndex: skipping %s — %s", path.name, exc)
                 failed.append((path.name, str(exc)))
@@ -224,7 +235,8 @@ class PageIndexPipeline:
                 continue
             if run:
                 # Promoted to "completed" once the manifest is published.
-                run.document(path, "parsed")
+                fallback = {"detail": _STANDARD_FALLBACK_DETAIL} if used_standard else {}
+                run.document(path, "parsed", **fallback)
             size = path.stat().st_size if path.exists() else None
             storage.upsert_doc(manifest, path.name, doc_id, size=size)
             if submitted_by_name is not None:
@@ -239,6 +251,31 @@ class PageIndexPipeline:
                 len(failed), total, names,
             )
         return succeeded
+
+    async def _submit(self, client, path: Path, mode: str | None, run) -> tuple[str, bool]:
+        """Submit one file; retry once in standard mode when Flash finds no structure.
+
+        Layout-only Flash refuses documents with no detectable headings (e.g.
+        exam papers in a single font). Standard mode builds the structure with
+        the model, at the cost of more model calls, so it is only used for the
+        files Flash refused, and only on PageIndex OSS.
+        """
+        try:
+            return await client.submit_document(path, mode=mode), False
+        except Exception as exc:
+            if (
+                self.provider != storage.OSS_PROVIDER
+                or mode == "standard"
+                or not is_flash_structure_rejection(exc)
+            ):
+                raise
+            self.logger.info(
+                "PageIndex: Flash found no structure in %s; retrying with mode='standard'",
+                path.name,
+            )
+        if run:
+            run.check()  # honour a cancellation requested during the first attempt
+        return await client.submit_document(path, mode="standard"), True
 
     # ----- retrieval ------------------------------------------------------
 

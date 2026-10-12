@@ -643,3 +643,201 @@ def test_local_submit_timeout_env_parsing(monkeypatch) -> None:
     for bad in ("0", "-1", "abc"):
         monkeypatch.setenv("PAGEINDEX_SUBMIT_TIMEOUT_SECONDS", bad)
         assert client_mod.local_submit_timeout_seconds() == default
+
+
+# ---------------------------------------------------------------------------
+# Flash -> standard fallback: only the SDK's own "no structure" refusals, once.
+# Refusal texts come from the installed SDK's policy, so a reworded SDK message
+# is exercised here instead of a frozen copy.
+# ---------------------------------------------------------------------------
+
+
+def _sdk_refusal(result: dict) -> Exception:
+    from pageindex.flash.api import flash_rejection_reason
+
+    from deeptutor.runtime.isolated_worker import IsolatedWorkerError
+
+    reason = flash_rejection_reason(result)
+    assert reason, result
+    # What the isolated worker re-raises for local_api's PageIndexAPIError.
+    return IsolatedWorkerError(
+        f"Failed to submit document: {reason}",
+        remote_module="pageindex.errors",
+        remote_type="PageIndexAPIError",
+    )
+
+
+def _flat_tree_refusal() -> Exception:
+    from pageindex.flash.api import FLAT_TREE_MAX_NODES
+
+    pages = [{"title": f"Page {i}"} for i in range(FLAT_TREE_MAX_NODES + 16)]
+    return _sdk_refusal({"toc_source": "pages", "structure": pages})
+
+
+def _empty_tree_refusal() -> Exception:
+    return _sdk_refusal({"toc_source": "detected", "structure": []})
+
+
+def _no_text_layer_refusal() -> Exception:
+    return _sdk_refusal({"toc_source": "unreadable", "structure": []})
+
+
+class ScriptedClient(FakeClient):
+    """Raises the scripted exception for a (file, mode) pair; succeeds otherwise."""
+
+    def __init__(self, script: dict[tuple[str, str | None], Exception]) -> None:
+        super().__init__()
+        self.script = script
+        self.calls: list[tuple[str, str | None]] = []
+
+    async def submit_document(self, file_path, *, mode=None) -> str:
+        key = (Path(file_path).name, mode)
+        self.calls.append(key)
+        if key in self.script:
+            raise self.script[key]
+        return await super().submit_document(file_path, mode=mode)
+
+
+def _oss_pipe(tmp_path, client, mode=None) -> PageIndexPipeline:
+    pipe = PageIndexPipeline(kb_base_dir=str(tmp_path), client=client, provider="pageindex-oss")
+    pipe._processing_mode = lambda _kb: mode
+    return pipe
+
+
+def test_structure_refusal_matcher_uses_the_sdk_policy() -> None:
+    from deeptutor.runtime.isolated_worker import IsolatedWorkerError
+    from deeptutor.services.rag.pipelines.pageindex.client import is_flash_structure_rejection
+
+    assert is_flash_structure_rejection(_flat_tree_refusal())
+    assert is_flash_structure_rejection(_empty_tree_refusal())
+    assert not is_flash_structure_rejection(_no_text_layer_refusal())
+    # Same wording from something other than the SDK's refusal is not trusted.
+    text = str(_flat_tree_refusal())
+    assert not is_flash_structure_rejection(
+        IsolatedWorkerError(text, remote_module="litellm", remote_type="APIConnectionError")
+    )
+    assert not is_flash_structure_rejection(RuntimeError(text))
+    assert not is_flash_structure_rejection(
+        IsolatedWorkerError(
+            "Failed to submit document: try mode='standard'",
+            remote_module="pageindex.errors",
+            remote_type="PageIndexAPIError",
+        )
+    )
+
+
+@pytest.mark.parametrize("refusal", [_flat_tree_refusal, _empty_tree_refusal])
+@pytest.mark.parametrize("mode", [None, "flash"])
+def test_flash_structure_refusal_falls_back_to_standard_once(tmp_path, refusal, mode) -> None:
+    client = ScriptedClient({("exam.pdf", mode): refusal()})
+    raw = tmp_path / "kb" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "exam.pdf").write_text("x")
+
+    async def run_once():
+        from deeptutor.knowledge.indexing_run import IndexingRun
+
+        paths = [str(raw / "exam.pdf")]
+        async with IndexingRun(tmp_path / "kb", paths, task_id="t") as run:
+            ok = await _oss_pipe(tmp_path, client, mode).initialize("kb", paths)
+            return ok, dict(run.data["documents"]["exam.pdf"])
+
+    ok, doc = asyncio.run(run_once())
+
+    assert ok is True
+    assert client.calls == [("exam.pdf", mode), ("exam.pdf", "standard")]
+    assert set(_manifest(tmp_path, "kb")["docs"]) == {"exam.pdf"}
+    assert doc["status"] == "parsed"
+    assert "standard" in doc["detail"]
+
+
+def test_standard_fallback_is_not_repeated(tmp_path) -> None:
+    pdf = tmp_path / "exam.pdf"
+    pdf.write_text("x")
+    client = ScriptedClient(
+        {("exam.pdf", None): _flat_tree_refusal(), ("exam.pdf", "standard"): _empty_tree_refusal()}
+    )
+
+    ok = asyncio.run(_oss_pipe(tmp_path, client).initialize("kb", [str(pdf)]))
+
+    assert ok is False
+    assert client.calls == [("exam.pdf", None), ("exam.pdf", "standard")]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _no_text_layer_refusal,
+        lambda: __import__("deeptutor.runtime.isolated_worker", fromlist=["x"]).IsolatedWorkerError(
+            "litellm.APIConnectionError: Connection reset by peer",
+            remote_module="litellm",
+            remote_type="APIConnectionError",
+        ),
+    ],
+    ids=["no-text-layer", "network-error"],
+)
+def test_other_failures_do_not_fall_back(tmp_path, error) -> None:
+    pdf = tmp_path / "scan.pdf"
+    pdf.write_text("x")
+    client = ScriptedClient({("scan.pdf", None): error()})
+
+    ok = asyncio.run(_oss_pipe(tmp_path, client).initialize("kb", [str(pdf)]))
+
+    assert ok is False
+    assert client.calls == [("scan.pdf", None)]
+
+
+def test_kb_already_in_standard_mode_is_not_retried(tmp_path) -> None:
+    pdf = tmp_path / "exam.pdf"
+    pdf.write_text("x")
+    client = ScriptedClient({("exam.pdf", "standard"): _empty_tree_refusal()})
+
+    ok = asyncio.run(_oss_pipe(tmp_path, client, "standard").initialize("kb", [str(pdf)]))
+
+    assert ok is False
+    assert client.calls == [("exam.pdf", "standard")]
+
+
+def test_cloud_provider_does_not_fall_back(tmp_path) -> None:
+    pdf = tmp_path / "exam.pdf"
+    pdf.write_text("x")
+    client = ScriptedClient({("exam.pdf", None): _flat_tree_refusal()})
+
+    ok = asyncio.run(_pipe(tmp_path, client).initialize("kb", [str(pdf)]))
+
+    assert ok is False
+    assert client.calls == [("exam.pdf", None)]
+
+
+def test_cancel_before_standard_fallback_is_not_reported_as_failure(tmp_path) -> None:
+    """A cancel requested during the Flash attempt stops before standard runs."""
+    from deeptutor.knowledge.indexing_run import IndexingCancelled, IndexingRun, request_cancel
+
+    kb_dir = tmp_path / "kb"
+    raw = kb_dir / "raw"
+    raw.mkdir(parents=True)
+    (raw / "exam.pdf").write_text("x")
+    paths = [str(raw / "exam.pdf")]
+
+    class CancelDuringFlash(ScriptedClient):
+        async def submit_document(self, file_path, *, mode=None) -> str:
+            if mode is None:
+                assert request_cancel(kb_dir, "t")  # the user clicks cancel meanwhile
+            return await super().submit_document(file_path, mode=mode)
+
+    client = CancelDuringFlash({("exam.pdf", None): _flat_tree_refusal()})
+    seen: dict[str, dict] = {}
+
+    async def run_once():
+        async with IndexingRun(kb_dir, paths, task_id="t") as run:
+            try:
+                await _oss_pipe(tmp_path, client).initialize("kb", paths)
+            finally:
+                seen.update({k: dict(v) for k, v in run.data["documents"].items()})
+
+    with pytest.raises(IndexingCancelled):
+        asyncio.run(run_once())
+
+    assert client.calls == [("exam.pdf", None)]
+    assert seen["exam.pdf"]["status"] != "failed"
+    assert "reason" not in seen["exam.pdf"] or not seen["exam.pdf"]["reason"]

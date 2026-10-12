@@ -7,6 +7,7 @@ from functools import lru_cache
 import logging
 import os
 from pathlib import Path
+import re
 import shutil
 from typing import Any
 
@@ -31,6 +32,39 @@ def local_submit_timeout_seconds() -> float:
     except ValueError:
         value = DEFAULT_LOCAL_SUBMIT_TIMEOUT_SECONDS
     return value if value > 0 else DEFAULT_LOCAL_SUBMIT_TIMEOUT_SECONDS
+
+
+@lru_cache(maxsize=1)
+def _flash_structure_refusals() -> tuple[re.Pattern[str], ...]:
+    """Patterns for the Flash refusals the SDK says standard mode can resolve.
+
+    Built from the SDK's own refusal policy, so a reworded message still
+    matches; without that helper the fallback is disabled instead of guessed.
+    A missing text layer is deliberately excluded: standard mode reads the
+    same text and cannot help there.
+    """
+    try:
+        from pageindex.flash.api import FLAT_TREE_MAX_NODES, flash_rejection_reason
+    except Exception:  # noqa: BLE001 - optional SDK internals
+        return ()
+    # The flat-tree refusal embeds the page count; a sentinel count marks it.
+    sentinel = FLAT_TREE_MAX_NODES + 4321
+    samples = (
+        flash_rejection_reason({"toc_source": "pages", "structure": [{}] * sentinel}),
+        flash_rejection_reason({"toc_source": "detected", "structure": []}),
+    )
+    return tuple(
+        re.compile(re.escape(sample).replace(str(sentinel), r"\d+")) for sample in samples if sample
+    )
+
+
+def is_flash_structure_rejection(exc: BaseException) -> bool:
+    """True only when the SDK itself refused a Flash tree for lacking structure."""
+    raised_as = getattr(exc, "remote_type", None) or type(exc).__name__
+    if raised_as != "PageIndexAPIError":
+        return False
+    message = str(exc)
+    return any(pattern.search(message) for pattern in _flash_structure_refusals())
 
 
 def _sdk_types():
