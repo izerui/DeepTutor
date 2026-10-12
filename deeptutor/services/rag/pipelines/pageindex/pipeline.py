@@ -155,12 +155,14 @@ class PageIndexPipeline:
 
         self.logger.info("Adding %d document(s) to PageIndex KB '%s'", len(file_paths), kb_name)
         try:
+            submitted_by_name: dict[str, str] = {}
             count = await self._ingest(
                 file_paths,
                 manifest,
                 progress_callback,
                 storage_dir=storage_dir,
                 mode=self._processing_mode(kb_name),
+                submitted_by_name=submitted_by_name,
             )
             if count == 0:
                 self.logger.warning("PageIndex: no supported documents to add for '%s'", kb_name)
@@ -168,6 +170,8 @@ class PageIndexPipeline:
             storage_dir.mkdir(parents=True, exist_ok=True)
             storage.write_manifest(storage_dir, manifest)
             storage.write_meta(storage_dir, provider=self.provider)
+            if indexed_file_callback := kwargs.get("indexed_file_callback"):
+                indexed_file_callback(sorted(submitted_by_name.values()))
             self.logger.info("Added %d doc(s) to PageIndex KB '%s'", count, kb_name)
             return True
         except Exception as exc:
@@ -192,6 +196,9 @@ class PageIndexPipeline:
         if not supported:
             return 0
 
+        from deeptutor.knowledge.indexing_run import _redact, current_run, failure_code
+
+        run = current_run()
         client = self._get_client(storage_dir)
         total = len(supported)
         succeeded = 0
@@ -199,14 +206,25 @@ class PageIndexPipeline:
         for idx, fp in enumerate(supported, 1):
             path = Path(fp)
             self.logger.info("PageIndex: submitting %s (%d/%d)", path.name, idx, total)
+            if run:
+                # Also the cancellation boundary between files.
+                run.phase("parsing", source=path, current=idx - 1, total=total)
+                run.document(path, "parsing")
             try:
                 doc_id = await client.submit_document(path, mode=mode)
             except Exception as exc:
                 self.logger.warning("PageIndex: skipping %s — %s", path.name, exc)
                 failed.append((path.name, str(exc)))
+                if run:
+                    run.document(
+                        path, "failed", reason=failure_code(exc), detail=_redact(str(exc))
+                    )
                 if progress_callback:
                     progress_callback(idx, total)
                 continue
+            if run:
+                # Promoted to "completed" once the manifest is published.
+                run.document(path, "parsed")
             size = path.stat().st_size if path.exists() else None
             storage.upsert_doc(manifest, path.name, doc_id, size=size)
             if submitted_by_name is not None:

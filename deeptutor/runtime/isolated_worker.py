@@ -14,6 +14,7 @@ import contextlib
 import os
 from pathlib import Path
 import pickle
+import signal
 import subprocess  # nosec B404 - fixed interpreter/module argv, no shell
 import sys
 import tempfile
@@ -112,6 +113,49 @@ def _command(request_path: Path, result_path: Path) -> list[str]:
     return [sys.executable, "-m", _WORKER_MODULE, str(request_path), str(result_path)]
 
 
+# Each worker leads its own process group so the whole tree can be stopped:
+# callables may start their own workers (e.g. PageIndex Flash's spawn pool for
+# long PDFs), and those grandchildren inherit our stdout/stderr pipes.
+def _isolation_kwargs() -> dict[str, Any]:
+    if os.name == "posix":
+        return {"start_new_session": True}
+    return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+
+
+def _signal_tree(pid: int, *, force: bool) -> None:
+    if os.name == "posix":
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pid, signal.SIGKILL if force else signal.SIGTERM)
+        return
+    # Windows has no group signal; descendants are only discoverable while
+    # the root is alive, so terminate the tree in one forced pass.
+    try:
+        import psutil
+
+        root = psutil.Process(pid)
+        for proc in [*root.children(recursive=True), root]:
+            with contextlib.suppress(psutil.Error):
+                proc.kill()
+    except ImportError:
+        subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
+            ["taskkill", "/T", "/F", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except Exception:  # noqa: BLE001 - the root already exited
+        pass
+
+
+def _stop_sync_process(process: subprocess.Popen) -> None:
+    _signal_tree(process.pid, force=False)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=1.0)
+    # Unconditional: descendants can outlive a root that obeyed SIGTERM.
+    _signal_tree(process.pid, force=True)
+    process.communicate()
+
+
 def run_in_isolated_process_sync(
     callable_path: str,
     *args: Any,
@@ -133,29 +177,59 @@ def run_in_isolated_process_sync(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 shell=False,
+                **_isolation_kwargs(),
             )
             try:
                 _stdout, stderr = process.communicate(timeout=timeout)
             except subprocess.TimeoutExpired as exc:
-                process.kill()
-                process.communicate()
+                _stop_sync_process(process)
                 raise IsolatedWorkerTimeout(
                     f"Isolated call {callable_path!r} exceeded {timeout:g} seconds"
                 ) from exc
+            except BaseException:
+                _stop_sync_process(process)
+                raise
+            if os.name == "posix":
+                # Reap strays a callable left behind after returning.
+                _signal_tree(process.pid, force=True)
             return _read_envelope(result_path, callable_path, stderr)
 
 
-async def _stop_async_process(process: asyncio.subprocess.Process) -> None:
-    if process.returncode is not None:
-        return
-    with contextlib.suppress(ProcessLookupError):
-        process.terminate()
-    try:
-        await asyncio.wait_for(process.wait(), timeout=1.0)
-    except asyncio.TimeoutError:
-        with contextlib.suppress(ProcessLookupError):
-            process.kill()
-        await process.wait()
+async def _stop_async_process(process: asyncio.subprocess.Process, drain: asyncio.Future) -> None:
+    """Stop the whole tree while ``drain`` (its communicate()) keeps reading.
+
+    Abandoning the readers lets a tree that logs on shutdown fill the pipes;
+    before gh-119710 (Python < 3.13) wait() then never returns. Descendants
+    may also outlive the root and hold the pipes, so signal the group even
+    when the root has already exited.
+    """
+    _signal_tree(process.pid, force=False)
+    await asyncio.wait({drain}, timeout=1.0)
+    _signal_tree(process.pid, force=True)
+    with contextlib.suppress(Exception):
+        await drain
+
+
+async def _reap_before_returning(
+    process: asyncio.subprocess.Process, drain: asyncio.Future
+) -> None:
+    """Run the tree stop to completion even if this task is cancelled meanwhile.
+
+    The caller frees its slot and may clean shared storage once this returns,
+    so a cancellation (e.g. backend shutdown) that lands during the SIGTERM
+    grace period is deferred until SIGKILL has run and the pipes are drained,
+    then re-raised.
+    """
+    stop = asyncio.ensure_future(_stop_async_process(process, drain))
+    cancelled = False
+    while not stop.done():
+        try:
+            await asyncio.shield(stop)
+        except asyncio.CancelledError:
+            cancelled = True
+    stop.result()
+    if cancelled:
+        raise asyncio.CancelledError
 
 
 async def run_in_isolated_process(
@@ -187,17 +261,22 @@ async def run_in_isolated_process(
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **_isolation_kwargs(),
             )
+            drain = asyncio.ensure_future(process.communicate())
             try:
-                _stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+                # shield: a timeout must not cancel the pipe readers.
+                _stdout, stderr = await asyncio.wait_for(asyncio.shield(drain), timeout=timeout)
             except asyncio.TimeoutError as exc:
-                await _stop_async_process(process)
+                await _reap_before_returning(process, drain)
                 raise IsolatedWorkerTimeout(
                     f"Isolated call {callable_path!r} exceeded {timeout:g} seconds"
                 ) from exc
             except asyncio.CancelledError:
-                await asyncio.shield(_stop_async_process(process))
+                await _reap_before_returning(process, drain)
                 raise
+            if os.name == "posix":
+                _signal_tree(process.pid, force=True)
             return _read_envelope(result_path, callable_path, stderr)
     finally:
         if acquired:

@@ -117,7 +117,8 @@ class RAGService:
             if version is None:
                 raise RuntimeError("Index output did not pass the provider readiness check.")
             partial = any(
-                doc.get("status") in {"failed", "unknown", "pending", "parsing"}
+                # "parsed" was never confirmed by indexed_file_callback.
+                doc.get("status") in {"failed", "unknown", "pending", "parsing", "parsed"}
                 for doc in run.data["documents"].values()
             )
             run.finish("partial" if partial else "completed", version=version.get("version"))

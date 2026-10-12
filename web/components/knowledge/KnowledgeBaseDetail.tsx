@@ -43,6 +43,7 @@ import type { HistoryEntry } from "@/hooks/useKnowledgeHistory";
 import KbStatusBadge from "./KbStatusBadge";
 import KbTaskLogs from "./KbTaskLogs";
 import KbIndexingRun from "./KbIndexingRun";
+import KbIndexFailureBanner from "./KbIndexFailureBanner";
 import KbFilesTab from "./KbFilesTab";
 import KbDocumentsSection from "./KbDocumentsSection";
 import KbIndexVersionsSection from "./KbIndexVersionsSection";
@@ -313,6 +314,12 @@ export default function KnowledgeBaseDetail({
       {/* Body */}
       <KbTaskLogs key={knowledgeBaseRef(kb)} kb={kb} task={task} />
       <KbIndexingRun key={`run-${knowledgeBaseRef(kb)}`} kbName={knowledgeBaseRef(kb)} readOnly={kb.read_only} />
+      {/* The add/versions sections render their own banner with actions. */}
+      {activeSection === "files" && status === "error" && (
+        <div className="shrink-0 px-6 pt-3">
+          <KbIndexFailureBanner kb={kb} />
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeSection === "files" ? (
           <KbFilesTab key={knowledgeBaseRef(kb)} kb={kb} task={task} />

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -390,3 +392,254 @@ def test_ingest_all_files_fail_returns_false(tmp_path) -> None:
 
     assert ok is False
     assert client.submitted == []
+
+
+async def _initialize_in_run(tmp_path, client, names, *, create=True):
+    from deeptutor.knowledge.indexing_run import IndexingRun
+
+    raw = tmp_path / "kb" / "raw"
+    paths = []
+    for name in names:
+        if create:
+            raw.mkdir(parents=True, exist_ok=True)
+            (raw / name).write_text("x")
+        paths.append(str(raw / name))
+    async with IndexingRun(tmp_path / "kb", paths, task_id="t") as run:
+        ok = await _pipe(tmp_path, client).initialize("kb", paths)
+        return ok, {key: dict(doc) for key, doc in run.data["documents"].items()}
+
+
+def test_failed_file_is_recorded_in_indexing_run(tmp_path) -> None:
+    """The recovery panel shows which file was skipped and why."""
+    client = FailOnSecondClient("bad.pdf")
+
+    ok, docs = asyncio.run(_initialize_in_run(tmp_path, client, ["good.pdf", "bad.pdf"]))
+
+    assert ok is True
+    assert docs["bad.pdf"]["status"] == "failed"
+    assert docs["bad.pdf"]["reason"] == "invalid_output"
+    assert "All pages are blank" in docs["bad.pdf"]["detail"]
+    assert docs["good.pdf"]["status"] == "parsed"
+
+
+def test_ragservice_add_documents_partial_success_is_reported(tmp_path, monkeypatch) -> None:
+    """Incremental adds confirm successes, so the run ends partial, not completed."""
+    from deeptutor.knowledge.indexing_run import load_run
+    from deeptutor.services.rag.service import RAGService
+
+    kb = tmp_path / "kb"
+    raw = kb / "raw"
+    raw.mkdir(parents=True)
+    (kb / "metadata.json").write_text(json.dumps({"rag_provider": "pageindex"}), encoding="utf-8")
+    good, bad = raw / "good.pdf", raw / "bad.pdf"
+    for f in (good, bad):
+        f.write_text("x")
+    service = RAGService(kb_base_dir=str(tmp_path), provider="pageindex")
+    pipe = _pipe(tmp_path, FailOnSecondClient("bad.pdf"))
+    monkeypatch.setattr(service, "_get_pipeline", lambda _provider: pipe)
+    received: list[str] = []
+
+    ok = asyncio.run(
+        service.add_documents(
+            kb_name="kb", file_paths=[str(good), str(bad)], indexed_file_callback=received.extend
+        )
+    )
+
+    assert ok is True
+    assert received == [str(good)]
+    run = load_run(kb)
+    assert run["state"] == "partial"
+    assert run["documents"]["good.pdf"]["status"] == "completed"
+    assert run["documents"]["bad.pdf"]["status"] == "failed"
+    assert "All pages are blank" in run["documents"]["bad.pdf"]["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Local submits run in a killable worker: a fake ``pageindex`` package on
+# PYTHONPATH reaches the child, whose blocking call cannot be cancelled. It
+# writes the real SDK's on-disk layout, and the parent inspects and cleans it
+# with the real ``PageIndexLocalClient``.
+# ---------------------------------------------------------------------------
+
+_FAKE_SDK = """
+import json, multiprocessing, os, signal, sys, time, uuid
+from pathlib import Path
+
+
+def _flood_stderr_and_block(_signum, _frame):
+    # SDK shutdown logging far beyond the pipe buffer, then still stuck.
+    for _ in range(256):
+        sys.stderr.write("shutdown log " + "x" * 4096 + "\\n")
+    sys.stderr.flush()
+    time.sleep(3600)
+
+
+def _save(storage_path, name, *, complete=True):
+    # DocStore.save_document order: tree.json, pages.json, then doc.json.
+    doc_id = "pi-" + uuid.uuid4().hex
+    doc_dir = Path(storage_path, "docs", doc_id)
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "tree.json").write_text("[]")
+    (doc_dir / "pages.json").write_text(json.dumps([{"page_index": 1, "markdown": "x" * 4096}]))
+    if complete:
+        meta = {"id": doc_id, "name": name, "description": None, "status": "completed",
+                "createdAt": "2026-01-01T00:00:00Z", "pageNum": 1, "folderId": None,
+                "metadata": None, "mode": "flash"}
+        (doc_dir / "doc.json").write_text(json.dumps(meta))
+    return doc_id
+
+
+class PageIndexLocalClient:
+    def __init__(self, storage_path, **_kwargs):
+        self.storage_path = storage_path
+        Path(storage_path).mkdir(parents=True, exist_ok=True)
+
+    def submit_document(self, file_path, mode=None):
+        name = Path(file_path).name
+        if name.startswith("fail"):
+            _save(self.storage_path, name, complete=False)  # partial save, then error
+            raise RuntimeError("Failed to submit document: LLM response was malformed")
+        if name.startswith("hang"):
+            if "noisy" in name:
+                signal.signal(signal.SIGTERM, _flood_stderr_and_block)
+            # Like Flash's spawn pool for long PDFs: the stall sits in a worker
+            # the SDK started, which inherits the isolated child's pipes.
+            pool = multiprocessing.get_context("spawn").Process(target=time.sleep, args=(3600,))
+            pool.start()
+            Path(self.storage_path, name + ".pid").write_text(f"{os.getpid()} {pool.pid}")
+            _save(self.storage_path, name)  # a complete late write
+            _save(self.storage_path, name, complete=False)  # and one killed mid-save
+            time.sleep(3600)  # synchronous: no event loop can cancel this
+            _save(self.storage_path, name)
+        return {"doc_id": _save(self.storage_path, name), "name": name}
+
+
+class PageIndexCloudClient:
+    pass
+"""
+
+
+@pytest.fixture
+def isolated_local_client(tmp_path, monkeypatch):
+    from pageindex import PageIndexLocalClient as RealLocalClient
+
+    sdk_root = tmp_path / "fake_sdk"
+    (sdk_root / "pageindex").mkdir(parents=True)
+    (sdk_root / "pageindex" / "__init__.py").write_text(_FAKE_SDK)
+    repo_root = Path(__file__).resolve().parents[3]
+    paths = [str(sdk_root), str(repo_root), os.environ.get("PYTHONPATH", "")]
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(paths))
+    monkeypatch.setenv("PAGEINDEX_SUBMIT_TIMEOUT_SECONDS", "2")
+    store = tmp_path / "store"
+    store.mkdir()
+    spec = {"storage_path": str(store), "model": "openai/test", "backend": {}}
+    client = PageIndexClient(RealLocalClient(storage_path=str(store)), local_spec=spec)
+    return client, store
+
+
+def _stored(store: Path) -> dict[str, str | None]:
+    """Every doc directory on disk -> its name, or None for an incomplete save."""
+    docs = store / "docs"
+    if not docs.is_dir():
+        return {}
+    out: dict[str, str | None] = {}
+    for doc_dir in docs.iterdir():
+        meta = doc_dir / "doc.json"
+        out[doc_dir.name] = json.loads(meta.read_text())["name"] if meta.is_file() else None
+    return out
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _assert_tree_reaped(pid_file: Path) -> None:
+    """Both the isolated child and the worker it spawned have exited."""
+    import time
+
+    pids = [int(pid) for pid in pid_file.read_text().split()]
+    assert len(pids) == 2
+    deadline = time.monotonic() + 5
+    while any(_pid_alive(pid) for pid in pids) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not [pid for pid in pids if _pid_alive(pid)]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX liveness probe")
+def test_local_timeout_kills_worker_and_discards_its_writes(
+    tmp_path, isolated_local_client
+) -> None:
+    import time
+
+    client, store = isolated_local_client
+    hang = tmp_path / "hang.pdf"
+    hang.write_text("x")
+
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match="timed out"):
+        asyncio.run(client.submit_document(hang))
+
+    assert time.monotonic() - started < 15
+    _assert_tree_reaped(store / "hang.pdf.pid")
+    # Both the listed write and the save killed before doc.json are gone.
+    assert _stored(store) == {}
+    time.sleep(0.5)
+    assert _stored(store) == {}  # and nothing writes afterwards
+
+
+def test_local_error_after_partial_write_discards_it(tmp_path, isolated_local_client) -> None:
+    """A plain SDK error is also an exit that must not leave a partial save."""
+    from deeptutor.runtime.isolated_worker import IsolatedWorkerError
+
+    client, store = isolated_local_client
+    for name in ("kept.pdf", "fail.pdf", "next.pdf"):
+        (tmp_path / name).write_text("x")
+    kept_id = asyncio.run(client.submit_document(tmp_path / "kept.pdf"))
+
+    with pytest.raises(IsolatedWorkerError, match="malformed"):
+        asyncio.run(client.submit_document(tmp_path / "fail.pdf"))
+
+    assert _stored(store) == {kept_id: "kept.pdf"}
+    next_id = asyncio.run(client.submit_document(tmp_path / "next.pdf"))
+    assert _stored(store) == {kept_id: "kept.pdf", next_id: "next.pdf"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX liveness probe")
+def test_stalled_local_files_do_not_starve_later_files(tmp_path, isolated_local_client) -> None:
+    import threading
+
+    client, store = isolated_local_client
+    raw = tmp_path / "kb" / "raw"
+    raw.mkdir(parents=True)
+    names = ["hang1.pdf", "hang2.pdf", "hang3-noisy.pdf", "fail.pdf", "ok.pdf"]
+    for name in names:
+        (raw / name).write_text("x")
+    threads_before = threading.active_count()
+
+    ok, docs = asyncio.run(_initialize_in_run(tmp_path, client, names, create=False))
+
+    assert ok is True
+    for name in names[:3]:
+        assert docs[name]["status"] == "failed"
+        assert docs[name]["reason"] == "timeout"
+        _assert_tree_reaped(store / f"{name}.pid")
+    assert docs["fail.pdf"]["status"] == "failed"
+    assert docs["ok.pdf"]["status"] == "parsed"
+    assert set(_manifest(tmp_path, "kb")["docs"]) == {"ok.pdf"}
+    assert list(_stored(store).values()) == ["ok.pdf"]
+    assert threading.active_count() <= threads_before + 1
+
+
+def test_local_submit_timeout_env_parsing(monkeypatch) -> None:
+    default = client_mod.DEFAULT_LOCAL_SUBMIT_TIMEOUT_SECONDS
+    monkeypatch.delenv("PAGEINDEX_SUBMIT_TIMEOUT_SECONDS", raising=False)
+    assert client_mod.local_submit_timeout_seconds() == default
+    monkeypatch.setenv("PAGEINDEX_SUBMIT_TIMEOUT_SECONDS", "5")
+    assert client_mod.local_submit_timeout_seconds() == 5
+    for bad in ("0", "-1", "abc"):
+        monkeypatch.setenv("PAGEINDEX_SUBMIT_TIMEOUT_SECONDS", bad)
+        assert client_mod.local_submit_timeout_seconds() == default
