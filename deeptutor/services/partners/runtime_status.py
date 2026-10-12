@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import json
 from pathlib import Path
 import sqlite3
@@ -33,12 +35,22 @@ class PartnerRuntimeStatusRepository:
                 """
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # sqlite3's own context manager commits or rolls back but never closes,
+        # and the connection sits in a reference cycle: a bare `with` keeps its
+        # descriptors until the cyclic GC runs, which this polled store outpaced.
+        # The inner `with` keeps the commit/rollback the call sites rely on: this store uses
+        # sqlite3's default mode, so writes are only durable once it commits.
         connection = sqlite3.connect(self.path, timeout=30)
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA busy_timeout=30000")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA busy_timeout=30000")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def set(
         self,
