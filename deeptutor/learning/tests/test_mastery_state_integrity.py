@@ -670,14 +670,25 @@ async def test_diagnose_refines_error_without_touching_the_grade(path_id):
     )
     status = json.loads((await MasteryStatusTool().execute(_mastery_path_id=path_id)).content)
     kp_id = status["next"]["knowledge_point_id"]
-    await MasteryQuizTool().execute(
-        _mastery_path_id=path_id,
-        knowledge_point_id=kp_id,
-        question="2+2?",
-        expected_answer="4",
+    # A choice question is graded deterministically; free text now needs the
+    # semantic assessor, which an offline test cannot reach.
+    quiz = tool_payload(
+        await MasteryQuizTool().execute(
+            _mastery_path_id=path_id,
+            knowledge_point_id=kp_id,
+            question="2+2?",
+            expected_answer="A",
+            question_type="choice",
+            options=[{"label": "A", "body": "4"}, {"label": "B", "body": "5"}],
+        )
+    )
+    wrong_label = next(
+        option["label"]
+        for option in quiz["pending_question"]["options"]
+        if option["body"] == "5"
     )
     graded = json.loads(
-        (await MasteryGradeTool().execute(_mastery_path_id=path_id, answer="5")).content
+        (await MasteryGradeTool().execute(_mastery_path_id=path_id, answer=wrong_label)).content
     )
     assert graded["is_correct"] is False
     assert f"mastery_diagnose(question_id={graded['question_id']!r})" in graded["instruction"]
