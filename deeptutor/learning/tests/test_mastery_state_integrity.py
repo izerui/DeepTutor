@@ -719,3 +719,68 @@ def test_legacy_quiz_attempt_without_voided_stays_counted():
     progress = LearningProgress(book_id="old")
     progress.modules = [_module("m1", [_kp("kp1", "Legacy")])]
     assert progress.deferred_objectives == {}
+
+
+def _grade_seed(grade: dict) -> str:
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+    from deeptutor.core.context import UnifiedContext
+
+    return MasteryLoopCapability._grade_seed(
+        MasteryLoopCapability.__new__(MasteryLoopCapability),
+        UnifiedContext(user_message="", metadata={"mastery_card_grade": grade}),
+    )
+
+
+def test_card_seed_points_diagnose_at_a_final_wrong_answer():
+    seed = _grade_seed(
+        {"result": {"question_id": "q1", "result": "incorrect", "final": True}}
+    )
+    assert "mastery_diagnose(question_id='q1')" in seed
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"question_id": "q1", "result": "partial", "final": True},
+        {"question_id": "q1", "result": "ungraded"},
+        {"question_id": "q1", "result": "incorrect", "final": False},
+        {"question_id": "q1", "result": "correct", "final": True},
+    ],
+)
+def test_card_seed_never_diagnoses_a_reply_without_an_error_record(result):
+    # Partial, ungraded and nonfinal replies record no error, so a diagnosis
+    # would rewrite some earlier error record instead.
+    assert "mastery_diagnose" not in _grade_seed({"result": result})
+
+
+def test_group_seed_diagnoses_only_final_wrong_children():
+    seed = _grade_seed(
+        {
+            "result": {
+                "results": [
+                    {"question_id": "a", "result": "incorrect", "final": True},
+                    {"question_id": "b", "result": "partial", "final": True},
+                    {"question_id": "c", "result": "incorrect", "final": False},
+                    {"question_id": "d", "result": "correct", "final": True},
+                ]
+            }
+        }
+    )
+    assert "mastery_diagnose for these question_ids: a " in seed
+
+
+def test_group_grade_instruction_diagnoses_only_final_wrong_children():
+    from deeptutor.capabilities.mastery.tools import _group_diagnose_hint
+
+    hint = _group_diagnose_hint(
+        {
+            "results": [
+                {"question_id": "a", "result": "incorrect", "final": True},
+                {"question_id": "b", "result": "partial"},
+                {"question_id": "c", "is_correct": False, "final": False},
+                {"question_id": "d", "is_correct": False},
+            ]
+        }
+    )
+    assert "question_ids: a, d " in hint
+    assert _group_diagnose_hint({"results": [{"question_id": "b", "result": "partial"}]}) == ""

@@ -601,6 +601,6 @@ async def test_ungraded_answer_never_steers_the_tutor_to_diagnose(lesson):
             metadata={"mastery_card_grade": result.metadata["mastery_grade"]},
         ),
     )
-    assert "graded it: ungraded" in seed
+    assert "engine reports: ungraded" in seed
     assert "incorrect" not in seed
-    assert "do not call mastery_diagnose" in seed
+    assert "mastery_diagnose" not in seed
