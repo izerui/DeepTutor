@@ -63,9 +63,7 @@ function listenForAuthBoundary(): void {
   boundaryListenerInstalled = true;
   window.addEventListener("storage", (event) => {
     if (event.key !== AUTH_BOUNDARY_KEY) return;
-    // Another tab crossed an auth boundary: drop this tab's cached data too,
-    // so it cannot keep rendering the previous account's lists.
-    invalidateSessionCaches();
+    invalidateAuthStatusCache();
     void fetchAuthStatus();
   });
 }

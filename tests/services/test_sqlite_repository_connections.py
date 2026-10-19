@@ -1,4 +1,8 @@
-"""Background SQLite repositories must close every connection they open.
+"""Partner runtime status must close every SQLite connection it opens.
+
+Cron and web-source sync are covered upstream by
+``test_background_sqlite_connections.py``; partners has no upstream test, and
+its connection setup is the one place that needed a local close-on-failure.
 
 ``sqlite3.Connection``'s own context manager commits or rolls back but never
 closes, and the connection sits in a reference cycle, so a bare
@@ -18,11 +22,7 @@ from typing import Any, Callable
 
 import pytest
 
-from deeptutor.services.cron.repository import SQLiteCronRepository
 from deeptutor.services.partners.runtime_status import PartnerRuntimeStatusRepository
-from deeptutor.services.web_source.repository import SQLiteWebSourceSyncRepository
-
-_WEB_KEY = ("owner", "kb", "source")
 
 
 @dataclass(frozen=True)
@@ -37,20 +37,6 @@ class Case:
 
 
 CASES = {
-    "web_source": Case(
-        open=lambda path: SQLiteWebSourceSyncRepository(path / "web-source-sync.sqlite"),
-        write=lambda repo: repo.ensure_source(_WEB_KEY),
-        read=lambda repo: repo.get(_WEB_KEY),
-        table="web_source_sync_jobs",
-        begin="BEGIN IMMEDIATE",
-    ),
-    "cron": Case(
-        open=lambda path: SQLiteCronRepository(path / "jobs.sqlite3"),
-        write=lambda repo: repo.upsert({"id": "job-1", "name": "nightly", "state": {}}),
-        read=lambda repo: [job["id"] for job in repo.list_payloads()] or None,
-        table="cron_jobs",
-        begin="BEGIN IMMEDIATE",
-    ),
     "partners": Case(
         open=lambda path: PartnerRuntimeStatusRepository(path / "status.sqlite3"),
         write=lambda repo: repo.set("ada", owner_id="worker-a", running=True, state="running"),
