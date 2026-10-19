@@ -715,14 +715,31 @@ async def require_learning_surface(
     """Second-stage default-deny guard for configured learning accounts."""
     from starlette._utils import get_route_path
 
-    from deeptutor.multi_user.learning_access import assert_learning_surface
+    from deeptutor.multi_user.learning_access import (
+        assert_learning_surface,
+        learning_surface_allowed,
+    )
+
+    # get_route_path strips root_path, so sub-path deployments (CONTEXT_PATH)
+    # match the same unprefixed paths as root deployments.
+    request_path = get_route_path(request.scope)
+    route_path = _resolved_route_path(request)
+    # The landing page combines independent learning surfaces (#1987). Admit
+    # any granted surface; the handler filters its readers with the same policy.
+    if (
+        request.method == "GET"
+        and request_path == "/api/dashboard/learning-index"
+        and route_path == "/api/dashboard/learning-index"
+        and any(learning_surface_allowed(surface) for surface in ("books", "chat", "reading"))
+    ):
+        return
 
     try:
         assert_learning_surface(
             _learning_surface_for_path(
-                get_route_path(request.scope),
+                request_path,
                 request.method,
-                route_path=_resolved_route_path(request),
+                route_path=route_path,
             )
         )
     except PermissionError as exc:

@@ -105,10 +105,7 @@ class SQLiteCronRepository:
 
     @contextlib.contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        # sqlite3's own context manager commits or rolls back but never closes,
-        # and the connection sits in a reference cycle: a bare `with` keeps its
-        # descriptors until the cyclic GC runs, which this polled store outpaced.
-        # The inner `with` keeps the commit/rollback the call sites rely on.
+        """Preserve transaction handling and close without relying on garbage collection."""
         connection = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         try:
             connection.execute("PRAGMA journal_mode=WAL")

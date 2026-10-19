@@ -1,5 +1,7 @@
+import { browserStorage } from "@/shared/storage";
 import { apiFetch, apiUrl, setRuntimeAuthEnabled } from "@/lib/api";
 import { invalidateClientCache } from "@/lib/client-cache";
+import { updateRecoveryPrincipal } from "@/lib/recovery-principal";
 
 // Auth state is resolved at runtime from the backend (`/api/auth/status`),
 // not from a build-time/env constant: the browser bundle never sees
@@ -34,15 +36,38 @@ export interface AuthStatus {
 }
 
 const AUTH_STATUS_CACHE_MS = 5_000;
+const AUTH_BOUNDARY_KEY = "deeptutor.authBoundary";
+let authGeneration = 0;
+let boundaryListenerInstalled = false;
 let authStatusRequest: Promise<AuthStatus | null> | null = null;
 let cachedAuthStatus: { value: AuthStatus | null; expiresAt: number } | null =
   null;
-let authStatusGeneration = 0;
 
 export function invalidateAuthStatusCache(): void {
-  authStatusGeneration += 1;
+  authGeneration += 1;
   authStatusRequest = null;
   cachedAuthStatus = null;
+  updateRecoveryPrincipal(null);
+}
+
+function broadcastAuthBoundary(): void {
+  // Notify other tabs to re-check the server, never convey/trust a principal
+  // through shared browser storage. No private recovery records are deleted.
+  if (typeof window === "undefined") return;
+  try { browserStorage.writeRaw("local", AUTH_BOUNDARY_KEY, `${Date.now()}:${Math.random()}`); }
+  catch { /* Storage may be unavailable; this tab still fails closed. */ }
+}
+
+function listenForAuthBoundary(): void {
+  if (boundaryListenerInstalled || typeof window === "undefined") return;
+  boundaryListenerInstalled = true;
+  window.addEventListener("storage", (event) => {
+    if (event.key !== AUTH_BOUNDARY_KEY) return;
+    // Another tab crossed an auth boundary: drop this tab's cached data too,
+    // so it cannot keep rendering the previous account's lists.
+    invalidateSessionCaches();
+    void fetchAuthStatus();
+  });
 }
 
 function invalidateSessionCaches(): void {
@@ -55,28 +80,28 @@ function invalidateSessionCaches(): void {
  * Returns null on network error so callers can decide how to handle it.
  */
 export function fetchAuthStatus(): Promise<AuthStatus | null> {
+  listenForAuthBoundary();
   if (cachedAuthStatus && cachedAuthStatus.expiresAt > Date.now()) {
     return Promise.resolve(cachedAuthStatus.value);
   }
   if (!authStatusRequest) {
-    const generation = authStatusGeneration;
-    authStatusRequest = (async () => {
+    const generation = authGeneration;
+    const request = (async () => {
       try {
         const res = await apiFetch(apiUrl("/api/auth/status"));
         if (!res.ok) return null;
         const status: AuthStatus = await res.json();
         // Record the real auth state so apiFetch's in-session 401 → /login redirect
         // fires only when auth is actually enabled.
-        if (generation === authStatusGeneration) {
-          setRuntimeAuthEnabled(Boolean(status.enabled));
-        }
         return status;
       } catch {
         return null;
       }
     })()
       .then((status) => {
-        if (generation !== authStatusGeneration) return null;
+        if (generation !== authGeneration) return null;
+        if (status !== null) setRuntimeAuthEnabled(Boolean(status.enabled));
+        updateRecoveryPrincipal(status);
         cachedAuthStatus = {
           value: status,
           // Retry unavailable backends quickly; stable answers can be shared
@@ -86,8 +111,9 @@ export function fetchAuthStatus(): Promise<AuthStatus | null> {
         return status;
       })
       .finally(() => {
-        if (generation === authStatusGeneration) authStatusRequest = null;
+        if (authStatusRequest === request) authStatusRequest = null;
       });
+    authStatusRequest = request;
   }
   return authStatusRequest;
 }
@@ -111,6 +137,7 @@ export async function login(
 
     if (res.ok) {
       invalidateSessionCaches();
+      broadcastAuthBoundary();
       return { ok: true };
     }
 
@@ -161,6 +188,7 @@ export async function register(
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       invalidateSessionCaches();
+      broadcastAuthBoundary();
       return { ok: true, role: data.role, is_first_user: data.is_first_user };
     }
     return { ok: false, error: extractDetail(data.detail) };
@@ -187,6 +215,7 @@ export async function checkIsFirstUser(): Promise<boolean> {
  * POST to the logout endpoint to clear the session cookie.
  */
 export async function logout(): Promise<void> {
+  invalidateAuthStatusCache();
   try {
     await apiFetch(apiUrl("/api/auth/logout"), {
       method: "POST",
@@ -195,5 +224,6 @@ export async function logout(): Promise<void> {
     // Ignore — we'll redirect regardless
   } finally {
     invalidateSessionCaches();
+    broadcastAuthBoundary();
   }
 }

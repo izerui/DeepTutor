@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
@@ -119,12 +119,9 @@ class SQLiteWebSourceSyncRepository:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    @contextmanager
+    @contextlib.contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        # sqlite3's own context manager commits or rolls back but never closes,
-        # and the connection sits in a reference cycle: a bare `with` keeps its
-        # descriptors until the cyclic GC runs, which this polled store outpaced.
-        # The inner `with` keeps the commit/rollback the call sites rely on.
+        """Preserve transaction handling and close without relying on garbage collection."""
         connection = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         try:
             connection.execute("PRAGMA journal_mode=WAL")
