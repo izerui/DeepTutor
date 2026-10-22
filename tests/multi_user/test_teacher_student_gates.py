@@ -2,93 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 import pytest
-
-
-# ---------------------------------------------------------------------------
-# Inline isolation fixtures (same as tests/multi_user/conftest.py) so this
-# test module can run both alone and together with tests/multi_user.
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def mu_isolated_root(tmp_path, monkeypatch) -> Path:
-    """Redirect every ``multi_user`` global path under ``tmp_path``."""
-    from deeptutor.multi_user import (
-        audit,
-        device_credentials,
-        grants,
-        guardians,
-        identity,
-        paths,
-    )
-
-    project_root = tmp_path
-    admin_root = (project_root / "data").resolve()
-    users_root = admin_root / "users"
-    system_root = admin_root / "system"
-
-    monkeypatch.setattr(paths, "PROJECT_ROOT", project_root)
-    monkeypatch.setattr(paths, "USERS_ROOT", users_root)
-    monkeypatch.setattr(paths, "SYSTEM_ROOT", system_root)
-    monkeypatch.setattr(paths, "ADMIN_WORKSPACE_ROOT", admin_root)
-    monkeypatch.setattr(paths, "LEGACY_MULTI_USER_ROOT", project_root / "multi-user")
-    monkeypatch.setattr(paths, "_path_services", {})
-
-    monkeypatch.setattr(identity, "PROJECT_ROOT", project_root)
-    monkeypatch.setattr(identity, "SYSTEM_ROOT", system_root)
-    monkeypatch.setattr(identity, "AUTH_DIR", system_root / "auth")
-    monkeypatch.setattr(identity, "USERS_FILE", system_root / "auth" / "users.json")
-    monkeypatch.setattr(identity, "SECRET_FILE", system_root / "auth" / "auth_secret")
-    monkeypatch.setattr(
-        identity,
-        "LEGACY_USERS_FILE",
-        project_root / "data" / "user" / "auth_users.json",
-    )
-    monkeypatch.setattr(
-        identity,
-        "LEGACY_SECRET_FILE",
-        project_root / "data" / "user" / "auth_secret",
-    )
-
-    monkeypatch.setattr(grants, "GRANTS_DIR", system_root / "grants")
-    monkeypatch.setattr(guardians, "GUARDIANS_FILE", system_root / "guardians.json")
-    monkeypatch.setattr(audit, "SYSTEM_ROOT", system_root)
-    monkeypatch.setattr(
-        device_credentials,
-        "DEVICE_CREDENTIALS_FILE",
-        system_root / "auth" / "device_credentials.json",
-    )
-
-    from deeptutor.services import auth as auth_service
-
-    monkeypatch.setattr(auth_service, "AUTH_USERNAME", "")
-    monkeypatch.setattr(auth_service, "AUTH_PASSWORD_HASH", "")
-
-    admin_root.mkdir(parents=True, exist_ok=True)
-    return tmp_path
-
-
-@pytest.fixture
-def seed_user(mu_isolated_root):
-    """Create a user record on disk and return the resulting record dict."""
-
-    def _seed(username: str, password: str = "password1234", role: str = "user") -> dict:
-        from deeptutor.multi_user.identity import save_user
-        from deeptutor.services.auth import hash_password
-
-        return save_user(username, hash_password(password), role=role)  # type: ignore[arg-type]
-
-    return _seed
-
-
-# ---------------------------------------------------------------------------
-# Test fixtures and tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
