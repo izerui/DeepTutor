@@ -23,7 +23,7 @@ import { GuardianRelationshipsEditor } from "@/features/multi-user/components/Gu
 import { UserAvatar } from "@/components/UserAvatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { filterUsersByQuery } from "@/lib/admin-users";
-import { accountRoleLabelKey } from "@/lib/account-role";
+import { accountRoleLabelKey, type AccountRole } from "@/lib/account-role";
 import {
   Search,
   Shield,
@@ -162,6 +162,19 @@ export default function AdminUsersPage() {
       );
     } finally {
       setCreateSubmitting(false);
+    }
+  }
+
+  async function handleRoleChange(user: (typeof users)[number], role: AccountRole) {
+    if (role === user.role) return;
+    setActionError("");
+    try {
+      await setUserRole(user.username, role);
+      setUsers((prev) =>
+        prev.map((u) => (u.username === user.username ? { ...u, role } : u)),
+      );
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t("Failed to update role"));
     }
   }
 
@@ -553,19 +566,36 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
                         <td className="px-5 py-3">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
-                            ${
-                              isAdmin
-                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                : "bg-[var(--muted)]/50 text-[var(--muted-foreground)]"
-                            }`}
-                          >
-                            {isAdmin && (
-                              <ShieldCheck size={11} strokeWidth={2} />
-                            )}
-                            {t(accountRoleLabelKey(user.role))}
-                          </span>
+                          {isAdmin || isSelf ? (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
+                              ${
+                                isAdmin
+                                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                  : "bg-[var(--muted)]/50 text-[var(--muted-foreground)]"
+                              }`}
+                            >
+                              {isAdmin && <ShieldCheck size={11} strokeWidth={2} />}
+                              {t(accountRoleLabelKey(user.role))}
+                            </span>
+                          ) : (
+                            <select
+                              value={user.role}
+                              onChange={(event) =>
+                                void handleRoleChange(user, event.target.value as AccountRole)
+                              }
+                              aria-label={t("Change role for {{username}}", {
+                                username: user.username,
+                              })}
+                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--foreground)]"
+                            >
+                              {(["user", "teacher", "student"] as const).map((role) => (
+                                <option key={role} value={role}>
+                                  {t(accountRoleLabelKey(role))}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           {!isAdmin && user.preset && (
                             <span className="mt-1 block text-[11px] text-[var(--muted-foreground)]">
                               {t("Preset: {{preset}}", {
@@ -671,6 +701,7 @@ export default function AdminUsersPage() {
                               key={user.id}
                               userId={user.id}
                               lockLearningPolicy={user.preset === "learner"}
+                              isStudent={user.role === "student"}
                             />
                             <BookPermissionEditor userId={user.id} />
                             {user.preset === "learner" && (

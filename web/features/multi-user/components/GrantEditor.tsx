@@ -16,7 +16,9 @@ import type {
   GrantPayload,
   LearningPolicy,
   MultiUserResources,
+  StudentPolicy,
 } from "../types";
+import { STUDENT_POLICY_DEFAULTS } from "../types";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -32,6 +34,7 @@ function emptyGrant(userId: string): GrantPayload {
     mcp_tools: null,
     exec_enabled: null,
     learning_policy: null,
+    student_policy: null,
   };
 }
 
@@ -161,9 +164,11 @@ function ModeSwitch({
 export function GrantEditor({
   userId,
   lockLearningPolicy = false,
+  isStudent = false,
 }: {
   userId: string;
   lockLearningPolicy?: boolean;
+  isStudent?: boolean;
 }) {
   const { t } = useTranslation();
   const [resources, setResources] = useState<MultiUserResources | null>(null);
@@ -822,6 +827,47 @@ export function GrantEditor({
                 />
               </div>
             </section>
+            {isStudent && (
+              <section className="min-w-0">
+                <SectionTitle>{t("Student permissions")}</SectionTitle>
+                <div className="space-y-1.5 text-xs">
+                  {(
+                    [
+                      [
+                        "allow_personal_mastery",
+                        t("Allow personal mastery paths"),
+                        t("The student can create mastery paths of their own besides the ones assigned by teachers."),
+                      ],
+                      [
+                        "allow_private_kb",
+                        t("Allow private knowledge bases"),
+                        t("The student can create knowledge bases and upload documents visible only to themselves."),
+                      ],
+                    ] as Array<[keyof StudentPolicy, string, string]>
+                  ).map(([key, label, description]) => {
+                    const policy = grant.student_policy ?? STUDENT_POLICY_DEFAULTS;
+                    return (
+                      <CheckRow
+                        key={key}
+                        label={label}
+                        description={description}
+                        checked={policy[key]}
+                        disabled={controlsDisabled}
+                        onToggle={() =>
+                          setGrant((current) => {
+                            const base = current.student_policy ?? STUDENT_POLICY_DEFAULTS;
+                            return {
+                              ...current,
+                              student_policy: { ...base, [key]: !base[key] },
+                            };
+                          })
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </div>
         </div>
 

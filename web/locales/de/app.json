@@ -5531,5 +5531,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "Gilt für Chat, Problemlösung, Rückfragen, geführtes Lernen, Lesen, Kurslernen und Standardvisualisierungen. Änderungen gelten ab der nächsten Runde.",
   "Clear instructions": "Anweisungen leeren",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} Zeichen",
-  "contextBudget.segment.workspace_instructions": "Arbeitsbereichsanweisungen"
+  "contextBudget.segment.workspace_instructions": "Arbeitsbereichsanweisungen",
+  "Student permissions": "Schülerberechtigungen",
+  "Allow personal mastery paths": "Eigene Meisterpfade erlauben",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "Der Schüler kann neben den von Lehrkräften zugewiesenen Pfaden eigene Meisterpfade anlegen.",
+  "Allow private knowledge bases": "Private Wissensdatenbanken erlauben",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "Der Schüler kann Wissensdatenbanken anlegen und Dokumente hochladen, die nur er selbst sieht.",
+  "Change role for {{username}}": "Rolle von {{username}} ändern"
 }

@@ -5547,5 +5547,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "Dotyczy czatu, rozwiązywania, pytań, nauki z przewodnikiem, czytania, kursów i standardowych wizualizacji. Zmiany obowiązują od następnej tury.",
   "Clear instructions": "Wyczyść instrukcje",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} znaków",
-  "contextBudget.segment.workspace_instructions": "Instrukcje obszaru roboczego"
+  "contextBudget.segment.workspace_instructions": "Instrukcje obszaru roboczego",
+  "Student permissions": "Uprawnienia ucznia",
+  "Allow personal mastery paths": "Zezwalaj na własne ścieżki opanowania",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "Uczeń może tworzyć własne ścieżki opanowania oprócz przypisanych przez nauczycieli.",
+  "Allow private knowledge bases": "Zezwalaj na prywatne bazy wiedzy",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "Uczeń może tworzyć bazy wiedzy i przesyłać dokumenty widoczne tylko dla siebie.",
+  "Change role for {{username}}": "Zmień rolę użytkownika {{username}}"
 }

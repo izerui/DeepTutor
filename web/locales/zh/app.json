@@ -5531,5 +5531,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "适用于对话、解题、主动提问、引导学习、沉浸式阅读、课程学习和常规可视化。从下一轮开始生效。",
   "Clear instructions": "清空提示词",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} 字符",
-  "contextBudget.segment.workspace_instructions": "工作区提示词"
+  "contextBudget.segment.workspace_instructions": "工作区提示词",
+  "Student permissions": "学生权限",
+  "Allow personal mastery paths": "允许创建个人精通之路",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "除了老师布置的路径，学生还可以自己创建精通之路。",
+  "Allow private knowledge bases": "允许创建私有知识库",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "学生可以创建只有自己能看到的知识库并上传文档。",
+  "Change role for {{username}}": "修改 {{username}} 的角色"
 }

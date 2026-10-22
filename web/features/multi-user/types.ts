@@ -15,6 +15,8 @@ export type GrantPayload = {
   /** null = follow deployment exec policy, false = always disabled. */
   exec_enabled: boolean | null;
   learning_policy: LearningPolicy | null;
+  /** Student-only abilities; null = defaults (personal mastery on, private KB off). */
+  student_policy: StudentPolicy | null;
 };
 
 export type LearningPolicy = {
@@ -28,6 +30,16 @@ export type LearningPolicy = {
     material_ids: string[];
     extensions: string[];
   };
+};
+
+export type StudentPolicy = {
+  allow_personal_mastery: boolean;
+  allow_private_kb: boolean;
+};
+
+export const STUDENT_POLICY_DEFAULTS: StudentPolicy = {
+  allow_personal_mastery: true,
+  allow_private_kb: false,
 };
 
 export type ToolOption = { name: string; description?: string };

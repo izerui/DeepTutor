@@ -5531,5 +5531,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.",
   "Clear instructions": "Clear instructions",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} characters",
-  "contextBudget.segment.workspace_instructions": "Workspace instructions"
+  "contextBudget.segment.workspace_instructions": "Workspace instructions",
+  "Student permissions": "Student permissions",
+  "Allow personal mastery paths": "Allow personal mastery paths",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "The student can create mastery paths of their own besides the ones assigned by teachers.",
+  "Allow private knowledge bases": "Allow private knowledge bases",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "The student can create knowledge bases and upload documents visible only to themselves.",
+  "Change role for {{username}}": "Change role for {{username}}"
 }

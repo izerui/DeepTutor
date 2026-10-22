@@ -17,6 +17,13 @@ export interface AuthStatus {
   username?: string;
   role?: string;
   is_admin?: boolean;
+  /** Admin or teacher, from the live account role. */
+  is_teacher?: boolean;
+  /** Present only for student accounts. */
+  student_policy?: {
+    allow_personal_mastery: boolean;
+    allow_private_kb: boolean;
+  } | null;
   /** Server-side account preset; null for identities without a local account. */
   preset?: "standard" | "learner" | "custom" | null;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */

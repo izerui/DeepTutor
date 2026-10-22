@@ -5547,5 +5547,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "Застосовується до чату, розв’язування, запитань, керованого навчання, читання, курсів і стандартних візуалізацій. Зміни діють із наступного ходу.",
   "Clear instructions": "Очистити інструкції",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} символів",
-  "contextBudget.segment.workspace_instructions": "Інструкції робочого простору"
+  "contextBudget.segment.workspace_instructions": "Інструкції робочого простору",
+  "Student permissions": "Дозволи учня",
+  "Allow personal mastery paths": "Дозволити власні шляхи опанування",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "Учень може створювати власні шляхи опанування на додачу до призначених учителями.",
+  "Allow private knowledge bases": "Дозволити приватні бази знань",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "Учень може створювати бази знань і завантажувати документи, видимі лише йому.",
+  "Change role for {{username}}": "Змінити роль {{username}}"
 }

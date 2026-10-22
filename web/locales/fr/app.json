@@ -5900,5 +5900,11 @@
   "Applies to Chat, Solve, Ask Questions, Guided Learning, Reading, Course Study and standard visualizations. Changes take effect on the next turn.": "S’applique au chat, à la résolution, aux questions, à l’apprentissage guidé, à la lecture, aux cours et aux visualisations standard. Les changements prennent effet au prochain tour.",
   "Clear instructions": "Effacer les instructions",
   "{{used}} / {{limit}} characters": "{{used}} / {{limit}} caractères",
-  "contextBudget.segment.workspace_instructions": "Instructions de l’espace de travail"
+  "contextBudget.segment.workspace_instructions": "Instructions de l’espace de travail",
+  "Student permissions": "Autorisations de l'élève",
+  "Allow personal mastery paths": "Autoriser les parcours de maîtrise personnels",
+  "The student can create mastery paths of their own besides the ones assigned by teachers.": "L'élève peut créer ses propres parcours de maîtrise en plus de ceux assignés par les enseignants.",
+  "Allow private knowledge bases": "Autoriser les bases de connaissances privées",
+  "The student can create knowledge bases and upload documents visible only to themselves.": "L'élève peut créer des bases de connaissances et importer des documents visibles uniquement par lui.",
+  "Change role for {{username}}": "Modifier le rôle de {{username}}"
 }
