@@ -316,6 +316,8 @@ class AuthStatusResponse(BaseModel):
     avatar: str = ""
     preset: AccountPreset | None = None
     learning_policy: dict | None = None
+    is_teacher: bool = False
+    student_policy: dict | None = None
 
 
 class UserInfo(BaseModel):
@@ -607,6 +609,27 @@ async def require_admin(
     return payload
 
 
+async def require_teacher_or_admin(
+    payload: TokenPayload | None = Depends(require_auth),
+) -> TokenPayload:
+    """FastAPI dependency for teaching surfaces (admins and teachers).
+
+    The role is re-read from the user store: a teacher demoted by an admin
+    loses these routes immediately, not when their token expires.
+    """
+    if not AUTH_ENABLED:
+        return _local_admin_token_payload()
+
+    from deeptutor.multi_user.roles import TEACHING_ROLES, current_role
+
+    if payload is None or current_role() not in TEACHING_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher or admin access required",
+        )
+    return payload
+
+
 _LEARNER_KB_READ_ROUTES = frozenset(
     {
         "/api/knowledge-bases",
@@ -811,6 +834,7 @@ async def auth_status(
             username="local",
             role="admin",
             is_admin=True,
+            is_teacher=True,
             preset="standard",
         )
 
@@ -819,10 +843,16 @@ async def auth_status(
     avatar = ""
     preset: AccountPreset | None = None
     learning_policy = None
+    live_role: str | None = payload.role if payload else None
+    student_policy = None
     if payload is not None:
         info = get_user_info(payload.username)
         if info:
             avatar = str(info.get("avatar") or "")
+            if payload.role != "admin":
+                from deeptutor.multi_user.models import normalize_role
+
+                live_role = normalize_role(str(info.get("role") or "user"))
             raw_preset = str(info.get("preset") or "standard")
             if raw_preset == "learner":
                 preset = "learner"
@@ -839,16 +869,22 @@ async def auth_status(
         # what clients need to render the scoped experience.
         if learning_policy is not None and preset != "learner":
             preset = "learner"
+        if live_role == "student":
+            from deeptutor.multi_user.roles import effective_student_policy
+
+            student_policy = effective_student_policy(payload.user_id)
     return AuthStatusResponse(
         enabled=True,
         authenticated=payload is not None,
         user_id=payload.user_id if payload else None,
         username=payload.username if payload else None,
-        role=payload.role if payload else None,
+        role=live_role,
         is_admin=payload.role == "admin" if payload else False,
+        is_teacher=live_role in {"admin", "teacher"},
         avatar=avatar,
         preset=preset,
         learning_policy=learning_policy,
+        student_policy=student_policy,
     )
 
 
