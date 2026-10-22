@@ -83,6 +83,7 @@ export default function AdminUsersPage() {
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
+  const [roleSavingUsername, setRoleSavingUsername] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -168,6 +169,7 @@ export default function AdminUsersPage() {
   async function handleRoleChange(user: (typeof users)[number], role: AccountRole) {
     if (role === user.role) return;
     setActionError("");
+    setRoleSavingUsername(user.username);
     try {
       await setUserRole(user.username, role);
       setUsers((prev) =>
@@ -175,6 +177,8 @@ export default function AdminUsersPage() {
       );
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t("Failed to update role"));
+    } finally {
+      setRoleSavingUsername(null);
     }
   }
 
@@ -584,10 +588,11 @@ export default function AdminUsersPage() {
                               onChange={(event) =>
                                 void handleRoleChange(user, event.target.value as AccountRole)
                               }
+                              disabled={roleSavingUsername === user.username}
                               aria-label={t("Change role for {{username}}", {
                                 username: user.username,
                               })}
-                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--foreground)]"
+                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {(["user", "teacher", "student"] as const).map((role) => (
                                 <option key={role} value={role}>
@@ -698,7 +703,7 @@ export default function AdminUsersPage() {
                         <tr>
                           <td colSpan={5} className="p-0">
                             <GrantEditor
-                              key={user.id}
+                              key={`${user.id}-${user.role}`}
                               userId={user.id}
                               lockLearningPolicy={user.preset === "learner"}
                               isStudent={user.role === "student"}
