@@ -109,6 +109,9 @@ def empty_grant(user_id: str) -> dict[str, Any]:
         "cli_apps": None,
         "exec_enabled": None,
         "learning_policy": None,
+        # Student-only account abilities (see ``roles.STUDENT_POLICY_DEFAULTS``);
+        # ``None`` means the defaults. Ignored for every other role.
+        "student_policy": None,
     }
 
 
@@ -212,6 +215,9 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
     base["learning_policy"] = _normalize_learning_policy(
         _upstream_learning_policy(payload.get("learning_policy"))
     )
+    from .roles import normalize_student_policy
+
+    base["student_policy"] = normalize_student_policy(payload.get("student_policy"))
     return base
 
 
@@ -256,6 +262,10 @@ def load_grant(user_id: str) -> dict[str, Any]:
             raise GrantStorageError(f"Grant for user {user_id} has invalid {key}")
     if stored.get("exec_enabled") is not None and not isinstance(stored["exec_enabled"], bool):
         raise GrantStorageError(f"Grant for user {user_id} has invalid exec_enabled")
+    if stored.get("student_policy") is not None and not isinstance(
+        stored["student_policy"], dict
+    ):
+        raise GrantStorageError(f"Grant for user {user_id} has invalid student_policy")
     if stored.get("learning_policy") is not None and not isinstance(
         stored["learning_policy"], dict
     ):

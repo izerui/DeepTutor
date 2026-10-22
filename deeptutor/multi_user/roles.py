@@ -1,0 +1,77 @@
+"""Teaching roles and the student policy.
+
+``admin`` stays the only elevated role. ``teacher`` unlocks the teaching
+surfaces guarded by ``require_teacher_or_admin``; ``student`` is a teaching
+identity whose account-level abilities are narrowed by ``student_policy`` in
+the user's grant. Roles are read from the live user record so a role change
+takes effect without waiting for the session token to expire.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .context import get_current_user
+from .models import normalize_role
+
+TEACHING_ROLES: frozenset[str] = frozenset({"admin", "teacher"})
+
+#: ``None`` in a grant means "use these". Personal mastery paths stay open to
+#: students by default; private knowledge bases are closed by default.
+STUDENT_POLICY_DEFAULTS: dict[str, bool] = {
+    "allow_personal_mastery": True,
+    "allow_private_kb": False,
+}
+
+
+def normalize_student_policy(value: Any) -> dict[str, bool] | None:
+    if not isinstance(value, dict):
+        return None
+    policy = dict(STUDENT_POLICY_DEFAULTS)
+    for key in STUDENT_POLICY_DEFAULTS:
+        raw = value.get(key)
+        if isinstance(raw, bool):
+            policy[key] = raw
+    return policy
+
+
+def current_role() -> str:
+    """The caller's role as stored now, not as minted into their token."""
+    user = get_current_user()
+    if user.is_admin:
+        return "admin"
+    from .identity import get_user_by_id
+
+    found = get_user_by_id(user.id)
+    if found is None:
+        return user.role
+    return normalize_role(str(found[1].get("role") or "user"))
+
+
+def is_teacher_or_admin() -> bool:
+    return current_role() in TEACHING_ROLES
+
+
+def effective_student_policy(user_id: str) -> dict[str, bool]:
+    """The student's policy; every ability is denied when the grant is unreadable."""
+    from .grants import GrantStorageError, load_grant
+
+    try:
+        stored = load_grant(user_id).get("student_policy")
+    except GrantStorageError:
+        return {key: False for key in STUDENT_POLICY_DEFAULTS}
+    return normalize_student_policy(stored) or dict(STUDENT_POLICY_DEFAULTS)
+
+
+def _student_allows(key: str) -> bool:
+    if current_role() != "student":
+        return True
+    return effective_student_policy(get_current_user().id)[key]
+
+
+def can_create_personal_mastery() -> bool:
+    return _student_allows("allow_personal_mastery")
+
+
+def can_write_private_kb() -> bool:
+    return _student_allows("allow_private_kb")
