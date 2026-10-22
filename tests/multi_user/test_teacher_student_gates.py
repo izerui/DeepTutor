@@ -93,3 +93,101 @@ def test_status_role_follows_live_record(status_client):
     body = status_client.get("/api/auth/status", headers=_bearer("user-token")).json()
     assert body["role"] == "teacher"
     assert body["is_teacher"] is True
+
+
+# ------------------------------------------------- student write gates
+
+
+@pytest.fixture
+def gate_client(role_env):
+    from deeptutor.api.routers import knowledge, mastery_path
+    from deeptutor.api.routers.auth import require_auth
+
+    app = FastAPI()
+    auth = [Depends(require_auth)]
+    app.include_router(knowledge.router, prefix="/api", dependencies=auth)
+    app.include_router(mastery_path.router, prefix="/api/mastery-paths", dependencies=auth)
+    return TestClient(app), role_env[0]
+
+
+def test_student_cannot_create_knowledge_base_by_default(gate_client):
+    client, _users = gate_client
+    response = client.post(
+        "/api/knowledge-bases",
+        headers=_bearer("student-token"),
+        data={"name": "notes"},
+    )
+    assert response.status_code == 403
+    assert "knowledge base" in response.json()["detail"].lower()
+
+
+def test_student_gate_is_installed_on_kb_routes(gate_client):
+    from deeptutor.api.routers.knowledge import deny_student_kb_writes
+
+    client, _users = gate_client
+    # Newer FastAPI wraps included routers as _IncludedRouter; look inside.
+    all_routes = list(client.app.routes)
+    for r in client.app.routes:
+        orig = getattr(r, "original_router", None)
+        if orig:
+            all_routes.extend(orig.routes)
+    route_deps = {
+        dep.call
+        for route in all_routes
+        if getattr(route, "path", "") == "/knowledge-bases/list"
+        for dep in route.dependant.dependencies
+    }
+    # The gate is installed on every route, but it must not block GETs.
+    assert deny_student_kb_writes in route_deps
+
+
+@pytest.mark.asyncio
+async def test_deny_student_kb_writes_respects_policy(role_env, as_user):
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from deeptutor.api.routers.knowledge import deny_student_kb_writes
+    from deeptutor.multi_user.grants import save_grant
+
+    users, _tokens = role_env
+    student = users["student"]
+    with as_user(student["id"], role="student", username="student1"):
+        await deny_student_kb_writes(SimpleNamespace(method="GET"))
+        with pytest.raises(HTTPException) as exc:
+            await deny_student_kb_writes(SimpleNamespace(method="POST"))
+        assert exc.value.status_code == 403
+        save_grant(student["id"], {"student_policy": {"allow_private_kb": True}})
+        await deny_student_kb_writes(SimpleNamespace(method="DELETE"))
+    teacher = users["teacher"]
+    with as_user(teacher["id"], role="teacher", username="teacher1"):
+        await deny_student_kb_writes(SimpleNamespace(method="POST"))
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("post", "/api/mastery-paths/topics/draft", {"name": "x", "goal": "y"}),
+        ("post", "/api/mastery-paths/topics", {"name": "x", "goal": "y"}),
+        ("post", "/api/mastery-paths/progress/p1/init-modules", {"modules": []}),
+        ("post", "/api/mastery-paths/progress/p1/import-from-book", {"chapters": []}),
+        ("post", "/api/mastery-paths/progress/p1/generate-from-notebook", {"records": []}),
+        ("post", "/api/mastery-paths/progress/p1/generate-from-reading", {}),
+    ],
+)
+def test_student_without_personal_mastery_is_blocked(gate_client, method, path, body):
+    from deeptutor.multi_user.grants import save_grant
+
+    client, users = gate_client
+    save_grant(users["student"]["id"], {"student_policy": {"allow_personal_mastery": False}})
+    response = getattr(client, method)(path, headers=_bearer("student-token"), json=body)
+    assert response.status_code == 403
+    assert "mastery path" in response.json()["detail"].lower()
+
+
+def test_student_with_default_policy_passes_mastery_gate(role_env, as_user):
+    from deeptutor.api.routers.mastery_path import require_personal_mastery_creation
+
+    users, _tokens = role_env
+    with as_user(users["student"]["id"], role="student", username="student1"):
+        assert require_personal_mastery_creation() is None

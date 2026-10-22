@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
 
@@ -41,6 +41,20 @@ from deeptutor.utils.json_parser import parse_json_response
 
 router = APIRouter()
 ws_router = APIRouter()
+
+
+def require_personal_mastery_creation() -> None:
+    """Students create their own paths only when their policy allows it."""
+    from deeptutor.multi_user.roles import can_create_personal_mastery
+
+    if not can_create_personal_mastery():
+        raise HTTPException(
+            status_code=403,
+            detail="Your account cannot create personal mastery paths.",
+        )
+
+
+_PERSONAL_PATH_CREATION = [Depends(require_personal_mastery_creation)]
 
 #: Signals that change what a topic screen shows without advancing the path's
 #: revision, so they are forwarded even when the durable event tail is empty.
@@ -503,7 +517,7 @@ async def list_reading_learning_records() -> ReadingLearningRecords:
     return await asyncio.to_thread(store.list_reading_records)
 
 
-@router.post("/topics/draft")
+@router.post("/topics/draft", dependencies=_PERSONAL_PATH_CREATION)
 async def generate_topic_route(body: GenerateTopicDraftRequest):
     from deeptutor.learning.topic_generation import TopicGenerationError, generate_topic_draft
 
@@ -540,7 +554,7 @@ def _provisional_name(goal: str) -> str:
     return head[:_PROVISIONAL_NAME_CHARS].rstrip() + "…"
 
 
-@router.post("/topics")
+@router.post("/topics", dependencies=_PERSONAL_PATH_CREATION)
 async def create_topic(body: ConfirmTopicRequest):
     from deeptutor.learning.topic_generation import (
         TopicGenerationError,
@@ -1061,7 +1075,7 @@ async def get_progress_sessions(book_id: str):
     return {"book_id": book_id, "session_ids": session_ids}
 
 
-@router.post("/progress/{book_id}/init-modules")
+@router.post("/progress/{book_id}/init-modules", dependencies=_PERSONAL_PATH_CREATION)
 async def init_modules(book_id: str, body: InitModulesRequest):
     _validate_book_id(book_id)
     modules = _parse_modules(_module_payloads(body.modules))
@@ -1076,7 +1090,7 @@ async def init_modules(book_id: str, body: InitModulesRequest):
     }
 
 
-@router.post("/progress/{book_id}/import-from-book")
+@router.post("/progress/{book_id}/import-from-book", dependencies=_PERSONAL_PATH_CREATION)
 async def import_from_book(book_id: str, body: ImportFromBookRequest):
     _validate_book_id(book_id)
     modules = []
@@ -1188,7 +1202,7 @@ class GenerateFromReadingRequest(BaseModel):
     material_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
-@router.post("/progress/{book_id}/generate-from-notebook")
+@router.post("/progress/{book_id}/generate-from-notebook", dependencies=_PERSONAL_PATH_CREATION)
 async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest):
     _validate_book_id(book_id)
     if not body.records:
@@ -1265,7 +1279,7 @@ async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest
     }
 
 
-@router.post("/progress/{book_id}/generate-from-reading")
+@router.post("/progress/{book_id}/generate-from-reading", dependencies=_PERSONAL_PATH_CREATION)
 async def generate_from_reading(book_id: str, body: GenerateFromReadingRequest):
     """Create a mastery curriculum from a private reading workspace."""
     from deeptutor.reading.knowledge_capture import mastery_source_records

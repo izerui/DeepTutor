@@ -30,6 +30,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -114,7 +115,29 @@ config = load_config_with_main("main.yaml", PROJECT_ROOT)
 log_dir = config.get("paths", {}).get("user_log_dir") or config.get("logging", {}).get("log_dir")
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def deny_student_kb_writes(request: Request) -> None:
+    """Students may only browse knowledge bases unless an admin allows more.
+
+    Runs after the include-time ``require_auth`` dependency, so the current
+    user is already installed. Reads always pass; the full list of write
+    routes (create, upload, connect, sync, delete, engine config) is covered
+    by gating on the method instead of naming each route.
+    """
+    if request.method.upper() in _READ_METHODS:
+        return
+    from deeptutor.multi_user.roles import can_write_private_kb
+
+    if not can_write_private_kb():
+        raise HTTPException(
+            status_code=403,
+            detail="Students cannot create or modify knowledge bases on this account.",
+        )
+
+
+router = APIRouter(dependencies=[Depends(deny_student_kb_writes)])
 ws_router = APIRouter()
 
 _DEFAULT_EXTRACT_TEXT_FROM_PATH = extract_text_from_path
