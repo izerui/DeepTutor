@@ -2383,6 +2383,9 @@ class KnowledgeBaseManager:
         source_info = {
             "id": source_id,
             "url": normalized_url,
+            # Missing/1 identifies persisted pre-registry sources. New instances
+            # must never inherit state from retained account/name recovery rows.
+            "sync_state_version": 2,
             "max_depth": max_depth,
             "max_pages": max_pages,
             "enabled": True,

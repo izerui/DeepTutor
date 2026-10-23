@@ -197,12 +197,16 @@ class SQLiteWebSourceSyncRepository:
         source_key: tuple[str, str, str],
         legacy_owner_ids: list[str],
         legacy_name: str,
+        *,
+        import_legacy: bool = False,
     ) -> None:
         """Copy legacy state once into a stable KB key, retaining recovery rows.
 
         The kb_name storage column accepts kb:<id> for registered jobs. Source IDs
         and public physical names stay unchanged. Ambiguous legacy state is copied
-        independently to each matching KB, never shared after binding.
+        independently to each matching legacy KB, never shared after binding.
+        Recovery-row existence is not provenance: callers must explicitly identify
+        a persisted legacy source before importing an account/name key.
         """
         owner, kb_ref, source_id = source_key
         with self._connect() as connection:
@@ -233,7 +237,8 @@ class SQLiteWebSourceSyncRepository:
                         )
                     else:
                         candidates = [(row["owner_id"], row["kb_name"]) for row in previous]
-                        candidates.extend((uid, legacy_name) for uid in legacy_owner_ids)
+                        if import_legacy:
+                            candidates.extend((uid, legacy_name) for uid in legacy_owner_ids)
                     for old_owner, old_name in dict.fromkeys(candidates):
                         old_key = (old_owner, old_name, source_id)
                         connection.execute(

@@ -210,6 +210,7 @@ class WebSourceSyncScheduler:
                         await asyncio.to_thread(
                             self.repo.bind_registered_source, key,
                             legacy_job_owners(record), record.dir_name,
+                            import_legacy=source.get("sync_state_version", 1) == 1,
                         )
                         sources[key] = dict(source)
                         source_dirs[key] = record.base_dir
@@ -245,6 +246,7 @@ class WebSourceSyncScheduler:
         for source in manager.get_web_sources(kb_name):
             self.repo.bind_registered_source(
                 (record.created_by, record.ref, str(source["id"])), owners, kb_name,
+                import_legacy=source.get("sync_state_version", 1) == 1,
             )
         return record.created_by, record.ref
 

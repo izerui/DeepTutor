@@ -1,5 +1,7 @@
 """B14 review regressions: stable jobs, administrator controls, archive isolation."""
 
+import asyncio
+import json
 import sqlite3
 from unittest.mock import AsyncMock
 
@@ -48,6 +50,17 @@ def _pairing(label):
     }
 
 
+def _legacy_source(manager, source):
+    """Reproduce source metadata written before registry-native job identities."""
+    path = manager.base_dir / "papers" / "metadata.json"
+    payload = json.loads(path.read_text())
+    for item in payload["web_sources"]:
+        if item["id"] == source["id"]:
+            item.pop("sync_state_version", None)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    source.pop("sync_state_version", None)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("adopted", [False, True])
 async def test_independent_jobs_controls_pairings_and_legacy_state(
@@ -57,6 +70,8 @@ async def test_independent_jobs_controls_pairings_and_legacy_state(
 
     first, one, source = _create(as_user, make_kb, adopted="p1" if adopted else None)
     second, two, other = _create(as_user, make_kb, adopted="p2" if adopted else None)
+    _legacy_source(first, source)
+    _legacy_source(second, other)
     assert source["id"] == other["id"]
     repo = SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite")
     scheduler = WebSourceSyncScheduler(repository=repo)
@@ -280,7 +295,8 @@ async def test_admin_own_coincident_legacy_job_is_not_imported_into_users_kb(
         admin_record = registry.register_kb(
             base_dir=manager.base_dir, name="papers", kind="uploaded", created_by=admin["id"],
         )
-        manager.add_web_source("papers", "https://example.com/docs/")
+        admin_source = manager.add_web_source("papers", "https://example.com/docs/")
+        _legacy_source(manager, admin_source)
     repo = SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite")
     scheduler = WebSourceSyncScheduler(repository=repo)
     monkeypatch.setattr(knowledge, "get_web_source_sync_scheduler", lambda: scheduler)
@@ -372,6 +388,7 @@ async def test_relevant_catalog_corruption_preserves_reads_jobs_but_blocks_dispa
 
 def test_legacy_binding_upgrade_rolls_back_atomically(as_user, make_kb, tmp_path):
     manager, record, source = _create(as_user, make_kb)
+    _legacy_source(manager, source)
     repo = SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite")
     legacy = ("u1", "papers", source["id"])
     before = repo.ensure_source(legacy)
@@ -398,3 +415,97 @@ def test_legacy_binding_upgrade_rolls_back_atomically(as_user, make_kb, tmp_path
     scheduler.source_scope(manager, "papers")
     assert repo.get(key).next_run_at_ms == before.next_run_at_ms
     assert repo.list_pairings(*key)[0].pairing_id == "preserved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_state", ["cancelled", "error"])
+@pytest.mark.parametrize("new_kb", [False, True])
+@pytest.mark.parametrize("entrypoint", ["route", "manager"])
+async def test_new_source_never_imports_retained_legacy_state(
+        as_user, make_kb, tmp_path, monkeypatch, legacy_state, new_kb, entrypoint,
+):
+    from deeptutor.api.routers import knowledge
+
+    old_manager, old_record, old_source = _create(as_user, make_kb)
+    _legacy_source(old_manager, old_source)
+    # This genuinely old R7 copy is registered/adopted only after the first
+    # source migrates, as can happen when an earlier migration is retried.
+    late_manager, late_record, late_source = _create(as_user, make_kb, adopted="late")
+    _legacy_source(late_manager, late_source)
+    registry.unregister_kb(late_record.ref)
+
+    def create_empty():
+        workspace = ContentWorkspaceService().create_workspace("New source")["workspace_id"]
+        with workspace_context(workspace):
+            manager = current_kb_manager()
+            make_kb(manager, "papers")
+            record = registry.ensure_registered(manager.base_dir, "papers", created_by="u1")
+        return manager, record
+
+    with as_user("u1"):
+        if not new_kb:
+            fresh_manager, fresh_record = create_empty()
+    repo = SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite")
+    scheduler = WebSourceSyncScheduler(repository=repo)
+    monkeypatch.setattr(knowledge, "get_web_source_sync_scheduler", lambda: scheduler)
+    legacy_key = ("u1", "papers", old_source["id"])
+    original = repo.ensure_source(legacy_key)
+    if legacy_state == "cancelled":
+        repo.request_cancel(legacy_key)
+    else:
+        claim = repo.claim(original, runner_id="old", lease_until_ms=repo._now_ms() + 60000)
+        repo.mark_failure(claim, error="old error", next_run_at_ms=1)
+    original = repo.get(legacy_key)
+    repo.record_pairings(*legacy_key, [_pairing("old-only")])
+
+    await scheduler._synchronize_sources()
+    old_key = ("u1", old_record.ref, old_source["id"])
+    assert repo.get(old_key).state == legacy_state
+    assert repo.list_pairings(*old_key)[0].pairing_id == "old-only"
+    # Changing the migrated old job must not update or consume the recovery row.
+    repo.retry(old_key)
+    repo.request_cancel(old_key)
+    with as_user("u1"):
+        if new_kb:
+            fresh_manager, fresh_record = create_empty()
+        if entrypoint == "route":
+            await knowledge.add_web_source(
+                fresh_record.ref, knowledge.AddWebSourceRequest(url=old_source["url"]),
+            )
+        else:
+            fresh_manager.add_web_source("papers", old_source["url"])
+    await scheduler._synchronize_sources()
+    fresh_key = ("u1", fresh_record.ref, old_source["id"])
+    fresh = repo.get(fresh_key)
+    assert (fresh.state, fresh.attempt, fresh.error, fresh.cancel_requested) == (
+        "pending", 0, None, False,
+    )
+    assert fresh.last_run_at_ms is None
+    assert repo.list_pairings(*fresh_key) == []
+    assert repo.get(legacy_key) == original
+    assert repo.list_pairings(*legacy_key)[0].pairing_id == "old-only"
+
+    late_record = registry.register_kb(
+        base_dir=late_manager.base_dir, name="papers", kind="uploaded", created_by="partner_late",
+    )
+    late_record = registry.adopt_partner_copy(late_record.ref, partner_id="late", owner_id="u1")
+    # Idempotent add of an existing legacy source must not stamp it as new.
+    late_manager.add_web_source("papers", old_source["url"])
+    await scheduler._synchronize_sources()
+    late_key = ("u1", late_record.ref, old_source["id"])
+    assert repo.get(late_key).state == legacy_state
+    assert repo.list_pairings(*late_key)[0].pairing_id == "old-only"
+    repo.retry(late_key)
+    repo.request_cancel(late_key)
+
+    sync = AsyncMock(return_value=WebSyncResult(ok=True))
+    monkeypatch.setattr("deeptutor.services.web_source.sync.sync_source", sync)
+    scheduler._start_due_jobs()
+    await asyncio.gather(*list(scheduler._run_tasks.values()))
+    sync.assert_awaited_once()
+    assert sync.await_args.kwargs["base_dir"] == str(fresh_manager.base_dir)
+    assert sync.await_args.kwargs["kb_name"] == "papers"
+    assert repo.get(old_key).state == "cancelled"
+    assert repo.get(late_key).state == "cancelled"
+    assert repo.list_pairings(*fresh_key) == []
+    assert repo.get(legacy_key) == original
