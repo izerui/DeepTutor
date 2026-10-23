@@ -236,44 +236,36 @@ def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResourc
             raise HTTPException(status_code=403, detail="Knowledge base is not shared with you")
         return shared
 
-    if requested_source == "user":
+    if requested_source == "user" or name.lower() in DEFAULT_KB_ALIASES:
         resolved = _resolve_default_or_name(user_manager, name)
-        return KnowledgeResource(
-            id=f"user:kb:{resolved}",
-            name=resolved,
-            base_dir=current_kb_base_dir(),
-            source="user",
-            assigned=False,
-            read_only=False,
-        )
+    elif name in user_manager.list_knowledge_bases():
+        resolved = name
+    else:
+        shared = _shared_admin_resource(name, require_write=require_write)
+        if shared is not None:
+            return shared
+        raise HTTPException(status_code=404, detail=f"Knowledge base '{name}' not found")
 
-    if name.lower() in DEFAULT_KB_ALIASES:
-        resolved = _resolve_default_or_name(user_manager, name)
-        return KnowledgeResource(
-            id=f"user:kb:{resolved}",
-            name=resolved,
-            base_dir=current_kb_base_dir(),
-            source="user",
-            assigned=False,
-            read_only=False,
-        )
+    from deeptutor.services.partners.scope import is_partner_user_id
 
-    user_names = set(user_manager.list_knowledge_bases())
-    if name in user_names:
-        return KnowledgeResource(
-            id=f"user:kb:{name}",
-            name=name,
-            base_dir=current_kb_base_dir(),
-            source="user",
-            assigned=False,
-            read_only=False,
-        )
+    if is_partner_user_id(user.id):
+        from deeptutor.knowledge import registry
 
-    shared = _shared_admin_resource(name, require_write=require_write)
-    if shared is not None:
-        return shared
+        # Adopted human-owned KBs stay in this directory after detachment.
+        # Their location is not authority, even when reached by a legacy alias.
+        record = registry.find_by_location(current_kb_base_dir(), resolved)
+        if record is not None:
+            resource = _resolve_registered(record.ref, require_write=require_write)
+            return replace(resource, id=f"user:kb:{resolved}")
 
-    raise HTTPException(status_code=404, detail=f"Knowledge base '{name}' not found")
+    return KnowledgeResource(
+        id=f"user:kb:{resolved}",
+        name=resolved,
+        base_dir=current_kb_base_dir(),
+        source="user",
+        assigned=False,
+        read_only=False,
+    )
 
 
 def _resolve_default_or_name(manager: KnowledgeBaseManager, name: str) -> str:

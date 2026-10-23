@@ -3,8 +3,10 @@
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from deeptutor.knowledge import registry
+from deeptutor.knowledge.manager import KnowledgeBaseManager
 from deeptutor.multi_user.knowledge_access import resolve_kb
 from deeptutor.multi_user.models import LOCAL_ADMIN_ID, CurrentUser
 from deeptutor.multi_user.paths import scope_for_user, user_context
@@ -13,6 +15,7 @@ from deeptutor.services.partners.manager import PartnerConfig, PartnerManager
 from deeptutor.services.partners.runtime import PartnerRunner
 from deeptutor.services.partners.scope import partner_user
 from deeptutor.services.partners.workspace import list_assets, provision_assets, remove_asset
+from deeptutor.services.partners.workspace_binding import partner_content_context
 from tests.services.partners.test_partner_workspace import (
     _seed_admin_connected_kb,
     _seed_admin_kb,
@@ -64,6 +67,86 @@ def test_removing_adopted_reference_preserves_private_kb(partners_root, selector
     assert list_assets("ada")["knowledge_bases"] == []
     with user_context(partner_user("ada")):
         assert PartnerRunner("ada", PartnerConfig(name="Ada"), MessageBus())._list_kb_names() == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["referenced", "detached", "recreated"])
+@pytest.mark.parametrize("alias", ["physics", "user:kb:physics", "default", "user:kb:default"])
+@pytest.mark.parametrize("require_write", [False, True])
+async def test_adopted_legacy_alias_uses_registry_authority(
+    partners_root, stage, alias, require_write
+):
+    manager = PartnerManager()
+    config = PartnerConfig(name="Ada", owner_id="alice")
+    other_config = PartnerConfig(name="Other", owner_id="alice")
+    manager.save_config("ada", config, auto_start=False)
+    manager.save_config("other", other_config, auto_start=False)
+    source = _seed_admin_kb(partners_root / "ada" / "workspace")
+    KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
+    record = registry.ensure_registered(source.parent, "physics", created_by="alice")
+    for partner_id in ["ada", "other"]:
+        registry.add_reference(
+            record.kb_id, referrer_kind="partner", referrer_id=partner_id, created_by="alice"
+        )
+    original_files = {
+        path.relative_to(source.parent): path.read_bytes()
+        for path in source.parent.rglob("*") if path.is_file()
+    }
+    if stage == "detached":
+        assert remove_asset("ada", "knowledge_base", record.ref)
+    elif stage == "recreated":
+        assert await manager.destroy_partner("ada")
+        assert manager.load_config("ada") is None
+        config = PartnerConfig(name="Replacement", owner_id="bob")
+        manager.save_config("ada", config, auto_start=False)
+
+    with partner_content_context("ada", config):
+        if stage == "referenced" and not require_write:
+            resource = resolve_kb(alias)
+            assert resource.read_only is True
+            assert resource.assigned is True
+            assert resource.base_dir == source.parent
+            assert resource.name == record.dir_name
+        else:
+            with pytest.raises(HTTPException) as denied:
+                resolve_kb(alias, require_write=require_write)
+            assert denied.value.status_code == (403 if stage == "referenced" else 404)
+        if stage != "referenced":
+            assert PartnerRunner("ada", config, MessageBus())._list_kb_names() == []
+
+    owner = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
+    with user_context(owner):
+        assert resolve_kb(record.ref).read_only is False
+        assert resolve_kb(record.ref, require_write=True).base_dir == source.parent
+    with partner_content_context("other", other_config):
+        assert resolve_kb(record.ref).read_only is True
+        with pytest.raises(HTTPException) as denied:
+            resolve_kb(record.ref, require_write=True)
+        assert denied.value.status_code == 403
+    assert registry.get_kb(record.ref) == record
+    assert registry.list_referenced("partner", "other") == [record]
+    assert registry.list_referenced("partner", "ada") == (
+        [record] if stage == "referenced" else []
+    )
+    assert {
+        path.relative_to(source.parent): path.read_bytes()
+        for path in source.parent.rglob("*") if path.is_file()
+    } == original_files
+
+
+@pytest.mark.parametrize("alias", ["physics", "user:kb:physics", "default", "user:kb:default"])
+@pytest.mark.parametrize("require_write", [False, True])
+def test_unregistered_legacy_alias_remains_available(partners_root, alias, require_write):
+    source = _seed_admin_kb(partners_root / "ada" / "workspace")
+    KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
+    with partner_content_context("ada", PartnerConfig(name="Ada")):
+        resource = resolve_kb(alias, require_write=require_write)
+        assert resource.base_dir == source.parent
+        assert resource.name == "physics"
+        assert resource.read_only is False
+        assert resource.assigned is False
+    assert registry.find_by_location(source.parent, "physics") is None
+    assert (source / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
 
 
 def test_same_name_references_and_legacy_copy_are_distinct(partners_root):
