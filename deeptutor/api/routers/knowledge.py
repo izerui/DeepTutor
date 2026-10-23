@@ -201,12 +201,18 @@ def _writable_kb(kb_name: str) -> tuple[KnowledgeBaseManager, str, Path]:
     return manager_for_resource(resource), resource.name, resource.base_dir
 
 
-def _can_set_default(base_dir: Path, *, read_only: bool = False) -> bool:
+def _in_default_scope(base_dir: Path) -> bool:
     from deeptutor.services.path_service import get_path_service
 
-    return not read_only and Path(base_dir).resolve() == (
+    return Path(base_dir).resolve() == (
         get_path_service().get_knowledge_bases_root().resolve()
     )
+
+
+def _can_set_default(base_dir: Path, *, read_only: bool = False) -> bool:
+    from deeptutor.multi_user.roles import can_write_private_kb
+
+    return not read_only and _in_default_scope(base_dir) and can_write_private_kb()
 
 
 class KnowledgeBaseInfo(BaseModel):
@@ -2839,7 +2845,9 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
                         **info,
                         "id": access["id"],
                         "name": resource.name,
-                        "is_default": can_set_default and info.get("is_default", False),
+                        "is_default": (
+                            _in_default_scope(resource.base_dir) and info.get("is_default", False)
+                        ),
                         "can_set_default": can_set_default,
                         "statistics": info.get("statistics", {}),
                         "path": (
@@ -3066,7 +3074,9 @@ async def get_knowledge_base_details(kb_name: str):
                 "assigned": resource.assigned,
                 "read_only": resource.read_only,
                 "can_set_default": can_set_default,
-                "is_default": can_set_default and info.get("is_default", False),
+                "is_default": (
+                    _in_default_scope(resource.base_dir) and info.get("is_default", False)
+                ),
             }
         )
         if resource.assigned:

@@ -269,6 +269,7 @@ def main():
             "type": "base",
             "schema": [
                 {"name": "kb_name", "type": "text", "required": True},
+                {"name": "kb_id", "type": "text", "required": False},
                 {"name": "user_id", "type": "text", "required": False},
                 {"name": "description", "type": "text", "required": False},
                 {"name": "rag_provider", "type": "text", "required": False},

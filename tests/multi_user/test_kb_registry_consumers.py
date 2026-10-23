@@ -1220,6 +1220,64 @@ async def test_workspace_default_is_local_and_persistence_failure_is_not_success
         assert get_kb_config_service().get_default_kb_id() == account_id
 
 
+@pytest.mark.parametrize("allow_private_kb", [None, False, True])
+@pytest.mark.parametrize("library", [False, True])
+def test_default_capability_matches_student_http_policy(
+    as_user, make_kb, seed_user, allow_private_kb, library,
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from deeptutor.api.routers import knowledge
+    from deeptutor.multi_user.grants import save_grant
+    from deeptutor.services.workspace.knowledge import library_request
+
+    app = FastAPI()
+    app.include_router(knowledge.router, prefix="/api")
+    seed_user("boss", role="admin")
+    student = seed_user("student", role="student")
+    with as_user(student["id"], role="student"):
+        manager = current_kb_manager()
+        for name in ("physics", "algebra"):
+            make_kb(manager, name)
+        list_visible_knowledge_bases()
+        records = {
+            name: registry.find_by_location(manager.base_dir, name)
+            for name in ("physics", "algebra")
+        }
+        # Simulate a default selected before the account policy was restricted.
+        manager.set_default("physics")
+        if allow_private_kb is not None:
+            save_grant(student["id"], {
+                "student_policy": {"allow_private_kb": allow_private_kb},
+            })
+        token = library_request.set(library)
+        try:
+            with TestClient(app) as client:
+                def check(selected):
+                    response = client.get("/api/knowledge-bases")
+                    assert response.status_code == 200
+                    rows = {row["name"]: row for row in response.json()}
+                    for name, record in records.items():
+                        detail = client.get(f"/api/knowledge-bases/{record.ref}")
+                        assert detail.status_code == 200
+                        for item in (rows[name], detail.json()):
+                            assert item["can_set_default"] is (allow_private_kb is True)
+                            assert item["is_default"] is (name == selected)
+                    default = client.get("/api/knowledge-bases/default")
+                    assert default.status_code == 200
+                    assert default.json() == {
+                        "default_kb": selected, "default_kb_id": records[selected].kb_id,
+                    }
+
+                check("physics")
+                response = client.put(f"/api/knowledge-bases/default/{records['algebra'].ref}")
+                assert response.status_code == (200 if allow_private_kb else 403)
+                check("algebra" if allow_private_kb else "physics")
+        finally:
+            library_request.reset(token)
+
+
 @pytest.mark.parametrize("target_default", [False, True])
 @pytest.mark.parametrize("stale_name", [False, True])
 def test_move_preserves_default_registry_id_without_overwriting_target(
