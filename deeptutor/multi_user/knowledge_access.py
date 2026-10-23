@@ -111,6 +111,7 @@ def resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource
 def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResource:
     """``kb:<id>`` — served from the record's own location, whoever's scope that is."""
     from deeptutor.knowledge import registry
+    from deeptutor.knowledge.registry_scope import source_is_archived
     from deeptutor.services.workspace.knowledge import learning_source_kbs, library_request
     from deeptutor.services.workspace.resources import current_resources
 
@@ -119,7 +120,7 @@ def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResourc
     # Unreadable and unknown look the same: a private KB's existence is not public.
     if record is None or not registry.can_read(record, user):
         raise HTTPException(status_code=404, detail="Knowledge base not found")
-    writable = registry.can_write(record, user)
+    writable = registry.can_write(record, user) and not source_is_archived(record.base_dir)
     if require_write and not writable:
         raise HTTPException(status_code=403, detail="This knowledge base is read-only for you")
     # D14: workspace selections only narrow the caller's own private KBs.
@@ -415,22 +416,18 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
 def _with_external_private(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Include independently owned KBs outside the account's storage scopes."""
     from deeptutor.knowledge import registry
+    from deeptutor.knowledge.registry_scope import is_retired_source
     from deeptutor.services.workspace.knowledge import workspace_id_for_kb_base_dir
 
     user = get_current_user()
     present = {item.get("kb_id") for item in items}
     result = list(items)
-    partner_root = get_admin_path_service().workspace_root / "partners"
     for record in registry.list_records(visibility="private", created_by=user.id):
         if record.kb_id in present or workspace_id_for_kb_base_dir(record.base_dir) is not None:
             continue
-        location = Path(record.base_dir)
-        if location.is_relative_to(partner_root):
-            relative = location.relative_to(partner_root)
-            if relative.parts[1:4] == ("workspace", "knowledge_bases", ".retired"):
-                # Retired IDs remain readable by their existing consumers,
-                # but must not reappear as active independent libraries.
-                continue
+        if is_retired_source(record.base_dir):
+            # Stable IDs still serve consumers, but are not active libraries.
+            continue
         result.append(
             {
                 "id": record.ref,

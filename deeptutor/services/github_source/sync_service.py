@@ -29,21 +29,41 @@ class GitHubSourceSyncService(BaseSourceSyncService):
         return "github-source-sync"
 
     async def _sync_one_cycle(self) -> None:
+        if self._base_dir is None:
+            from deeptutor.knowledge.registry_scope import indexed_records, owner_user
+
+            for record in indexed_records():
+                try:
+                    await self._sync_root(record.base_dir, owner_user(record), record=record)
+                except Exception:
+                    logger.exception("GitHub sync failed for KB %s", record.kb_id)
+            return
+        await self._sync_root(self.effective_base_dir, self._owner)
+
+    async def _sync_root(self, base_dir, owner, *, record=None) -> None:
         from deeptutor.knowledge.manager import KnowledgeBaseManager
         from deeptutor.services.github_source.sync import sync_source
 
-        token = set_current_user(self._owner)
+        token = set_current_user(owner)
         try:
-            base_dir = self.effective_base_dir
             manager = KnowledgeBaseManager(base_dir=base_dir)
 
-            all_sources = manager.get_all_github_sources()
+            all_sources = (
+                [(record.dir_name, source) for source in manager.get_github_sources(record.dir_name)]
+                if record is not None else manager.get_all_github_sources()
+            )
             for kb_name, source in all_sources:
                 if not source.get("enabled", True):
                     continue
                 if not is_stale(source, stale_hours=SYNC_INTERVAL_HOURS):
                     continue
                 sid = source.get("id", "?")
+                if record is not None:
+                    from deeptutor.knowledge import registry
+                    from deeptutor.knowledge.registry_scope import is_indexed_source
+
+                    if registry.get_kb(record.kb_id) != record or not is_indexed_source(record):
+                        return
                 try:
                     await sync_source(
                         kb_name=kb_name,
