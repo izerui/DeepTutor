@@ -1056,6 +1056,182 @@ def test_migration_accepts_valid_legacy_identity_formats(partners_root, entrypoi
         assert path.read_bytes() == original
 
 
+@pytest.fixture
+def pending_legacy_tree(partners_root, monkeypatch):
+    from deeptutor.multi_user import identity, paths
+
+    legacy = partners_root.parent.parent / "multi-user"
+    monkeypatch.setattr(paths, "LEGACY_MULTI_USER_ROOT", legacy)
+    monkeypatch.setattr(paths, "_legacy_migration_done", False)
+    monkeypatch.setattr(
+        identity, "LEGACY_USERS_FILE", partners_root.parent / "user" / "auth_users.json"
+    )
+    return legacy
+
+
+@pytest.mark.parametrize("entrypoint", ["direct", "backfill"])
+@pytest.mark.parametrize("same_name_admin", [False, True])
+@pytest.mark.parametrize("damaged", [False, True])
+def test_migration_pending_legacy_tree_validates_before_moving(
+    partners_root, pending_legacy_tree, entrypoint, same_name_admin, damaged
+):
+    import json
+
+    from deeptutor.knowledge.registry_backfill import backfill_registry
+    from deeptutor.multi_user import identity, paths
+    from deeptutor.services.partners.kb_migration import (
+        identity_snapshot,
+        migrate_partner_kb_copies,
+    )
+
+    copy = _migration_partner(partners_root, owner_id="alice")
+    source = _seed_admin_kb(pending_legacy_tree / "alice")
+    (source / "raw" / "doc.pdf").write_bytes(b"legacy account source")
+    if same_name_admin:
+        _seed_admin_kb(partners_root.parent)
+    path = pending_legacy_tree / "_system" / "auth" / "users.json"
+    path.parent.mkdir(parents=True)
+    valid = {"Alice": {"id": "alice", "hash": "test-hash", "role": "user"}}
+    path.write_text(json.dumps(
+        {"Alice": {"id": "alice", "role": "user"}} if damaged else valid
+    ))
+    # Seeding must not accidentally resolve the pending layout before the test.
+    identity_bytes = path.read_bytes()
+    tree_bytes = {p.relative_to(pending_legacy_tree): p.read_bytes()
+                  for p in pending_legacy_tree.rglob("*") if p.is_file()}
+    copy_bytes = {p.relative_to(copy.parent): p.read_bytes()
+                  for p in copy.parent.rglob("*") if p.is_file()}
+    paths._legacy_migration_done = False
+    assert not paths.SYSTEM_ROOT.exists()
+    assert not identity.USERS_FILE.exists()
+    assert not identity.LEGACY_USERS_FILE.exists()
+    run = migrate_partner_kb_copies if entrypoint == "direct" else backfill_registry
+    if damaged:
+        result = run()
+        assert result == ({"referenced": [], "adopted": []} if entrypoint == "direct" else {
+            "admin": 0, "account": 0, "workspace": 0, "promoted": 0,
+            "connectors_disabled": 0, "partner_copies": 0,
+        })
+        assert path.read_bytes() == identity_bytes
+        assert {p.relative_to(pending_legacy_tree): p.read_bytes()
+                for p in pending_legacy_tree.rglob("*") if p.is_file()} == tree_bytes
+        assert {p.relative_to(copy.parent): p.read_bytes()
+                for p in copy.parent.rglob("*") if p.is_file()} == copy_bytes
+        assert not paths.SYSTEM_ROOT.exists()
+        assert not paths._legacy_migration_done
+        assert registry.list_referenced("partner", "ada") == []
+        assert registry.find_by_location(copy.parent, copy.name) is None
+        assert not registry.get_meta("partner_copies_migrated_at")
+        assert not registry.get_meta("partner_copy_progress:ada")
+        assert registry.list_migration_items() == []
+        path.write_text(json.dumps(valid))
+    repaired = path.read_bytes()
+    assert identity_snapshot() == {"alice": {"username": "Alice", "role": "user"}}
+    assert path.read_bytes() == repaired
+    assert not paths.SYSTEM_ROOT.exists()
+    assert not paths._legacy_migration_done
+    result = run()
+    [record] = registry.list_referenced("partner", "ada")
+    target = paths.USERS_ROOT / "alice" / "knowledge_bases"
+    assert record.base_dir == str(target)
+    assert record.created_by == "alice"
+    assert (target / "physics" / "raw" / "doc.pdf").read_bytes() == b"legacy account source"
+    assert not source.exists()
+    assert not copy.exists()
+    assert (copy.parent / ".retired" / "physics" / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+    assert registry.get_meta("partner_copies_migrated_at")
+    assert registry.list_migration_items() == []
+    if entrypoint == "direct":
+        assert result == {
+            "referenced": [{"partner_id": "ada", "name": "physics", "kb_id": record.kb_id}],
+            "adopted": [],
+        }
+        assert identity.USERS_FILE.read_bytes() == repaired
+    else:
+        assert result["partner_copies"] == 1
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+
+
+@pytest.mark.parametrize("entrypoint", ["direct", "backfill"])
+@pytest.mark.parametrize("target_store", ["current", "fallback", "empty"])
+@pytest.mark.parametrize("obsolete_damaged", [False, True])
+def test_migration_legacy_tree_respects_existing_targets(
+    partners_root, pending_legacy_tree, entrypoint, target_store, obsolete_damaged
+):
+    import json
+
+    from deeptutor.knowledge.registry_backfill import backfill_registry
+    from deeptutor.multi_user import identity, paths
+    from deeptutor.services.partners.kb_migration import identity_snapshot, migrate_partner_kb_copies
+
+    copy = _migration_partner(partners_root, owner_id="alice")
+    admin = _seed_admin_kb(partners_root.parent)
+    legacy_source = _seed_admin_kb(pending_legacy_tree / "alice")
+    source = _seed_admin_kb(paths.USERS_ROOT / "alice")
+    (source / "raw" / "doc.pdf").write_bytes(b"authoritative account source")
+    path = pending_legacy_tree / "_system" / "auth" / "users.json"
+    path.parent.mkdir(parents=True)
+    obsolete_record = {"id": "alice", "role": "admin"}
+    if not obsolete_damaged:
+        obsolete_record["hash"] = "old-hash"
+    path.write_text(json.dumps({"Alice": obsolete_record}))
+    obsolete = path.read_bytes()
+    paths.SYSTEM_ROOT.mkdir(parents=True, exist_ok=True)
+    if target_store != "empty":
+        target = identity.USERS_FILE if target_store == "current" else identity.LEGACY_USERS_FILE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({
+            "Alice": {"id": "alice", "hash": "test-hash", "role": "user"},
+        }))
+    paths._legacy_migration_done = False
+    assert identity_snapshot() == (
+        {} if target_store == "empty" else {"alice": {"username": "Alice", "role": "user"}}
+    )
+    assert not paths._legacy_migration_done
+    result = (migrate_partner_kb_copies if entrypoint == "direct" else backfill_registry)()
+    [record] = registry.list_referenced("partner", "ada")
+    assert record.base_dir == str((admin if target_store == "empty" else source).parent)
+    assert path.read_bytes() == obsolete
+    assert (legacy_source / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+    assert (source / "raw" / "doc.pdf").read_bytes() == b"authoritative account source"
+    assert not copy.exists()
+    assert registry.get_meta("partner_copies_migrated_at")
+    if entrypoint == "backfill":
+        assert result["partner_copies"] == 1
+    else:
+        assert result["adopted"] == []
+
+
+@pytest.mark.parametrize("entrypoint", ["direct", "backfill"])
+def test_migration_pending_tree_identity_precedes_auth_users(
+    partners_root, pending_legacy_tree, entrypoint
+):
+    import json
+
+    from deeptutor.knowledge.registry_backfill import backfill_registry
+    from deeptutor.multi_user import identity, paths
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    _migration_partner(partners_root, owner_id="alice")
+    _seed_admin_kb(partners_root.parent)
+    _seed_admin_kb(pending_legacy_tree / "alice")
+    path = pending_legacy_tree / "_system" / "auth" / "users.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "Alice": {"id": "alice", "hash": "test-hash", "role": "user"},
+    }))
+    identity.LEGACY_USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    identity.LEGACY_USERS_FILE.write_text('{"Alice": {"id": "alice"}}')
+    fallback = identity.LEGACY_USERS_FILE.read_bytes()
+    paths._legacy_migration_done = False
+    assert not paths.SYSTEM_ROOT.exists()
+    (migrate_partner_kb_copies if entrypoint == "direct" else backfill_registry)()
+    [record] = registry.list_referenced("partner", "ada")
+    assert record.base_dir == str(paths.USERS_ROOT / "alice" / "knowledge_bases")
+    assert identity.LEGACY_USERS_FILE.read_bytes() == fallback
+    assert registry.get_meta("partner_copies_migrated_at")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["direct", "backfill"])
 @pytest.mark.parametrize("live", [False, True])

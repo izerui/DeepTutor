@@ -6,6 +6,7 @@ items stay completed even after detachment; interrupted items resume on startup.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime, timezone
 import json
 import logging
@@ -82,12 +83,25 @@ def _validate_name(name: str) -> None:
         raise ValueError(f"Unsafe knowledge base name: {name!r}")
 
 
+def _identity_store_paths() -> Iterator[Path]:
+    from deeptutor.multi_user import identity, paths
+
+    yield identity.USERS_FILE
+    # load_users moves the sibling tree before reading users.json. An existing
+    # system target blocks that move, even when it contains no identity file.
+    # Yield lazily so an authoritative current store never probes obsolete data.
+    if not paths._legacy_migration_done and not _directory(paths.SYSTEM_ROOT):
+        legacy = paths.LEGACY_MULTI_USER_ROOT
+        if _directory(legacy) and _directory(legacy / "_system"):
+            yield legacy / "_system" / "auth" / "users.json"
+    yield identity.LEGACY_USERS_FILE
+
+
 def identity_snapshot() -> dict[str, dict[str, Any]]:
-    """Validate the authoritative store without invoking mutating normalization."""
-    from deeptutor.multi_user import identity
+    """Validate the loader's effective store before any layout/record mutation."""
     from deeptutor.multi_user.models import normalize_role
 
-    for path in (identity.USERS_FILE, identity.LEGACY_USERS_FILE):
+    for path in _identity_store_paths():
         try:
             users = json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
