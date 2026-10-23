@@ -43,11 +43,30 @@ async def _safe_index(
 
 
 async def _knowledge_base_index() -> ResourceIndex:
-    from deeptutor.multi_user.knowledge_access import current_kb_manager
+    """Index visible course-compatible KBs by fixed and legacy references."""
+    from deeptutor.multi_user.knowledge_access import list_visible_knowledge_bases
 
-    manager = current_kb_manager()
-    names = await asyncio.to_thread(manager.list_knowledge_bases)
-    return {name: {"name": name} for raw_name in names if (name := str(raw_name or "").strip())}
+    rows = await asyncio.to_thread(list_visible_knowledge_bases)
+    result: ResourceIndex = {}
+    for row in rows:
+        # Personal connectors may only be referenced by their owner's partners.
+        if row.get("connector"):
+            continue
+        name = str(row.get("name") or "").strip()
+        rid = str(row.get("id") or "").strip()
+        if not name or not rid:
+            continue
+        detail = {
+            "name": name,
+            "ref": str(row.get("ref") or rid),
+            "visibility": str(row.get("visibility") or "private"),
+        }
+        result[rid] = detail
+        result.setdefault(detail["ref"], detail)
+        # Bare names in saved courses always refer to the caller's own KBs.
+        if not row.get("assigned"):
+            result.setdefault(name, detail)
+    return result
 
 
 async def _book_index() -> ResourceIndex:
@@ -331,9 +350,15 @@ async def build_course_resource_candidates() -> dict[str, list[dict[str, str]]]:
     indexes = await _resource_indexes()
     candidates: dict[str, list[dict[str, str]]] = {}
     for kind in COURSE_RESOURCE_KINDS:
+        pairs = list(indexes[kind].items())
+        if kind == "knowledge_base":
+            # Keep aliases for saved courses, but offer each KB once by fixed ID.
+            pairs = list(
+                {str(detail.get("ref") or ref_id): detail for ref_id, detail in pairs}.items()
+            )
         rows = [
             {"ref_id": ref_id, "label": _candidate_label(kind, ref_id, detail)}
-            for ref_id, detail in indexes[kind].items()
+            for ref_id, detail in pairs
         ]
         rows.sort(key=lambda row: (row["label"].casefold(), row["ref_id"]))
         candidates[kind] = rows

@@ -414,12 +414,15 @@ def read_kb_entities() -> list[Entity]:
     kbs = cfg.get("knowledge_bases") or {}
     if not isinstance(kbs, dict):
         return []
+    from deeptutor.knowledge import registry
+
     out: list[Entity] = []
     for kb_name, kb_data in sorted(kbs.items()):
         if not isinstance(kb_name, str):
             continue
         if not isinstance(kb_data, dict):
             kb_data = {}
+        record = registry.find_by_location(kb_root, kb_name)
         description = kb_data.get("description", "") or ""
         versions = kb_data.get("index_versions") or []
         sigs = sorted(v.get("signature", "") for v in versions if isinstance(v, dict))
@@ -448,6 +451,7 @@ def read_kb_entities() -> list[Entity]:
                 content=content,
                 metadata={
                     "kb_name": kb_name,
+                    "kb_id": record.kb_id if record is not None else "",
                     "version_count": len(versions),
                     "rag_provider": kb_data.get("rag_provider", ""),
                 },

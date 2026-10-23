@@ -348,3 +348,16 @@ def test_declared_row_labels_cover_the_label_tables() -> None:
 
     from_tables = set(_SERVICE_LABELS.values()) | set(_TOOL_LABELS.values())
     assert from_tables <= TRANSLATABLE_ROW_LABELS, sorted(from_tables - TRANSLATABLE_ROW_LABELS)
+
+
+def test_embedding_is_required_when_any_account_has_an_indexed_kb(tmp_path) -> None:
+    from deeptutor.knowledge import registry
+    from deeptutor.services.config.readiness import _embedding_required
+
+    assert _embedding_required([]) is False
+    assert not registry.DB_PATH_OVERRIDE.exists()
+    assert _embedding_required(["mine"]) is True
+    registry.register_kb(base_dir=tmp_path, name="vault", kind="obsidian", created_by="u1")
+    assert _embedding_required([]) is False
+    registry.register_kb(base_dir=tmp_path, name="notes", kind="uploaded", created_by="u2")
+    assert _embedding_required([]) is True

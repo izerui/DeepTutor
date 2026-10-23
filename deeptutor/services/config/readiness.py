@@ -880,6 +880,15 @@ def _module_available(name: str) -> bool:
         return False
 
 
+def _embedding_required(kb_names: list[str]) -> bool:
+    """Indexed KBs in any account require the deployment's embedding model."""
+    if kb_names:
+        return True
+    from deeptutor.knowledge import registry
+
+    return registry.has_indexed_kbs()
+
+
 async def build_settings_readiness() -> dict[str, Any]:
     """Build the current admin-scoped readiness matrix."""
 
@@ -899,7 +908,8 @@ async def build_settings_readiness() -> dict[str, Any]:
     # and load-bearing the moment a knowledge base exists.
     catalog_rows = catalog_service_rows(
         get_model_catalog_service().load(),
-        required_services=REQUIRED_CATALOG_SERVICES | ({"embedding"} if kb_names else set()),
+        required_services=REQUIRED_CATALOG_SERVICES
+        | ({"embedding"} if _embedding_required(kb_names) else set()),
     )
     rows.extend(catalog_rows)
 

@@ -278,3 +278,37 @@ def test_corrupt_book_manifest_skipped_with_warning(
     assert [e.id for e in entities] == ["ok"]
     warnings = _warn_records(caplog)
     assert any(str(corrupt) in w for w in warnings)
+
+
+class _KbPathService:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def get_knowledge_bases_root(self) -> Path:
+        return self.root
+
+
+def test_kb_entities_carry_the_registry_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from deeptutor.knowledge import registry
+
+    kb_root = tmp_path / "knowledge_bases"
+    kb_root.mkdir()
+    (kb_root / "kb_config.json").write_text(
+        json.dumps({"knowledge_bases": {"physics": {"description": "waves"}, "draft": {}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(adapters, "get_path_service", lambda: _KbPathService(kb_root))
+    before = {entity.id: entity for entity in adapters.read_kb_entities()}
+    record = registry.register_kb(base_dir=kb_root, name="physics", kind="uploaded", created_by="u1")
+    registry.register_kb(
+        base_dir=tmp_path / "other", name="foreign", kind="uploaded", created_by="u2",
+    )
+
+    entities = {entity.id: entity for entity in adapters.read_kb_entities()}
+
+    assert set(entities) == {"physics", "draft"}
+    assert entities["physics"].metadata["kb_id"] == record.kb_id
+    assert entities["draft"].metadata["kb_id"] == ""
+    assert entities["physics"].fingerprint == before["physics"].fingerprint
+    assert entities["physics"].content == before["physics"].content
+    assert registry.find_by_location(kb_root, "draft") is None
