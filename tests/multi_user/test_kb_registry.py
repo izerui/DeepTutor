@@ -55,8 +55,9 @@ def test_document_moves_are_literal_and_collision_is_atomic(tmp_path):
     registry.upsert_documents(kb.ref, {
         "a%_/one.md": "sha256:1", "a%_/two.md": "sha256:2",
         "abc/one.md": "sha256:3", "dest/two.md": "sha256:4",
+        "dest/one.md": "sha256:old",
     })
-    registry.mark_document_deleted(kb.ref, "dest/two.md")
+    registry.mark_document_deleted(kb.ref, "dest/one.md")
     before = registry.list_documents(kb.ref, include_deleted=True)
     with pytest.raises(registry.KbRegistryError):
         registry.move_document_paths(kb.ref, "a%_", "dest")
@@ -72,6 +73,40 @@ def test_document_reads_do_not_create_database(tmp_path):
     assert registry.document_referrers("absent", "doc") == []
     assert registry.refresh_documents(tmp_path, "absent") == []
     assert not registry._db_path().exists()
+
+
+def test_document_history_is_additive_and_keeps_revival_authority(tmp_path):
+    import sqlite3
+
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    moving, old = registry.upsert_documents(kb.ref, {
+        "source.md": "sha256:source", "dest.md": "sha256:old",
+    })
+    old = registry.mark_document_deleted(kb.ref, old.rel_path)
+    # Simulate the previously shipped schema with its existing rows and UNIQUE.
+    with sqlite3.connect(registry._db_path()) as conn:
+        conn.execute("DROP TABLE kb_document_history")
+    assert registry.find_document(kb.ref, "dest.md") == old
+    registry.move_document_paths(kb.ref, "source.md", "dest.md")
+    assert old in registry.list_documents(kb.ref, include_deleted=True)
+    registry.mark_document_deleted(kb.ref, "dest.md")
+    [revived] = registry.upsert_documents(kb.ref, {"dest.md": "sha256:revived"})
+    assert revived.doc_id == moving.doc_id and revived.version == moving.version + 1
+    assert old in registry.list_documents(kb.ref, include_deleted=True)
+    # Repeated displacement must retain all deleted identities, even at one path.
+    deleted = registry.mark_document_deleted(kb.ref, "dest.md")
+    [third] = registry.upsert_documents(kb.ref, {"third.md": "sha256:third"})
+    registry.move_document_paths(kb.ref, "third.md", "dest.md")
+    assert registry.find_document(kb.ref, "dest.md").doc_id == third.doc_id
+    history = registry.list_documents(kb.ref, include_deleted=True)
+    assert old in history and deleted in history and len(history) == 3
+    registry.move_document_paths(kb.ref, "dest.md", "elsewhere.md")
+    assert registry.find_document(kb.ref, "dest.md") is None
+    assert old in registry.list_documents(kb.ref, include_deleted=True)
+    registry.unregister_kb(kb.ref)
+    assert registry.list_documents(kb.ref, include_deleted=True) == []
 
 
 def test_document_refresh_hashes_renames_and_connector_contract(tmp_path):

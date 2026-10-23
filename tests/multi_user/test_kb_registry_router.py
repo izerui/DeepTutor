@@ -7,6 +7,7 @@ from io import BytesIO
 from pathlib import Path
 import sqlite3
 import threading
+from types import SimpleNamespace
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.testclient import TestClient
@@ -241,27 +242,115 @@ async def test_document_delete_holds_reference_writer_lock(
 
 
 @pytest.mark.asyncio
-async def test_document_move_rejects_deleted_destination_identity(
-    knowledge, as_user, make_kb
+@pytest.mark.parametrize("folder_move", [False, True])
+@pytest.mark.parametrize("failure", [None, "commit", "filesystem", "rename", "unique"])
+async def test_document_move_preserves_deleted_destination_identity(
+    knowledge, as_user, make_kb, monkeypatch, folder_move, failure
 ):
     with as_user("t1", role="teacher"):
         manager = current_kb_manager()
         folder = make_kb(manager, "physics")
         record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
-        registry.refresh_documents(manager.base_dir, "physics")
-        [old] = registry.upsert_documents(record.ref, {"archive/doc.md": "sha256:old"})
-        registry.mark_document_deleted(record.ref, old.rel_path)
+        raw = folder / "raw"
+        source = "part" if folder_move else "doc.md"
+        if folder_move:
+            (raw / "part/nested").mkdir(parents=True)
+            (raw / "doc.md").rename(raw / "part/doc.md")
+            (raw / "part/nested/second.md").write_text("second")
+        moving = registry.refresh_documents(manager.base_dir, "physics")
+        old_docs = registry.upsert_documents(record.ref, {
+            f"archive/{doc.rel_path}": "sha256:old" for doc in moving
+        })
+        old_docs = [
+            registry.mark_document_deleted(record.ref, doc.rel_path) for doc in old_docs
+        ]
+        old = old_docs[0]
         registry.add_reference(
             record.ref, referrer_kind="mastery_template", referrer_id="pinned",
             created_by="t1", doc_ids=[old.doc_id],
         )
         before = registry.list_documents(record.ref, include_deleted=True)
+        if failure == "commit":
+            _fail_registry_commit(monkeypatch)
+        elif failure == "filesystem":
+            def fail(*args):
+                raise OSError("injected filesystem failure")
+
+            monkeypatch.setattr(knowledge.VisualAssetStore, "move_source", fail)
+        elif failure == "rename":
+            original_replace = knowledge.os.replace
+
+            def fail_source_rename(src, dest):
+                if Path(src) == raw / source:
+                    raise OSError("injected rename failure")
+                return original_replace(src, dest)
+
+            monkeypatch.setattr(knowledge.os, "replace", fail_source_rename)
+        elif failure == "unique":
+            with registry._write() as conn:
+                conn.execute(
+                    "CREATE TRIGGER fail_move BEFORE UPDATE OF rel_path ON kb_documents "
+                    "BEGIN SELECT RAISE(ABORT, 'injected UNIQUE failure'); END"
+                )
+        call = knowledge.move_kb_file(
+            record.ref, knowledge.MoveFilePayload(source=source, dest_folder="archive")
+        )
+        if failure:
+            with pytest.raises((OSError, sqlite3.Error), match="injected"):
+                await call
+            assert (raw / source).exists()
+            assert not (raw / "archive" / source).exists()
+            for doc in moving:
+                assert (raw / doc.rel_path).read_text() == (
+                    "second" if doc.rel_path.endswith("second.md") else "hello"
+                )
+            assert registry.list_documents(record.ref, include_deleted=True) == before
+        else:
+            await call
+            assert not (raw / source).exists()
+            for doc in moving:
+                target = f"archive/{doc.rel_path}"
+                assert (raw / target).read_text() == (
+                    "second" if target.endswith("second.md") else "hello"
+                )
+                current = registry.find_document(record.ref, target)
+                assert (current.doc_id, current.version, current.content_hash) == (
+                    doc.doc_id, doc.version, doc.content_hash
+                )
+            history = registry.list_documents(record.ref, include_deleted=True)
+            assert all(doc in history for doc in old_docs)
+            assert len(history) == 2 * len(moving)
+            registry.refresh_documents(manager.base_dir, "physics")
+            assert registry.list_documents(record.ref, include_deleted=True) == history
+        assert [ref.referrer_id for ref in registry.document_referrers(record.ref, old.doc_id)] == [
+            "pinned"
+        ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("folder_move", [False, True])
+async def test_document_move_keeps_active_registry_destination_protected(
+    knowledge, as_user, make_kb, folder_move
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        raw = folder / "raw"
+        if folder_move:
+            (raw / "part").mkdir()
+            (raw / "doc.md").rename(raw / "part/doc.md")
+        source = "part" if folder_move else "doc.md"
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        [moving] = registry.refresh_documents(manager.base_dir, "physics")
+        registry.upsert_documents(record.ref, {f"archive/{moving.rel_path}": "sha256:live"})
+        before = registry.list_documents(record.ref, include_deleted=True)
         with pytest.raises(HTTPException) as error:
             await knowledge.move_kb_file(
-                record.ref, knowledge.MoveFilePayload(source="doc.md", dest_folder="archive")
+                record.ref, knowledge.MoveFilePayload(source=source, dest_folder="archive")
             )
         assert error.value.status_code == 409
-        assert (folder / "raw/doc.md").exists()
+        assert (raw / moving.rel_path).read_text() == "hello"
+        assert not (raw / "archive" / source).exists()
         assert registry.list_documents(record.ref, include_deleted=True) == before
 
 
@@ -326,8 +415,9 @@ def test_ready_registry_failure_does_not_publish_success(as_user, make_kb, monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("duplicates", [False, True])
 async def test_upload_completion_hashing_stays_off_event_loop(
-    knowledge, as_user, make_kb, monkeypatch
+    knowledge, as_user, make_kb, monkeypatch, duplicates
 ):
     with as_user("t1", role="teacher"):
         manager = current_kb_manager()
@@ -336,9 +426,14 @@ async def test_upload_completion_hashing_stays_off_event_loop(
         loop_thread = threading.get_ident()
         original = registry.document_hashes
         threads = []
+        started = threading.Event()
+        release = threading.Event()
+        publications = []
 
         def hash_on_worker(raw):
             threads.append(threading.get_ident())
+            started.set()
+            assert release.wait(5), "ready hashing was not awaited off-loop"
             return original(raw)
 
         class DuplicateAdder:
@@ -346,16 +441,131 @@ async def test_upload_completion_hashing_stays_off_event_loop(
                 pass
 
             def add_documents(self, *args, **kwargs):
-                return []
+                return [] if duplicates else [folder / "raw/doc.md"]
+
+            async def process_new_documents(self, files):
+                return SimpleNamespace(has_failures=False, processed_count=1)
+
+            def update_metadata(self, count):
+                pass
+
+        def published(*args, **kwargs):
+            assert release.is_set()
+            publications.append(registry.list_documents(record.ref))
 
         monkeypatch.setattr(registry, "document_hashes", hash_on_worker)
         monkeypatch.setattr(knowledge, "DocumentAdder", DuplicateAdder)
-        await knowledge.run_upload_processing_task(
+        monkeypatch.setattr(knowledge.get_task_stream_manager(), "emit_complete", published)
+        task = asyncio.create_task(knowledge.run_upload_processing_task(
             "physics", str(manager.base_dir), [str(folder / "raw/doc.md")],
             "task13-upload-completion", rag_provider="llamaindex",
-        )
+        ))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            assert not task.done()
+            assert publications == []
+            assert registry.list_documents(record.ref) == []
+        finally:
+            release.set()
+            await task
         assert threads and all(thread != loop_thread for thread in threads)
         assert registry.list_documents(record.ref)[0].rel_path == "doc.md"
+        assert publications and all(docs[0].version == 1 for docs in publications)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["duplicates", "append", "bootstrap", "initialize"])
+async def test_cli_ready_hashing_is_awaited_before_return(
+    as_user, make_kb, monkeypatch, entrypoint
+):
+    import importlib
+
+    adding = importlib.import_module("deeptutor.knowledge.add_documents")
+    initializing = importlib.import_module("deeptutor.knowledge.initializer")
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        [first] = registry.refresh_documents(manager.base_dir, "physics")
+        source = folder / "raw/doc.md"
+        source.write_text("changed")
+        manager.update_kb_status("physics", "processing")
+        original = registry.document_hashes
+        started = threading.Event()
+        release = threading.Event()
+        threads = []
+        loop_thread = threading.get_ident()
+
+        def hash_on_worker(raw):
+            threads.append(threading.get_ident())
+            started.set()
+            assert release.wait(5), "ready hashing was not awaited off-loop"
+            return original(raw)
+
+        class Adder:
+            rag_provider = "llamaindex"
+
+            def __init__(self, **kwargs):
+                if entrypoint == "bootstrap":
+                    raise ValueError("not initialized")
+
+            def add_documents(self, *args, **kwargs):
+                return [] if entrypoint == "duplicates" else [source]
+
+            async def process_new_documents(self, files):
+                return SimpleNamespace(has_failures=False, processed_count=1)
+
+            def update_metadata(self, count):
+                pass
+
+        class Service:
+            def __init__(self, **kwargs):
+                pass
+
+            async def initialize(self, **kwargs):
+                kwargs["indexed_file_callback"]([str(source)])
+                return True
+
+            def _resolve_provider(self, name):
+                return "llamaindex"
+
+        class Initializer:
+            def __init__(self, **kwargs):
+                pass
+
+            def create_directory_structure(self):
+                pass
+
+            def copy_documents(self, files):
+                return files
+
+            async def process_documents(self):
+                pass
+
+        monkeypatch.setattr(registry, "document_hashes", hash_on_worker)
+        monkeypatch.setattr(adding, "DocumentAdder", Adder)
+        monkeypatch.setattr(adding, "RAGService", Service)
+        monkeypatch.setattr(initializing, "KnowledgeBaseInitializer", Initializer)
+        invoke = (
+            initializing.initialize_knowledge_base
+            if entrypoint == "initialize" else adding.add_documents
+        )
+        task = asyncio.create_task(invoke(
+            "physics", [str(source)], base_dir=str(manager.base_dir)
+        ))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            assert not task.done()
+            assert registry.find_document(record.ref, "doc.md") == first
+            assert manager.get_kb_status("physics")["status"] == "processing"
+        finally:
+            release.set()
+            result = await task
+        assert result == (0 if entrypoint == "duplicates" else 1)
+        current = registry.find_document(record.ref, "doc.md")
+        assert current.doc_id == first.doc_id and current.version == 2
+        assert manager.get_kb_status("physics")["status"] == "ready"
+        assert threads and all(thread != loop_thread for thread in threads)
 
 
 async def _create(knowledge, monkeypatch, make_kb, name="physics", visibility="private", **kwargs):

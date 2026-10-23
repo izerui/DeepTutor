@@ -100,6 +100,16 @@ CREATE TABLE IF NOT EXISTS kb_documents (
     PRIMARY KEY (kb_id, doc_id),
     UNIQUE (kb_id, rel_path)
 );
+CREATE TABLE IF NOT EXISTS kb_document_history (
+    kb_id TEXT NOT NULL REFERENCES kb_registry(kb_id) ON DELETE CASCADE,
+    doc_id TEXT NOT NULL,
+    rel_path TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted INTEGER NOT NULL CHECK (deleted = 1),
+    PRIMARY KEY (kb_id, doc_id)
+);
 CREATE TABLE IF NOT EXISTS kb_admin_legacy_names (
     name TEXT PRIMARY KEY,
     kb_id TEXT NOT NULL REFERENCES kb_registry(kb_id) ON DELETE CASCADE
@@ -1174,18 +1184,30 @@ def _move_document_paths(
     if dest_rel.startswith(source_rel + "/"):
         raise KbRegistryError("Cannot move a folder into itself.")
     rows = conn.execute(
-        "SELECT doc_id, rel_path FROM kb_documents WHERE kb_id = ?", (kb_id,)
+        "SELECT * FROM kb_documents WHERE kb_id = ?", (kb_id,)
     ).fetchall()
     # Literal prefix matching avoids SQL LIKE wildcard/backslash ambiguity.
     moved = [
         (dest_rel + row["rel_path"][len(source_rel):], row["doc_id"])
         for row in rows
-        if row["rel_path"] == source_rel or row["rel_path"].startswith(source_rel + "/")
+        if not row["deleted"]
+        and (row["rel_path"] == source_rel or row["rel_path"].startswith(source_rel + "/"))
     ]
-    occupied = {row["rel_path"] for row in rows}
+    occupied = {row["rel_path"] for row in rows if not row["deleted"]}
     if any(path in occupied for path, _ in moved):
-        # Even a deleted destination owns an identity and may have pinned references.
         raise KbRegistryError("The destination already has a document identity.")
+    # Keep displaced tombstones intact, including pinned IDs and original paths.
+    # The existing table remains the unique path owner and revival authority.
+    for path, _ in moved:
+        conn.execute(
+            "INSERT INTO kb_document_history SELECT * FROM kb_documents "
+            "WHERE kb_id = ? AND rel_path = ? AND deleted = 1",
+            (kb_id, path),
+        )
+        conn.execute(
+            "DELETE FROM kb_documents WHERE kb_id = ? AND rel_path = ? AND deleted = 1",
+            (kb_id, path),
+        )
     conn.executemany(
         "UPDATE kb_documents SET rel_path = ?, updated_at = ? WHERE kb_id = ? AND doc_id = ?",
         [(path, _now(), kb_id, doc_id) for path, doc_id in moved],
@@ -1230,6 +1252,7 @@ def guarded_document_change(
 
 
 def find_document(kb_id: str, rel_path: str) -> KbDocument | None:
+    """Return the current path owner, including its tombstone, not displaced history."""
     with _read() as conn:
         if conn is None:
             return None
@@ -1241,12 +1264,15 @@ def find_document(kb_id: str, rel_path: str) -> KbDocument | None:
 
 
 def list_documents(kb_id: str, *, include_deleted: bool = False) -> list[KbDocument]:
+    """List current path owners, plus displaced tombstones when requested."""
     with _read() as conn:
         if conn is None:
             return []
         rows = conn.execute(
-            "SELECT * FROM kb_documents WHERE kb_id = ? AND (? OR deleted = 0) ORDER BY rel_path",
-            (_strip_ref(kb_id), include_deleted),
+            "SELECT * FROM kb_documents WHERE kb_id = ? AND (? OR deleted = 0) "
+            "UNION ALL SELECT * FROM kb_document_history WHERE kb_id = ? AND ? "
+            "ORDER BY rel_path, doc_id",
+            (_strip_ref(kb_id), include_deleted, _strip_ref(kb_id), include_deleted),
         ).fetchall()
         return [_document(row) for row in rows]
 
