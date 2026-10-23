@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import tempfile
 import traceback
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import uuid4
@@ -614,6 +615,7 @@ async def _save_uploaded_files_off_loop(
     kb_name: str | None = None,
     rel_paths: list[str] | None = None,
     dest_subdir: str = "",
+    registry_name: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """:func:`_save_uploaded_files` on a worker thread.
 
@@ -627,14 +629,61 @@ async def _save_uploaded_files_off_loop(
     ``SpooledTemporaryFile`` underneath, never the async ``UploadFile`` API.
     """
     return await asyncio.to_thread(
-        _save_uploaded_files,
+        _save_registered_uploads if registry_name is not None else _save_uploaded_files,
         files,
         target_dir,
         allowed_extensions=allowed_extensions,
         kb_name=kb_name,
         rel_paths=rel_paths,
         dest_subdir=dest_subdir,
+        **({"registry_name": registry_name} if registry_name is not None else {}),
     )
+
+
+@contextmanager
+def _document_staging(kb_dir: Path, prefix: str):
+    """Retain recovery files on failure, especially if filesystem rollback also fails."""
+    temp = Path(tempfile.mkdtemp(prefix=prefix, dir=kb_dir))
+    try:
+        yield temp
+    except BaseException:
+        logger.warning("Document operation failed; recovery files retained at %s", temp)
+        raise
+    else:
+        shutil.rmtree(temp, ignore_errors=True)
+
+
+def _save_registered_uploads(files, target_dir: Path, *, registry_name: str, **kwargs):
+    """Stage a batch and restore overwritten files if document registration fails."""
+    target_dir = target_dir.resolve()
+    with _document_staging(target_dir.parent, ".document-upload-") as temp:
+        staging = temp / "raw"
+        staging.mkdir()
+        names, paths = _save_uploaded_files(files, staging, **kwargs)
+        published: list[tuple[Path, Path | None]] = []
+        try:
+            for index, source in enumerate(dict.fromkeys(paths)):
+                staged = Path(source)
+                dest = target_dir / staged.relative_to(staging)
+                if not dest.resolve().is_relative_to(target_dir):
+                    raise HTTPException(status_code=403, detail="Upload path escapes raw directory")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.is_dir():
+                    raise HTTPException(status_code=409, detail="Upload destination is a folder")
+                backup = temp / str(index) if dest.exists() else None
+                if backup is not None:
+                    os.replace(dest, backup)
+                published.append((dest, backup))
+                os.replace(staged, dest)
+            saved_paths = [str(target_dir / Path(path).relative_to(staging)) for path in paths]
+            _record_documents(target_dir.parent.parent, registry_name, target_dir, saved_paths)
+        except BaseException:
+            for dest, backup in reversed(published):
+                dest.unlink(missing_ok=True)
+                if backup is not None:
+                    os.replace(backup, dest)
+            raise
+        return names, saved_paths
 
 
 def _get_upload_file_size(file: UploadFile) -> int | None:
@@ -701,6 +750,69 @@ def _validate_upload_batch(
         )
 
     return validated
+
+
+def _record_documents(
+    kb_base_dir: Path, kb_name: str, raw_dir: Path, paths: list[str]
+) -> None:
+    """Hash uploaded files on the save worker and preserve legacy ownership."""
+    import hashlib
+    from types import SimpleNamespace
+
+    from deeptutor.knowledge import registry
+
+    root = raw_dir.resolve()
+    hashes = {}
+    for value in paths:
+        path = Path(value)
+        if not path.resolve().is_relative_to(root) or not path.is_file():
+            continue
+        with path.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256")
+        hashes[path.relative_to(raw_dir).as_posix()] = f"sha256:{digest.hexdigest()}"
+    if not hashes:
+        return
+    record = registry.find_by_location(kb_base_dir, kb_name)
+    if record is None:
+        # The route already resolved write access to this physical location.
+        # Shared admin-library entries must never belong to the incidental caller.
+        owner = registry._owner_for_resource(
+            SimpleNamespace(base_dir=kb_base_dir, read_only=False), get_current_user().id
+        )
+        if owner is None:
+            raise HTTPException(status_code=403, detail="Cannot register this knowledge base")
+        record = registry.ensure_registered(kb_base_dir, kb_name, created_by=owner)
+    registry.upsert_documents(record.kb_id, hashes)
+
+
+def _assert_document_deletable(
+    record, rel_path: str, *, confirm: bool, force: bool, document=None, references=None
+) -> None:
+    """D18: pinned documents require admin force; whole-KB references require confirmation."""
+    from deeptutor.knowledge import registry
+
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force document deletion.")
+    if references is None:
+        references = registry.list_references(record.kb_id)
+        document = registry.find_document(record.kb_id, rel_path)
+    cited = [
+        ref for ref in references
+        if document is not None and ref.doc_ids is not None and document.doc_id in ref.doc_ids
+    ]
+    if cited and not force:
+        raise HTTPException(status_code=409, detail={
+            "code": "document_referenced",
+            "message": f"'{rel_path}' is cited by document ID. Remove those references first.",
+            "references": [ref.to_dict() for ref in cited],
+        })
+    whole = [ref for ref in references if ref.doc_ids is None]
+    if whole and not (confirm or force):
+        raise HTTPException(status_code=409, detail={
+            "code": "requires_confirmation", "requires_confirmation": True,
+            "message": f"These references will no longer see '{rel_path}'.",
+            "references": [ref.to_dict() for ref in whole],
+        })
 
 
 def _upload_file_to_pb(kb_name: str, filename: str, file_path: Path) -> None:
@@ -1093,7 +1205,8 @@ async def run_initialization_task(
                     doc.get("status") == "completed" for doc in receipt["documents"].values()
                 )
 
-            initializer.progress_tracker.update(
+            await asyncio.to_thread(
+                initializer.progress_tracker.update,
                 ProgressStage.COMPLETED,
                 message_key="Knowledge base initialization complete!",
                 current=1,
@@ -1104,7 +1217,8 @@ async def run_initialization_task(
             )
 
             manager = get_kb_manager()
-            manager.update_kb_status(
+            await asyncio.to_thread(
+                manager.update_kb_status,
                 name=initializer.kb_name,
                 status="ready",
                 progress={
@@ -1313,7 +1427,8 @@ async def run_upload_processing_task(
                             f"Folder sync state update failed: {sync_err}",
                             level="warning",
                         )
-                progress_tracker.update(
+                await asyncio.to_thread(
+                    progress_tracker.update,
                     ProgressStage.COMPLETED,
                     message_key="No new files to process (all duplicates or invalid)",
                     current=0,
@@ -1391,7 +1506,8 @@ async def run_upload_processing_task(
                     )
 
             num_processed = index_result.processed_count
-            progress_tracker.update(
+            await asyncio.to_thread(
+                progress_tracker.update,
                 ProgressStage.COMPLETED,
                 message_key="Successfully processed {{count}} files!",
                 message_params={"count": num_processed},
@@ -3245,12 +3361,35 @@ async def move_kb_file(kb_name: str, payload: MoveFilePayload):
             detail=f"'{src.name}' already exists in the target folder",
         )
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dest))
-    VisualAssetStore(manager.get_knowledge_base_path(kb_name)).move_source(
-        source_rel, dest.relative_to(raw_dir.resolve()).as_posix()
-    )
-    return {"status": "ok", "path": dest.relative_to(raw_dir.resolve()).as_posix()}
+    from deeptutor.knowledge import registry
+
+    source_rel = src.relative_to(raw_dir.resolve()).as_posix()
+    dest_rel = dest.relative_to(raw_dir.resolve()).as_posix()
+    assets = VisualAssetStore(manager.get_knowledge_base_path(kb_name))
+    manifest = assets.manifest_path
+    previous_manifest = manifest.read_bytes() if manifest.exists() else None
+    moved = False
+    try:
+        with registry.guarded_document_change(
+            manager.base_dir, kb_name, source_rel, dest_rel=dest_rel
+        ) as (record, _document, _references):
+            if record is not None and not registry.can_write(record, get_current_user()):
+                raise HTTPException(status_code=403, detail="This knowledge base is read-only.")
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(src, dest)
+            moved = True
+            assets.move_source(source_rel, dest_rel)
+    except BaseException as exc:
+        if moved:
+            os.replace(dest, src)
+            if previous_manifest is None:
+                manifest.unlink(missing_ok=True)
+            else:
+                assets._atomic_write(manifest, previous_manifest)
+        if isinstance(exc, registry.KbRegistryError):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
+    return {"status": "ok", "path": dest_rel}
 
 
 @router.get("/knowledge-bases/{kb_name}/file-preview-text/{filename:path}")
@@ -3368,7 +3507,9 @@ async def kb_source_page(
 
 
 @router.delete("/knowledge-bases/{kb_name}/files/{filename:path}")
-async def delete_kb_file(kb_name: str, filename: str):
+async def delete_kb_file(
+    kb_name: str, filename: str, confirm: bool = False, force: bool = False
+):
     """Remove a single raw document from a knowledge base.
 
     Unlike deleting the whole KB, this works while the KB is in an *error*
@@ -3378,6 +3519,8 @@ async def delete_kb_file(kb_name: str, filename: str):
     rejected. Vectors are not pruned here; ``was_indexed`` tells the caller
     whether a re-index is needed to purge the file from retrieval.
     """
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force document deletion.")
     manager, resolved_name, _ = _writable_kb(kb_name)
     kb_entry = _load_kb_entry_or_404(manager, resolved_name)
     _assert_kb_writable_or_409(resolved_name, kb_entry)
@@ -3386,16 +3529,47 @@ async def delete_kb_file(kb_name: str, filename: str):
     raw_dir = kb_dir / "raw"
     target = _resolve_raw_file_or_404(raw_dir, filename)
 
-    provider = _validate_registered_provider(kb_entry.get("rag_provider") or DEFAULT_PROVIDER)
-    if provider in {PAGEINDEX_PROVIDER, PAGEINDEX_OSS_PROVIDER}:
-        from deeptutor.services.rag.factory import get_pipeline
+    from deeptutor.knowledge import registry
 
-        await get_pipeline(provider, kb_base_dir=str(manager.base_dir)).remove_document(
-            resolved_name,
-            target.name,
-        )
-    VisualAssetStore(kb_dir).remove_source(target.relative_to(raw_dir).as_posix())
-    removal = remove_raw_document(Path(kb_dir), target)
+    rel_path = target.relative_to(raw_dir.resolve()).as_posix()
+    metadata = kb_dir / "metadata.json"
+    previous_metadata = metadata.read_bytes() if metadata.exists() else None
+    # Keep the source outside raw/ until the registry commit succeeds.
+    with _document_staging(kb_dir, ".document-delete-") as temp:
+        backup = temp / "source"
+        try:
+            with registry.guarded_document_change(
+                manager.base_dir, resolved_name, rel_path
+            ) as (record, document, references):
+                if record is not None:
+                    if not registry.can_write(record, get_current_user()):
+                        raise HTTPException(status_code=403, detail="This knowledge base is read-only.")
+                    _assert_document_deletable(
+                        record, rel_path, confirm=confirm, force=force,
+                        document=document, references=references,
+                    )
+                provider = _validate_registered_provider(kb_entry.get("rag_provider") or DEFAULT_PROVIDER)
+                if provider in {PAGEINDEX_PROVIDER, PAGEINDEX_OSS_PROVIDER}:
+                    from deeptutor.services.rag.factory import get_pipeline
+
+                    await get_pipeline(provider, kb_base_dir=str(manager.base_dir)).remove_document(
+                        resolved_name, target.name,
+                    )
+                os.replace(target, backup)
+                removal = remove_raw_document(Path(kb_dir), target)
+        except BaseException:
+            if backup.exists():
+                os.replace(backup, target)
+                if previous_metadata is None:
+                    metadata.unlink(missing_ok=True)
+                else:
+                    VisualAssetStore._atomic_write(metadata, previous_metadata)
+            raise
+    try:
+        VisualAssetStore(kb_dir).remove_source(rel_path)
+    except Exception:
+        # Source reads already reject missing raw files; stale assets can be cleaned later.
+        logger.warning("Could not clean visual assets for deleted document %s", rel_path, exc_info=True)
     return {
         "status": "ok",
         "path": removal.rel_path,
@@ -3624,6 +3798,7 @@ async def upload_files(
             allowed_extensions=upload_extensions,
             rel_paths=rel_paths,
             dest_subdir=_sanitize_rel_subdir(dest_subdir),
+            registry_name=kb_name,
         )
         task_id = _build_unique_task_id("kb_upload", kb_name)
         get_task_stream_manager().ensure_task(task_id)
@@ -3917,13 +4092,15 @@ async def _create_knowledge_base_owned(
         # Fast path: no files uploaded — create an empty KB ready for web
         # sources, GitHub sources, or later document uploads.
         if not files:
-            progress_tracker.update(
+            await asyncio.to_thread(
+                progress_tracker.update,
                 ProgressStage.COMPLETED,
                 "Knowledge base created (no documents yet).",
                 current=0,
                 total=0,
             )
-            manager.update_kb_status(
+            await asyncio.to_thread(
+                manager.update_kb_status,
                 name=name,
                 status="ready",
                 progress={
@@ -3948,7 +4125,8 @@ async def _create_knowledge_base_owned(
             }
 
         uploaded_files, _ = await _save_uploaded_files_off_loop(
-            files, initializer.raw_dir, allowed_extensions=allowed_extensions, rel_paths=rel_paths
+            files, initializer.raw_dir, allowed_extensions=allowed_extensions, rel_paths=rel_paths,
+            registry_name=name,
         )
 
         progress_tracker.update(
@@ -4220,7 +4398,7 @@ async def run_reindex_task(
                     hashes_for_indexed_files, sorted(indexed_files), raw_dir
                 )
 
-            persist_terminal_state()
+            await asyncio.to_thread(persist_terminal_state)
 
             if indexed_files is not None and len(indexed_files) < len(file_paths):
                 _task_log(

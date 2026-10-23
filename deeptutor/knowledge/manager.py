@@ -626,6 +626,9 @@ class KnowledgeBaseManager:
                     f"on ready transition: {exc}"
                 )
 
+        if status == "ready":
+            self._refresh_document_versions(name)
+
         try:
             self._save_config()
         except Exception as exc:
@@ -634,6 +637,12 @@ class KnowledgeBaseManager:
             )
             raise
         self._sync_kb_to_pb(name, kb_config)
+
+    def _refresh_document_versions(self, name: str) -> None:
+        """All ingestion completions must record documents before publishing ready."""
+        from deeptutor.knowledge import registry
+
+        registry.refresh_documents(self.base_dir, name)
 
     def get_kb_entry(self, name: str) -> dict | None:
         """The KB's raw ``kb_config.json`` record, or ``None`` if unregistered.

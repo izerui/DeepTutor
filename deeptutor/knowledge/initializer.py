@@ -354,7 +354,8 @@ async def initialize_knowledge_base(
         initializer.create_directory_structure()
         copied_files = initializer.copy_documents(source_files)
         await initializer.process_documents()
-        manager.update_kb_status(
+        await asyncio.to_thread(
+            manager.update_kb_status,
             name=kb_name,
             status="ready",
             progress={

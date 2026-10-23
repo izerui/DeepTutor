@@ -19,6 +19,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import importlib
 import json
 import logging
@@ -87,6 +88,17 @@ CREATE INDEX IF NOT EXISTS kb_references_by_referrer
 CREATE TABLE IF NOT EXISTS registry_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS kb_documents (
+    kb_id TEXT NOT NULL REFERENCES kb_registry(kb_id) ON DELETE CASCADE,
+    doc_id TEXT NOT NULL,
+    rel_path TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (kb_id, doc_id),
+    UNIQUE (kb_id, rel_path)
 );
 CREATE TABLE IF NOT EXISTS kb_admin_legacy_names (
     name TEXT PRIMARY KEY,
@@ -1055,3 +1067,212 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
 
 def can_write(record: KbRecord, user: CurrentUser) -> bool:
     return user.is_admin or record.created_by == user.id
+
+
+@dataclass(frozen=True)
+class KbDocument:
+    kb_id: str
+    doc_id: str
+    rel_path: str
+    content_hash: str
+    version: int
+    updated_at: str
+    deleted: bool
+
+
+def _document(row: sqlite3.Row) -> KbDocument:
+    return KbDocument(
+        kb_id=row["kb_id"], doc_id=row["doc_id"], rel_path=row["rel_path"],
+        content_hash=row["content_hash"], version=int(row["version"]),
+        updated_at=row["updated_at"], deleted=bool(row["deleted"]),
+    )
+
+
+def _document_path(value: str) -> str:
+    # Reject aliases rather than letting two spellings acquire different IDs.
+    from pathlib import PurePosixPath
+
+    path = PurePosixPath(value)
+    if not value or path.is_absolute() or ".." in path.parts or path.as_posix() != value or value == ".":
+        raise KbRegistryError("Document paths must be canonical relative POSIX paths.")
+    return value
+
+
+def _upsert_document(
+    conn: sqlite3.Connection, kb_id: str, rel_path: str, content_hash: str, now: str
+) -> KbDocument:
+    _document_path(rel_path)
+    conn.execute(
+        "INSERT INTO kb_documents "
+        "(kb_id, doc_id, rel_path, content_hash, version, updated_at, deleted) "
+        "VALUES (?, ?, ?, ?, 1, ?, 0) "
+        "ON CONFLICT(kb_id, rel_path) DO UPDATE SET "
+        "content_hash = excluded.content_hash, version = kb_documents.version + 1, "
+        "updated_at = excluded.updated_at, deleted = 0 "
+        "WHERE kb_documents.content_hash != excluded.content_hash OR kb_documents.deleted = 1",
+        (kb_id, uuid.uuid4().hex, rel_path, content_hash, now),
+    )
+    return _document(conn.execute(
+        "SELECT * FROM kb_documents WHERE kb_id = ? AND rel_path = ?", (kb_id, rel_path)
+    ).fetchone())
+
+
+def upsert_documents(kb_id: str, hashes: Mapping[str, str]) -> list[KbDocument]:
+    """Record only the supplied paths, returning a transaction-consistent snapshot."""
+    with _write() as conn:
+        now = _now()
+        return [
+            _upsert_document(conn, _strip_ref(kb_id), path, digest, now)
+            for path, digest in hashes.items()
+        ]
+
+
+def sync_documents(kb_id: str, hashes: Mapping[str, str]) -> list[KbDocument]:
+    """Replace the live set; deletion keeps identities for later revival."""
+    kb_id = _strip_ref(kb_id)
+    with _write() as conn:
+        now = _now()
+        documents = [
+            _upsert_document(conn, kb_id, path, digest, now)
+            for path, digest in hashes.items()
+        ]
+        rows = conn.execute(
+            "SELECT doc_id, rel_path FROM kb_documents WHERE kb_id = ? AND deleted = 0", (kb_id,)
+        ).fetchall()
+        conn.executemany(
+            "UPDATE kb_documents SET deleted = 1, updated_at = ? WHERE kb_id = ? AND doc_id = ?",
+            [(now, kb_id, row["doc_id"]) for row in rows if row["rel_path"] not in hashes],
+        )
+        return sorted(documents, key=lambda doc: doc.rel_path)
+
+
+def _mark_document_deleted(conn: sqlite3.Connection, kb_id: str, rel_path: str) -> None:
+    conn.execute(
+        "UPDATE kb_documents SET deleted = 1, updated_at = ? "
+        "WHERE kb_id = ? AND rel_path = ? AND deleted = 0",
+        (_now(), kb_id, rel_path),
+    )
+
+
+def mark_document_deleted(kb_id: str, rel_path: str) -> KbDocument | None:
+    kb_id = _strip_ref(kb_id)
+    with _write() as conn:
+        _mark_document_deleted(conn, kb_id, rel_path)
+        row = conn.execute(
+            "SELECT * FROM kb_documents WHERE kb_id = ? AND rel_path = ?", (kb_id, rel_path)
+        ).fetchone()
+        return _document(row) if row else None
+
+
+def _move_document_paths(
+    conn: sqlite3.Connection, kb_id: str, source_rel: str, dest_rel: str
+) -> None:
+    _document_path(source_rel)
+    _document_path(dest_rel)
+    if source_rel == dest_rel:
+        return
+    if dest_rel.startswith(source_rel + "/"):
+        raise KbRegistryError("Cannot move a folder into itself.")
+    rows = conn.execute(
+        "SELECT doc_id, rel_path FROM kb_documents WHERE kb_id = ?", (kb_id,)
+    ).fetchall()
+    # Literal prefix matching avoids SQL LIKE wildcard/backslash ambiguity.
+    moved = [
+        (dest_rel + row["rel_path"][len(source_rel):], row["doc_id"])
+        for row in rows
+        if row["rel_path"] == source_rel or row["rel_path"].startswith(source_rel + "/")
+    ]
+    occupied = {row["rel_path"] for row in rows}
+    if any(path in occupied for path, _ in moved):
+        # Even a deleted destination owns an identity and may have pinned references.
+        raise KbRegistryError("The destination already has a document identity.")
+    conn.executemany(
+        "UPDATE kb_documents SET rel_path = ?, updated_at = ? WHERE kb_id = ? AND doc_id = ?",
+        [(path, _now(), kb_id, doc_id) for path, doc_id in moved],
+    )
+
+
+def move_document_paths(kb_id: str, source_rel: str, dest_rel: str) -> None:
+    """Follow an explicit file/folder move without changing identities or versions."""
+    with _write() as conn:
+        _move_document_paths(conn, _strip_ref(kb_id), source_rel, dest_rel)
+
+
+@contextmanager
+def guarded_document_change(
+    base_dir: Path | str, name: str, source_rel: str, *, dest_rel: str | None = None
+) -> Iterator[tuple[KbRecord | None, KbDocument | None, list[KbReference]]]:
+    """Exclude reference writers through the filesystem change and registry commit.
+
+    Callers must restore their filesystem changes if this context raises,
+    including a commit failure. The yielded snapshot precedes the mutation.
+    """
+    with _write() as conn:
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE base_dir = ? AND dir_name = ?",
+            (_location(base_dir), name),
+        ).fetchone()
+        record = _record(row) if row else None
+        document = None
+        references = []
+        if record is not None:
+            row = conn.execute(
+                "SELECT * FROM kb_documents WHERE kb_id = ? AND rel_path = ?",
+                (record.kb_id, source_rel),
+            ).fetchone()
+            document = _document(row) if row else None
+            references = _references_of(conn, record.kb_id)
+            if dest_rel is None:
+                _mark_document_deleted(conn, record.kb_id, source_rel)
+            else:
+                _move_document_paths(conn, record.kb_id, source_rel, dest_rel)
+        yield record, document, references
+
+
+def find_document(kb_id: str, rel_path: str) -> KbDocument | None:
+    with _read() as conn:
+        if conn is None:
+            return None
+        row = conn.execute(
+            "SELECT * FROM kb_documents WHERE kb_id = ? AND rel_path = ?",
+            (_strip_ref(kb_id), rel_path),
+        ).fetchone()
+        return _document(row) if row else None
+
+
+def list_documents(kb_id: str, *, include_deleted: bool = False) -> list[KbDocument]:
+    with _read() as conn:
+        if conn is None:
+            return []
+        rows = conn.execute(
+            "SELECT * FROM kb_documents WHERE kb_id = ? AND (? OR deleted = 0) ORDER BY rel_path",
+            (_strip_ref(kb_id), include_deleted),
+        ).fetchall()
+        return [_document(row) for row in rows]
+
+
+def document_referrers(kb_id: str, doc_id: str) -> list[KbReference]:
+    return [ref for ref in list_references(kb_id) if ref.doc_ids is not None and doc_id in ref.doc_ids]
+
+
+def document_hashes(raw_dir: Path) -> dict[str, str]:
+    """Hash raw files with the same POSIX keys as book document fingerprints."""
+    root = raw_dir.resolve()
+    hashes = {}
+    for path in sorted(raw_dir.rglob("*")):
+        if not path.is_file() or not path.resolve().is_relative_to(root):
+            continue
+        with path.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256")
+        hashes[path.relative_to(raw_dir).as_posix()] = f"sha256:{digest.hexdigest()}"
+    return hashes
+
+
+def refresh_documents(base_dir: Path | str, name: str) -> list[KbDocument]:
+    record = find_by_location(base_dir, name)
+    if record is None or is_connector(record):
+        return []
+    raw_dir = Path(record.base_dir) / record.dir_name / "raw"
+    if not raw_dir.is_dir():
+        return []
+    return sync_documents(record.kb_id, document_hashes(raw_dir))

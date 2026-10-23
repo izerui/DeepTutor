@@ -572,7 +572,8 @@ async def _bootstrap_index_from_files(
         metadata["last_indexed_action"] = "create"
         _write_metadata(metadata_file, metadata)
 
-        manager.update_kb_status(
+        await asyncio.to_thread(
+            manager.update_kb_status,
             name=kb_name,
             status="ready",
             progress={
@@ -653,7 +654,8 @@ async def add_documents(
 
         new_files = adder.add_documents(source_files, allow_duplicates=allow_duplicates)
         if not new_files:
-            manager.update_kb_status(
+            await asyncio.to_thread(
+                manager.update_kb_status,
                 name=kb_name,
                 status="ready",
                 progress={
@@ -678,7 +680,8 @@ async def add_documents(
             published_count = result.processed_count
         adder.update_metadata(result.processed_count)
 
-        manager.update_kb_status(
+        await asyncio.to_thread(
+            manager.update_kb_status,
             name=kb_name,
             status="ready",
             progress={

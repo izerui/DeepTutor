@@ -7,6 +7,121 @@ import pytest
 from deeptutor.knowledge import registry
 
 
+def test_documents_get_stable_ids_and_versions(tmp_path):
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    first = {d.rel_path: d for d in registry.upsert_documents(
+        kb.ref, {"a.md": "sha256:1", "b.md": "sha256:2"}
+    )}
+    assert first["a.md"].version == 1
+    changed = registry.upsert_documents(kb.kb_id, {"a.md": "sha256:changed"})[0]
+    assert changed.doc_id == first["a.md"].doc_id and changed.version == 2
+    assert registry.upsert_documents(kb.ref, {"a.md": "sha256:changed"}) == [changed]
+    assert [d.rel_path for d in registry.sync_documents(
+        kb.ref, {"a.md": "sha256:changed"}
+    )] == ["a.md"]
+    assert registry.find_document(kb.ref, "b.md").deleted
+    revived = registry.upsert_documents(kb.ref, {"b.md": "sha256:2"})[0]
+    assert revived.doc_id == first["b.md"].doc_id
+    assert revived.version == 2 and not revived.deleted
+    registry.move_document_paths(kb.ref, "a.md", "folder/a.md")
+    registry.move_document_paths(kb.ref, "folder", "archive/folder")
+    moved = registry.find_document(kb.ref, "archive/folder/a.md")
+    assert moved.doc_id == changed.doc_id and moved.version == 2
+    assert registry.mark_document_deleted(kb.ref, moved.rel_path).deleted
+    assert len(registry.list_documents(kb.ref, include_deleted=True)) == 2
+
+
+def test_document_referrers_are_doc_level_only(tmp_path):
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    doc = registry.upsert_documents(kb.ref, {"a.md": "sha256:1"})[0]
+    for name, ids in [("whole", None), ("chapter", [doc.doc_id]), ("empty", [])]:
+        registry.add_reference(
+            kb.ref, referrer_kind="mastery_template", referrer_id=name,
+            doc_ids=ids, created_by="t1",
+        )
+    assert [r.referrer_id for r in registry.document_referrers(kb.ref, doc.doc_id)] == [
+        "chapter"
+    ]
+
+
+def test_document_moves_are_literal_and_collision_is_atomic(tmp_path):
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    registry.upsert_documents(kb.ref, {
+        "a%_/one.md": "sha256:1", "a%_/two.md": "sha256:2",
+        "abc/one.md": "sha256:3", "dest/two.md": "sha256:4",
+    })
+    registry.mark_document_deleted(kb.ref, "dest/two.md")
+    before = registry.list_documents(kb.ref, include_deleted=True)
+    with pytest.raises(registry.KbRegistryError):
+        registry.move_document_paths(kb.ref, "a%_", "dest")
+    assert registry.list_documents(kb.ref, include_deleted=True) == before
+    registry.move_document_paths(kb.ref, "a%_", "new")
+    assert registry.find_document(kb.ref, "abc/one.md")
+    assert registry.find_document(kb.ref, "new/one.md")
+
+
+def test_document_reads_do_not_create_database(tmp_path):
+    assert registry.find_document("absent", "a.md") is None
+    assert registry.list_documents("absent") == []
+    assert registry.document_referrers("absent", "doc") == []
+    assert registry.refresh_documents(tmp_path, "absent") == []
+    assert not registry._db_path().exists()
+
+
+def test_document_refresh_hashes_renames_and_connector_contract(tmp_path):
+    import hashlib
+
+    raw = tmp_path / "physics/raw"
+    raw.mkdir(parents=True)
+    (raw / "a.md").write_bytes(b"first")
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    [first] = registry.refresh_documents(tmp_path, "physics")
+    assert first.content_hash == "sha256:" + hashlib.sha256(b"first").hexdigest()
+    (raw / "a.md").rename(raw / "b.md")
+    [renamed] = registry.refresh_documents(tmp_path, "physics")
+    assert renamed.doc_id != first.doc_id
+    assert registry.find_document(kb.ref, "a.md").deleted
+    (raw / "b.md").unlink()
+    assert registry.refresh_documents(tmp_path, "physics") == []
+    assert registry.find_document(kb.ref, "b.md").deleted
+    connector = registry.register_kb(
+        base_dir=tmp_path, name="vault", kind="linked", created_by="t1"
+    )
+    (tmp_path / "vault/raw").mkdir(parents=True)
+    (tmp_path / "vault/raw/a.md").write_text("connector")
+    assert registry.refresh_documents(tmp_path, "vault") == []
+    assert registry.list_documents(connector.ref) == []
+    registry.unregister_kb(kb.ref)
+    assert registry.list_documents(kb.ref, include_deleted=True) == []
+
+
+def test_document_hashing_does_not_read_escaped_symlinks(tmp_path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (tmp_path / "private.md").write_text("private")
+    (raw / "escape.md").symlink_to(tmp_path / "private.md")
+    (raw / "own.md").write_text("own")
+    assert list(registry.document_hashes(raw)) == ["own.md"]
+
+
+@pytest.mark.parametrize("bad_path", ["../a.md", "/a.md", "a//b.md", "./a.md", "."])
+def test_document_upsert_rejects_path_aliases_atomically(tmp_path, bad_path):
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1"
+    )
+    with pytest.raises(registry.KbRegistryError):
+        registry.upsert_documents(kb.ref, {"valid.md": "sha256:1", bad_path: "sha256:2"})
+    assert registry.list_documents(kb.ref) == []
+
+
 def test_database_lives_under_system_root(mu_isolated_root, monkeypatch):
     from deeptutor.multi_user import paths
 

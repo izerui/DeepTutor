@@ -1,6 +1,7 @@
 """KB registration, guarded deletion, visibility and scoped configuration routes."""
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
@@ -20,6 +21,341 @@ def knowledge():
     from deeptutor.api.routers import knowledge as module
 
     return module
+
+
+@pytest.mark.asyncio
+async def test_document_delete_follows_d18(knowledge, as_user, make_kb):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        (folder / "raw/other.md").write_text("more")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        docs = {d.rel_path: d for d in registry.refresh_documents(manager.base_dir, "physics")}
+        registry.add_reference(
+            record.ref, referrer_kind="mastery_template", referrer_id="whole", created_by="t1"
+        )
+        registry.add_reference(
+            record.ref, referrer_kind="mastery_template", referrer_id="chapter",
+            doc_ids=[docs["doc.md"].doc_id], created_by="t1",
+        )
+        with pytest.raises(HTTPException) as cited:
+            await knowledge.delete_kb_file("physics", "doc.md", confirm=True)
+        assert cited.value.status_code == 409
+        assert cited.value.detail["code"] == "document_referenced"
+        assert [r["referrer_id"] for r in cited.value.detail["references"]] == ["chapter"]
+        with pytest.raises(HTTPException) as forced:
+            await knowledge.delete_kb_file("physics", "doc.md", force=True)
+        assert forced.value.status_code == 403
+        with pytest.raises(HTTPException) as ask:
+            await knowledge.delete_kb_file("physics", "other.md")
+        assert ask.value.status_code == 409
+        assert ask.value.detail["requires_confirmation"]
+        assert [r["referrer_id"] for r in ask.value.detail["references"]] == ["whole"]
+        assert (await knowledge.delete_kb_file("physics", "other.md", confirm=True))["status"] == "ok"
+        assert registry.find_document(record.ref, "other.md").deleted
+    with as_user("root", role="admin"):
+        assert (await knowledge.delete_kb_file(record.ref, "doc.md", force=True))["status"] == "ok"
+    assert registry.find_document(record.ref, "doc.md").deleted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("registered", [False, True])
+async def test_document_force_requires_admin_without_references(
+    knowledge, as_user, make_kb, registered
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        if registered:
+            registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        with pytest.raises(HTTPException) as error:
+            await knowledge.delete_kb_file("physics", "doc.md", force=True)
+        assert error.value.status_code == 403
+        assert (folder / "raw/doc.md").exists()
+
+
+def test_document_force_query_is_admin_only(knowledge, as_user, make_kb):
+    with as_user("t1", role="teacher"):
+        folder = make_kb(current_kb_manager(), "physics")
+        app = FastAPI()
+        app.include_router(knowledge.router, prefix="/api")
+        with TestClient(app) as client:
+            response = client.delete("/api/knowledge-bases/physics/files/doc.md?force=true")
+        assert response.status_code == 403
+        assert (folder / "raw/doc.md").exists()
+
+
+def test_documents_are_versioned_whenever_indexing_finishes(as_user, make_kb):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        manager.update_kb_status("physics", "ready")
+        [first] = registry.list_documents(record.ref)
+        (folder / "raw/doc.md").write_text("changed")
+        (folder / "raw/web").mkdir()
+        (folder / "raw/web/page.md").write_text("crawled")
+        manager.update_kb_status("physics", "ready")
+        docs = {d.rel_path: d for d in registry.list_documents(record.ref)}
+        assert docs["doc.md"].doc_id == first.doc_id and docs["doc.md"].version == 2
+        assert docs["web/page.md"].version == 1
+        assert docs["web/page.md"].content_hash.startswith("sha256:")
+
+
+def test_uploaded_files_are_recorded_as_documents(knowledge, as_user, make_kb):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        raw = folder / "raw"
+        (raw / "new.md").write_text("fresh")
+        knowledge._record_documents(
+            manager.base_dir, "physics", raw, [str(raw / "new.md"), "/elsewhere/x.md"]
+        )
+        record = registry.find_by_location(manager.base_dir, "physics")
+        assert [d.rel_path for d in registry.list_documents(record.ref)] == ["new.md"]
+        assert record.created_by == "t1"
+
+
+def test_upload_registration_preserves_admin_library_owner(knowledge, as_user, make_kb):
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    with as_user("incidental-admin", role="admin"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        knowledge._record_documents(
+            manager.base_dir, "physics", folder / "raw", [str(folder / "raw/doc.md")]
+        )
+        assert registry.find_by_location(manager.base_dir, "physics").created_by == LOCAL_ADMIN_ID
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("folder_move", [False, True])
+async def test_document_ids_follow_route_moves(knowledge, as_user, make_kb, folder_move):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        if folder_move:
+            (folder / "raw/part").mkdir()
+            (folder / "raw/doc.md").rename(folder / "raw/part/doc.md")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        [first] = registry.refresh_documents(manager.base_dir, "physics")
+        source = "part" if folder_move else "doc.md"
+        result = await knowledge.move_kb_file(
+            record.ref, knowledge.MoveFilePayload(source=source, dest_folder="archive")
+        )
+        assert result["path"] == f"archive/{source}"
+        [moved] = registry.list_documents(record.ref)
+        assert moved.rel_path == f"archive/{first.rel_path}"
+        assert moved.doc_id == first.doc_id and moved.version == first.version
+        manager.update_kb_status("physics", "ready")
+        assert registry.list_documents(record.ref) == [moved]
+
+
+def _fail_registry_commit(monkeypatch):
+    original = registry._open
+
+    class FailingCommit:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+        def execute(self, sql, *args):
+            if sql == "COMMIT":
+                raise sqlite3.OperationalError("injected commit failure")
+            return self.connection.execute(sql, *args)
+
+    monkeypatch.setattr(registry, "_open", lambda path: FailingCommit(original(path)))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["move", "delete"])
+@pytest.mark.parametrize("failure", ["commit", "filesystem"])
+async def test_document_mutation_failure_restores_files_and_ids(
+    knowledge, as_user, make_kb, monkeypatch, operation, failure
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        before = registry.refresh_documents(manager.base_dir, "physics")
+        metadata = folder / "metadata.json"
+        metadata.write_text(json.dumps({"file_hashes": {"doc.md": "old"}}))
+        original_metadata = metadata.read_bytes()
+        assets = knowledge.VisualAssetStore(folder)
+        assets.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        assets.manifest_path.write_text(json.dumps({
+            "version": 1, "assets": {"a": {"source_path": "doc.md"}}
+        }))
+        original_manifest = assets.manifest_path.read_bytes()
+        if failure == "commit":
+            _fail_registry_commit(monkeypatch)
+        else:
+            def fail(*args, **kwargs):
+                raise OSError("injected filesystem failure")
+
+            if operation == "move":
+                monkeypatch.setattr(knowledge.VisualAssetStore, "move_source", fail)
+            else:
+                monkeypatch.setattr(knowledge, "remove_raw_document", fail)
+        with pytest.raises((OSError, sqlite3.OperationalError), match="injected"):
+            if operation == "move":
+                await knowledge.move_kb_file(
+                    record.ref, knowledge.MoveFilePayload(source="doc.md", dest_folder="archive")
+                )
+            else:
+                await knowledge.delete_kb_file(record.ref, "doc.md")
+        assert (folder / "raw/doc.md").read_text() == "hello"
+        assert not (folder / "raw/archive/doc.md").exists()
+        assert registry.list_documents(record.ref) == before
+        assert metadata.read_bytes() == original_metadata
+        assert assets.manifest_path.read_bytes() == original_manifest
+
+
+@pytest.mark.asyncio
+async def test_document_delete_holds_reference_writer_lock(
+    knowledge, as_user, make_kb, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        registry.refresh_documents(manager.base_dir, "physics")
+        original = knowledge.remove_raw_document
+        checked = []
+
+        def remove_while_locked(*args):
+            other = sqlite3.connect(registry._db_path(), timeout=0)
+            try:
+                with pytest.raises(sqlite3.OperationalError, match="locked"):
+                    other.execute("BEGIN IMMEDIATE")
+                checked.append(True)
+            finally:
+                other.close()
+            return original(*args)
+
+        monkeypatch.setattr(knowledge, "remove_raw_document", remove_while_locked)
+        await knowledge.delete_kb_file(record.ref, "doc.md")
+        assert checked == [True]
+
+
+@pytest.mark.asyncio
+async def test_document_move_rejects_deleted_destination_identity(
+    knowledge, as_user, make_kb
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        registry.refresh_documents(manager.base_dir, "physics")
+        [old] = registry.upsert_documents(record.ref, {"archive/doc.md": "sha256:old"})
+        registry.mark_document_deleted(record.ref, old.rel_path)
+        registry.add_reference(
+            record.ref, referrer_kind="mastery_template", referrer_id="pinned",
+            created_by="t1", doc_ids=[old.doc_id],
+        )
+        before = registry.list_documents(record.ref, include_deleted=True)
+        with pytest.raises(HTTPException) as error:
+            await knowledge.move_kb_file(
+                record.ref, knowledge.MoveFilePayload(source="doc.md", dest_folder="archive")
+            )
+        assert error.value.status_code == 409
+        assert (folder / "raw/doc.md").exists()
+        assert registry.list_documents(record.ref, include_deleted=True) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_commit", [False, True])
+async def test_upload_hashing_is_off_loop_and_failure_restores_overwrites(
+    knowledge, as_user, make_kb, monkeypatch, fail_commit
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        before = registry.refresh_documents(manager.base_dir, "physics")
+        original = knowledge._record_documents
+        called = []
+        loop_thread = threading.get_ident()
+
+        def record_on_worker(*args):
+            assert threading.get_ident() != loop_thread
+            called.append(True)
+            original(*args)
+
+        monkeypatch.setattr(knowledge, "_record_documents", record_on_worker)
+        if fail_commit:
+            _fail_registry_commit(monkeypatch)
+        files = [
+            UploadFile(filename="doc.md", file=BytesIO(b"changed")),
+            UploadFile(filename="new.md", file=BytesIO(b"new")),
+        ]
+        try:
+            call = knowledge._save_uploaded_files_off_loop(
+                files, folder / "raw", registry_name="physics"
+            )
+            if fail_commit:
+                with pytest.raises(sqlite3.OperationalError, match="injected"):
+                    await call
+                assert (folder / "raw/doc.md").read_text() == "hello"
+                assert not (folder / "raw/new.md").exists()
+                assert registry.list_documents(record.ref) == before
+            else:
+                await call
+                current = registry.find_document(record.ref, "doc.md")
+                assert current.doc_id == before[0].doc_id and current.version == 2
+                assert registry.find_document(record.ref, "new.md").version == 1
+            assert called == [True]
+        finally:
+            for file in files:
+                await file.close()
+
+
+def test_ready_registry_failure_does_not_publish_success(as_user, make_kb, monkeypatch):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        manager.update_kb_status("physics", "processing")
+        _fail_registry_commit(monkeypatch)
+        with pytest.raises(sqlite3.OperationalError, match="injected"):
+            manager.update_kb_status("physics", "ready")
+        assert manager.get_kb_status("physics")["status"] == "processing"
+        assert registry.list_documents(registry.find_by_location(manager.base_dir, "physics").ref) == []
+
+
+@pytest.mark.asyncio
+async def test_upload_completion_hashing_stays_off_event_loop(
+    knowledge, as_user, make_kb, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        folder = make_kb(manager, "physics")
+        record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+        loop_thread = threading.get_ident()
+        original = registry.document_hashes
+        threads = []
+
+        def hash_on_worker(raw):
+            threads.append(threading.get_ident())
+            return original(raw)
+
+        class DuplicateAdder:
+            def __init__(self, **kwargs):
+                pass
+
+            def add_documents(self, *args, **kwargs):
+                return []
+
+        monkeypatch.setattr(registry, "document_hashes", hash_on_worker)
+        monkeypatch.setattr(knowledge, "DocumentAdder", DuplicateAdder)
+        await knowledge.run_upload_processing_task(
+            "physics", str(manager.base_dir), [str(folder / "raw/doc.md")],
+            "task13-upload-completion", rag_provider="llamaindex",
+        )
+        assert threads and all(thread != loop_thread for thread in threads)
+        assert registry.list_documents(record.ref)[0].rel_path == "doc.md"
 
 
 async def _create(knowledge, monkeypatch, make_kb, name="physics", visibility="private", **kwargs):
@@ -148,6 +484,8 @@ async def test_listing_during_upload_preserves_creation_identity(
         assert result["ref"] == item["ref"]
         record = registry.get_kb(item["kb_id"])
         assert record.created_by == "t1" and record.visibility == visibility
+        [doc] = registry.list_documents(record.ref)
+        assert doc.rel_path == "doc.txt" and doc.version == 1
         assert resolve_kb(item["ref"]).name == "physics"
         assert [ref.referrer_id for ref in registry.list_references(record.kb_id)] == ["during-upload"]
         assert registry.list_unavailable_references("partner", "during-upload") == []
