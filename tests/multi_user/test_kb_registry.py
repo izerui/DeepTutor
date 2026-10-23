@@ -310,3 +310,88 @@ def test_meta_round_trip():
     registry.set_meta("k", "v1")
     registry.set_meta("k", "v2")
     assert registry.get_meta("k") == "v2"
+
+
+# ── Fix round 1: privilege escalation & TOCTOU ──────────────────────
+
+
+def test_student_resolving_admin_kb_does_not_become_owner(mu_isolated_root, as_user, make_user, monkeypatch):
+    """A student resolving an assigned admin KB must not gain write access."""
+    from types import SimpleNamespace
+
+    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    admin_base = admin_kb_base_dir()
+    # Pre-register the KB under the admin so it exists on disk; then
+    # remove the registry entry to simulate "not yet registered".
+    record = registry.register_kb(
+        base_dir=admin_base, name="algebra", kind="uploaded", created_by=LOCAL_ADMIN_ID
+    )
+    registry.unregister_kb(record.kb_id)
+
+    # Monkeypatch resolve_kb to return a read-only admin resource.
+    fake_resource = SimpleNamespace(
+        base_dir=admin_base, name="algebra", read_only=True,
+    )
+    import deeptutor.multi_user.knowledge_access as ka_mod
+    monkeypatch.setattr(ka_mod, "resolve_kb", lambda ref, require_write=False: fake_resource)
+
+    # Also patch KnowledgeBaseManager.get_kb_entry used by ensure_registered
+    monkeypatch.setattr(
+        "deeptutor.knowledge.manager.KnowledgeBaseManager.get_kb_entry",
+        lambda self, name: {"rag_provider": "llamaindex"},
+    )
+
+    student = make_user("s1", role="student")
+    with as_user("s1", role="student"):
+        resolved = registry.resolve_ref("admin:kb:algebra")
+
+    assert resolved is not None
+    assert resolved.created_by == LOCAL_ADMIN_ID
+    assert not registry.can_write(resolved, student)
+
+
+def test_owner_resolving_own_legacy_ref_autoregisters(mu_isolated_root, as_user, make_user, monkeypatch):
+    """An owner resolving their own legacy ref auto-registers with themselves."""
+    from types import SimpleNamespace
+
+    from deeptutor.multi_user import paths
+
+    user_base = mu_isolated_root / "data" / "users" / "t1" / "knowledge_bases"
+    user_base.mkdir(parents=True, exist_ok=True)
+
+    fake_resource = SimpleNamespace(
+        base_dir=user_base, name="my_notes", read_only=False,
+    )
+    import deeptutor.multi_user.knowledge_access as ka_mod
+    monkeypatch.setattr(ka_mod, "resolve_kb", lambda ref, require_write=False: fake_resource)
+
+    # Also patch KnowledgeBaseManager.get_kb_entry used by ensure_registered
+    monkeypatch.setattr(
+        "deeptutor.knowledge.manager.KnowledgeBaseManager.get_kb_entry",
+        lambda self, name: {"rag_provider": "llamaindex"},
+    )
+
+    owner = make_user("t1", role="teacher")
+    with as_user("t1", role="teacher"):
+        resolved = registry.resolve_ref("my_notes")
+
+    assert resolved is not None
+    assert resolved.created_by == "t1"
+    assert registry.can_write(resolved, owner)
+
+
+def test_set_visibility_force_revokes_concurrent_reference(tmp_path):
+    """A reference added just before force-private is revoked in the same transaction."""
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="shared", kind="uploaded", created_by="t1", visibility="public"
+    )
+    # Add a foreign reference right before force-private.
+    registry.add_reference(kb.kb_id, referrer_kind="course", referrer_id="c1", created_by="t2")
+    result = registry.set_visibility(kb.kb_id, "private", force=True)
+    assert result.visibility == "private"
+    # The reference was revoked inside the transaction.
+    assert registry.list_references(kb.kb_id) == []
+    [revoked] = registry.list_unavailable_references("course", "c1")
+    assert revoked.reason == "made_private"

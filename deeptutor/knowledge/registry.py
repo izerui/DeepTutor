@@ -215,7 +215,7 @@ def _db_path() -> Path:
 
 
 def _open(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, timeout=30)
+    conn = sqlite3.connect(path, timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
@@ -243,8 +243,13 @@ def _write() -> Iterator[sqlite3.Connection]:
     with _write_lock:
         conn = _open(path)
         try:
-            with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
                 yield conn
+                conn.execute("COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
         finally:
             conn.close()
 
@@ -429,6 +434,24 @@ def ensure_registered(base_dir: Path | str, name: str, *, created_by: str) -> Kb
     return register_kb(base_dir=base_dir, name=name, kind=kind_of(entry), created_by=created_by)
 
 
+def _owner_for_resource(resource: Any, caller_id: str) -> str | None:
+    """Decide who should own an auto-registered record.
+
+    Admin-library KBs belong to ``LOCAL_ADMIN_ID`` regardless of who resolves
+    them first. User-library KBs belong to the caller only when they have write
+    access (``not resource.read_only``); a read-only foreign resource that isn't
+    registered yet returns ``None`` to signal "don't auto-register".
+    """
+    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    if _location(resource.base_dir) == _location(admin_kb_base_dir()):
+        return LOCAL_ADMIN_ID
+    if resource.read_only:
+        return None
+    return caller_id
+
+
 def resolve_ref(ref: str) -> KbRecord | None:
     """The record behind any KB reference.
 
@@ -451,7 +474,10 @@ def resolve_ref(ref: str) -> KbRecord | None:
         resource = resolve_kb(value)
     except HTTPException:
         return None
-    return ensure_registered(resource.base_dir, resource.name, created_by=get_current_user().id)
+    owner = _owner_for_resource(resource, get_current_user().id)
+    if owner is None:
+        return find_by_location(resource.base_dir, resource.name)
+    return ensure_registered(resource.base_dir, resource.name, created_by=owner)
 
 
 def unregister_kb(kb_id: str) -> None:
@@ -505,21 +531,31 @@ def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRec
     (reason ``made_private``, see :func:`list_unavailable_references`).
     References by the owner alone stay and simply turn the KB into "readable
     through a reference".
+
+    The record lookup, reference listing and decision all happen inside a single
+    ``BEGIN IMMEDIATE`` transaction so a concurrent ``add_reference`` cannot
+    slip between the check and the update.
     """
-    record = get_kb(kb_id)
-    if record is None:
-        raise KbRegistryError(f"Knowledge base {kb_id} is not registered.")
-    _check_visibility(visibility, record.kind)
-    foreign: list[KbReference] = []
-    if visibility == "private" and record.visibility == "public":
-        foreign = [ref for ref in list_references(record.kb_id) if ref.created_by != record.created_by]
-        if foreign and not force:
-            names = ", ".join(f"{ref.referrer_kind}:{ref.referrer_id}" for ref in foreign)
-            raise KbVisibilityError(
-                f"Still referenced by other accounts ({names}); "
-                "it cannot be made private until those references are removed."
-            )
     with _write() as conn:
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE kb_id = ?", (_strip_ref(kb_id),)
+        ).fetchone()
+        if row is None:
+            raise KbRegistryError(f"Knowledge base {kb_id} is not registered.")
+        record = _record(row)
+        _check_visibility(visibility, record.kind)
+        foreign: list[KbReference] = []
+        if visibility == "private" and record.visibility == "public":
+            foreign = [
+                ref for ref in _references_of(conn, record.kb_id)
+                if ref.created_by != record.created_by
+            ]
+            if foreign and not force:
+                names = ", ".join(f"{ref.referrer_kind}:{ref.referrer_id}" for ref in foreign)
+                raise KbVisibilityError(
+                    f"Still referenced by other accounts ({names}); "
+                    "it cannot be made private until those references are removed."
+                )
         # Spec 7.4: an admin's forced withdrawal cuts the other accounts off;
         # their references become "unavailable" instead of silently reading on.
         _revoke(conn, record, foreign, reason="made_private")
@@ -528,7 +564,8 @@ def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRec
             (visibility, _now(), record.kb_id),
         )
     updated = get_kb(record.kb_id)
-    assert updated is not None
+    if updated is None:
+        raise KbRegistryError(f"Knowledge base {kb_id} disappeared after visibility update.")
     return updated
 
 
@@ -564,8 +601,10 @@ def has_indexed_kbs() -> bool:
     with _read() as conn:
         if conn is None:
             return False
+        placeholders = ", ".join("?" for _ in INDEXED_KINDS)
         row = conn.execute(
-            "SELECT 1 FROM kb_registry WHERE kind IN (?, ?) LIMIT 1", tuple(sorted(INDEXED_KINDS))
+            f"SELECT 1 FROM kb_registry WHERE kind IN ({placeholders}) LIMIT 1",
+            tuple(sorted(INDEXED_KINDS)),
         ).fetchone()
     return row is not None
 
