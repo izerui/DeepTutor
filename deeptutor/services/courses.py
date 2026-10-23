@@ -113,8 +113,8 @@ class CourseResource:
     """One reference from a course to something another system owns.
 
     ``label`` is a snapshot taken at attach time so a course page stays readable
-    when the target is renamed or removed; ``ref_id`` remains the only identity
-    used to resolve it.
+    when the target is renamed or removed. Optional ``kb_id`` pins a legacy KB
+    alias to its resolved identity without rewriting the saved ``ref_id``.
     """
 
     id: str
@@ -123,6 +123,7 @@ class CourseResource:
     label: str
     position: int
     added_at: float
+    kb_id: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -228,6 +229,7 @@ def _parse_resources(raw: object) -> list[CourseResource]:
                 label=str(row.get("label") or ref_id)[:120],
                 position=int(row.get("position") or index),
                 added_at=added_at,
+                kb_id=str(row.get("kb_id") or "").strip(),
             )
         )
     resources.sort(key=lambda item: (item.position, item.added_at))
@@ -250,6 +252,14 @@ def _lock_for(path: Path) -> threading.RLock:
         return lock
 
 
+def _resource_kb_ref(resource: CourseResource) -> str:
+    from deeptutor.knowledge import registry
+
+    if resource.ref_id.startswith(registry.REF_PREFIX) or not resource.kb_id:
+        return resource.ref_id
+    return f"{registry.REF_PREFIX}{resource.kb_id}"
+
+
 def _sync_kb_references(course_id: str, course: StudyCourse | None) -> None:
     """Replace the course's whole-KB references, without granting read access.
 
@@ -268,10 +278,14 @@ def _sync_kb_references(course_id: str, course: StudyCourse | None) -> None:
     for resource in course.resources:
         if resource.kind != "knowledge_base":
             continue
-        # Canonical identities survive deletion, unlike registry resolution.
-        if resource.ref_id.startswith(registry.REF_PREFIX):
-            retained.add(resource.ref_id[len(registry.REF_PREFIX) :])
-        record = registry.resolve_ref(resource.ref_id)
+        # Pinned legacy identities survive deletion and same-name replacement.
+        ref = _resource_kb_ref(resource)
+        if not ref.startswith(registry.REF_PREFIX):
+            # Unresolved when saved: do not add an unpinned live reference if
+            # the alias becomes resolvable between the save and this sync.
+            continue
+        retained.add(ref[len(registry.REF_PREFIX) :])
+        record = registry.resolve_ref(ref)
         if record is not None:
             retained.add(record.kb_id)
         if (
@@ -363,6 +377,16 @@ class CourseService:
     ) -> None:
         """Save and sync under the caller's course lock; fail without losing old refs."""
         previous = self.index_file.read_text(encoding="utf-8")
+        if course is not None:
+            from deeptutor.knowledge import registry
+
+            # Persist the association before committing references. Never guess
+            # a deleted target from the names in the revocation table.
+            for resource in course.resources:
+                if resource.kind == "knowledge_base" and not resource.kb_id:
+                    record = registry.resolve_ref(resource.ref_id)
+                    if record is not None:
+                        resource.kb_id = record.kb_id
         self._save(courses)
         try:
             _sync_kb_references(course_id, course)
@@ -507,7 +531,7 @@ class CourseService:
                     for item in course.resources:
                         if (
                             item.kind == clean_kind
-                            and registry.resolve_ref(item.ref_id) == record
+                            and registry.resolve_ref(_resource_kb_ref(item)) == record
                         ):
                             return item
             resource = CourseResource(

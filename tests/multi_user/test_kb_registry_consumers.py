@@ -428,3 +428,152 @@ def test_course_revalidates_visibility_before_replacing_references(
         assert registry.list_references(record.kb_id) == []
         assert registry.list_unavailable_references("course", course.id) == withdrawn
         assert len(withdrawn) == int(existing)
+
+
+@pytest.mark.parametrize("aliases", [
+    ("physics",), ("user:kb:physics",), ("physics", "user:kb:physics"),
+])
+@pytest.mark.parametrize("recreate", [False, True])
+@pytest.mark.parametrize("cleanup", ["detach", "delete"])
+def test_course_legacy_deleted_identity_retains_revocation(
+    as_user, make_kb, tmp_path, aliases, recreate, cleanup,
+):
+    from pathlib import Path
+
+    from deeptutor.api.routers.knowledge import _delete_kb
+    from deeptutor.services.courses import CourseResource, CourseService
+    from deeptutor.services.file_io import atomic_write_json
+
+    foreign = _public_physics(as_user, make_kb)
+    with as_user("u2"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        original = registry.find_by_location(manager.base_dir, "physics")
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Legacy")
+        course.resources = [
+            CourseResource(f"old{i}", "knowledge_base", alias, "Physics", i, 1.0)
+            for i, alias in enumerate(aliases)
+        ]
+        # Simulate old JSON without identity metadata.
+        payload = course.to_dict()
+        for resource in payload["resources"]:
+            resource.pop("kb_id", None)
+        atomic_write_json(service.index_file, {"courses": [payload]})
+        notebook = service.attach_resource(course.id, kind="notebook", ref_id="notes")
+        assert len(registry.list_references(original.kb_id)) == 1
+        assert registry.list_references(foreign.kb_id) == []
+
+    with as_user("admin", role="admin"):
+        _delete_kb(original.ref, force=True)
+    assert not (Path(original.base_dir) / original.dir_name).exists()
+    assert registry.get_kb(original.kb_id) is None
+    [revoked] = registry.list_unavailable_references("course", course.id)
+    assert revoked.reason == "kb_deleted"
+
+    with as_user("u2"):
+        assert all(registry.resolve_ref(alias) is None for alias in aliases)
+        replacement = None
+        if recreate:
+            make_kb(manager, "physics")
+            list_visible_knowledge_bases()
+            replacement = registry.find_by_location(manager.base_dir, "physics")
+            assert replacement.kb_id not in (original.kb_id, foreign.kb_id)
+        # Reload from disk to ensure the identity survives service lifetimes.
+        service = CourseService(root=service.root)
+        service.detach_resource(course.id, notebook.id)
+        assert registry.list_unavailable_references("course", course.id) == [revoked]
+        service.attach_resource(course.id, kind="notebook", ref_id="other")
+        assert registry.list_unavailable_references("course", course.id) == [revoked]
+        resources = service.get(course.id).resources[:len(aliases)]
+        assert [item.ref_id for item in resources] == list(aliases)
+        assert all(item.kb_id == original.kb_id for item in resources)
+        assert registry.list_references(foreign.kb_id) == []
+        if replacement is not None:
+            assert registry.list_references(replacement.kb_id) == []
+            attached = service.attach_resource(
+                course.id, kind="knowledge_base", ref_id=replacement.ref,
+            )
+            assert attached.id not in {item.id for item in resources}
+            assert len(registry.list_references(replacement.kb_id)) == 1
+            assert registry.list_unavailable_references("course", course.id) == [revoked]
+        if cleanup == "delete":
+            service.delete(course.id)
+        else:
+            for index, resource in enumerate(resources):
+                service.detach_resource(course.id, resource.id)
+                assert registry.list_unavailable_references("course", course.id) == (
+                    [revoked] if index < len(resources) - 1 else []
+                )
+            if replacement is not None:
+                assert len(registry.list_references(replacement.kb_id)) == 1
+        assert registry.list_unavailable_references("course", course.id) == []
+
+
+def test_course_legacy_identity_save_rolls_back_on_sync_failure(
+    as_user, make_kb, tmp_path, monkeypatch,
+):
+    from deeptutor.services.courses import CourseResource, CourseService
+
+    with as_user("u2"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        record = registry.find_by_location(manager.base_dir, "physics")
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Legacy")
+        course.resources = [
+            CourseResource("old", "knowledge_base", "physics", "Physics", 0, 1.0),
+        ]
+        service._save([course])
+        before = service.index_file.read_bytes()
+
+        def fail_sync(*args, **kwargs):
+            saved = service.get(course.id).resources[0]
+            assert saved.ref_id == "physics"
+            assert saved.kb_id == record.kb_id
+            raise registry.KbReferenceError("injected sync failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(registry, "replace_references", fail_sync)
+            with pytest.raises(registry.KbReferenceError, match="injected"):
+                service.attach_resource(course.id, kind="notebook", ref_id="notes")
+        assert service.index_file.read_bytes() == before
+        assert registry.list_references(record.kb_id) == []
+        service.attach_resource(course.id, kind="notebook", ref_id="notes")
+        assert service.get(course.id).resources[0].kb_id == record.kb_id
+        assert len(registry.list_references(record.kb_id)) == 1
+
+
+def test_course_does_not_sync_legacy_identity_unresolved_at_save(
+    as_user, make_kb, tmp_path, monkeypatch,
+):
+    from deeptutor.services.courses import CourseResource, CourseService
+
+    with as_user("u2"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        record = registry.find_by_location(manager.base_dir, "physics")
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Legacy")
+        course.resources = [
+            CourseResource("old", "knowledge_base", "physics", "Physics", 0, 1.0),
+        ]
+        service._save([course])
+        resolve = registry.resolve_ref
+        calls = []
+
+        def initially_missing(ref):
+            calls.append(ref)
+            return None if len(calls) == 1 else resolve(ref)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(registry, "resolve_ref", initially_missing)
+            service.attach_resource(course.id, kind="notebook", ref_id="notes")
+        assert service.get(course.id).resources[0].kb_id == ""
+        assert registry.list_references(record.kb_id) == []
+        service.attach_resource(course.id, kind="notebook", ref_id="other")
+        assert service.get(course.id).resources[0].kb_id == record.kb_id
+        assert len(registry.list_references(record.kb_id)) == 1
