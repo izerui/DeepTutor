@@ -164,6 +164,17 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to reconcile linked assessments at startup")
 
+    # Every knowledge base gets a fixed registry id before the first request
+    # resolves one (spec 7.7). Idempotent; files never move. Disabled in tests.
+    try:
+        from deeptutor.knowledge.registry_backfill import run_startup_backfill
+
+        registry_report = await asyncio.to_thread(run_startup_backfill)
+        if registry_report:
+            logger.info("Knowledge-base registry backfill: %s", registry_report)
+    except Exception:
+        logger.exception("Knowledge-base registry backfill failed")
+
     # Initialize LLM client early so OPENAI_* env vars are available before
     # any downstream provider integrations start.
     try:

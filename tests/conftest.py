@@ -325,3 +325,16 @@ def _isolate_kb_registry(monkeypatch, tmp_path):
     # Builtin reader modules are imported once per process; reset the flag so
     # each test imports them into its own reader copy.
     monkeypatch.setattr(registry, "_builtin_readers_loaded", False)
+
+
+@pytest.fixture(autouse=True)
+def _disable_startup_kb_backfill(monkeypatch):
+    """Running the real app lifespan in a test must not walk the developer's data/.
+
+    The lifespan only calls ``run_startup_backfill``; with this switch off it
+    returns at once. Tests that want a backfill call ``backfill_registry()``
+    themselves, inside ``mu_isolated_root`` / ``partners_root``.
+    """
+    from deeptutor.knowledge import registry_backfill
+
+    monkeypatch.setattr(registry_backfill, "STARTUP_BACKFILL_ENABLED", False)
