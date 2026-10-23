@@ -1,6 +1,7 @@
 """A learning account's Mastery Path turn reads the topic's knowledge bases — only those it may.
 
-The learning policy strips every turn's ``tools`` and ``knowledge_bases``. A
+The learning policy strips every turn's ``tools`` and keeps only public (or
+readable own-private) ``knowledge_bases``. A
 mastery turn must not depend on either: the pipeline re-attaches the KBs the
 topic was built from, and ``rag`` mounts because a KB is attached, not because
 the learner toggled it. If that regresses, the learner can pick a KB when
@@ -45,13 +46,15 @@ def _kb_source(index: int, ref: str) -> TopicSource:
 
 
 @pytest.fixture
-def learner(mu_isolated_root, seed_user, monkeypatch):
+def learner(mu_isolated_root, seed_user, monkeypatch, make_kb):
     from deeptutor.knowledge import registry
-    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
+    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir, admin_kb_manager
 
     admin = seed_user("admin", role="admin")
     user = seed_user("student")
     save_grant(user["id"], learner_grant(user["id"]))
+    for name in ("calculus", "answer-keys"):
+        make_kb(admin_kb_manager(), name)
     # Grants no longer hand out KBs; a public admin KB is what every learner reads.
     registry.register_kb(
         base_dir=admin_kb_base_dir(),
@@ -95,7 +98,7 @@ async def _run_learner_mastery_turn(as_user, learner) -> None:
             }
         )
         assert payload["tools"] == []
-        assert payload["knowledge_bases"] == []
+        assert payload["knowledge_bases"] == [ASSIGNED]
 
         context = UnifiedContext(
             enabled_tools=payload["tools"],
@@ -161,3 +164,35 @@ async def test_learner_mastery_turn_cannot_read_an_unassigned_admin_kb_from_its_
     # The rejection is per KB: the assigned one beside it still resolves.
     assert observed["assigned"] is not None
     assert observed["assigned"].assigned is True
+
+
+@pytest.mark.parametrize("ref_format", ["legacy", "registry"])
+def test_learner_chat_mounts_rag_without_mastery_enrichment(learner, as_user, ref_format):
+    from deeptutor.knowledge import registry
+
+    with as_user(learner["id"], username="student"):
+        ref = ASSIGNED if ref_format == "legacy" else registry.resolve_ref(ASSIGNED).ref
+        payload = apply_learning_policy({
+            "capability": "chat",
+            "knowledge_bases": [ref, UNASSIGNED],
+            "tools": ["web_search", "reason"],
+            "enabled_tools": ["web_search", "reason"],
+            "enable_rag": True,
+            "enable_web_search": True,
+        })
+        assert payload["knowledge_bases"] == [ref]
+        assert payload["enable_rag"] is False
+        assert payload["tools"] == payload["enabled_tools"] == []
+        assert payload["enable_web_search"] is False
+        context = UnifiedContext(
+            active_capability="chat",
+            enabled_tools=payload["enabled_tools"],
+            knowledge_bases=payload["knowledge_bases"],
+        )
+        pipeline = AgenticLoopPipeline(language="zh")
+        tools = pipeline._compose_enabled_tools(context)
+        assert pipeline._coexisting_rag_kbs(context) == [ref]
+        assert "rag" in tools
+        assert not {"web_search", "reason", *MASTERY_TOOL_NAMES}.intersection(tools)
+        assert not learning_source_kbs.get()
+        assert resolve_for_rag(ref).read_only is True

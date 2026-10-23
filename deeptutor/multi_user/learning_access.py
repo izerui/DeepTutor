@@ -61,6 +61,9 @@ def apply_learning_policy(payload: dict[str, Any]) -> dict[str, Any]:
             "This learning account cannot use this mode. Please choose an allowed learning mode."
         )
 
+    from .knowledge_access import chat_readable_kb_refs
+
+    readable_kbs = chat_readable_kb_refs(payload.get("knowledge_bases"))
     return {
         **payload,
         "persona": str(policy.get("locked_persona") or ""),
@@ -69,7 +72,7 @@ def apply_learning_policy(payload: dict[str, Any]) -> dict[str, Any]:
         "enable_web_search": False,
         "partner_id": None,
         "bot_id": None,
-        "knowledge_bases": [],
+        "knowledge_bases": readable_kbs,
         "kb_name": "",
         "enable_rag": False,
     }

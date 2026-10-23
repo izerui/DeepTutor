@@ -448,6 +448,39 @@ def _with_public(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def chat_readable_kb_refs(refs: Any) -> list[str]:
+    """Keep public and readable own-private KBs for learner chat, in input order.
+
+    Reference-only access does not extend to chat, and connectors are excluded.
+    Private KBs still obey the current workspace's selection.
+    """
+    from deeptutor.knowledge import registry
+
+    if not isinstance(refs, (list, tuple)):
+        return []
+    user = get_current_user()
+    kept: list[str] = []
+    for raw in refs:
+        if not isinstance(raw, str):
+            continue
+        ref = raw.strip()
+        if not ref or ref in kept:
+            continue
+        try:
+            record = registry.resolve_ref(ref)
+            if record is None or registry.is_connector(record):
+                continue
+            if record.visibility != "public" and record.created_by != user.id:
+                continue
+            # Registry IDs are unchecked lookups. Use the read guard as well
+            # so they cannot bypass private workspace selections or availability.
+            resolve_kb(ref)
+        except (HTTPException, ValueError):
+            continue
+        kept.append(ref)
+    return kept
+
+
 def assert_writable(kb_ref: str) -> KnowledgeResource:
     return resolve_kb(kb_ref, require_write=True)
 
