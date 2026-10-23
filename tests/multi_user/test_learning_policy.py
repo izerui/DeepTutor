@@ -256,11 +256,14 @@ def test_chat_kb_filter_rejects_malformed_collections(mu_isolated_root, refs):
 
 
 @pytest.mark.parametrize("selection_format", ["registry", "legacy", "empty"])
+@pytest.mark.parametrize("origin_kind", ["account", "workspace"])
 def test_chat_kb_filter_preserves_private_workspace_allowlist(
-    mu_isolated_root, seed_user, as_user, make_kb, selection_format
+    mu_isolated_root, seed_user, as_user, make_kb, selection_format, origin_kind
 ):
+    from fastapi import HTTPException
+
     from deeptutor.knowledge import registry
-    from deeptutor.multi_user.knowledge_access import current_kb_manager
+    from deeptutor.multi_user.knowledge_access import current_kb_manager, resolve_for_rag
     from deeptutor.services.workspace import ContentWorkspaceService
     from deeptutor.services.workspace.context import workspace_context
     from deeptutor.services.workspace.knowledge import qualified_kb_id
@@ -268,18 +271,25 @@ def test_chat_kb_filter_preserves_private_workspace_allowlist(
     learner = _seed_learner(seed_user, "student")
     save_grant(learner["id"], _policy_grant())
     with as_user(learner["id"], username="student"):
-        manager = current_kb_manager()
+        service = ContentWorkspaceService()
+        origin = (
+            service.create_workspace("Origin")["workspace_id"]
+            if origin_kind == "workspace" else ""
+        )
         records = {}
-        for name in ("allowed", "blocked", "public"):
-            make_kb(manager, name)
-            records[name] = registry.register_kb(
-                base_dir=manager.base_dir, name=name, kind="uploaded",
-                created_by=learner["id"],
-                visibility="public" if name == "public" else "private",
-            )
-        legacy = qualified_kb_id("allowed", "")
+        with workspace_context(origin):
+            manager = current_kb_manager()
+            for name in ("allowed", "blocked", "public"):
+                make_kb(manager, name)
+                records[name] = registry.register_kb(
+                    base_dir=manager.base_dir, name=name, kind="uploaded",
+                    created_by=learner["id"],
+                    visibility="public" if name == "public" else "private",
+                )
+        legacy = qualified_kb_id("allowed", origin)
+        public_legacy = qualified_kb_id("public", origin)
         selected = records["allowed"].ref if selection_format == "registry" else legacy
-        workspace = ContentWorkspaceService().create_workspace(
+        workspace = service.create_workspace(
             "Restricted",
             resources={"knowledge_bases": [] if selection_format == "empty" else [selected]},
         )["workspace_id"]
@@ -288,21 +298,75 @@ def test_chat_kb_filter_preserves_private_workspace_allowlist(
             created_by="teacher", visibility="public",
         )
         with workspace_context(workspace):
+            # A same-name local private KB must neither replace the origin nor
+            # gain access just because the origin's identity is selected.
+            make_kb(current_kb_manager(), "allowed")
+            local = registry.register_kb(
+                base_dir=current_kb_manager().base_dir, name="allowed",
+                kind="uploaded", created_by=learner["id"],
+            )
             result = apply_learning_policy({
                 "capability": "chat",
                 "knowledge_bases": [
-                    records["blocked"].ref, qualified_kb_id("blocked", ""),
-                    records["public"].ref, records["allowed"].ref, legacy, missing.ref,
+                    records["blocked"].ref, qualified_kb_id("blocked", origin),
+                    records["public"].ref, public_legacy,
+                    records["allowed"].ref, legacy, missing.ref,
+                    local.ref, qualified_kb_id("allowed", workspace),
                 ],
             })
-        expected = [records["public"].ref]
-        if selection_format != "empty":
-            expected.append(records["allowed"].ref)
-        # The existing resolver accepts qualified legacy refs only when that
-        # form is selected; registry IDs also accept a legacy workspace selection.
-        if selection_format == "legacy":
-            expected.append(legacy)
-        assert result["knowledge_bases"] == expected
+            expected = [records["public"].ref, public_legacy]
+            if selection_format != "empty":
+                expected.extend([records["allowed"].ref, legacy])
+            assert result["knowledge_bases"] == expected
+            for ref in expected:
+                resource = resolve_for_rag(ref)
+                assert resource is not None
+                assert resource.base_dir.resolve() == manager.base_dir.resolve()
+                assert resource.name == (
+                    "public" if ref in (records["public"].ref, public_legacy) else "allowed"
+                )
+            denied = [
+                records["blocked"].ref, qualified_kb_id("blocked", origin),
+                local.ref, qualified_kb_id("allowed", workspace),
+            ]
+            if selection_format == "empty":
+                denied.extend([records["allowed"].ref, legacy])
+            for ref in denied:
+                with pytest.raises(HTTPException):
+                    resolve_for_rag(ref)
+
+
+@pytest.mark.parametrize("selection", [None, []])
+def test_chat_drops_unavailable_public_admin_legacy_refs(
+    mu_isolated_root, seed_user, as_user, selection
+):
+    from fastapi import HTTPException
+
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir, resolve_for_rag
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+
+    learner = _seed_learner(seed_user, "student")
+    save_grant(learner["id"], _policy_grant())
+    record = registry.register_kb(
+        base_dir=admin_kb_base_dir(), name="gone", kind="uploaded",
+        created_by="local-admin", visibility="public",
+    )
+    refs = ["admin:kb:gone", record.ref]
+    with as_user(learner["id"], username="student"):
+        workspace = (
+            ContentWorkspaceService().create_workspace(
+                "Restricted", resources={"knowledge_bases": selection},
+            )["workspace_id"] if selection is not None else ""
+        )
+        with workspace_context(workspace):
+            assert apply_learning_policy({
+                "capability": "chat", "knowledge_bases": refs,
+            })["knowledge_bases"] == []
+            for ref in refs:
+                with pytest.raises(HTTPException):
+                    resolve_for_rag(ref)
 
 
 @pytest.mark.parametrize("kind", sorted(CONNECTED_KB_TYPES))

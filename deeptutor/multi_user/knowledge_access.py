@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -92,8 +93,8 @@ def resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource
         except HTTPException:
             if require_write:
                 raise
-            # D14: public / referenced KBs bypass workspace selections, but the
-            # caller's own private KBs stay constrained by the allowlist.
+            # Match legacy refs by registry identity, preserving the private
+            # allowlist while public / referenced KBs retain their read access.
             fallback = _legacy_registry_fallback(kb_ref)
             if fallback is None:
                 raise
@@ -165,24 +166,33 @@ def _shared_admin_resource(name: str, *, require_write: bool) -> KnowledgeResour
         return None
     if require_write:
         raise HTTPException(status_code=403, detail="Shared knowledge bases are read-only")
-    return KnowledgeResource(
+    resource = _resolve_registered(record.ref, require_write=False)
+    return replace(
+        resource,
         id=f"{ADMIN_PREFIX}{name}",
-        name=name,
-        base_dir=admin_kb_base_dir(),
-        source="admin",
         assigned=True,
         read_only=True,
     )
 
 
 def _legacy_registry_fallback(kb_ref: str) -> KnowledgeResource | None:
-    """Bypass a workspace 403 when the legacy ref points at a public/referenced KB.
-
-    The caller's own private KBs stay constrained by the workspace allowlist;
-    only KBs readable through the registry (public or via a registered reader)
-    that belong to someone else get the bypass (D14).
-    """
+    """Resolve legacy reads by identity without bypassing the private allowlist."""
     from deeptutor.knowledge import registry
+    from deeptutor.services.workspace.knowledge import (
+        canonical_kb_id,
+        parse_kb_id,
+        resolve_qualified,
+    )
+
+    if parse_kb_id(canonical_kb_id(kb_ref)) is not None:
+        # Resolve the owned source scope first, then check its registry identity
+        # against the consumer workspace after resolve_qualified restores it.
+        resource = resolve_qualified(kb_ref)
+        record = registry.find_by_location(resource.base_dir, resource.name)
+        if record is None:
+            return None
+        checked = _resolve_registered(record.ref, require_write=False)
+        return replace(checked, id=resource.id)
 
     _, name = _strip_resource_prefix(kb_ref)
     # Try admin library first (covers ``admin:kb:<name>`` and bare names).
@@ -193,14 +203,7 @@ def _legacy_registry_fallback(kb_ref: str) -> KnowledgeResource | None:
     own_private = record.visibility == "private" and record.created_by == user.id
     if own_private or not registry.can_read(record, user):
         return None
-    return KnowledgeResource(
-        id=f"{ADMIN_PREFIX}{name}",
-        name=name,
-        base_dir=admin_kb_base_dir(),
-        source="admin",
-        assigned=True,
-        read_only=True,
-    )
+    return _shared_admin_resource(name, require_write=False)
 
 
 def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource:

@@ -8,7 +8,12 @@ from fastapi import HTTPException
 import pytest
 
 from deeptutor.knowledge import registry
-from deeptutor.multi_user.knowledge_access import admin_kb_base_dir, current_kb_manager, resolve_kb
+from deeptutor.multi_user.knowledge_access import (
+    admin_kb_base_dir,
+    admin_kb_manager,
+    current_kb_manager,
+    resolve_kb,
+)
 
 
 def test_kb_ref_reads_another_accounts_public_kb(as_user, make_kb):
@@ -85,7 +90,9 @@ def test_workspace_selection_limits_own_private_kbs_but_not_public_ones(as_user,
             assert blocked.value.status_code == 403
 
 
-def test_legacy_admin_refs_read_public_admin_kbs_without_a_grant(as_user):
+def test_legacy_admin_refs_read_public_admin_kbs_without_a_grant(as_user, make_kb):
+    for name in ("calculus", "answer-keys"):
+        make_kb(admin_kb_manager(), name)
     registry.register_kb(
         base_dir=admin_kb_base_dir(),
         name="calculus",
@@ -130,6 +137,8 @@ def test_workspace_allowlist_does_not_block_legacy_public_admin_refs(as_user, ma
     from deeptutor.services.workspace import ContentWorkspaceService
     from deeptutor.services.workspace.context import workspace_context
 
+    for name in ("public-math", "private-answers"):
+        make_kb(admin_kb_manager(), name)
     registry.register_kb(
         base_dir=admin_kb_base_dir(),
         name="public-math",
