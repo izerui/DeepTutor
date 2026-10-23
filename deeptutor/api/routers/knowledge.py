@@ -215,6 +215,30 @@ class KnowledgeBaseInfo(BaseModel):
     read_only: bool = False
     provenance_label: str | None = None
     available: bool = True
+    kb_id: str | None = None
+    ref: str | None = None
+    visibility: str | None = None
+    created_by: str | None = None
+    created_by_name: str | None = None
+    owned: bool = True
+    kind: str | None = None
+    connector: bool = False
+
+
+_REGISTRY_INFO_KEYS = (
+    "kb_id",
+    "ref",
+    "visibility",
+    "created_by",
+    "created_by_name",
+    "owned",
+    "kind",
+    "connector",
+)
+
+
+def _registry_info(access: dict) -> dict[str, Any]:
+    return {key: access[key] for key in _REGISTRY_INFO_KEYS if key in access}
 
 
 class LinkFolderRequest(BaseModel):
@@ -2798,6 +2822,7 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
                         "assigned": resource.assigned,
                         "read_only": resource.read_only,
                         "provenance_label": access.get("provenance_label", ""),
+                        **_registry_info(access),
                     }
                 )
             )
@@ -2812,6 +2837,7 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
                     available=False,
                     read_only=access.get("read_only", False),
                     provenance_label=access.get("provenance_label", ""),
+                    **_registry_info(access),
                 )
             )
     return result
@@ -2872,6 +2898,7 @@ def _list_knowledge_bases():
                         provenance_label=access_by_id.get(f"{own_prefix}{info['name']}", {}).get(
                             "provenance_label"
                         ),
+                        **_registry_info(access_by_id.get(f"{own_prefix}{info['name']}", {})),
                     )
                 )
             except Exception as e:
@@ -2919,82 +2946,49 @@ def _list_knowledge_bases():
             )
 
         logger.debug(f"Returning {len(result)} knowledge bases")
-        if not get_current_user().is_admin:
-            assigned_snapshots: dict[str, str | None] = {}
-            own_ids = {item.id for item in result}
-            for access in access_items:
-                if access.get("source") != "admin" or access.get("id") in own_ids:
-                    continue
-                if not access.get("available", True):
-                    result.append(
-                        KnowledgeBaseInfo(
-                            id=str(access.get("id") or ""),
-                            name=str(access.get("name") or ""),
-                            is_default=False,
-                            statistics={},
-                            metadata={},
-                            path=None,
-                            status="unavailable",
-                            progress=None,
-                            source="admin",
-                            assigned=True,
-                            read_only=True,
-                            provenance_label=str(access.get("provenance_label") or ""),
-                            available=False,
-                        )
+        # KBs from outside this scope: other accounts' public KBs, and my own
+        # public KBs that live in another workspace. Grants no longer add any.
+        own_ids = {item.id for item in result}
+        for access in access_items:
+            access_id = str(access.get("id") or "")
+            if not access.get("assigned") or access_id in own_ids:
+                continue
+            try:
+                resource = resolve_kb(access_id)
+                info = manager_for_resource(resource).get_info(resource.name, refresh_config=False)
+                result.append(
+                    KnowledgeBaseInfo(
+                        id=resource.id,
+                        name=info["name"],
+                        is_default=False,
+                        statistics=info.get("statistics", {}),
+                        metadata=info.get("metadata"),
+                        path=None,
+                        status=info.get("status"),
+                        progress=info.get("progress"),
+                        source=resource.source,
+                        assigned=True,
+                        read_only=resource.read_only,
+                        provenance_label=str(access.get("provenance_label") or ""),
+                        **_registry_info(access),
                     )
-                    continue
-                resource = resolve_kb(str(access.get("id") or access.get("name") or ""))
-                assigned_manager = manager_for_resource(resource)
-                try:
-                    manager_key = str(assigned_manager.base_dir.resolve())
-                    if manager_key not in assigned_snapshots:
-                        assigned_names = assigned_manager.list_knowledge_bases()
-                        assigned_snapshots[manager_key] = assigned_manager.get_default(
-                            available_names=assigned_names
-                        )
-                    info = assigned_manager.get_info(
-                        resource.name,
-                        refresh_config=False,
-                        default_name=assigned_snapshots[manager_key],
+                )
+            except (HTTPException, ValueError, OSError):
+                result.append(
+                    KnowledgeBaseInfo(
+                        id=access_id,
+                        name=str(access.get("name") or ""),
+                        is_default=False,
+                        statistics={},
+                        status="unavailable",
+                        source=access.get("source") or "user",
+                        assigned=True,
+                        read_only=True,
+                        provenance_label=str(access.get("provenance_label") or ""),
+                        available=False,
+                        **_registry_info(access),
                     )
-                    result.append(
-                        KnowledgeBaseInfo(
-                            id=resource.id,
-                            name=info["name"],
-                            is_default=False,
-                            statistics=info.get("statistics", {}),
-                            metadata=info.get("metadata"),
-                            path=None,
-                            status=info.get("status"),
-                            progress=info.get("progress"),
-                            source="admin",
-                            assigned=True,
-                            read_only=True,
-                            provenance_label=str(access.get("provenance_label") or ""),
-                        )
-                    )
-                except Exception as exc:
-                    error_msg = f"Error getting assigned KB '{resource.name}': {exc}"
-                    result.append(
-                        KnowledgeBaseInfo(
-                            id=resource.id,
-                            name=resource.name,
-                            is_default=False,
-                            statistics={},
-                            metadata={"name": resource.name, "last_error": error_msg},
-                            status="error",
-                            progress={
-                                "stage": "error",
-                                "message": "Failed to load assigned knowledge base info.",
-                                "error": error_msg,
-                            },
-                            source="admin",
-                            assigned=True,
-                            read_only=True,
-                            provenance_label=str(access.get("provenance_label") or ""),
-                        )
-                    )
+                )
         return result
     except HTTPException:
         raise

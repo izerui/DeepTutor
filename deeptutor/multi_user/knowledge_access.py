@@ -18,7 +18,6 @@ from deeptutor.knowledge.manifest import (
 )
 
 from .context import get_current_user
-from .grants import load_grant
 from .models import KnowledgeResource
 from .paths import get_account_path_service, get_admin_path_service, get_current_path_service
 
@@ -297,7 +296,7 @@ def list_visible_knowledge_bases() -> list[dict[str, Any]]:
     from deeptutor.services.workspace.resources import current_resources
 
     if library_request.get():
-        return knowledge_catalog()
+        return _with_public(knowledge_catalog())
     selected = current_resources().knowledge_bases
     if selected is None:
         own = _list_visible_knowledge_bases()
@@ -308,19 +307,25 @@ def list_visible_knowledge_bases() -> list[dict[str, Any]]:
             if (parsed := parse_kb_id(old_id)) is not None and parsed[0] == origin
         }
         if not moved_refs:
-            return _with_account_subagents(own, origin=origin)
+            return _with_public(_with_account_subagents(own, origin=origin))
         catalog = {item["id"]: item for item in knowledge_catalog()}
         existing = {item["id"] for item in own}
-        return _with_account_subagents(
-            own + [catalog[rid] for rid in sorted(moved_refs - existing) if rid in catalog],
-            origin=origin,
+        return _with_public(
+            _with_account_subagents(
+                own + [catalog[rid] for rid in sorted(moved_refs - existing) if rid in catalog],
+                origin=origin,
+            )
         )
     catalog = {item["id"]: item for item in knowledge_catalog()}
-    return [
-        catalog[rid]
-        for rid in dict.fromkeys(canonical_kb_id(ref) for ref in selected)
-        if rid in catalog
-    ]
+    # R3: a selection may name KBs by ``kb:<id>`` as well as by legacy id.
+    by_registry_ref = {item["ref"]: item for item in catalog.values() if item.get("ref")}
+    chosen = []
+    for rid in dict.fromkeys(canonical_kb_id(ref) for ref in selected):
+        item = by_registry_ref.get(rid) if rid.startswith(REGISTRY_PREFIX) else catalog.get(rid)
+        if item is not None and item not in chosen:
+            chosen.append(item)
+    # D14: the selection narrows private KBs only; public ones are always there.
+    return _with_public(chosen)
 
 
 def _with_account_subagents(items: list[dict[str, Any]], *, origin: str) -> list[dict[str, Any]]:
@@ -332,13 +337,21 @@ def _with_account_subagents(items: list[dict[str, Any]], *, origin: str) -> list
     """
     if not origin:
         return items
+    from deeptutor.knowledge import registry
+
     existing = {item["id"] for item in items}
     result = list(items)
     manager = account_kb_manager()
-    for name in manager.list_knowledge_bases():
-        meta = manager.get_metadata(name)
-        if not isinstance(meta, dict) or meta.get("type") != SUBAGENT_KB_TYPE:
-            continue
+    subagents = {
+        name: meta
+        for name in manager.list_knowledge_bases()
+        if isinstance(meta := manager.get_metadata(name), dict)
+        and meta.get("type") == SUBAGENT_KB_TYPE
+    }
+    records = registry.sync_base_dir(
+        manager.base_dir, subagents, created_by=get_current_user().id
+    )
+    for name in subagents:
         rid = f"account:kb:{name}"
         if rid in existing:
             continue
@@ -350,57 +363,89 @@ def _with_account_subagents(items: list[dict[str, Any]], *, origin: str) -> list
                 "assigned": False,
                 "read_only": False,
                 "provenance_label": "Account library",
+                **_registry_fields(records.get(name), owned=True),
             }
         )
     return result
 
 
 def _list_visible_knowledge_bases() -> list[dict[str, Any]]:
+    """The current scope's own KBs, registered on first sight (connect routes, manual folders)."""
+    from deeptutor.knowledge import registry
+
     user = get_current_user()
     manager = current_kb_manager()
-    items: list[dict[str, Any]] = []
-    for name in manager.list_knowledge_bases():
-        items.append(
-            {
-                "id": f"admin:kb:{name}" if user.is_admin else f"user:kb:{name}",
-                "name": name,
-                "source": "admin" if user.is_admin else "user",
-                "assigned": False,
-                "read_only": False,
-                "provenance_label": "Created by you" if not user.is_admin else "Admin workspace",
-            }
-        )
+    names = manager.list_knowledge_bases()
+    records = registry.sync_base_dir(
+        current_kb_base_dir(),
+        {name: manager.get_kb_entry(name) for name in names},
+        created_by=user.id,
+    )
+    return [
+        {
+            "id": f"admin:kb:{name}" if user.is_admin else f"user:kb:{name}",
+            "name": name,
+            "source": "admin" if user.is_admin else "user",
+            "assigned": False,
+            "read_only": False,
+            "provenance_label": "Created by you" if not user.is_admin else "Admin workspace",
+            **_registry_fields(records.get(name), owned=True),
+        }
+        for name in names
+    ]
 
-    if user.is_admin:
+
+def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
+    if record is None:
+        return {"owned": owned}
+    from deeptutor.knowledge import registry
+
+    return {
+        "kb_id": record.kb_id,
+        "ref": record.ref,
+        "visibility": record.visibility,
+        "created_by": record.created_by,
+        "owned": owned,
+        "kind": record.kind,
+        "connector": registry.is_connector(record),
+    }
+
+
+def _account_names() -> dict[str, str]:
+    from .identity import load_users
+    from .models import LOCAL_ADMIN_ID
+
+    names = {LOCAL_ADMIN_ID: "admin"}
+    for username, record in load_users().items():
+        if record.get("id"):
+            names[str(record["id"])] = username
+    return names
+
+
+def _with_public(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Public KBs are in every list and every workspace (spec 7.3, D14)."""
+    from deeptutor.knowledge import registry
+
+    present = {item.get("kb_id") for item in items if item.get("kb_id")}
+    extra = [r for r in registry.list_records(visibility="public") if r.kb_id not in present]
+    if not extra:
         return items
-
-    admin_manager = admin_kb_manager()
-    admin_names = set(admin_manager.list_knowledge_bases())
-    existing_ids = {item["id"] for item in items}
-    for item in load_grant(user.id).get("knowledge_bases", []) or []:
-        name = str(item.get("name") or item.get("kb_name") or "").strip()
-        resource_id = str(item.get("resource_id") or item.get("id") or "")
-        if resource_id.startswith(ADMIN_PREFIX):
-            name = resource_id[len(ADMIN_PREFIX) :]
-        if not name:
-            continue
-        rid = f"admin:kb:{name}"
-        if rid in existing_ids:
-            continue
-        items.append(
-            {
-                "id": rid,
-                "name": name,
-                "source": "admin",
-                "assigned": True,
-                "read_only": True,
-                "available": name in admin_names,
-                "provenance_label": "Assigned by admin",
-                "needs_admin_reindex": bool(item.get("needs_admin_reindex", False)),
-                "embedding_signature": item.get("embedding_signature", ""),
-            }
-        )
-    return items
+    user = get_current_user()
+    names = _account_names()
+    admin_root = str(admin_kb_base_dir().resolve())
+    return items + [
+        {
+            "id": record.ref,
+            "name": record.name,
+            "source": "admin" if record.base_dir == admin_root else "user",
+            "assigned": True,
+            "read_only": not registry.can_write(record, user),
+            "provenance_label": "Public knowledge base",
+            **_registry_fields(record, owned=record.created_by == user.id),
+            "created_by_name": names.get(record.created_by, ""),
+        }
+        for record in extra
+    ]
 
 
 def assert_writable(kb_ref: str) -> KnowledgeResource:

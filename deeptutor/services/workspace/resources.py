@@ -100,6 +100,8 @@ def validate_resources(value, *, previous=None, workspace_id="") -> dict:
         if selected is None:
             continue
         known = {item["id"] for item in catalog[kind]}
+        # R3: workspace selections may reference KBs by ``kb:<id>`` as well.
+        known.update(item["ref"] for item in catalog[kind] if item.get("ref"))
         # Preserve stale references when editing unrelated settings. A missing
         # resource stays missing; its name must never bind to another origin.
         known.update((previous or {}).get(kind) or [])
