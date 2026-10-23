@@ -479,13 +479,21 @@ class KnowledgeBaseManager:
         if not self._pb_enabled:
             return
         try:
+            from deeptutor.knowledge import registry
             from deeptutor.services.pocketbase_client import get_pb_client
 
+            record = registry.find_by_location(self.base_dir, name)
+            if record is None:
+                return
             pb = get_pb_client()
             records = pb.collection("knowledge_bases").get_full_list(
-                query_params={"filter": f'kb_name="{name}"'}
+                query_params={"filter": f'kb_id="{record.kb_id}"'}
             )
+            # Legacy name-only rows carry no verifiable owner/location.
+            # Leave them intact and create a stable-ID row instead of claiming
+            # another account's same-name mirror.
             payload = {
+                "kb_id": record.kb_id,
                 "kb_name": name,
                 "description": kb_entry.get("description", f"Knowledge base: {name}"),
                 "rag_provider": kb_entry.get("rag_provider", "llamaindex"),
@@ -1321,14 +1329,14 @@ class KnowledgeBaseManager:
         if name not in self.list_knowledge_bases():
             raise ValueError(f"Knowledge base not found: {name}")
 
-        # Persist default KB selection via the canonical KB config service.
-        try:
-            from deeptutor.services.config import get_kb_config_service
+        from deeptutor.knowledge import registry
+        from deeptutor.services.config import get_kb_config_service
 
-            kb_config_service = get_kb_config_service()
-            kb_config_service.set_default_kb(name)
-        except Exception as e:
-            logger.warning(f"Failed to save default to centralized config: {e}")
+        kb_config_service = get_kb_config_service()
+        if self.base_dir.resolve() != kb_config_service.config_path.parent.resolve():
+            raise ValueError("Knowledge base is outside the current default scope")
+        record = registry.find_by_location(self.base_dir, name)
+        kb_config_service.set_default_kb(name, kb_id=record.kb_id if record else None)
 
     def get_default(self, *, available_names: list[str] | None = None) -> str | None:
         """
@@ -1347,12 +1355,22 @@ class KnowledgeBaseManager:
 
         # Try centralized config first
         try:
+            from deeptutor.knowledge import registry
             from deeptutor.services.config import get_kb_config_service
 
             kb_config_service = get_kb_config_service()
-            default_kb = kb_config_service.get_default_kb()
-            if default_kb and default_kb in kb_list:
-                return default_kb
+            if self.base_dir.resolve() == kb_config_service.config_path.parent.resolve():
+                default_id = kb_config_service.get_default_kb_id()
+                record = registry.get_kb(default_id) if default_id else None
+                if (
+                    record is not None
+                    and Path(record.base_dir) == self.base_dir.resolve()
+                    and record.dir_name in kb_list
+                ):
+                    return record.dir_name
+                default_kb = kb_config_service.get_default_kb()
+                if default_kb and default_kb in kb_list:
+                    return default_kb
         except Exception:
             pass
 

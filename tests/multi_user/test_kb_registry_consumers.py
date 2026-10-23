@@ -912,3 +912,346 @@ def test_stable_workspace_kb_reference_still_blocks_catalog_migration(as_user, m
             migrate_data("", destination, ["knowledge_bases"])
         assert registry.get_kb(record.kb_id).base_dir == str(manager.base_dir.resolve())
         assert (manager.base_dir / "atlas/raw/doc.md").read_text() == "hello"
+
+
+@pytest.mark.asyncio
+async def test_default_kb_records_registry_id_and_prefers_it_over_legacy_name(as_user, make_kb):
+    from deeptutor.api.routers import knowledge
+    from deeptutor.services.config import get_kb_config_service
+
+    with as_user("u1"):
+        manager = current_kb_manager()
+        for name in ("algebra", "physics"):
+            make_kb(manager, name)
+        list_visible_knowledge_bases()
+        record = registry.find_by_location(manager.base_dir, "physics")
+        await knowledge.set_default_kb(record.ref)
+        config = get_kb_config_service()
+        assert config.get_default_kb_id() == record.kb_id
+        config.set_default_kb("algebra", kb_id=record.kb_id)
+        assert manager.get_default() == "physics"
+        assert await knowledge.get_default_kb() == {
+            "default_kb": "physics", "default_kb_id": record.kb_id,
+        }
+        config.set_default_kb("algebra")
+        assert config.get_default_kb_id() is None
+        assert manager.get_default() == "algebra"
+        config.set_default_kb(None)
+        assert config.get_default_kb_id() is None
+
+
+class _Task12Collection:
+    def __init__(self, rows=()):
+        self.rows = list(rows)
+        self.filters = []
+        self.created = []
+        self.updated = []
+
+    def get_full_list(self, query_params):
+        self.filters.append(query_params["filter"])
+        # A real name-only legacy row never matches a stable-ID query.
+        return [row for row in self.rows if query_params["filter"] == f'kb_id="{row.kb_id}"']
+
+    def create(self, payload):
+        self.created.append(payload)
+
+    def update(self, record_id, payload):
+        self.updated.append((record_id, payload))
+
+
+@pytest.mark.parametrize("existing_id", [False, True])
+def test_pocketbase_uses_stable_identity_without_claiming_ambiguous_legacy_rows(
+    tmp_path, monkeypatch, existing_id,
+):
+    from types import SimpleNamespace
+
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.services import pocketbase_client
+
+    first = registry.register_kb(
+        base_dir=tmp_path / "first", name="physics", kind="uploaded", created_by="u1",
+    )
+    second = registry.register_kb(
+        base_dir=tmp_path / "second", name="physics", kind="uploaded", created_by="u2",
+    )
+    rows = [SimpleNamespace(id="legacy", kb_name="physics", kb_id="")]
+    if existing_id:
+        rows.append(SimpleNamespace(id="stable", kb_name="physics", kb_id=first.kb_id))
+    collection = _Task12Collection(rows)
+    monkeypatch.setattr(
+        pocketbase_client, "get_pb_client",
+        lambda: SimpleNamespace(collection=lambda name: collection),
+    )
+    for record in (first, second):
+        manager = KnowledgeBaseManager(base_dir=record.base_dir)
+        manager._pb_enabled = True
+        manager._sync_kb_to_pb("physics", {"status": "ready"})
+    assert collection.filters == [f'kb_id="{r.kb_id}"' for r in (first, second)]
+    assert [p["kb_id"] for p in collection.created] == (
+        [second.kb_id] if existing_id else [first.kb_id, second.kb_id]
+    )
+    assert all(p["kb_name"] == "physics" for p in collection.created)
+    assert [rid for rid, _ in collection.updated] == (["stable"] if existing_id else [])
+
+
+def test_pocketbase_skips_unregistered_identity_and_remains_best_effort(tmp_path, monkeypatch):
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.services import pocketbase_client
+
+    calls = []
+
+    def unavailable():
+        calls.append(True)
+        raise RuntimeError("fake service unavailable")
+
+    monkeypatch.setattr(pocketbase_client, "get_pb_client", unavailable)
+    manager = KnowledgeBaseManager(base_dir=str(tmp_path / "kbs"))
+    manager._pb_enabled = True
+    manager._sync_kb_to_pb("physics", {})
+    assert not calls
+    registry.register_kb(
+        base_dir=manager.base_dir, name="physics", kind="uploaded", created_by="u1",
+    )
+    manager._sync_kb_to_pb("physics", {})
+    assert calls == [True]
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+def test_account_deletion_transfers_only_public_or_referenced_and_keeps_same_owner_refs(
+    seed_user, as_user, make_kb, authenticated,
+):
+    from deeptutor.api.routers.auth import _delete_admin_user
+    from deeptutor.services.auth import TokenPayload
+
+    boss = seed_user("boss", role="admin")
+    teacher = seed_user("tina", role="teacher")
+    records = {}
+    with as_user(teacher["id"], role="teacher"):
+        manager = current_kb_manager()
+        for name in ("public", "referenced", "untouched", "foreign"):
+            make_kb(manager, name)
+            records[name] = registry.register_kb(
+                base_dir=manager.base_dir, name=name, kind="uploaded",
+                created_by=teacher["id"],
+                visibility="public" if name in ("public", "foreign") else "private",
+            )
+        for name in ("public", "referenced", "foreign"):
+            registry.add_reference(
+                records[name].kb_id, referrer_kind="course", referrer_id=name,
+                created_by="other" if name == "foreign" else teacher["id"],
+            )
+    current = TokenPayload(username="boss", role="admin", user_id=boss["id"]) if authenticated else None
+    successor = boss["id"] if authenticated else "local-admin"
+    assert _delete_admin_user("tina", current) == (200, "")
+    for name, record in records.items():
+        transferred = registry.get_kb(record.kb_id)
+        assert transferred.created_by == (teacher["id"] if name == "untouched" else successor)
+        assert transferred.base_dir == record.base_dir
+        assert (manager.base_dir / name / "raw/doc.md").read_text() == "hello"
+    assert registry.list_references(records["public"].kb_id)[0].created_by == successor
+    assert registry.list_references(records["foreign"].kb_id)[0].created_by == "other"
+    with as_user(successor, role="admin"):
+        registry.set_visibility(records["public"].kb_id, "private")
+        assert registry.list_references(records["public"].kb_id)
+        with pytest.raises(registry.KbVisibilityError):
+            registry.set_visibility(records["foreign"].kb_id, "private")
+
+
+def test_account_deletion_transfer_failure_is_logged_without_failing_delete(seed_user, monkeypatch, caplog):
+    from deeptutor.api.routers.auth import _delete_admin_user
+    from deeptutor.multi_user.identity import get_user_by_id
+
+    seed_user("boss", role="admin")
+    user = seed_user("tina", role="teacher")
+
+    def fail(*args):
+        raise RuntimeError("injected registry failure")
+
+    monkeypatch.setattr(registry, "transfer_ownership", fail)
+    assert _delete_admin_user("tina", None) == (200, "")
+    assert get_user_by_id(user["id"]) is None
+    assert "Could not transfer knowledge bases" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_transferred_private_actual_listing_read_allowlist_and_default_eligibility(
+    seed_user, as_user, make_kb,
+):
+    from fastapi import HTTPException
+
+    from deeptutor.api.routers import knowledge
+    from deeptutor.api.routers.auth import _delete_admin_user
+    from deeptutor.multi_user.knowledge_access import resolve_kb, resolve_kb_document_path
+    from deeptutor.services.auth import TokenPayload
+    from deeptutor.services.config import get_kb_config_service
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import library_request
+
+    boss = seed_user("boss", role="admin")
+    teacher = seed_user("tina", role="teacher")
+    with as_user(teacher["id"], role="teacher"):
+        manager = current_kb_manager()
+        make_kb(manager, "retained", text="retained content")
+        make_kb(manager, "secret")
+        list_visible_knowledge_bases()
+        record = registry.find_by_location(manager.base_dir, "retained")
+        secret = registry.find_by_location(manager.base_dir, "secret")
+        registry.add_reference(
+            record.kb_id, referrer_kind="course", referrer_id="course", created_by=teacher["id"],
+        )
+    current = TokenPayload(username="boss", role="admin", user_id=boss["id"])
+    assert _delete_admin_user("tina", current) == (200, "")
+    with as_user(boss["id"], role="admin"):
+        local = current_kb_manager()
+        make_kb(local, "local")
+        local.set_default("local")
+        for library in (False, True):
+            token = library_request.set(library)
+            try:
+                rows = {row.kb_id: row for row in await knowledge.list_knowledge_bases()}
+                assert record.kb_id in rows and secret.kb_id not in rows
+                assert rows[record.kb_id].owned and not rows[record.kb_id].read_only
+                assert not rows[record.kb_id].can_set_default
+                assert not rows[record.kb_id].is_default
+                local_row = next(row for row in rows.values() if row.name == "local")
+                assert local_row.can_set_default and local_row.is_default
+                assert resolve_kb(record.ref, require_write=True).base_dir == manager.base_dir
+                assert resolve_kb_document_path(record.ref, "doc.md").read_text() == "retained content"
+                details = await knowledge.get_knowledge_base_details(record.ref)
+                assert not details["can_set_default"] and not details["is_default"]
+                with pytest.raises(HTTPException) as error:
+                    await knowledge.set_default_kb(record.ref)
+                assert error.value.status_code == 409
+                assert get_kb_config_service().get_default_kb() == "local"
+            finally:
+                library_request.reset(token)
+        with pytest.raises(ValueError, match="scope"):
+            manager.set_default("retained")
+        for selected in ([], [record.ref]):
+            workspace = ContentWorkspaceService().create_workspace(
+                "Selected" if selected else "Excluded", resources={"knowledge_bases": selected},
+            )["workspace_id"]
+            with workspace_context(workspace):
+                rows = {row.kb_id: row for row in await knowledge.list_knowledge_bases()}
+                assert (record.kb_id in rows) == bool(selected)
+                if selected:
+                    assert resolve_kb_document_path(record.ref, "doc.md").read_text() == "retained content"
+                    assert not rows[record.kb_id].can_set_default
+                else:
+                    with pytest.raises(HTTPException):
+                        resolve_kb(record.ref)
+                    assert resolve_kb_document_path(record.ref, "doc.md") is None
+    with as_user("stranger"):
+        assert record.kb_id not in {row.kb_id for row in await knowledge.list_knowledge_bases()}
+        with pytest.raises(HTTPException):
+            resolve_kb(record.ref)
+
+
+@pytest.mark.asyncio
+async def test_readonly_shared_kb_cannot_be_default(as_user, make_kb):
+    from fastapi import HTTPException
+
+    from deeptutor.api.routers import knowledge
+
+    record = _public_physics(as_user, make_kb)
+    with as_user("reader"):
+        rows = {row.kb_id: row for row in await knowledge.list_knowledge_bases()}
+        assert rows[record.kb_id].read_only
+        assert not rows[record.kb_id].can_set_default
+        assert not rows[record.kb_id].is_default
+        with pytest.raises(HTTPException) as error:
+            await knowledge.set_default_kb(record.ref)
+        assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_workspace_default_is_local_and_persistence_failure_is_not_success(
+    as_user, make_kb, monkeypatch,
+):
+    from fastapi import HTTPException
+
+    from deeptutor.api.routers import knowledge
+    from deeptutor.services.config import get_kb_config_service
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import library_request
+
+    with as_user("u1"):
+        account = current_kb_manager()
+        make_kb(account, "physics")
+        list_visible_knowledge_bases()
+        account.set_default("physics")
+        account_id = get_kb_config_service().get_default_kb_id()
+        workspace = ContentWorkspaceService().create_workspace("Local")["workspace_id"]
+        with workspace_context(workspace):
+            manager = current_kb_manager()
+            for name in ("physics", "algebra"):
+                make_kb(manager, name)
+            rows = {row.name: row for row in await knowledge.list_knowledge_bases()}
+            assert all(row.can_set_default for row in rows.values())
+            record_id = rows["physics"].kb_id
+            assert record_id != account_id
+            await knowledge.set_default_kb(rows["physics"].ref)
+            assert await knowledge.get_default_kb() == {
+                "default_kb": "physics", "default_kb_id": record_id,
+            }
+            config = get_kb_config_service()
+            # A foreign ID must not override the current catalog's legacy name.
+            config.set_default_kb("algebra", kb_id=account_id)
+            assert manager.get_default() == "algebra"
+            config.set_default_kb("physics", kb_id=record_id)
+            token = library_request.set(True)
+            try:
+                catalog = {row.kb_id: row for row in await knowledge.list_knowledge_bases()}
+                assert not catalog[account_id].can_set_default
+                assert catalog[record_id].can_set_default
+            finally:
+                library_request.reset(token)
+
+            def fail():
+                raise OSError("injected config persistence failure")
+
+            monkeypatch.setattr(config, "_save", fail)
+            with pytest.raises(HTTPException) as error:
+                await knowledge.set_default_kb(rows["algebra"].ref)
+            assert error.value.status_code == 500
+            assert config.get_default_kb_id() == record_id
+        assert get_kb_config_service().get_default_kb_id() == account_id
+
+
+@pytest.mark.parametrize("target_default", [False, True])
+@pytest.mark.parametrize("stale_name", [False, True])
+def test_move_preserves_default_registry_id_without_overwriting_target(
+    as_user, make_kb, target_default, stale_name,
+):
+    from deeptutor.services.config import get_kb_config_service
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.kb_move import move_kb
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    with as_user("u1"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        record = registry.find_by_location(manager.base_dir, "physics")
+        manager.set_default("physics")
+        if stale_name:
+            make_kb(manager, "legacy")
+            get_kb_config_service().set_default_kb("legacy", kb_id=record.kb_id)
+        destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
+        other_id = None
+        with workspace_context(destination):
+            other = current_kb_manager()
+            make_kb(other, "algebra")
+            list_visible_knowledge_bases()
+            if target_default:
+                other.set_default("algebra")
+                other_id = registry.find_by_location(other.base_dir, "algebra").kb_id
+        move_kb(qualified_kb_id("physics"), destination)
+        assert get_kb_config_service().get_default_kb() is None
+        assert get_kb_config_service().get_default_kb_id() is None
+        with workspace_context(destination):
+            assert get_kb_config_service().get_default_kb_id() == (other_id or record.kb_id)
+            assert current_kb_manager().get_default() == ("algebra" if target_default else "physics")

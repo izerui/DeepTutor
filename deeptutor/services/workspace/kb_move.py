@@ -394,12 +394,23 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
             source_next = deepcopy(source_before)
             del source_next["knowledge_bases"][name]
             source_defaults = source_next.get("defaults") or {}
-            if source_defaults.get("default_kb") == name:
+            default_id = source_defaults.get("default_kb_id")
+            default_record = registry.get_kb(default_id) if default_id else None
+            default_name = source_defaults.get("default_kb")
+            if (
+                default_record is not None
+                and Path(default_record.base_dir) == source_root.resolve()
+                and default_record.dir_name in source_before["knowledge_bases"]
+            ):
+                default_name = default_record.dir_name
+            if default_name == name:
                 source_defaults["default_kb"] = None
+                moved_default_id = source_defaults.pop("default_kb_id", None)
                 source_next["defaults"] = source_defaults
                 target_defaults = target_next.setdefault("defaults", {})
                 if not target_defaults.get("default_kb"):
                     target_defaults["default_kb"] = name
+                    target_defaults["default_kb_id"] = moved_default_id
             atomic_write_json(target_config_path, target_next)
             _rewrite_assignments(old_ids, plan["target_id"])
             aliases_next = {

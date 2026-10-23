@@ -82,7 +82,8 @@ async def test_adopted_legacy_alias_uses_registry_authority(
     manager.save_config("ada", config, auto_start=False)
     manager.save_config("other", other_config, auto_start=False)
     source = _seed_admin_kb(partners_root / "ada" / "workspace")
-    KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
+    with partner_content_context("ada", config):
+        KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
     record = registry.ensure_registered(source.parent, "physics", created_by="alice")
     for partner_id in ["ada", "other"]:
         registry.add_reference(
@@ -138,8 +139,8 @@ async def test_adopted_legacy_alias_uses_registry_authority(
 @pytest.mark.parametrize("require_write", [False, True])
 def test_unregistered_legacy_alias_remains_available(partners_root, alias, require_write):
     source = _seed_admin_kb(partners_root / "ada" / "workspace")
-    KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
     with partner_content_context("ada", PartnerConfig(name="Ada")):
+        KnowledgeBaseManager(base_dir=str(source.parent)).set_default("physics")
         resource = resolve_kb(alias, require_write=require_write)
         assert resource.base_dir == source.parent
         assert resource.name == "physics"
@@ -1239,6 +1240,7 @@ def test_migration_pending_tree_identity_precedes_auth_users(
 async def test_migration_synthetic_preregistration_preserves_consumers(
     partners_root, entrypoint, live, after_failure
 ):
+    from deeptutor.api.routers import knowledge
     from deeptutor.knowledge.registry_backfill import backfill_registry
     from deeptutor.multi_user.knowledge_access import (
         list_visible_knowledge_bases,
@@ -1299,6 +1301,15 @@ async def test_migration_synthetic_preregistration_preserves_consumers(
             token = library_request.set(True)
             try:
                 assert resolve_kb_document_path(old.ref, "doc.pdf").read_bytes() == b"%PDF-fake"
+                rows = {row.kb_id: row for row in await knowledge.list_knowledge_bases()}
+                if not live:
+                    assert not rows[old.kb_id].can_set_default
+                    assert not rows[old.kb_id].is_default
+                    with pytest.raises(HTTPException) as error:
+                        await knowledge.set_default_kb(old.ref)
+                    assert error.value.status_code == 409
+                else:
+                    assert old.kb_id not in rows
             finally:
                 library_request.reset(token)
         assert registry.list_referenced("partner", "other") == [kept]

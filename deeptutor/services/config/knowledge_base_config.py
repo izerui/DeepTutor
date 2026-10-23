@@ -25,6 +25,7 @@ def _default_payload() -> dict[str, Any]:
     return {
         "defaults": {
             "default_kb": None,
+            "default_kb_id": None,
             "rag_provider": DEFAULT_PROVIDER,
             "search_mode": "hybrid",
             # Per-engine default retrieval mode, set from the engine cards
@@ -192,14 +193,20 @@ class KnowledgeBaseConfigService:
         current.update(defaults)
         self._save()
 
-    def set_default_kb(self, kb_name: str | None) -> None:
+    def set_default_kb(self, kb_name: str | None, kb_id: str | None = None) -> None:
         self._refresh()
-        self._config.setdefault("defaults", _default_payload()["defaults"])["default_kb"] = kb_name
+        defaults = self._config.setdefault("defaults", _default_payload()["defaults"])
+        defaults["default_kb"] = kb_name
+        defaults["default_kb_id"] = kb_id if kb_name else None
         self._save()
 
     def get_default_kb(self) -> str | None:
         self._refresh()
         return self._config.get("defaults", {}).get("default_kb")
+
+    def get_default_kb_id(self) -> str | None:
+        self._refresh()
+        return self._config.get("defaults", {}).get("default_kb_id")
 
     def sync_from_metadata(self, kb_name: str, kb_base_dir: Path) -> None:
         metadata_file = kb_base_dir / kb_name / "metadata.json"

@@ -300,7 +300,7 @@ def list_visible_knowledge_bases() -> list[dict[str, Any]]:
         return _with_public(knowledge_catalog())
     selected = current_resources().knowledge_bases
     if selected is None:
-        own = _list_visible_knowledge_bases()
+        own = _with_external_private(_list_visible_knowledge_bases())
         origin = current_workspace_id()
         moved_refs = {
             canonical_kb_id(old_id)

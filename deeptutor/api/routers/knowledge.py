@@ -201,6 +201,14 @@ def _writable_kb(kb_name: str) -> tuple[KnowledgeBaseManager, str, Path]:
     return manager_for_resource(resource), resource.name, resource.base_dir
 
 
+def _can_set_default(base_dir: Path, *, read_only: bool = False) -> bool:
+    from deeptutor.services.path_service import get_path_service
+
+    return not read_only and Path(base_dir).resolve() == (
+        get_path_service().get_knowledge_bases_root().resolve()
+    )
+
+
 class KnowledgeBaseInfo(BaseModel):
     id: str | None = None
     name: str
@@ -213,6 +221,7 @@ class KnowledgeBaseInfo(BaseModel):
     source: str | None = None
     assigned: bool = False
     read_only: bool = False
+    can_set_default: bool = False
     provenance_label: str | None = None
     available: bool = True
     kb_id: str | None = None
@@ -2207,7 +2216,10 @@ async def get_default_kb():
     try:
         manager = get_kb_manager()
         default_kb = manager.get_default()
-        return {"default_kb": default_kb}
+        from deeptutor.knowledge import registry
+
+        record = registry.find_by_location(manager.base_dir, default_kb) if default_kb else None
+        return {"default_kb": default_kb, "default_kb_id": record.kb_id if record else None}
     except Exception as e:
         logger.error(f"Error getting default KB: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2218,6 +2230,10 @@ async def set_default_kb(kb_name: str):
     """Set the default knowledge base."""
     try:
         manager, kb_name, _ = _writable_kb(kb_name)
+        if not _can_set_default(manager.base_dir):
+            raise HTTPException(
+                status_code=409, detail="Knowledge base is outside the current default scope"
+            )
 
         # Verify KB exists
         if kb_name not in manager.list_knowledge_bases():
@@ -2816,13 +2832,15 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
         try:
             resource = resolve_kb(access.get("ref") or access["id"])
             info = manager_for_resource(resource).get_info(resource.name, refresh_config=False)
+            can_set_default = _can_set_default(resource.base_dir, read_only=resource.read_only)
             result.append(
                 KnowledgeBaseInfo(
                     **{
                         **info,
                         "id": access["id"],
                         "name": resource.name,
-                        "is_default": info.get("is_default", False),
+                        "is_default": can_set_default and info.get("is_default", False),
+                        "can_set_default": can_set_default,
                         "statistics": info.get("statistics", {}),
                         "path": (
                             None
@@ -2901,6 +2919,7 @@ def _list_knowledge_bases():
                         id=f"{own_prefix}{info['name']}",
                         name=info["name"],
                         is_default=info["is_default"],
+                        can_set_default=_can_set_default(manager.base_dir),
                         statistics=info.get("statistics", {}),
                         metadata=info.get("metadata"),
                         path=info.get("path"),
@@ -2970,7 +2989,7 @@ def _list_knowledge_bases():
         own_ids = {item.id for item in result}
         for access in access_items:
             access_id = str(access.get("id") or "")
-            if not access.get("assigned") or access_id in own_ids:
+            if access_id in own_ids:
                 continue
             try:
                 resource = resolve_kb(access_id)
@@ -2986,7 +3005,7 @@ def _list_knowledge_bases():
                         status=info.get("status"),
                         progress=info.get("progress"),
                         source=resource.source,
-                        assigned=True,
+                        assigned=resource.assigned,
                         read_only=resource.read_only,
                         provenance_label=str(access.get("provenance_label") or ""),
                         **_registry_info(access),
@@ -3039,12 +3058,15 @@ async def get_knowledge_base_details(kb_name: str):
         resource = resolve_kb(kb_name)
         manager = manager_for_resource(resource)
         info = manager.get_info(resource.name)
+        can_set_default = _can_set_default(resource.base_dir, read_only=resource.read_only)
         info.update(
             {
                 "id": resource.id,
                 "source": resource.source,
                 "assigned": resource.assigned,
                 "read_only": resource.read_only,
+                "can_set_default": can_set_default,
+                "is_default": can_set_default and info.get("is_default", False),
             }
         )
         if resource.assigned:

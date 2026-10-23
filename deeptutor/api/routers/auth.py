@@ -1891,6 +1891,23 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
 
         delete_avatar_file(user_id)
 
+    if user_id:
+        from deeptutor.knowledge import registry
+        from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+        successor = (current.user_id if current else "") or LOCAL_ADMIN_ID
+        try:
+            transferred = registry.transfer_ownership(user_id, successor)
+        except Exception:
+            # The account is already deleted; hand-over failure is nonfatal.
+            logger.exception("Could not transfer knowledge bases of deleted user '%s'", username)
+        else:
+            if transferred:
+                logger.info(
+                    "Transferred %d knowledge base(s) of '%s' to %s",
+                    len(transferred), username, successor,
+                )
+
     actor = current.username if current else "local"
     logger.info("Admin '%s' deleted user '%s'", actor, username)
     return 200, ""
