@@ -181,6 +181,98 @@ class SQLiteWebSourceSyncRepository:
                 "CREATE INDEX IF NOT EXISTS idx_web_source_pairings "
                 "ON web_source_bilingual_pairings(owner_id, kb_name, source_id)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS web_source_registry_bindings (
+                    owner_id TEXT NOT NULL,
+                    kb_ref TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    PRIMARY KEY (kb_ref, source_id)
+                )
+                """
+            )
+
+    def bind_registered_source(
+        self,
+        source_key: tuple[str, str, str],
+        legacy_owner_ids: list[str],
+        legacy_name: str,
+    ) -> None:
+        """Copy legacy state once into a stable KB key, retaining recovery rows.
+
+        The kb_name storage column accepts kb:<id> for registered jobs. Source IDs
+        and public physical names stay unchanged. Ambiguous legacy state is copied
+        independently to each matching KB, never shared after binding.
+        """
+        owner, kb_ref, source_id = source_key
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                bound = connection.execute(
+                    "SELECT owner_id FROM web_source_registry_bindings "
+                    "WHERE kb_ref=? AND source_id=?", (kb_ref, source_id),
+                ).fetchone()
+                if bound is None or bound["owner_id"] != owner:
+                    # A previously bound stable ID also survives ownership transfers.
+                    previous = connection.execute(
+                        "SELECT owner_id, kb_name FROM web_source_sync_jobs "
+                        "WHERE kb_name=? AND source_id=? ORDER BY updated_at_ms DESC",
+                        (kb_ref, source_id),
+                    ).fetchall()
+                    if bound is not None:
+                        # Returning ownership must use the latest binding's state,
+                        # not an earlier owner's retained row or legacy snapshot.
+                        candidates = [(bound["owner_id"], kb_ref)]
+                        connection.execute(
+                            "DELETE FROM web_source_sync_jobs "
+                            "WHERE owner_id=? AND kb_name=? AND source_id=?", source_key,
+                        )
+                        connection.execute(
+                            "DELETE FROM web_source_bilingual_pairings "
+                            "WHERE owner_id=? AND kb_name=? AND source_id=?", source_key,
+                        )
+                    else:
+                        candidates = [(row["owner_id"], row["kb_name"]) for row in previous]
+                        candidates.extend((uid, legacy_name) for uid in legacy_owner_ids)
+                    for old_owner, old_name in dict.fromkeys(candidates):
+                        old_key = (old_owner, old_name, source_id)
+                        connection.execute(
+                            """
+                            INSERT OR IGNORE INTO web_source_sync_jobs
+                                (owner_id, kb_name, source_id, state, next_run_at_ms,
+                                 last_run_at_ms, attempt, error, cancel_requested,
+                                 runner_id, lease_until_ms, updated_at_ms)
+                            SELECT ?, ?, source_id, state, next_run_at_ms, last_run_at_ms,
+                                   attempt, error, cancel_requested, runner_id, lease_until_ms,
+                                   updated_at_ms
+                            FROM web_source_sync_jobs
+                            WHERE owner_id=? AND kb_name=? AND source_id=?
+                            """,
+                            (owner, kb_ref, *old_key),
+                        )
+                        connection.execute(
+                            """
+                            INSERT OR IGNORE INTO web_source_bilingual_pairings
+                                (owner_id, kb_name, source_id, pairing_id, source_url,
+                                 target_url, source_file, target_file, source_lang,
+                                 target_lang, pairing_method, updated_at_ms)
+                            SELECT ?, ?, source_id, pairing_id, source_url, target_url,
+                                   source_file, target_file, source_lang, target_lang,
+                                   pairing_method, updated_at_ms
+                            FROM web_source_bilingual_pairings
+                            WHERE owner_id=? AND kb_name=? AND source_id=?
+                            """,
+                            (owner, kb_ref, *old_key),
+                        )
+                    connection.execute(
+                        "INSERT INTO web_source_registry_bindings VALUES (?, ?, ?) "
+                        "ON CONFLICT(kb_ref, source_id) DO UPDATE SET owner_id=excluded.owner_id",
+                        source_key,
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
 
     @staticmethod
     def key(job: WebSourceSyncJob) -> tuple[str, str, str]:
@@ -194,6 +286,7 @@ class SQLiteWebSourceSyncRepository:
         source_keys: set[tuple[str, str, str]],
         *,
         scanned_owner_ids: set[str] | None = None,
+        registered_only: bool = False,
     ) -> None:
         """Reconcile only owners whose source inventory was read successfully."""
         now = self._now_ms()
@@ -218,6 +311,10 @@ class SQLiteWebSourceSyncRepository:
                         (owner_id, kb_name, source_id, now, now),
                     )
                 for owner_id, kb_name, source_id in existing - source_keys:
+                    if registered_only and not kb_name.startswith("kb:"):
+                        # Legacy rows are retained for compatibility/recovery. They
+                        # are never dispatched by the registry scheduler.
+                        continue
                     if scanned_owner_ids is not None and owner_id not in scanned_owner_ids:
                         continue
                     connection.execute(

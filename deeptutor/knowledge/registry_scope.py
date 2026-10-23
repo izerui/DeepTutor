@@ -51,7 +51,7 @@ def is_retired_source(base_dir: str | Path) -> bool:
     return relative.parts[1:4] == ("workspace", "knowledge_bases", ".retired")
 
 
-def archived_source_roots() -> set[str]:
+def archived_source_roots(*, base_dir: str | Path | None = None) -> set[str]:
     """Read physical archive flags, including catalogs of former owners.
 
     Transfers do not move files or catalogs. Read the retained account catalogs
@@ -70,35 +70,55 @@ def archived_source_roots() -> set[str]:
         if (path / "workspace").is_dir()
     )
     archived = set()
+    target = str(Path(base_dir).resolve()) if base_dir is not None else None
+    resolved = False
+    failures = []
     for account_root in account_roots:
-        catalog = PathService(workspace_root=account_root).get_runtime_state_dir() / "workspaces.sqlite3"
-        if not catalog.is_file():
-            continue
+        paths = PathService(workspace_root=account_root)
+        if target == str(paths.get_knowledge_bases_root().resolve()):
+            # Account libraries cannot be archived as content workspaces.
+            resolved = True
+        catalog = paths.get_runtime_state_dir() / "workspaces.sqlite3"
         try:
+            if not catalog.is_file():
+                continue
+            locations = {}
             with closing(sqlite3.connect(f"{catalog.as_uri()}?mode=ro", uri=True)) as conn:
                 for (payload,) in conn.execute("SELECT payload FROM workspaces"):
                     row = json.loads(payload)
-                    if row.get("kind") == "workspace" and row.get("archived"):
+                    if row.get("kind") == "workspace":
                         storage = Path(row["path"]).expanduser() / ".deeptutor/data/knowledge_bases"
-                        archived.add(str(storage.resolve()))
-        except (sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as exc:
-            raise WorkspaceError("The source workspace registry could not be read.") from exc
+                        location = str(storage.resolve())
+                        locations[location] = locations.get(location, False) or bool(row.get("archived"))
+            resolved = resolved or target in locations
+            archived.update(location for location, frozen in locations.items() if frozen)
+        except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as exc:
+            failures.append(exc)
+    if failures and not resolved:
+        raise WorkspaceError("The source workspace registry could not be read.") from failures[0]
     return archived
 
 
 def source_is_archived(base_dir: str | Path) -> bool:
     root = Path(base_dir).resolve()
-    return str(root) in archived_source_roots()
+    return str(root) in archived_source_roots(base_dir=root)
 
 
 def indexed_records() -> list[registry.KbRecord]:
     """Eligible KBs, keeping each creator even when several share one root."""
     records = registry.list_records()
-    archived = archived_source_roots()
-    return [
-        record for record in records
-        if is_indexed_source(record, archived=archived)
-    ]
+    from deeptutor.services.workspace.models import WorkspaceError
+
+    eligible = []
+    for record in records:
+        try:
+            if is_indexed_source(record):
+                eligible.append(record)
+        except WorkspaceError:
+            # An unresolved source is never evidence of writability, but must
+            # not prevent other, positively classified KBs from synchronizing.
+            continue
+    return eligible
 
 
 def is_indexed_source(record: registry.KbRecord, *, archived: set[str] | None = None) -> bool:

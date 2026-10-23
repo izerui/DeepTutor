@@ -5459,7 +5459,7 @@ async def add_web_source(kb_name: str, request: AddWebSourceRequest):
             resolved_name, request.url, request.max_depth, request.max_pages
         )
         scheduler = get_web_source_sync_scheduler()
-        scheduler.repo.ensure_source((get_current_user().id, resolved_name, str(info["id"])))
+        scheduler.repo.ensure_source((*scheduler.source_scope(manager, resolved_name), str(info["id"])))
         return WebSourceInfo(**info)
 
 
@@ -5474,14 +5474,12 @@ async def get_web_sources(kb_name: str):
 async def remove_web_source(kb_name: str, source_id: str):
     with _knowledge_source_errors(kb_name):
         manager, resolved_name, _ = _writable_kb(kb_name)
+        scheduler = get_web_source_sync_scheduler()
+        job_key = (*scheduler.source_scope(manager, resolved_name), source_id)
         if not manager.remove_web_source(resolved_name, source_id):
             raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
-        await get_web_source_sync_scheduler().request_cancel(
-            get_current_user().id, resolved_name, source_id
-        )
-        get_web_source_sync_scheduler().repo.delete(
-            (get_current_user().id, resolved_name, source_id)
-        )
+        await scheduler.request_cancel(*job_key)
+        scheduler.repo.delete(job_key)
         return {"message": "Removed", "source_id": source_id}
 
 
@@ -5493,8 +5491,11 @@ async def get_web_source_sync_jobs(kb_name: str):
     with _knowledge_source_errors(kb_name):
         manager, resolved_name, _ = _writable_kb(kb_name)
         scheduler = get_web_source_sync_scheduler()
-        jobs = scheduler.repo.list_jobs(get_current_user().id, resolved_name)
-        return [WebSourceSyncJobInfo(**job.public_dict()) for job in jobs]
+        jobs = scheduler.repo.list_jobs(*scheduler.source_scope(manager, resolved_name))
+        return [
+            WebSourceSyncJobInfo(**{**job.public_dict(), "kb_name": resolved_name})
+            for job in jobs
+        ]
 
 
 @router.get(
@@ -5516,7 +5517,7 @@ async def get_web_source_pairings(kb_name: str, source_id: str):
             raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
         scheduler = get_web_source_sync_scheduler()
         repo_pairings = scheduler.repo.list_pairings(
-            get_current_user().id, resolved_name, source_id
+            *scheduler.source_scope(manager, resolved_name), source_id
         )
         if repo_pairings:
             return [BilingualPairingInfo(**p.public_dict()) for p in repo_pairings]
@@ -5542,7 +5543,7 @@ async def update_web_source_schedule(
             sync_interval_hours=request.sync_interval_hours,
         )
         scheduler = get_web_source_sync_scheduler()
-        job_key = (get_current_user().id, resolved_name, source_id)
+        job_key = (*scheduler.source_scope(manager, resolved_name), source_id)
         if request.auto_sync_enabled:
             scheduler.repo.ensure_source(job_key)
         else:
@@ -5559,8 +5560,9 @@ async def cancel_web_source_sync(kb_name: str, source_id: str):
         manager, resolved_name, _ = _writable_kb(kb_name)
         if not any(item.get("id") == source_id for item in manager.get_web_sources(resolved_name)):
             raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
-        cancelled = await get_web_source_sync_scheduler().request_cancel(
-            get_current_user().id, resolved_name, source_id
+        scheduler = get_web_source_sync_scheduler()
+        cancelled = await scheduler.request_cancel(
+            *scheduler.source_scope(manager, resolved_name), source_id
         )
         if not cancelled:
             raise HTTPException(status_code=409, detail="Synchronization job cannot be cancelled")
@@ -5588,8 +5590,9 @@ async def retry_web_source_sync(kb_name: str, source_id: str):
                 status_code=409,
                 detail="Enable the source and automatic synchronization before retrying",
             )
-        retried = await get_web_source_sync_scheduler().retry(
-            get_current_user().id, resolved_name, source_id
+        scheduler = get_web_source_sync_scheduler()
+        retried = await scheduler.retry(
+            *scheduler.source_scope(manager, resolved_name), source_id
         )
         if not retried:
             raise HTTPException(status_code=404, detail="Synchronization job not found")

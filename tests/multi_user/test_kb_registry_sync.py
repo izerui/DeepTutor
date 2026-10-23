@@ -84,7 +84,7 @@ async def test_schedulers_keep_each_kb_owner_in_mixed_root(
     with as_user("ambient"):
         await scheduler._synchronize_sources()
         for name, _, owner, _ in expected:
-            [job] = scheduler.repo.list_jobs(owner, name)
+            [job] = scheduler.repo.list_jobs(owner, registry.find_by_location(manager.base_dir, name).ref)
             await scheduler._run_job(job)
         assert set(seen) == expected
         assert get_current_user().id == "ambient"
@@ -116,12 +116,12 @@ def test_archived_fixed_ids_and_qualified_writes_are_denied(as_user, make_kb, ca
 async def test_archive_after_scan_prevents_execution(as_user, make_kb, tmp_path, monkeypatch):
     from deeptutor.knowledge.registry_scope import indexed_roots
 
-    _, workspace, _ = _workspace_kb(as_user, make_kb)
+    _, workspace, record = _workspace_kb(as_user, make_kb)
     scheduler = WebSourceSyncScheduler(
         repository=SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite"),
     )
     await scheduler._synchronize_sources()
-    [job] = scheduler.repo.list_jobs("u1", "papers")
+    [job] = scheduler.repo.list_jobs("u1", record.ref)
     with as_user("u1"):
         ContentWorkspaceService().update_workspace(workspace, archived=True)
     sync = AsyncMock(return_value=WebSyncResult(ok=True))
@@ -132,7 +132,7 @@ async def test_archive_after_scan_prevents_execution(as_user, make_kb, tmp_path,
     await scheduler._synchronize_sources()
     await GitHubSourceSyncService()._sync_one_cycle()
     sync.assert_not_awaited()
-    assert scheduler.repo.list_jobs("u1", "papers") == []
+    assert scheduler.repo.list_jobs("u1", record.ref) == []
 
 
 @pytest.mark.asyncio
@@ -220,17 +220,24 @@ async def test_archived_transferred_source_keeps_physical_archive_status(
 
 @pytest.mark.asyncio
 async def test_same_legacy_job_key_in_two_workspaces_is_not_arbitrarily_routed(
-        as_user, make_kb, tmp_path, caplog,
+        as_user, make_kb, tmp_path, monkeypatch,
 ):
-    _workspace_kb(as_user, make_kb)
-    _workspace_kb(as_user, make_kb)
+    first, _, one = _workspace_kb(as_user, make_kb)
+    second, _, two = _workspace_kb(as_user, make_kb)
     scheduler = WebSourceSyncScheduler(
         repository=SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite"),
     )
     await scheduler._synchronize_sources()
-    assert scheduler._sources == {}
-    assert scheduler.repo.list_jobs("u1", "papers") == []
-    assert "Ambiguous web source job" in caplog.text
+    [job_one] = scheduler.repo.list_jobs("u1", one.ref)
+    [job_two] = scheduler.repo.list_jobs("u1", two.ref)
+    assert job_one.source_id == job_two.source_id
+    sync = AsyncMock(return_value=WebSyncResult(ok=True))
+    monkeypatch.setattr("deeptutor.services.web_source.sync.sync_source", sync)
+    await scheduler._run_job(job_one)
+    await scheduler._run_job(job_two)
+    assert {call.kwargs["base_dir"] for call in sync.await_args_list} == {
+        str(first.base_dir), str(second.base_dir),
+    }
 
 
 @pytest.mark.asyncio
@@ -239,13 +246,13 @@ async def test_one_failed_kb_scan_preserves_owner_jobs_and_other_roots(
 ):
     from deeptutor.knowledge.manager import KnowledgeBaseManager
 
-    broken, _, _ = _workspace_kb(as_user, make_kb, "broken")
-    _workspace_kb(as_user, make_kb, "working")
+    broken, _, broken_record = _workspace_kb(as_user, make_kb, "broken")
+    _, _, working_record = _workspace_kb(as_user, make_kb, "working")
     scheduler = WebSourceSyncScheduler(
         repository=SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite"),
     )
     await scheduler._synchronize_sources()
-    [old] = scheduler.repo.list_jobs("u1", "broken")
+    [old] = scheduler.repo.list_jobs("u1", broken_record.ref)
     original = KnowledgeBaseManager.get_web_sources
 
     def get_sources(manager, name):
@@ -255,8 +262,8 @@ async def test_one_failed_kb_scan_preserves_owner_jobs_and_other_roots(
 
     monkeypatch.setattr(KnowledgeBaseManager, "get_web_sources", get_sources)
     await scheduler._synchronize_sources()
-    assert scheduler.repo.list_jobs("u1", "broken") == [old]
-    assert {key[1] for key in scheduler._sources} == {"working"}
+    assert scheduler.repo.list_jobs("u1", broken_record.ref) == [old]
+    assert {key[1] for key in scheduler._sources} == {working_record.ref}
 
 
 def test_registry_scope_filters_connectors_missing_dirs_and_preserves_local_admin(
@@ -301,7 +308,7 @@ async def test_registry_sync_respects_disabled_manual_and_fresh_sources(
 ):
     from datetime import datetime, timezone
 
-    manager, _, _ = _workspace_kb(as_user, make_kb)
+    manager, _, record = _workspace_kb(as_user, make_kb)
     [web] = manager.get_web_sources("papers")
     manager.update_web_source_state("papers", web["id"], auto_sync_enabled=False)
     [github] = manager.get_github_sources("papers")
@@ -334,7 +341,7 @@ async def test_running_web_job_keeps_validated_directory_across_inventory_replac
         repository=SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite"),
     )
     await scheduler._synchronize_sources()
-    [job] = scheduler.repo.list_jobs("u1", "papers")
+    [job] = scheduler.repo.list_jobs("u1", registry.find_by_location(manager.base_dir, "papers").ref)
     original_get = scheduler.repo.get
 
     def get_after_rescan(key):

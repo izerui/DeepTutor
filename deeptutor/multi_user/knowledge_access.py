@@ -112,6 +112,7 @@ def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResourc
     """``kb:<id>`` — served from the record's own location, whoever's scope that is."""
     from deeptutor.knowledge import registry
     from deeptutor.knowledge.registry_scope import source_is_archived
+    from deeptutor.services.workspace.models import WorkspaceError
     from deeptutor.services.workspace.knowledge import learning_source_kbs, library_request
     from deeptutor.services.workspace.resources import current_resources
 
@@ -120,7 +121,13 @@ def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResourc
     # Unreadable and unknown look the same: a private KB's existence is not public.
     if record is None or not registry.can_read(record, user):
         raise HTTPException(status_code=404, detail="Knowledge base not found")
-    writable = registry.can_write(record, user) and not source_is_archived(record.base_dir)
+    writable = registry.can_write(record, user)
+    if writable:
+        try:
+            writable = not source_is_archived(record.base_dir)
+        except WorkspaceError:
+            # Archive uncertainty narrows writes, never previously granted reads.
+            writable = False
     if require_write and not writable:
         raise HTTPException(status_code=403, detail="This knowledge base is read-only for you")
     # D14: workspace selections only narrow the caller's own private KBs.

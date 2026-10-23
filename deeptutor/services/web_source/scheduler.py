@@ -183,19 +183,20 @@ class WebSourceSyncScheduler:
     async def _synchronize_registered_sources(self) -> None:
         from deeptutor.knowledge import registry
         from deeptutor.knowledge.manager import KnowledgeBaseManager
-        from deeptutor.knowledge.registry_scope import indexed_records, owner_user
+        from deeptutor.knowledge.registry_scope import is_indexed_source, owner_user
         from deeptutor.multi_user.context import reset_current_user, set_current_user
 
         sources = {}
         source_dirs = {}
         record_ids = {}
-        ambiguous_keys = set()
         records = await asyncio.to_thread(registry.list_records)
         scanned_owner_ids = {record.created_by for record in records}
         failed_owner_ids = set()
-        for record in await asyncio.to_thread(indexed_records):
+        for record in records:
             token = set_current_user(owner_user(record))
             try:
+                if not await asyncio.to_thread(is_indexed_source, record):
+                    continue
                 manager = KnowledgeBaseManager(base_dir=record.base_dir)
                 entries = await asyncio.to_thread(manager.get_web_sources, record.dir_name)
                 for source in entries:
@@ -203,16 +204,13 @@ class WebSourceSyncScheduler:
                         continue
                     source_id = str(source.get("id") or "")
                     if source_id:
-                        key = (record.created_by, record.dir_name, source_id)
-                        if key in sources or key in ambiguous_keys:
-                            # The durable legacy key cannot distinguish two locations.
-                            # Do not silently direct a job at whichever was scanned last.
-                            ambiguous_keys.add(key)
-                            sources.pop(key, None)
-                            source_dirs.pop(key, None)
-                            record_ids.pop(key, None)
-                            logger.error("Ambiguous web source job across KB locations: %s", key)
-                            continue
+                        from deeptutor.services.web_source.identity import legacy_job_owners
+
+                        key = (record.created_by, record.ref, source_id)
+                        await asyncio.to_thread(
+                            self.repo.bind_registered_source, key,
+                            legacy_job_owners(record), record.dir_name,
+                        )
                         sources[key] = dict(source)
                         source_dirs[key] = record.base_dir
                         record_ids[key] = record.kb_id
@@ -228,7 +226,27 @@ class WebSourceSyncScheduler:
             self.repo.reconcile_sources,
             set(sources),
             scanned_owner_ids=scanned_owner_ids - failed_owner_ids,
+            registered_only=True,
         )
+
+    def source_scope(self, manager: Any, kb_name: str) -> tuple[str, str]:
+        """After authorization, bind route/pairing state to the physical KB."""
+        from deeptutor.knowledge import registry
+        from deeptutor.multi_user.context import get_current_user
+        from deeptutor.services.web_source.identity import legacy_job_owners
+
+        record = (
+            registry.find_by_location(manager.base_dir, kb_name)
+            if self._manager_factory is None else None
+        )
+        if record is None:
+            return get_current_user().id, kb_name
+        owners = legacy_job_owners(record)
+        for source in manager.get_web_sources(kb_name):
+            self.repo.bind_registered_source(
+                (record.created_by, record.ref, str(source["id"])), owners, kb_name,
+            )
+        return record.created_by, record.ref
 
     def _start_due_jobs(self) -> None:
         for job in self.repo.due_jobs():
@@ -255,9 +273,11 @@ class WebSourceSyncScheduler:
         key = self.repo.key(scheduled)
         registered_owner = None
         registered_base_dir = None
+        physical_name = scheduled.kb_name
         if self._manager_factory is None:
             from deeptutor.knowledge import registry
             from deeptutor.knowledge.registry_scope import is_indexed_source, owner_user
+            from deeptutor.services.workspace.models import WorkspaceError
 
             record = await asyncio.to_thread(
                 registry.get_kb, self._source_record_ids.get(key, "")
@@ -265,13 +285,19 @@ class WebSourceSyncScheduler:
             if (
                 record is None
                 or record.created_by != scheduled.owner_id
-                or record.dir_name != scheduled.kb_name
+                or record.ref != scheduled.kb_name
                 or record.base_dir != self._source_dirs.get(key)
-                or not await asyncio.to_thread(is_indexed_source, record)
             ):
+                return
+            try:
+                if not await asyncio.to_thread(is_indexed_source, record):
+                    return
+            except WorkspaceError:
+                logger.warning("Source archive state is unresolved for KB %s", record.kb_id)
                 return
             registered_owner = owner_user(record)
             registered_base_dir = record.base_dir
+            physical_name = record.dir_name
         lease_until = _now_ms() + WEB_SYNC_LEASE_SECONDS * 1000
         claimed = await asyncio.to_thread(
             self.repo.claim,
@@ -312,7 +338,7 @@ class WebSourceSyncScheduler:
                 self.repo.mark_cancelled(current)
                 return
             result = await sync_source(
-                kb_name=claimed.kb_name,
+                kb_name=physical_name,
                 source=source,
                 base_dir=registered_base_dir or str(self._make_manager().base_dir),
                 max_depth=source.get("max_depth"),

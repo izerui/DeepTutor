@@ -191,14 +191,13 @@ async def sync_source(
     )
 
     try:
-        from deeptutor.multi_user.context import get_current_user
         from deeptutor.services.web_source.scheduler import get_web_source_sync_scheduler
 
-        user = get_current_user()
         scheduler = get_web_source_sync_scheduler()
+        owner_id, job_kb = scheduler.source_scope(manager, kb_name)
         scheduler.repo.record_pairings(
-            owner_id=user.id,
-            kb_name=kb_name,
+            owner_id=owner_id,
+            kb_name=job_kb,
             source_id=source["id"],
             pairings=diff.pairings,
         )
