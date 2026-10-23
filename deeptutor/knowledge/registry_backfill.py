@@ -102,12 +102,29 @@ def backfill_registry() -> dict[str, int]:
             report["workspace"] += _sync_workspaces(created_by=user_id)
 
     if registry.get_meta(GRANTS_PROMOTED_KEY) is None:
-        promoted, disabled = _promote_granted_admin_kbs(admin_root, users)
-        report["promoted"] = promoted
-        report["connectors_disabled"] = disabled
-        registry.set_meta(
-            GRANTS_PROMOTED_KEY, datetime.now(timezone.utc).isoformat(timespec="seconds")
-        )
+        # D16/D19 require the admin KBs to be registered first. If the admin-root
+        # sync failed (report["admin"] == 0 while the directory exists), skip
+        # promotion and leave the key unset so the next startup retries.
+        admin_sync_ok = report["admin"] > 0 or not admin_root.is_dir()
+        if not admin_sync_ok:
+            logger.warning(
+                "Admin-root sync returned 0 — skipping D16 grant promotion "
+                "so the next startup retries"
+            )
+        else:
+            try:
+                promoted, disabled = _promote_granted_admin_kbs(admin_root, users)
+                report["promoted"] = promoted
+                report["connectors_disabled"] = disabled
+                registry.set_meta(
+                    GRANTS_PROMOTED_KEY,
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                )
+            except Exception:
+                logger.exception(
+                    "D16 grant promotion failed — key left unset so the next "
+                    "startup retries"
+                )
     return report
 
 

@@ -141,6 +141,40 @@ def test_startup_backfill_is_off_in_tests_and_on_when_enabled(mu_isolated_root, 
     assert registry_backfill.run_startup_backfill()["knowledge_bases"]["admin"] == 3
 
 
+def test_admin_sync_failure_leaves_d16_key_unset_and_retries(mu_isolated_root, seed_user, monkeypatch):
+    """If the admin-root sync fails, the D16 meta key stays unset so the next startup retries."""
+    from deeptutor.knowledge import registry_backfill
+    from deeptutor.knowledge.registry_backfill import GRANTS_PROMOTED_KEY
+
+    _alice, admin_root, _alice_root = _setup(mu_isolated_root, seed_user)
+    real_sync = registry_backfill._sync_root_unguarded
+    fail_admin = True
+
+    def flaky(root, *, created_by):
+        if fail_admin and root == admin_root:
+            raise ValueError("damaged kb_config")
+        return real_sync(root, created_by=created_by)
+
+    monkeypatch.setattr(registry_backfill, "_sync_root_unguarded", flaky)
+
+    # First run: admin sync fails -> D16 key must NOT be set.
+    report1 = registry_backfill.backfill_registry()
+    assert report1["admin"] == 0
+    assert report1["promoted"] == 0
+    assert registry.get_meta(GRANTS_PROMOTED_KEY) is None
+    assert registry.find_by_location(admin_root, "granted") is None
+
+    # Second run: admin sync succeeds -> D16 fires, KB becomes public.
+    fail_admin = False
+    monkeypatch.setattr(registry_backfill, "_sync_root_unguarded", real_sync)
+    report2 = registry_backfill.backfill_registry()
+    assert report2["admin"] == 3
+    assert report2["promoted"] == 1
+    assert registry.get_meta(GRANTS_PROMOTED_KEY) is not None
+    granted = registry.find_by_location(admin_root, "granted")
+    assert granted is not None and granted.visibility == "public"
+
+
 def test_a_failing_startup_step_does_not_stop_the_next(mu_isolated_root, monkeypatch):
     from deeptutor.knowledge import registry_backfill
 
