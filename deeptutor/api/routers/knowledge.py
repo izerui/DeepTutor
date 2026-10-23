@@ -16,7 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import traceback
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -2105,15 +2105,27 @@ async def get_all_kb_configs():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _kb_config_target(kb_name: str, *, require_write: bool):
+    """Resolve every reference under the caller's access and workspace scope."""
+    from deeptutor.services.config.knowledge_base_config import KnowledgeBaseConfigService
+
+    resource = resolve_kb(kb_name, require_write=require_write)
+    return (
+        KnowledgeBaseConfigService.get_instance(resource.base_dir / "kb_config.json"),
+        resource.name,
+        resource.base_dir,
+    )
+
+
 @router.get("/knowledge-bases/{kb_name}/config")
 async def get_kb_config(kb_name: str):
     """Get configuration for a specific knowledge base."""
     try:
-        from deeptutor.services.config import get_kb_config_service
-
-        service = get_kb_config_service()
-        config = service.get_kb_config(kb_name)
-        return {"kb_name": kb_name, "config": config}
+        service, name, _base_dir = _kb_config_target(kb_name, require_write=False)
+        config = service.get_kb_config(name)
+        return {"kb_name": name, "config": config}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting config for KB '{kb_name}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2123,11 +2135,10 @@ async def get_kb_config(kb_name: str):
 async def update_kb_config(kb_name: str, config: dict):
     """Update configuration for a specific knowledge base."""
     try:
-        from deeptutor.services.config import get_kb_config_service
         from deeptutor.services.rag.index_probe import has_ready_provider_index
 
         config = dict(config or {})
-        service = get_kb_config_service()
+        service, kb_name, kb_base_dir = _kb_config_target(kb_name, require_write=True)
         current_config = service.get_kb_config(kb_name)
         # Older clients may send back the full GET payload while editing a
         # retrieval setting. Preserve those no-op fields, but disallow rebinding.
@@ -2141,13 +2152,11 @@ async def update_kb_config(kb_name: str, config: dict):
             )
         if "rag_provider" in config:
             requested_provider = _validate_registered_provider(config.get("rag_provider"))
-            service = get_kb_config_service()
-            current_config = service.get_kb_config(kb_name)
             current_provider = _validate_registered_provider(
                 current_config.get("rag_provider") or DEFAULT_PROVIDER
             )
             if requested_provider != current_provider:
-                kb_dir = _current_kb_base_dir() / kb_name
+                kb_dir = kb_base_dir / kb_name
                 if kb_dir.exists() and has_ready_provider_index(kb_dir, current_provider):
                     raise HTTPException(
                         status_code=409,
@@ -2169,9 +2178,6 @@ async def update_kb_config(kb_name: str, config: dict):
                     "timestamp": datetime.now().isoformat(),
                 }
             config["rag_provider"] = requested_provider
-        else:
-            service = get_kb_config_service()
-
         service.set_kb_config(kb_name, config)
         return {"status": "success", "kb_name": kb_name, "config": service.get_kb_config(kb_name)}
     except HTTPException:
@@ -3365,11 +3371,41 @@ async def delete_kb_file(kb_name: str, filename: str):
     }
 
 
-def _delete_kb(kb_name: str) -> dict[str, str]:
+def _assert_unreferenced_or_forced(record, *, force: bool, references=None) -> None:
+    """The deletion transaction supplies its locked reference snapshot."""
+    from deeptutor.knowledge import registry
+
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force deletion.")
+    if references is None:
+        references = registry.list_references(record.kb_id)
+    if references and not force:
+        names = ", ".join(f"{ref.referrer_kind}:{ref.referrer_id}" for ref in references)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This knowledge base is still referenced by {len(references)} item(s): "
+                f"{names}. Remove those references first."
+            ),
+        )
+
+
+def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
     """Delete ``kb_name``, whichever route addressed it."""
+    from deeptutor.knowledge import registry
+
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force deletion.")
     try:
-        manager, resolved_name, _ = _writable_kb(kb_name)
-        success = manager.delete_knowledge_base(resolved_name, confirm=True)
+        manager, resolved_name, base_dir = _writable_kb(kb_name)
+        with registry.guarded_deletion(base_dir, resolved_name) as (record, references):
+            if record is not None:
+                if not registry.can_write(record, get_current_user()):
+                    raise HTTPException(status_code=403, detail="This knowledge base is read-only.")
+                _assert_unreferenced_or_forced(record, force=force, references=references)
+            success = manager.delete_knowledge_base(resolved_name, confirm=True)
+            if not success:
+                raise HTTPException(status_code=400, detail="Failed to delete knowledge base")
     except HTTPException:
         # Re-raised before the catch-all below, which used to turn a 404 from
         # ``_writable_kb`` into a 500 whose detail read "404: ... not found".
@@ -3378,14 +3414,13 @@ def _delete_kb(kb_name: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to delete knowledge base")
     logger.info(f"KB '{kb_name}' deleted")
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
 
 class DeleteKnowledgeBaseRequest(BaseModel):
     name: str
+    force: bool = False
 
 
 @router.post("/knowledge-bases/delete")
@@ -3404,13 +3439,69 @@ async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
     declared ahead of the DELETE routes for linked folders, GitHub sources and
     web sources, and a greedy converter would silently swallow all three.
     """
-    return _delete_kb(payload.name)
+    return _delete_kb(payload.name, force=payload.force)
 
 
 @router.delete("/knowledge-bases/{kb_name}")
-async def delete_knowledge_base(kb_name: str):
+async def delete_knowledge_base(kb_name: str, force: bool = False):
     """Delete a knowledge base."""
-    return _delete_kb(kb_name)
+    return _delete_kb(kb_name, force=force)
+
+
+class KbVisibilityRequest(BaseModel):
+    visibility: Literal["public", "private"]
+    force: bool = False
+
+
+def _registered_record(kb_name: str):
+    """Resolve access first, then reuse the registry's safe legacy ownership."""
+    from deeptutor.knowledge import registry
+
+    resolve_kb(kb_name)
+    record = registry.resolve_ref(kb_name)
+    if record is None:
+        raise HTTPException(status_code=403, detail="Only the owner can register this knowledge base.")
+    return record
+
+
+@router.put("/knowledge-bases/{kb_name}/visibility")
+async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.roles import is_teacher_or_admin
+
+    user = get_current_user()
+    record = _registered_record(kb_name)
+    if not registry.can_write(record, user):
+        raise HTTPException(status_code=403, detail="Only the owner can change visibility.")
+    resolve_kb(kb_name, require_write=True)
+    if payload.visibility == "public" and not is_teacher_or_admin():
+        raise HTTPException(
+            status_code=403, detail="Only teachers and admins can make a knowledge base public."
+        )
+    if payload.force and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
+    try:
+        updated = registry.set_visibility(record.kb_id, payload.visibility, force=payload.force)
+    except registry.KbVisibilityError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except registry.KbRegistryError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"kb_id": updated.kb_id, "ref": updated.ref, "visibility": updated.visibility}
+
+
+@router.get("/knowledge-bases/{kb_name}/references")
+async def list_kb_references(kb_name: str):
+    from deeptutor.knowledge import registry
+
+    record = _registered_record(kb_name)
+    if not registry.can_write(record, get_current_user()):
+        raise HTTPException(status_code=403, detail="Only the owner can see references.")
+    resolve_kb(kb_name, require_write=True)
+    return {
+        "kb_id": record.kb_id,
+        "ref": record.ref,
+        "references": [ref.to_dict() for ref in registry.list_references(record.kb_id)],
+    }
 
 
 @router.get("/knowledge-bases/tasks/{task_id}/stream")
@@ -3541,6 +3632,35 @@ async def upload_files(
         raise HTTPException(status_code=500, detail=formatted_error) from e
 
 
+def _requested_visibility(value: object) -> str:
+    visibility = value.strip().lower() if isinstance(value, str) else ""
+    visibility = visibility or "private"
+    if visibility not in {"public", "private"}:
+        raise HTTPException(status_code=400, detail="visibility must be 'public' or 'private'")
+    if visibility == "public":
+        from deeptutor.multi_user.roles import is_teacher_or_admin
+
+        if not is_teacher_or_admin():
+            raise HTTPException(
+                status_code=403, detail="Only teachers and admins can make a knowledge base public."
+            )
+    return visibility
+
+
+def _register_created_kb(name: str, visibility: str):
+    """A new physical KB gets a fresh identity, including at a stale location."""
+    from deeptutor.knowledge import registry
+
+    base_dir = _current_kb_base_dir()
+    stale = registry.find_by_location(base_dir, name)
+    if stale is not None:
+        registry.unregister_kb(stale.kb_id)
+    return registry.register_kb(
+        base_dir=base_dir, name=name, kind=registry.UPLOADED_KIND,
+        created_by=get_current_user().id, visibility=visibility,
+    )
+
+
 @router.post("/knowledge-bases")
 async def create_knowledge_base(
     background_tasks: BackgroundTasks,
@@ -3553,6 +3673,7 @@ async def create_knowledge_base(
     indexing_llm: str = Form(""),
     embedding_model: str = Form(""),
     storage_workspace_id: str | None = Form(None),
+    visibility: str = Form("private"),
 ):
     from contextlib import nullcontext
 
@@ -3570,6 +3691,7 @@ async def create_knowledge_base(
     # field is omitted; only an actual submitted string selects a destination.
     if not isinstance(storage_workspace_id, str):
         storage_workspace_id = None
+    visibility = _requested_visibility(visibility)
     try:
         valid_name = validate_knowledge_base_name(name)
     except ValueError as exc:
@@ -3610,6 +3732,9 @@ async def create_knowledge_base(
                         embedding_model,
                     )
                 result["id"] = resource_id
+                record = _register_created_kb(valid_name, visibility)
+                result["kb_id"] = record.kb_id
+                result["ref"] = record.ref
                 return result
             finally:
                 if token is not None:

@@ -494,6 +494,30 @@ def unregister_kb(kb_id: str) -> None:
         conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
 
 
+@contextmanager
+def guarded_deletion(
+    base_dir: Path | str, name: str
+) -> Iterator[tuple[KbRecord | None, list[KbReference]]]:
+    """Hold a write transaction through authorization and physical deletion.
+
+    The caller checks the yielded record/references and raises if deletion is
+    refused or fails. Only successful exit revokes references and unregisters.
+    BEGIN IMMEDIATE also excludes reference writers in other processes, even
+    when this location has not been registered yet.
+    """
+    with _write() as conn:
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE base_dir = ? AND dir_name = ?",
+            (_location(base_dir), name),
+        ).fetchone()
+        record = _record(row) if row is not None else None
+        references = _references_of(conn, record.kb_id) if record is not None else []
+        yield record, references
+        if record is not None:
+            _revoke(conn, record, references, reason="kb_deleted")
+            conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
+
+
 def relocate_kb(kb_id: str, base_dir: Path | str) -> KbRecord:
     """Point a record at a new ``base_dir`` (the KB folder was moved); the id is kept."""
     try:
