@@ -1,12 +1,53 @@
 """One nonblocking writer per knowledge base, shared across worker processes."""
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+import errno
 import hashlib
 import os
 from pathlib import Path
+import threading
 
 from .indexing_policy import IndexingPolicyError
+
+
+class WriteOwnershipBusy(IndexingPolicyError):
+    """Another writer holds the KB; admission may retry without occupying a worker."""
+
+
+@dataclass
+class _Ownership:
+    key: str
+    pid: int
+    thread: int
+    task: object
+    active: bool = True
+
+
+_ownerships: ContextVar[tuple[_Ownership, ...]] = ContextVar("kb_write_ownerships", default=())
+
+
+def _current_task() -> asyncio.Task | None:
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None
+
+
+def owns_write_ownership(kb_dir: Path) -> bool:
+    """Allow nested document work only in the actual owner, not inherited child contexts."""
+    key = str(Path(kb_dir).resolve())
+    return any(
+        owner.active
+        and owner.key == key
+        and owner.pid == os.getpid()
+        and owner.thread == threading.get_ident()
+        and owner.task is _current_task()
+        for owner in _ownerships.get()
+    )
 
 
 @contextmanager
@@ -42,12 +83,20 @@ def write_ownership(kb_dir: Path) -> Iterator[None]:
 
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
-            raise IndexingPolicyError(
+            if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}:
+                raise
+            raise WriteOwnershipBusy(
                 "Another indexing operation is active for this knowledge base; resubmit after it finishes."
             ) from exc
+        owner = _Ownership(
+            str(kb_dir.resolve()), os.getpid(), threading.get_ident(), _current_task()
+        )
+        token = _ownerships.set((*_ownerships.get(), owner))
         try:
             yield
         finally:
+            owner.active = False
+            _ownerships.reset(token)
             if os.name == "nt":
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)

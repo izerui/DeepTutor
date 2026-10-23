@@ -1,10 +1,17 @@
-"""Coordinate raw snapshots and compensated mutations within this process."""
+"""Coordinate raw snapshots and compensation with native cross-process KB ownership."""
 
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 import threading
+import time
 from weakref import WeakValueDictionary
+
+from deeptutor.services.rag.pipelines.lightrag.write_lock import (
+    WriteOwnershipBusy,
+    owns_write_ownership,
+    write_ownership,
+)
 
 _locks = WeakValueDictionary()
 _guard = threading.Lock()
@@ -28,21 +35,51 @@ def _lock(base_dir, name):
 @contextmanager
 def document_mutation(base_dir, name):
     """Use on workers, covering snapshot/publication through commit or compensation."""
-    if getattr(_worker_ownership, "key", None) == str((Path(base_dir) / name).resolve()):
+    kb_dir = Path(base_dir) / name
+    if (
+        getattr(_worker_ownership, "key", None) == str(kb_dir.resolve())
+        or owns_write_ownership(kb_dir)
+    ):
         yield
         return
     with _lock(base_dir, name):
-        yield
+        while True:
+            ownership = write_ownership(kb_dir)
+            try:
+                ownership.__enter__()
+                break
+            except WriteOwnershipBusy:
+                time.sleep(0.01)
+        try:
+            yield
+        finally:
+            ownership.__exit__(None, None, None)
 
 
 @asynccontextmanager
 async def async_document_mutation(base_dir, name):
     """Wait without blocking the loop or occupying workers needed by the owner."""
+    kb_dir = Path(base_dir) / name
+    # Native publication already holds the file lock. Do not wait behind a local
+    # contender that is itself waiting for that same file lock.
+    if owns_write_ownership(kb_dir):
+        yield
+        return
     lock = _lock(base_dir, name)
     while not lock.acquire(blocking=False):
         await asyncio.sleep(0.01)
     try:
-        yield
+        while True:
+            ownership = write_ownership(kb_dir)
+            try:
+                ownership.__enter__()
+                break
+            except WriteOwnershipBusy:
+                await asyncio.sleep(0.01)
+        try:
+            yield
+        finally:
+            ownership.__exit__(None, None, None)
     finally:
         lock.release()
 
