@@ -20,6 +20,7 @@ import sqlite3
 import uuid
 import zipfile
 
+from deeptutor.knowledge import registry
 from deeptutor.multi_user.paths import get_account_path_service
 from deeptutor.services.file_io import atomic_write_json
 from deeptutor.services.path_service import get_path_service
@@ -288,7 +289,6 @@ def _shared_source_blockers(source_id: str, selected: set[str]) -> list[str]:
     if source_id or not AUTH_ENABLED or not get_current_user().is_admin:
         return []
     from deeptutor.multi_user.book_permission import normalize_book_permission
-    from deeptutor.multi_user.grants import load_grant
     from deeptutor.multi_user.identity import list_user_info
 
     blockers = set()
@@ -301,10 +301,6 @@ def _shared_source_blockers(source_id: str, selected: set[str]) -> list[str]:
         ):
             blockers.add(
                 "Books are shared with other accounts. Remove those grants before moving the shared catalogue, or export a copy."
-            )
-        if "knowledge_bases" in selected and load_grant(user["id"]).get("knowledge_bases"):
-            blockers.add(
-                "Knowledge bases are shared with other accounts. Remove those grants before migrating, or export a copy."
             )
     return sorted(blockers)
 
@@ -590,6 +586,15 @@ def migrate_data(
             "plan": plan,
             "recovery_path": str(root),
         }
+        if "knowledge_bases" in plan["features"]:
+            # Persist identities before relocation so interrupted precommit work
+            # can restore only this catalog, never unrelated destination records.
+            result["kb_registry_ids"] = [
+                record.kb_id
+                for record in registry.list_records(
+                    base_dir=_feature_path(source, "knowledge_bases")
+                )
+            ]
         journal = root / "operation.json"
         atomic_write_json(journal, result)
         installed = []
@@ -665,8 +670,14 @@ def migrate_data(
                         local_ids,
                         target_id,
                     )
+            if "knowledge_bases" in plan["features"]:
+                registry.relocate_base_dir(
+                    _feature_path(source, "knowledge_bases"),
+                    _feature_path(target, "knowledge_bases"),
+                )
+            # A failed commit-marker write must still take the rollback path.
+            atomic_write_json(journal, {**result, "status": "committed"})
             result["status"] = "committed"
-            atomic_write_json(journal, result)
             # The verified snapshot remains available for recovery. Remove
             # source feature trees only after the session transfer commits.
             for feature in plan["features"]:
@@ -691,10 +702,11 @@ def migrate_data(
             _clear_store_caches()
             return result
         except Exception as exc:
-            if result["status"] != "committed":
+            if result["status"] not in {"committed", "completed"}:
                 if result["status"] == "transferring":
                     try:
                         _restore_sessions(root, source, target)
+                        _restore_kb_registry(result, source, target)
                     except Exception as restore_error:
                         result["status"] = "recovery_required"
                         result["error"] = f"{exc}; recovery: {restore_error}"
@@ -908,6 +920,19 @@ def _restore_sessions(root: Path, source, target) -> None:
             Path(str(target.get_chat_history_db()) + suffix).unlink(missing_ok=True)
 
 
+def _restore_kb_registry(result: dict, source, target) -> None:
+    """Undo precommit relocation before deleting the destination copies."""
+    source_root = _feature_path(source, "knowledge_bases").resolve()
+    target_root = _feature_path(target, "knowledge_bases").resolve()
+    for kb_id in result.get("kb_registry_ids", []):
+        record = registry.get_kb(kb_id)
+        if record is None or record.base_dir == str(source_root):
+            continue
+        if record.base_dir != str(target_root):
+            raise WorkspaceError("Knowledge base location changed; manual recovery is required.")
+        registry.relocate_kb(kb_id, source_root)
+
+
 def _read_journal(path: Path) -> dict:
     """Validate recovery control data before it can authorize filesystem changes."""
     row = json.loads(path.read_text())
@@ -941,6 +966,13 @@ def _read_journal(path: Path) -> dict:
             or any(not isinstance(feature, str) or feature not in FEATURES for feature in features)
         ):
             raise ValueError("journal recovery features are missing or invalid")
+        kb_ids = row.get("kb_registry_ids", [])
+        if (
+            not isinstance(kb_ids, list)
+            or any(not isinstance(kb_id, str) or not kb_id for kb_id in kb_ids)
+            or (kb_ids and "knowledge_bases" not in features)
+        ):
+            raise ValueError("journal knowledge base identities are invalid")
     return row
 
 
@@ -1082,6 +1114,7 @@ def recover_operation(operation_id: str) -> dict:
         else:
             if result["status"] in {"transferring", "recovery_required"}:
                 _restore_sessions(root, source, target)
+                _restore_kb_registry(result, source, target)
             _remove_installed(result, target)
             result["status"] = "recovered"
         result.pop("error", None)

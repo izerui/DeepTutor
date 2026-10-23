@@ -15,6 +15,7 @@ import shutil
 from typing import Any, cast
 import uuid
 
+from deeptutor.knowledge import registry
 from deeptutor.knowledge.kb_types import MARGINNOTE4_KB_TYPE, is_connected_kb
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.services.file_io import atomic_write_json
@@ -53,26 +54,6 @@ def _config(root: Path) -> dict:
 def _root(workspace_id: str) -> tuple[Path, bool]:
     with workspace_context(workspace_id) as scope:
         return get_path_service().get_knowledge_bases_root(), scope.archived
-
-
-def _shared_grants(name: str) -> list[str]:
-    from deeptutor.services.auth import AUTH_ENABLED
-
-    if not AUTH_ENABLED or not get_current_user().is_admin:
-        return []
-    from deeptutor.multi_user.grants import load_grant
-    from deeptutor.multi_user.identity import list_user_info
-
-    return [
-        user["id"]
-        for user in list_user_info()
-        if user.get("role") != "admin"
-        and any(
-            str(item.get("name") or item.get("kb_name") or "") == name
-            or str(item.get("resource_id") or item.get("id") or "") == f"admin:kb:{name}"
-            for item in load_grant(user["id"]).get("knowledge_bases", []) or []
-        )
-    ]
 
 
 def _legacy_account_id(name: str) -> str:
@@ -129,10 +110,6 @@ def preview_kb_move(source_id: str, target_workspace_id: str) -> dict:
     target_id = qualified_kb_id(name, target_workspace_id)
     if target_id in move_aliases():
         blockers.append("Destination ID is reserved by an earlier knowledge-base move.")
-    if not source_workspace_id and _shared_grants(name):
-        blockers.append(
-            "This knowledge base is shared with other accounts. Remove those grants before moving it."
-        )
     if source_dir.is_dir() and not source_dir.is_symlink():
         try:
             files = list(_files(source_dir))
@@ -350,6 +327,7 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
         }
         if not plan["source_workspace_id"]:
             old_ids.add(_legacy_account_id(name))
+        moved_record = registry.find_by_location(source_root, name)
         stage = target_root / f".kb-move-{uuid.uuid4().hex}"
         published = False
         source_hidden = None
@@ -414,6 +392,9 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
             if source_path.is_dir():
                 source_hidden = source_root / f".kb-moved-{uuid.uuid4().hex}"
                 source_path.rename(source_hidden)
+            # Publish the stable reference only after all filesystem writes succeed.
+            if moved_record is not None:
+                registry.relocate_kb(moved_record.kb_id, target_root)
         except BaseException:
             if source_hidden is not None and source_hidden.exists():
                 source_hidden.rename(source_path)
@@ -434,6 +415,10 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
                 shutil.rmtree(target_path)
             if stage.exists():
                 shutil.rmtree(stage)
+            if moved_record is not None:
+                current = registry.get_kb(moved_record.kb_id)
+                if current is not None and current.base_dir != moved_record.base_dir:
+                    registry.relocate_kb(moved_record.kb_id, source_root)
             raise
         if source_hidden is not None:
             try:

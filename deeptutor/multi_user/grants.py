@@ -84,6 +84,8 @@ def empty_grant(user_id: str) -> dict[str, Any]:
         "version": 2,
         "user_id": user_id,
         "models": {"llm": []},
+        # Retired: KBs are shared by making them public. Keep this field
+        # round-trippable so existing grants retain their legacy payload.
         "knowledge_bases": [],
         "skills": [],
         # Partners an admin has lent this user. People build their own partners

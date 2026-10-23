@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from deeptutor.api.routers.auth import require_admin, require_auth
-from deeptutor.knowledge.manager import KnowledgeBaseManager
 from deeptutor.multi_user.audit import log_admin_action, log_guardian_action
 from deeptutor.multi_user.book_permission import (
     BookDefaultLevel,
@@ -49,7 +48,6 @@ from deeptutor.multi_user.identity import (
     set_password,
     set_preset,
 )
-from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
 from deeptutor.multi_user.model_access import is_owner_bound
 from deeptutor.multi_user.paths import (
     get_admin_path_service,
@@ -190,18 +188,6 @@ def _admin_catalog_summary() -> dict[str, list[dict[str, Any]]]:
                 }
             )
     return out
-
-
-def _admin_kb_summary() -> list[dict[str, Any]]:
-    manager = KnowledgeBaseManager(base_dir=str(admin_kb_base_dir()))
-    return [
-        {
-            "resource_id": f"admin:kb:{name}",
-            "name": name,
-            "source": "admin",
-        }
-        for name in manager.list_knowledge_bases()
-    ]
 
 
 def _admin_skill_summary() -> list[dict[str, Any]]:
@@ -353,14 +339,15 @@ def _log_supervisor_action(
 
 @router.get("/admin/resources")
 async def admin_resources(_: object = Depends(require_admin)) -> dict[str, Any]:
-    """Everything an admin can assign to a user: models, KBs, skills, and
-    the tool surface (system tools + MCP tools, same pool partners use)."""
+    """Assignable models, skills, partners, reading resources, and tools.
+
+    Knowledge bases are shared by making them public instead.
+    """
     from deeptutor.api.utils.tool_options import build_tool_options
 
     tool_options = await build_tool_options()
     return {
         "models": _admin_catalog_summary(),
-        "knowledge_bases": _admin_kb_summary(),
         "skills": _admin_skill_summary(),
         "partners": _admin_partner_summary(),
         "reading_materials": _admin_reading_summary(),
@@ -370,6 +357,14 @@ async def admin_resources(_: object = Depends(require_admin)) -> dict[str, Any]:
         "tools": tool_options["tools"],
         "mcp_tools": tool_options["mcp_tools"],
     }
+
+
+@router.get("/admin/migration-results")
+async def admin_migration_results(_: object = Depends(require_admin)) -> dict[str, Any]:
+    """Typed upgrade notes, including items appended by later migrations."""
+    from deeptutor.knowledge import registry
+
+    return {"items": [item.to_dict() for item in registry.list_migration_items()]}
 
 
 @router.get("/admin/books")
@@ -525,7 +520,8 @@ async def guardian_report(
         "assigned_materials": assigned_materials,
         "grant_summary": {
             "model_count": len(grant.get("models", {}).get("llm", []) or []),
-            "knowledge_base_count": len(grant.get("knowledge_bases") or []),
+            # Retired: KBs are shared by making them public, not by grants.
+            "knowledge_base_count": 0,
             "skill_count": len(grant.get("skills") or []),
             "enabled_tools": grant.get("enabled_tools"),
         },
@@ -801,7 +797,6 @@ async def put_user_grants(
         target_user_id=user_id,
         summary={
             "model_count": len(grant.get("models", {}).get("llm", []) or []),
-            "kb_count": len(grant.get("knowledge_bases", []) or []),
             "skill_count": len(grant.get("skills", []) or []),
             "partner_count": len(grant.get("partners", []) or []),
             "enabled_tools": grant.get("enabled_tools"),

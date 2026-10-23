@@ -209,6 +209,156 @@ def test_course_legacy_aliases_are_preserved_and_deduplicated(as_user, make_kb, 
         assert registry.list_references(record.kb_id) == []
 
 
+@pytest.mark.parametrize("whole_catalog", [False, True])
+@pytest.mark.parametrize("failure", [None, "registry", "after_registry"])
+def test_kb_move_registry_and_files_commit_together(
+    as_user, make_kb, monkeypatch, whole_catalog, failure,
+):
+    from pathlib import Path
+
+    from deeptutor.multi_user.knowledge_access import resolve_kb
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace import data_migration, kb_move
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import move_aliases, qualified_kb_id
+
+    with as_user("alice"):
+        manager = current_kb_manager()
+        source = manager.base_dir
+        make_kb(manager, "atlas", text="retained source")
+        record = registry.register_kb(
+            base_dir=source, name="atlas", kind="uploaded",
+            created_by="alice", visibility="public",
+        )
+        service = ContentWorkspaceService()
+        destination = service.create_workspace("Research")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir
+        source_config = (source / "kb_config.json").read_bytes()
+        assert not (target / "kb_config.json").exists()
+        relocate_name = "relocate_base_dir" if whole_catalog else "relocate_kb"
+        relocate = getattr(registry, relocate_name)
+
+        def fail_relocation(*args, **kwargs):
+            if failure == "after_registry":
+                relocate(*args, **kwargs)
+            raise registry.KbRegistryError("injected registry failure")
+
+        with monkeypatch.context() as patch:
+            if failure:
+                # Fail only the forward relocation; rollback must remain usable.
+                def forward_only(*args, **kwargs):
+                    if Path(args[1]).resolve() == target.resolve():
+                        return fail_relocation(*args, **kwargs)
+                    return relocate(*args, **kwargs)
+
+                patch.setattr(registry, relocate_name, forward_only)
+
+            def run():
+                if whole_catalog:
+                    return data_migration.migrate_data("", destination, ["knowledge_bases"])
+                return kb_move.move_kb(qualified_kb_id("atlas"), destination)
+
+            if failure:
+                with pytest.raises(registry.KbRegistryError, match="injected"):
+                    run()
+            else:
+                assert run()["status"] == ("completed" if whole_catalog else "moved")
+        expected = source if failure else target
+        moved = registry.get_kb(record.kb_id)
+        assert moved.base_dir == str(expected.resolve())
+        assert moved.visibility == "public"
+        assert moved.created_by == "alice"
+        assert resolve_kb(record.ref).base_dir == expected.resolve()
+        assert (expected / "atlas/raw/doc.md").read_text() == "retained source"
+        assert not ((target if failure else source) / "atlas").exists()
+        if failure:
+            assert (source / "kb_config.json").read_bytes() == source_config
+            assert move_aliases() == {}
+            if whole_catalog:
+                operation = data_migration.operations()[0]
+                assert operation["status"] == "failed"
+                assert data_migration.recover_operation(operation["id"])["status"] == "recovered"
+            else:
+                assert not (target / "kb_config.json").exists()
+
+
+def test_kb_grants_no_longer_block_moves_or_migrations(
+    seed_user, as_user, make_kb, monkeypatch,
+):
+    from deeptutor.multi_user.grants import load_grant, save_grant
+    from deeptutor.services import auth
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.data_migration import _shared_source_blockers
+    from deeptutor.services.workspace.kb_move import preview_kb_move
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    seed_user("boss", role="admin")
+    alice = seed_user("alice")
+    entries = [{"resource_id": "admin:kb:atlas", "legacy": {"label": "Atlas"}}]
+    save_grant(alice["id"], {"knowledge_bases": entries})
+    assert load_grant(alice["id"])["knowledge_bases"] == entries
+    with as_user("root", role="admin"):
+        make_kb(current_kb_manager(), "atlas")
+        destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
+        assert preview_kb_move(qualified_kb_id("atlas"), destination)["blockers"] == []
+        assert _shared_source_blockers("", {"knowledge_bases"}) == []
+
+
+@pytest.mark.asyncio
+async def test_admin_kb_grants_are_retired_but_payload_round_trips(
+    seed_user, as_user, monkeypatch,
+):
+    from deeptutor.api.routers import multi_user
+
+    assert not hasattr(multi_user, "_admin_kb_summary")
+    seed_user("boss", role="admin")
+    alice = seed_user("alice")
+    audits = []
+    monkeypatch.setattr(
+        multi_user, "log_admin_action", lambda *args, **kwargs: audits.append(kwargs),
+    )
+    with as_user("root", role="admin"):
+        entries = [{"resource_id": "admin:kb:atlas", "name": "atlas"}]
+        response = await multi_user.put_user_grants(
+            alice["id"], multi_user.GrantPayload(grant={"knowledge_bases": entries}), None,
+        )
+        assert response["grant"]["knowledge_bases"] == entries
+        assert (await multi_user.get_user_grants(alice["id"], None))["grant"][
+            "knowledge_bases"
+        ] == entries
+        assert "kb_count" not in audits[-1]["summary"]
+        from deeptutor.multi_user.context import get_current_user
+
+        report = await multi_user.guardian_report(alice["id"], get_current_user())
+        assert report["grant_summary"]["knowledge_base_count"] == 0
+        assert "knowledge_bases" not in await multi_user.admin_resources(None)
+
+
+@pytest.mark.asyncio
+async def test_admin_migration_results_lists_typed_items():
+    from deeptutor.api.routers import multi_user
+
+    registry.add_migration_item(
+        "kb_made_public", "kb1", {"kb_id": "kb1", "name": "atlas", "users": ["alice"]},
+    )
+    registry.add_migration_item("book_auto_public", "b1", {"title": "Plan D adds kinds"})
+    body = await multi_user.admin_migration_results(None)
+    assert [(item["kind"], item["key"]) for item in body["items"]] == [
+        ("kb_made_public", "kb1"), ("book_auto_public", "b1"),
+    ]
+    assert body["items"][0]["data"]["users"] == ["alice"]
+    route = next(
+        route for route in multi_user.router.routes
+        if route.path.endswith("/admin/migration-results")
+    )
+    assert any(
+        dependency.call is multi_user.require_admin
+        for dependency in route.dependant.dependencies
+    )
+
+
 @pytest.mark.parametrize("operation", ["attach", "detach", "delete"])
 @pytest.mark.parametrize("failure", ["registry", "save"])
 def test_course_mutation_failure_preserves_resources_and_references(
@@ -577,3 +727,128 @@ def test_course_does_not_sync_legacy_identity_unresolved_at_save(
         service.attach_resource(course.id, kind="notebook", ref_id="other")
         assert service.get(course.id).resources[0].kb_id == record.kb_id
         assert len(registry.list_references(record.kb_id)) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recovery_fails", [False, True])
+async def test_kb_migration_commit_failure_restores_registry_sessions_and_files(
+    as_user, make_kb, monkeypatch, recovery_fails,
+):
+    from deeptutor.services.session import get_sqlite_session_store
+    from deeptutor.services.workspace import ContentWorkspaceService, WorkspaceError
+    from deeptutor.services.workspace import data_migration
+    from deeptutor.services.workspace.context import workspace_context
+
+    with as_user("alice"):
+        manager = current_kb_manager()
+        source = manager.base_dir
+        make_kb(manager, "atlas")
+        record = registry.register_kb(
+            base_dir=source, name="atlas", kind="uploaded", created_by="alice",
+        )
+        source_store = get_sqlite_session_store()
+        session = await source_store.create_session("Retain conversation")
+        await source_store.add_message(session["id"], "user", "retained message")
+        destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir
+        write = data_migration.atomic_write_json
+        relocate = registry.relocate_kb
+
+        def fail_commit(path, payload):
+            if payload.get("status") == "committed":
+                assert registry.get_kb(record.kb_id).base_dir == str(target.resolve())
+                raise OSError("injected commit journal failure")
+            return write(path, payload)
+
+        def fail_restore(*args, **kwargs):
+            raise registry.KbRegistryError("injected recovery failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(data_migration, "atomic_write_json", fail_commit)
+            if recovery_fails:
+                patch.setattr(registry, "relocate_kb", fail_restore)
+            with pytest.raises(
+                WorkspaceError if recovery_fails else OSError,
+                match="Recover" if recovery_fails else "commit journal",
+            ):
+                data_migration.migrate_data("", destination, ["knowledge_bases", "chat"])
+        operation = data_migration.operations()[0]
+        assert operation["kb_registry_ids"] == [record.kb_id]
+        assert operation["status"] == ("recovery_required" if recovery_fails else "failed")
+        assert (source / "atlas/raw/doc.md").read_text() == "hello"
+        if recovery_fails:
+            assert (target / "atlas/raw/doc.md").read_text() == "hello"
+            assert registry.get_kb(record.kb_id).base_dir == str(target.resolve())
+        assert data_migration.recover_operation(operation["id"])["status"] == "recovered"
+        assert registry.get_kb(record.kb_id).base_dir == str(source.resolve())
+        assert not (target / "atlas").exists()
+        saved = await get_sqlite_session_store().get_session(session["id"])
+        assert saved is not None
+        assert (await get_sqlite_session_store().get_messages(session["id"]))[0][
+            "content"
+        ] == "retained message"
+        with workspace_context(destination):
+            assert await get_sqlite_session_store().get_session(session["id"]) is None
+        assert registry.relocate_kb is relocate
+
+
+def test_kb_migration_cleanup_recovery_keeps_relocated_registry(
+    as_user, make_kb, monkeypatch,
+):
+    from deeptutor.services.task_board import TaskBoardStore
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace import data_migration
+    from deeptutor.services.workspace.context import workspace_context
+
+    with as_user("alice"):
+        manager = current_kb_manager()
+        source = manager.base_dir
+        make_kb(manager, "atlas")
+        record = registry.register_kb(
+            base_dir=source, name="atlas", kind="uploaded", created_by="alice",
+        )
+        destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir
+
+        def fail_cleanup(*args, **kwargs):
+            raise OSError("injected cleanup failure")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TaskBoardStore, "move_session_links", fail_cleanup)
+            with pytest.raises(OSError, match="cleanup"):
+                data_migration.migrate_data("", destination, ["knowledge_bases"])
+        operation = data_migration.operations()[0]
+        assert operation["status"] == "cleanup_required"
+        assert registry.get_kb(record.kb_id).base_dir == str(target.resolve())
+        assert data_migration.recover_operation(operation["id"])["status"] == "completed"
+        assert registry.get_kb(record.kb_id).base_dir == str(target.resolve())
+        assert (target / "atlas/raw/doc.md").read_text() == "hello"
+        assert not (source / "atlas").exists()
+
+
+def test_stable_workspace_kb_reference_still_blocks_catalog_migration(as_user, make_kb):
+    from deeptutor.services.workspace import ContentWorkspaceService, WorkspaceError
+    from deeptutor.services.workspace.data_migration import migrate_data, preview
+    from deeptutor.services.workspace.resources import resource_usage
+
+    with as_user("alice"):
+        manager = current_kb_manager()
+        make_kb(manager, "atlas")
+        record = registry.register_kb(
+            base_dir=manager.base_dir, name="atlas", kind="uploaded", created_by="alice",
+        )
+        service = ContentWorkspaceService()
+        consumer = service.create_workspace("Consumer", resources={"knowledge_bases": [record.ref]})
+        destination = service.create_workspace("Research")["workspace_id"]
+        assert consumer["workspace_id"] in {
+            item["workspace_id"] for item in resource_usage("knowledge_bases", record.ref)
+        }
+        assert any("Consumer" in blocker for blocker in preview(
+            "", destination, ["knowledge_bases"],
+        )["blockers"])
+        with pytest.raises(WorkspaceError, match="Consumer"):
+            migrate_data("", destination, ["knowledge_bases"])
+        assert registry.get_kb(record.kb_id).base_dir == str(manager.base_dir.resolve())
+        assert (manager.base_dir / "atlas/raw/doc.md").read_text() == "hello"
