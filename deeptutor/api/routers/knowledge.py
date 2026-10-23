@@ -53,6 +53,7 @@ from deeptutor.knowledge.document_mutation import (
     async_document_mutation,
     document_mutation,
     finish_document_worker,
+    run_document_worker,
 )
 from deeptutor.knowledge.initializer import KnowledgeBaseInitializer
 from deeptutor.knowledge.kb_types import is_connected_kb, supports_local_raw_files
@@ -634,15 +635,27 @@ async def _save_uploaded_files_off_loop(
     Safe to hand to a thread: it only touches ``UploadFile.file``, the plain
     ``SpooledTemporaryFile`` underneath, never the async ``UploadFile`` API.
     """
+    if registry_name is not None:
+        return await run_document_worker(
+            target_dir.resolve().parent.parent,
+            registry_name,
+            _save_registered_uploads,
+            files,
+            target_dir,
+            allowed_extensions=allowed_extensions,
+            kb_name=kb_name,
+            rel_paths=rel_paths,
+            dest_subdir=dest_subdir,
+            registry_name=registry_name,
+        )
     return await asyncio.to_thread(
-        _save_registered_uploads if registry_name is not None else _save_uploaded_files,
+        _save_uploaded_files,
         files,
         target_dir,
         allowed_extensions=allowed_extensions,
         kb_name=kb_name,
         rel_paths=rel_paths,
         dest_subdir=dest_subdir,
-        **({"registry_name": registry_name} if registry_name is not None else {}),
     )
 
 
@@ -1216,7 +1229,8 @@ async def run_initialization_task(
                     doc.get("status") == "completed" for doc in receipt["documents"].values()
                 )
 
-            await asyncio.to_thread(
+            await run_document_worker(
+                initializer.base_dir, initializer.kb_name,
                 initializer.progress_tracker.update,
                 ProgressStage.COMPLETED,
                 message_key="Knowledge base initialization complete!",
@@ -1228,7 +1242,8 @@ async def run_initialization_task(
             )
 
             manager = get_kb_manager()
-            await asyncio.to_thread(
+            await run_document_worker(
+                manager.base_dir, initializer.kb_name,
                 manager.update_kb_status,
                 name=initializer.kb_name,
                 status="ready",
@@ -1440,7 +1455,8 @@ async def run_upload_processing_task(
                             f"Folder sync state update failed: {sync_err}",
                             level="warning",
                         )
-                await asyncio.to_thread(
+                await run_document_worker(
+                    base_dir, kb_name,
                     progress_tracker.update,
                     ProgressStage.COMPLETED,
                     message_key="No new files to process (all duplicates or invalid)",
@@ -1519,7 +1535,8 @@ async def run_upload_processing_task(
                     )
 
             num_processed = index_result.processed_count
-            await asyncio.to_thread(
+            await run_document_worker(
+                base_dir, kb_name,
                 progress_tracker.update,
                 ProgressStage.COMPLETED,
                 message_key="Successfully processed {{count}} files!",
@@ -4134,14 +4151,16 @@ async def _create_knowledge_base_owned(
         # Fast path: no files uploaded — create an empty KB ready for web
         # sources, GitHub sources, or later document uploads.
         if not files:
-            await asyncio.to_thread(
+            await run_document_worker(
+                kb_base_dir, name,
                 progress_tracker.update,
                 ProgressStage.COMPLETED,
                 "Knowledge base created (no documents yet).",
                 current=0,
                 total=0,
             )
-            await asyncio.to_thread(
+            await run_document_worker(
+                manager.base_dir, name,
                 manager.update_kb_status,
                 name=name,
                 status="ready",
@@ -4440,7 +4459,7 @@ async def run_reindex_task(
                     hashes_for_indexed_files, sorted(indexed_files), raw_dir
                 )
 
-            await asyncio.to_thread(persist_terminal_state)
+            await run_document_worker(base_path, kb_name, persist_terminal_state)
 
             if indexed_files is not None and len(indexed_files) < len(file_paths):
                 _task_log(

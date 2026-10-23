@@ -451,9 +451,12 @@ class LightRagPipeline:
                 raise RuntimeError(f"LightRAG did not produce a ready index for {kb_name!r}")
             policy = dict(outcome.indexing_policy)
             policy["vlm_used"] = outcome.vlm_used
+            from deeptutor.knowledge.document_mutation import run_document_worker
             from deeptutor.knowledge.registry import refresh_documents
 
-            await asyncio.to_thread(refresh_documents, kb_dir.parent, kb_name)
+            await run_document_worker(
+                kb_dir.parent, kb_name, refresh_documents, kb_dir.parent, kb_name
+            )
             before_publish = kwargs.get("before_publish")
             if before_publish is not None:
                 before_publish(root_dir)
@@ -555,9 +558,12 @@ class LightRagPipeline:
             policy = dict(outcome.indexing_policy)
             previous_policy = storage.read_published_policy(existing) or {}
             policy["vlm_used"] = outcome.vlm_used or previous_policy.get("vlm_used") is True
+            from deeptutor.knowledge.document_mutation import run_document_worker
             from deeptutor.knowledge.registry import refresh_documents
 
-            await asyncio.to_thread(refresh_documents, kb_dir.parent, kb_name)
+            await run_document_worker(
+                kb_dir.parent, kb_name, refresh_documents, kb_dir.parent, kb_name
+            )
             if not is_update:
                 before_publish = kwargs.get("before_publish")
                 if before_publish is not None:

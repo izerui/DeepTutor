@@ -1,6 +1,7 @@
 """Deterministic Task13 publication, failure and mutation interleavings."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
 import sqlite3
@@ -653,7 +654,8 @@ async def test_cli_lightrag_required_recording_failure_is_not_bookkeeping(
 
 
 @pytest.mark.asyncio
-async def test_cancelled_mutation_keeps_ownership_until_worker_exits(tmp_path):
+@pytest.mark.parametrize("admitted", [False, True])
+async def test_cancelled_mutation_keeps_ownership_until_worker_exits(tmp_path, admitted):
     entered, release, finished = threading.Event(), threading.Event(), threading.Event()
 
     def worker():
@@ -662,6 +664,8 @@ async def test_cancelled_mutation_keeps_ownership_until_worker_exits(tmp_path):
         finished.set()
 
     async def mutate():
+        if admitted:
+            return await document_mutation.run_document_worker(tmp_path, "kb", worker)
         async with document_mutation.async_document_mutation(tmp_path, "kb"):
             await document_mutation.finish_document_worker(worker)
 
@@ -684,3 +688,146 @@ async def test_cancelled_mutation_keeps_ownership_until_worker_exits(tmp_path):
         assert await asyncio.to_thread(finished.wait, 5)
     async with document_mutation.async_document_mutation(tmp_path, "kb"):
         assert finished.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workers", [1, 2])
+@pytest.mark.parametrize("contenders", ["uploads", "refresh", "ready", "mixed"])
+async def test_provider_delete_small_executor_liveness(
+    knowledge, as_user, make_kb, monkeypatch, workers, contenders
+):
+    """Contenders must wait outside the executor needed by provider and local commit."""
+    loop = asyncio.get_running_loop()
+    # Restore the loop's original executor, including when it was not initialized yet.
+    await asyncio.to_thread(lambda: None)
+    original_executor = loop._default_executor
+    executor = ThreadPoolExecutor(max_workers=workers)
+    loop.set_default_executor(executor)
+    tasks, files = [], []
+    release = asyncio.Event()
+    try:
+        with as_user("t1", role="teacher"):
+            manager = current_kb_manager()
+            folder = make_kb(manager, "physics")
+            record = registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
+            [first] = registry.refresh_documents(manager.base_dir, "physics")
+            raw = folder / "raw"
+            entered, attempted = asyncio.Event(), asyncio.Event()
+            original_entry = knowledge._load_kb_entry_or_404
+            monkeypatch.setattr(knowledge, "_load_kb_entry_or_404", lambda *a: {
+                **original_entry(*a), "rag_provider": "pageindex",
+            })
+            provider_finished = False
+
+            async def remove(*args):
+                nonlocal provider_finished
+                entered.set()
+                await release.wait()
+                # The actual SDK also uses the shared executor.
+                await asyncio.to_thread(lambda: None)
+                provider_finished = True
+
+            monkeypatch.setattr("deeptutor.services.rag.factory.get_pipeline",
+                                lambda *a, **k: SimpleNamespace(remove_document=remove))
+            actual_lock = document_mutation._lock(manager.base_dir, "physics")
+
+            class BoundedLock:
+                """Fail a regressed blocking wait rather than hanging pytest teardown."""
+
+                def acquire(self, blocking=True):
+                    if not blocking:
+                        return actual_lock.acquire(blocking=False)
+                    assert actual_lock.acquire(timeout=3), "worker blocked on owner admission"
+                    return True
+
+                def release(self):
+                    actual_lock.release()
+
+                def __enter__(self):
+                    self.acquire()
+                    return self
+
+                def __exit__(self, *args):
+                    self.release()
+
+            bounded_lock = BoundedLock()
+            count = 0
+            count_guard = threading.Lock()
+
+            def observed(*args):
+                nonlocal count
+                with count_guard:
+                    count += 1
+                    if count == 7:  # Deletion plus six contenders, greater than pool capacity.
+                        loop.call_soon_threadsafe(attempted.set)
+                return bounded_lock
+
+            monkeypatch.setattr(document_mutation, "_lock", observed)
+            tasks.append(asyncio.create_task(knowledge.delete_kb_file(record.ref, "doc.md")))
+            await asyncio.wait_for(entered.wait(), 2)
+            expected = {}
+            for index in range(6):
+                kind = contenders if contenders != "mixed" else (
+                    "uploads", "refresh", "ready"
+                )[index % 3]
+                if kind == "uploads":
+                    filename, content = f"new-{index}.md", f"upload-{index}".encode()
+                    expected[filename] = content
+                    upload = UploadFile(filename=filename, file=BytesIO(content))
+                    files.append(upload)
+                    invoke = knowledge._save_uploaded_files_off_loop(
+                        [upload], raw, registry_name="physics",
+                    )
+                elif kind == "refresh":
+                    invoke = document_mutation.run_document_worker(
+                        manager.base_dir, "physics",
+                        registry.refresh_documents, manager.base_dir, "physics",
+                    )
+                else:
+                    invoke = document_mutation.run_document_worker(
+                        manager.base_dir, "physics",
+                        manager.update_kb_status, name="physics", status="ready",
+                    )
+                tasks.append(asyncio.create_task(invoke))
+            await asyncio.wait_for(attempted.wait(), 2)
+            assert all(not task.done() for task in tasks)
+            assert registry.list_documents(record.ref) == [first]
+            assert set(path.name for path in raw.iterdir()) == {"doc.md"}
+            # Stronger than a loop pulse: a shared worker must remain available.
+            assert await asyncio.wait_for(asyncio.to_thread(lambda: "available"), 1) == "available"
+            release.set()
+            done, pending = await asyncio.wait(tasks, timeout=5)
+            assert not pending, "provider deletion and mutation contenders did not complete"
+            for task in done:
+                task.result()
+            assert provider_finished and tasks[0].result()["status"] == "ok"
+            assert registry.find_document(record.ref, "doc.md").deleted
+            assert registry.find_document(record.ref, "doc.md").doc_id == first.doc_id
+            assert {p.name: p.read_bytes() for p in raw.iterdir()} == expected
+            documents = registry.list_documents(record.ref)
+            assert {d.rel_path: d.content_hash for d in documents} == registry.document_hashes(raw)
+            assert all(d.version == 1 for d in documents)
+    finally:
+        release.set()
+        if tasks:
+            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 15)
+        for upload in files:
+            await upload.close()
+        loop.set_default_executor(original_executor)
+        executor.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_admission_does_not_dispatch_worker(tmp_path):
+    called = threading.Event()
+    async with document_mutation.async_document_mutation(tmp_path, "kb"):
+        task = asyncio.create_task(
+            document_mutation.run_document_worker(tmp_path, "kb", called.set)
+        )
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not called.is_set()
+    await document_mutation.run_document_worker(tmp_path, "kb", called.set)
+    assert called.is_set()

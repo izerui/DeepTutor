@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING, List, Optional
 
+from deeptutor.knowledge.document_mutation import run_document_worker
 from deeptutor.services.config import resolve_llm_runtime_config
 from deeptutor.services.file_io import atomic_write_json
 from deeptutor.services.rag.factory import (
@@ -572,7 +573,8 @@ async def _bootstrap_index_from_files(
         metadata["last_indexed_action"] = "create"
         _write_metadata(metadata_file, metadata)
 
-        await asyncio.to_thread(
+        await run_document_worker(
+            manager.base_dir, kb_name,
             manager.update_kb_status,
             name=kb_name,
             status="ready",
@@ -656,7 +658,8 @@ async def add_documents(
 
         new_files = adder.add_documents(source_files, allow_duplicates=allow_duplicates)
         if not new_files:
-            await asyncio.to_thread(
+            await run_document_worker(
+                manager.base_dir, kb_name,
                 manager.update_kb_status,
                 name=kb_name,
                 status="ready",
@@ -682,7 +685,8 @@ async def add_documents(
             published_count = result.processed_count
         adder.update_metadata(result.processed_count)
 
-        await asyncio.to_thread(
+        await run_document_worker(
+            manager.base_dir, kb_name,
             manager.update_kb_status,
             name=kb_name,
             status="ready",

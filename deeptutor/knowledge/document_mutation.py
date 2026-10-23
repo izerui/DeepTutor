@@ -8,6 +8,7 @@ from weakref import WeakValueDictionary
 
 _locks = WeakValueDictionary()
 _guard = threading.Lock()
+_worker_ownership = threading.local()
 
 
 class DocumentRecordingError(RuntimeError):
@@ -27,6 +28,9 @@ def _lock(base_dir, name):
 @contextmanager
 def document_mutation(base_dir, name):
     """Use on workers, covering snapshot/publication through commit or compensation."""
+    if getattr(_worker_ownership, "key", None) == str((Path(base_dir) / name).resolve()):
+        yield
+        return
     with _lock(base_dir, name):
         yield
 
@@ -41,6 +45,23 @@ async def async_document_mutation(base_dir, name):
         yield
     finally:
         lock.release()
+
+
+async def run_document_worker(base_dir, kb_name, function, /, *args, **kwargs):
+    """Admit async mutations before dispatch, leaving executor capacity for the owner."""
+    key = str((Path(base_dir) / kb_name).resolve())
+
+    def admitted():
+        # Only this worker may reuse the admission; child tasks/threads cannot inherit it.
+        previous = getattr(_worker_ownership, "key", None)
+        _worker_ownership.key = key
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _worker_ownership.key = previous
+
+    async with async_document_mutation(base_dir, kb_name):
+        return await finish_document_worker(admitted)
 
 
 async def finish_document_worker(function, *args):

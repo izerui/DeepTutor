@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
@@ -168,9 +167,10 @@ async def sync_source(
                 base_dir=base_dir,
                 allow_duplicates=False,
             )
+        from deeptutor.knowledge.document_mutation import run_document_worker
         from deeptutor.knowledge.registry import refresh_documents
 
-        await asyncio.to_thread(refresh_documents, base_dir, kb_name)
+        await run_document_worker(base_dir, kb_name, refresh_documents, base_dir, kb_name)
     except Exception as exc:
         logger.warning("Indexing failed for web source files: %s", exc)
         error = f"Indexing failed: {exc}"

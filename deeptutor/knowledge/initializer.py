@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from deeptutor.multi_user.models import CurrentUser
     from deeptutor.services.rag.pipelines.lightrag.indexing_policy import IndexingPolicySnapshot
 
+from deeptutor.knowledge.document_mutation import run_document_worker
 from deeptutor.knowledge.naming import validate_knowledge_base_name
 from deeptutor.knowledge.progress_tracker import ProgressStage, ProgressTracker
 from deeptutor.services.config import resolve_llm_runtime_config
@@ -354,7 +355,8 @@ async def initialize_knowledge_base(
         initializer.create_directory_structure()
         copied_files = initializer.copy_documents(source_files)
         await initializer.process_documents()
-        await asyncio.to_thread(
+        await run_document_worker(
+            manager.base_dir, kb_name,
             manager.update_kb_status,
             name=kb_name,
             status="ready",
