@@ -82,16 +82,11 @@ def _validate_name(name: str) -> None:
         raise ValueError(f"Unsafe knowledge base name: {name!r}")
 
 
-def _owner_kb_root(owner_id: str) -> tuple[Path, str]:
+def identity_snapshot() -> dict[str, dict[str, Any]]:
+    """Validate the authoritative store without invoking mutating normalization."""
     from deeptutor.multi_user import identity
-    from deeptutor.multi_user.models import LOCAL_ADMIN_ID, normalize_role
-    from deeptutor.multi_user.paths import get_admin_path_service, scope_for_user
+    from deeptutor.multi_user.models import normalize_role
 
-    owner_id = owner_id or LOCAL_ADMIN_ID
-    if owner_id == LOCAL_ADMIN_ID:
-        return get_admin_path_service().get_knowledge_bases_root(), owner_id
-    # The normal identity reader tolerates damaged stores as empty. Migration
-    # cannot use that fallback to conclude an account's source is absent.
     for path in (identity.USERS_FILE, identity.LEGACY_USERS_FILE):
         try:
             users = json.loads(path.read_text(encoding="utf-8"))
@@ -99,14 +94,43 @@ def _owner_kb_root(owner_id: str) -> tuple[Path, str]:
             continue
         if not isinstance(users, dict):
             raise ValueError("Account catalog unavailable during copy migration")
-        break
-    found = identity.get_user_by_id(owner_id)
-    if found is None or normalize_role(str(found[1].get("role") or "user")) == "admin":
+        snapshot = {}
+        for index, (username, value) in enumerate(users.items()):
+            # Hash-only and password_hash records are supported legacy formats.
+            # Missing IDs are not invented here: those rows cannot match an
+            # existing partner owner, and startup can normalize them afterward.
+            if isinstance(value, str) and value:
+                value = {"hash": value}
+            if not isinstance(value, dict) or not isinstance(
+                value.get("hash") or value.get("password_hash"), str
+            ) or not (value.get("hash") or value.get("password_hash")):
+                raise ValueError(f"Invalid account identity: {username}")
+            user_id = value.get("id") or ""
+            if not isinstance(user_id, str) or (user_id and user_id in snapshot):
+                raise ValueError(f"Invalid or duplicate account ID: {username}")
+            role = normalize_role(str(value.get("role") or ""), "admin" if index == 0 else "user")
+            if user_id:
+                snapshot[user_id] = {"username": username, "role": role}
+        return snapshot
+    return {}
+
+
+def _owner_kb_root(owner_id: str) -> tuple[Path, str]:
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+    from deeptutor.multi_user.paths import get_admin_path_service, scope_for_user
+
+    owner_id = owner_id or LOCAL_ADMIN_ID
+    if owner_id == LOCAL_ADMIN_ID:
+        return get_admin_path_service().get_knowledge_bases_root(), owner_id
+    found = identity_snapshot().get(owner_id)
+    if found is None or found["role"] == "admin":
         return get_admin_path_service().get_knowledge_bases_root(), owner_id
     return scope_for_user(owner_id, is_admin=False).root / "knowledge_bases", owner_id
 
 
 def _migrate_partner(manager: Any, partner_id: str, report: dict) -> None:
+    from deeptutor.services.partners.scope import is_partner_user_id, partner_user_id
+
     config = manager.load_config(partner_id)
     if config is None:
         raise ValueError(f"Partner configuration unavailable: {partner_id}")
@@ -130,9 +154,13 @@ def _migrate_partner(manager: Any, partner_id: str, report: dict) -> None:
         state = progress.get(name)
         if state and state.get("done"):
             continue
-        # Task10 may already have independent records here. Only our persisted
-        # intent authorizes resuming an existing registration.
-        if state is None and registry.find_by_location(copy_root, name) is not None:
+        existing = registry.find_by_location(copy_root, name)
+        synthetic_owner = partner_user_id(partner_id)
+        # Human-owned registrations are independent libraries; synthetic scope
+        # discovery is only preregistration, not proof of completed adoption.
+        if state is None and existing is not None and existing.created_by != synthetic_owner:
+            if is_partner_user_id(existing.created_by):
+                raise ValueError("Copy belongs to a different synthetic owner")
             continue
         source_root, owner_id = _owner_kb_root(config.owner_id)
         source_catalog = _read_config(source_root)
@@ -150,6 +178,11 @@ def _migrate_partner(manager: Any, partner_id: str, report: dict) -> None:
                 "retired": retired.name,
                 "done": False,
             }
+            if existing is not None:
+                state["legacy_id"] = existing.kb_id
+                if not adopted:
+                    # Keep the old ID and its consumers bound to the actual copy.
+                    state["retired"] = f"{uuid.uuid4().hex}/{name}"
             progress[name] = state
             registry.set_meta(progress_key, json.dumps(progress))
         if state["owner_id"] != owner_id:
@@ -164,6 +197,10 @@ def _migrate_partner(manager: Any, partner_id: str, report: dict) -> None:
         record = registry.register_kb(
             base_dir=target_root, name=name, kind=registry.kind_of(entry), created_by=owner_id
         )
+        if adopted and state.get("legacy_id"):
+            record = registry.adopt_partner_copy(
+                state["legacy_id"], partner_id=partner_id, owner_id=owner_id
+            )
         if adopted and (record.created_by != owner_id or record.visibility != "private"):
             raise ValueError("Copy ownership changed during migration")
 
@@ -181,7 +218,26 @@ def _migrate_partner(manager: Any, partner_id: str, report: dict) -> None:
                 "partner_copy_adopted", f"{partner_id}:{name}", {**row, "owner_id": owner_id}
             )
         else:
-            _retire_copy(copy_root, name, state["retired"])
+            if state.get("legacy_id"):
+                _directory(copy_root / ".retired")
+                registry.adopt_partner_copy(
+                    state["legacy_id"], partner_id=partner_id, owner_id=owner_id
+                )
+                retired_root = copy_root / ".retired" / Path(state["retired"]).parent
+                # Preserve connector metadata as well as folder-only copies.
+                from deeptutor.services.file_io import atomic_write_json
+
+                retired_catalog = _read_config(retired_root)
+                if name not in retired_catalog["knowledge_bases"]:
+                    retired_catalog["knowledge_bases"][name] = catalog["knowledge_bases"].get(
+                        name, {"path": name, "rag_provider": "llamaindex", "status": "ready"}
+                    )
+                    atomic_write_json(retired_root / "kb_config.json", retired_catalog)
+                _retire_copy(copy_root, name, state["retired"])
+                registry.relocate_kb(state["legacy_id"], retired_root)
+                registry.remove_reference(state["legacy_id"], "partner", partner_id)
+            else:
+                _retire_copy(copy_root, name, state["retired"])
         state["done"] = True
         registry.set_meta(progress_key, json.dumps(progress))
         report["adopted" if adopted else "referenced"].append(row)
@@ -211,6 +267,7 @@ def _retire_copy(copy_root: Path, name: str, retired_name: str) -> None:
     if not _directory(retired_root):
         retired_root.mkdir()
     retired = retired_root / retired_name
+    retired.parent.mkdir(parents=True, exist_ok=True)
     if _directory(folder):
         if retired.exists() or retired.is_symlink():
             raise ValueError(f"Retirement target already exists: {retired}")

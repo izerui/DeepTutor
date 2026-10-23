@@ -420,9 +420,17 @@ def _with_external_private(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     user = get_current_user()
     present = {item.get("kb_id") for item in items}
     result = list(items)
+    partner_root = get_admin_path_service().workspace_root / "partners"
     for record in registry.list_records(visibility="private", created_by=user.id):
         if record.kb_id in present or workspace_id_for_kb_base_dir(record.base_dir) is not None:
             continue
+        location = Path(record.base_dir)
+        if location.is_relative_to(partner_root):
+            relative = location.relative_to(partner_root)
+            if relative.parts[1:4] == ("workspace", "knowledge_bases", ".retired"):
+                # Retired IDs remain readable by their existing consumers,
+                # but must not reappear as active independent libraries.
+                continue
         result.append(
             {
                 "id": record.ref,

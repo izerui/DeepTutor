@@ -20,9 +20,7 @@ def qualified_kb_id(name: str, workspace_id: str = "") -> str:
 def workspace_id_for_kb_base_dir(base_dir: str | Path) -> str | None:
     """Find the owned storage scope for a KB directory used by a background job."""
     from deeptutor.multi_user.paths import get_account_path_service
-    from deeptutor.services.path_service import get_path_service
     from deeptutor.services.workspace import get_content_workspace_service
-    from deeptutor.services.workspace.context import workspace_context
 
     root = Path(base_dir).resolve()
     if root == get_account_path_service().get_knowledge_bases_root().resolve():
@@ -30,9 +28,11 @@ def workspace_id_for_kb_base_dir(base_dir: str | Path) -> str | None:
     for row in get_content_workspace_service()._catalog():
         if row.get("kind") != "workspace":
             continue
-        with workspace_context(row["workspace_id"]):
-            if root == get_path_service().get_knowledge_bases_root().resolve():
-                return str(row["workspace_id"])
+        # Classification must include archived/missing roots without opening
+        # them, probing outputs, or treating their KBs as external libraries.
+        storage = Path(row["path"]).expanduser() / ".deeptutor" / "data" / "knowledge_bases"
+        if root == storage.resolve():
+            return str(row["workspace_id"])
     return None
 
 

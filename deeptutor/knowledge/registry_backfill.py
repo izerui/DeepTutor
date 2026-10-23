@@ -76,6 +76,15 @@ def backfill_registry() -> dict[str, int]:
         "connectors_disabled": 0,
         "partner_copies": 0,
     }
+    # Guard before list_user_info (or any catalog reader) can normalize away
+    # damaged identities and turn an unavailable owner into an unknown owner.
+    from deeptutor.services.partners.kb_migration import identity_snapshot
+
+    try:
+        identity_snapshot()
+    except (OSError, ValueError):
+        logger.exception("Identity catalog unavailable; registry backfill will retry")
+        return report
     admin_root = get_admin_path_service().get_knowledge_bases_root()
     report["admin"] = _sync_root(admin_root, created_by=LOCAL_ADMIN_ID)
     # Every admin shares the admin scope, so its custom workspaces are scanned once.

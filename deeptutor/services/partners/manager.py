@@ -1472,9 +1472,12 @@ class PartnerManager:
         from deeptutor.services.partners.scope import partner_user_id
 
         kb_root = partner_dir / "workspace" / "knowledge_bases"
-        records = registry.list_records(base_dir=kb_root)
-        # Adopted copies belong to a human account now. Keep their stable IDs,
-        # files and other consumers' references at the original location.
+        records = [
+            record for record in registry.list_records()
+            if Path(record.base_dir).is_relative_to(kb_root.resolve())
+        ]
+        # Include retired preregistrations: their stable IDs still serve old
+        # consumers. Both those and adopted copies now belong to humans.
         retained = [
             record for record in records if record.created_by != partner_user_id(partner_id)
         ]

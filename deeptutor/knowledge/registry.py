@@ -583,6 +583,25 @@ def guarded_deletion(
             conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
 
 
+def adopt_partner_copy(kb_id: str, *, partner_id: str, owner_id: str) -> KbRecord:
+    """Claim one synthetic legacy copy without replacing its ID or consumers."""
+    with _write() as conn:
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE kb_id = ?", (_strip_ref(kb_id),)
+        ).fetchone()
+        if row is None or row["created_by"] not in {f"partner_{partner_id}", owner_id}:
+            raise KbRegistryError("Legacy copy ownership changed during migration.")
+        if row["visibility"] != "private":
+            raise KbRegistryError("Legacy copy must be private before adoption.")
+        conn.execute(
+            "UPDATE kb_registry SET created_by = ?, updated_at = ? WHERE kb_id = ?",
+            (owner_id, _now(), row["kb_id"]),
+        )
+        return _record(conn.execute(
+            "SELECT * FROM kb_registry WHERE kb_id = ?", (row["kb_id"],)
+        ).fetchone())
+
+
 def relocate_kb(kb_id: str, base_dir: Path | str) -> KbRecord:
     """Point a record at a new ``base_dir`` (the KB folder was moved); the id is kept."""
     try:
