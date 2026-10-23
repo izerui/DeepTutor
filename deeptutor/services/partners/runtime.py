@@ -910,13 +910,29 @@ class PartnerRunner:
                 and supports_rag_retrieval(metadata)
             ]
         try:
+            from deeptutor.knowledge import registry
+            from deeptutor.knowledge.kb_types import supports_rag_retrieval
             from deeptutor.knowledge.manager import KnowledgeBaseManager
+            from deeptutor.multi_user.knowledge_access import resolve_kb_metadata
             from deeptutor.services.path_service import get_path_service
 
+            refs = [
+                record.ref
+                for record in registry.list_referenced("partner", self.partner_id)
+                if (metadata := resolve_kb_metadata(record.ref)) is not None
+                and supports_rag_retrieval(metadata)
+            ]
             kb_root = get_path_service().get_knowledge_bases_root()
             if not kb_root.is_dir():
-                return []
-            return KnowledgeBaseManager(base_dir=str(kb_root)).list_knowledge_bases()
+                return refs
+            manager = KnowledgeBaseManager(base_dir=str(kb_root))
+            legacy = [
+                name
+                for name in manager.list_knowledge_bases()
+                if registry.find_by_location(kb_root, name) is None
+                and supports_rag_retrieval(manager.get_metadata(name) or {})
+            ]
+            return refs + legacy
         except Exception:
             logger.warning("Failed to list KBs for partner %s", self.partner_id, exc_info=True)
             return []

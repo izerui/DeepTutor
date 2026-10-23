@@ -4,7 +4,7 @@ The partner workspace is a verbatim clone of the chat user-workspace format
 (``PathService`` layout), so the chat agent loop's tools read it natively:
 
     data/partners/<id>/workspace/          ← synthetic scope root
-    ├── knowledge_bases/<kb>/              ← copied KBs (rag)
+    ├── knowledge_bases/<kb>/              ← legacy / adopted KBs only
     └── user/
         ├── workspace/
         │   ├── SOUL.md                    ← the partner's persona
@@ -14,14 +14,10 @@ The partner workspace is a verbatim clone of the chat user-workspace format
         └── settings/ …
 
 Provisioning runs in the *requesting user's* context: sources are resolved
-with that user's permissions (``resolve_kb`` / assigned-skill grants), then
-copied into the partner scope as plain files. All three asset classes are
-self-contained on disk, so a copy is a complete transfer:
+with that user's permissions (``resolve_kb`` / assigned-skill grants).
 
-* KB: the whole ``<kb>/`` tree (raw + LlamaIndex ``version-N`` dirs); the
-  partner-side ``KnowledgeBaseManager`` auto-registers it on first list. A
-  connected/pointer KB (Obsidian, ``linked``, ...) has no such tree, so its
-  ``kb_config.json`` entry is registered directly instead of copied.
+* KB: a registry reference to the source, including connected/pointer KBs.
+  No knowledge-base files or connector configuration are copied.
 * Skill: the whole ``<name>/`` dir (SKILL.md + references).
 * Notebook: ``<id>.json`` plus its ``notebooks_index.json`` entry.
 """
@@ -125,18 +121,19 @@ def provision_assets(
     skills: list[str] | None = None,
     notebooks: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Copy the requested assets into the partner workspace.
+    """Reference KBs and copy skills / notebooks into the partner workspace.
 
     Source resolution honours the calling user's permissions. Returns a
-    report dict: ``{"copied": {...}, "errors": [{"type","name","error"}]}``.
+    report dict: ``{"copied": {...}, "errors": [{"type","name","error"}]}``;
+    ``copied.knowledge_bases`` lists referenced KB names for compatibility.
     """
-    root = ensure_partner_workspace(partner_id)
+    ensure_partner_workspace(partner_id)
     copied: dict[str, list[str]] = {"knowledge_bases": [], "skills": [], "notebooks": []}
     errors: list[dict[str, str]] = []
 
     for kb_ref in knowledge_bases or []:
         try:
-            copied["knowledge_bases"].append(_copy_knowledge_base(kb_ref, root))
+            copied["knowledge_bases"].append(_copy_knowledge_base(kb_ref, partner_id))
         except Exception as exc:
             logger.exception("KB provisioning failed for %s", kb_ref)
             errors.append({"type": "knowledge_base", "name": kb_ref, "error": _err(exc)})
@@ -177,16 +174,25 @@ def _err(exc: Exception) -> str:
     return str(detail) if detail else f"{type(exc).__name__}: {exc}"
 
 
-def _copy_knowledge_base(kb_ref: str, partner_root: Path) -> str:
-    from deeptutor.knowledge.kb_types import NON_RETRIEVABLE_KB_TYPES, is_connected_kb
-    from deeptutor.knowledge.manager import KnowledgeBaseManager
+def _copy_knowledge_base(kb_ref: str, partner_id: str) -> str:
+    """Reference a source KB; this helper retains its historical name."""
+    from deeptutor.knowledge import registry
+    from deeptutor.knowledge.kb_types import NON_RETRIEVABLE_KB_TYPES
+    from deeptutor.multi_user.context import get_current_user
     from deeptutor.multi_user.knowledge_access import resolve_kb
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+    from deeptutor.multi_user.partner_access import assert_partner_manageable, partner_owner_id
 
-    resource = resolve_kb(kb_ref)
-    dst_root = partner_root / "knowledge_bases"
-    entry = KnowledgeBaseManager(base_dir=str(resource.base_dir)).get_kb_entry(resource.name)
+    assert_partner_manageable(partner_id)
+    # Stable refs need an explicit access check; resolve_ref's stable-ID branch
+    # is only a lookup. Its legacy branch safely resolves the original owner.
+    resolve_kb(kb_ref)
+    record = registry.resolve_ref(kb_ref)
+    if record is None:
+        raise ValueError("Knowledge base cannot be safely registered")
+    user_id = get_current_user().id
 
-    kind = entry.get("type") if isinstance(entry, dict) else None
+    kind = record.kind
     if kind in NON_RETRIEVABLE_KB_TYPES:
         # Obsidian, MarginNote and subagent KBs are each driven by an
         # *exclusive* ``KnowledgeCapability``: when one is in the turn's KB
@@ -204,21 +210,14 @@ def _copy_knowledge_base(kb_ref: str, partner_root: Path) -> str:
             "it takes over the whole conversation when selected."
         )
 
-    if is_connected_kb(entry):
-        # Pointer KB: no on-disk tree to copy, so hand over the config row.
-        # ``register_connected_entry`` is a no-op when the partner already has
-        # it, which keeps provisioning idempotent like the copytree branch.
-        KnowledgeBaseManager(base_dir=str(dst_root)).register_connected_entry(resource.name, entry)
-        return resource.name
-
-    src = Path(resource.base_dir) / resource.name
-    if not src.is_dir():
-        raise FileNotFoundError(f"Knowledge base directory missing: {resource.name}")
-    dst = dst_root / resource.name
-    if dst.exists():
-        return resource.name  # already provisioned
-    shutil.copytree(src, dst)
-    return resource.name
+    if registry.is_connector(record):
+        owner = partner_owner_id(partner_id) or LOCAL_ADMIN_ID
+        if record.created_by != owner:
+            raise ValueError("A personal connector can only be referenced by its creator's partner")
+    registry.add_reference(
+        record.kb_id, referrer_kind="partner", referrer_id=partner_id, created_by=user_id
+    )
+    return record.name
 
 
 def _skill_source_dir(skill_name: str) -> Path:
@@ -327,24 +326,49 @@ def _merge_index_entry(index_path: Path, entry: dict[str, Any]) -> None:
 
 
 def list_assets(partner_id: str) -> dict[str, list[dict[str, Any]]]:
+    from deeptutor.knowledge import registry
+
     root = ensure_partner_workspace(partner_id)
     service = _partner_path_service(partner_id)
 
     kbs: list[dict[str, Any]] = []
     kb_root = root / "knowledge_bases"
+    for record in registry.list_referenced("partner", partner_id):
+        raw_dir = Path(record.base_dir) / record.dir_name / "raw"
+        item: dict[str, Any] = {
+            "name": record.name,
+            "ref": record.ref,
+            "documents": sum(1 for f in raw_dir.glob("*") if f.is_file()),
+        }
+        if registry.is_connector(record):
+            item["type"] = record.kind
+        if Path(record.base_dir) == kb_root.resolve():
+            item["adopted"] = True
+        kbs.append(item)
+    # Compare locations, not names: a legacy copy and a reference may share a
+    # display name. Registered local KBs without this reference stay private.
+    registered = {record.dir_name for record in registry.list_records(base_dir=kb_root)}
+    legacy_names: set[str] = set()
     if kb_root.is_dir():
         for entry in sorted(kb_root.iterdir()):
-            if entry.is_dir() and not entry.name.startswith((".", "_")):
+            if (
+                entry.is_dir()
+                and not entry.name.startswith((".", "_"))
+                and entry.name not in registered
+            ):
                 raw_count = sum(1 for f in (entry / "raw").glob("*") if f.is_file())
-                kbs.append({"name": entry.name, "documents": raw_count})
+                kbs.append({"name": entry.name, "documents": raw_count, "legacy": True})
+                legacy_names.add(entry.name)
     # A pointer KB is a config row and nothing else, so a directory scan alone
     # cannot see one. Left out, an assigned WeKnora or linked KB was invisible
     # in the partner's library AND never excluded from the picker, so the user
     # kept assigning it and kept seeing nothing happen.
     for name, config_entry in sorted(_partner_kb_config(root).items()):
-        if any(row["name"] == name for row in kbs):
+        if name in registered or name in legacy_names:
             continue
-        kbs.append({"name": name, "documents": 0, "type": config_entry.get("type", "")})
+        kbs.append(
+            {"name": name, "documents": 0, "type": config_entry.get("type", ""), "legacy": True}
+        )
 
     skills: list[dict[str, Any]] = []
     skills_root = service.get_workspace_dir() / "skills"
@@ -379,6 +403,25 @@ def remove_asset(partner_id: str, asset_type: str, name: str) -> bool:
         raise ValueError("Invalid asset name")
 
     if asset_type == "knowledge_base":
+        from deeptutor.knowledge import registry
+
+        records = registry.list_referenced("partner", partner_id)
+        exact = [record for record in records if name in {record.ref, record.kb_id}]
+        matches = exact or [record for record in records if name == record.name]
+        kb_root = root / "knowledge_bases"
+        local = registry.find_by_location(kb_root, name)
+        legacy = local is None and (
+            (kb_root / name).is_dir() or name in _partner_kb_config(root)
+        )
+        if not exact and (len(matches) > 1 or (matches and legacy)):
+            raise ValueError("Knowledge base name is ambiguous; use its kb:<id> reference")
+        if matches:
+            registry.remove_reference(matches[0].kb_id, "partner", partner_id)
+            return True
+        # Never reinterpret a stable ID or a detached adopted KB as a legacy
+        # deletion request, including a repeated removal by display name.
+        if name.startswith(registry.REF_PREFIX) or local is not None:
+            return False
         # The two halves are independent: an ordinary KB has both a folder and
         # (sometimes) a config row, a pointer KB has only the row. Returning
         # early on a missing folder made an assigned pointer KB un-removable —

@@ -571,6 +571,27 @@ class TestAssets:
         assert res.status_code == 200
         assert res.json()["errors"][0]["type"] == "skill"
 
+    def test_kb_reference_round_trip_preserves_source(self, client, isolated_root):
+        from deeptutor.knowledge import registry
+        from tests.services.partners.test_partner_workspace import _seed_admin_kb
+
+        source = _seed_admin_kb(isolated_root)
+        _create(client)
+        response = client.post(
+            "/api/partners/ada/assets", json={"knowledge_bases": ["physics"]}
+        )
+        assert response.status_code == 200
+        assert response.json()["errors"] == []
+        [record] = registry.list_referenced("partner", "ada")
+        assert response.json()["assets"]["knowledge_bases"] == [
+            {"name": "physics", "ref": record.ref, "documents": 1}
+        ]
+        response = client.delete(f"/api/partners/ada/assets/knowledge_base/{record.ref}")
+        assert response.status_code == 200
+        assert response.json()["assets"]["knowledge_bases"] == []
+        assert (source / "raw" / "doc.pdf").exists()
+        assert registry.get_kb(record.ref) == record
+
 
 class TestSoulLibraryEndpoints:
     def test_souls_crud(self, client):

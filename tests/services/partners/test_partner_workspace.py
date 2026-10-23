@@ -1,4 +1,4 @@
-"""Asset provisioning: copy KB / skill / notebook into the partner workspace."""
+"""Asset provisioning: reference KBs, copy skills / notebooks into the partner workspace."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from deeptutor.knowledge import registry
 from deeptutor.services.partners.workspace import (
     ensure_partner_workspace,
     list_assets,
@@ -25,19 +26,15 @@ def _seed_admin_kb(admin_root, name="physics"):
         json.dumps({"name": name, "rag_provider": "llamaindex"}), encoding="utf-8"
     )
     config_path = admin_root / "knowledge_bases" / "kb_config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    config.setdefault("knowledge_bases", {})[name] = {
+        "path": name,
+        "description": f"Knowledge base: {name}",
+        "rag_provider": "llamaindex",
+        "status": "ready",
+    }
     config_path.write_text(
-        json.dumps(
-            {
-                "knowledge_bases": {
-                    name: {
-                        "path": name,
-                        "description": f"Knowledge base: {name}",
-                        "rag_provider": "llamaindex",
-                        "status": "ready",
-                    }
-                }
-            }
-        ),
+        json.dumps(config),
         encoding="utf-8",
     )
     return kb
@@ -114,8 +111,8 @@ class TestProvisioning:
         }
 
         ws = partners_root / "ada" / "workspace"
-        assert (ws / "knowledge_bases" / "physics" / "raw" / "doc.pdf").exists()
-        assert (ws / "knowledge_bases" / "physics" / "version-1" / "docstore.json").exists()
+        assert not (ws / "knowledge_bases" / "physics").exists()
+        assert [record.name for record in registry.list_referenced("partner", "ada")] == ["physics"]
         assert (ws / "user" / "workspace" / "skills" / "research-mode" / "SKILL.md").exists()
         assert (
             ws / "user" / "workspace" / "skills" / "research-mode" / "references" / "ref.md"
@@ -162,6 +159,7 @@ class TestProvisioning:
         report = provision_assets("ada", knowledge_bases=["physics"])
         assert report["errors"] == []
         assert report["copied"]["knowledge_bases"] == ["physics"]
+        assert len(registry.list_referenced("partner", "ada")) == 1
 
     def test_connected_kb_is_registered_not_copied(self, partners_root):
         # A connected/pointer KB (Obsidian vault, linked index, ...) has no
@@ -179,11 +177,9 @@ class TestProvisioning:
         partner_kb_dir = partners_root / "ada" / "workspace" / "knowledge_bases"
         assert not (partner_kb_dir / "wiki").exists()
         manager = KnowledgeBaseManager(base_dir=str(partner_kb_dir))
-        assert manager.get_kb_entry("wiki") == {
-            "type": "weknora",
-            "server_url": "http://localhost:8080",
-            "knowledge_base_id": "kb-1",
-        }
+        assert manager.get_kb_entry("wiki") is None
+        [record] = registry.list_referenced("partner", "ada")
+        assert record.name == "wiki" and record.kind == "weknora"
 
     def test_connected_kb_provisioning_is_idempotent(self, partners_root):
         admin_root = partners_root.parent

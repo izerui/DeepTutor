@@ -1456,6 +1456,8 @@ class PartnerManager:
             await self.stop_partner(partner_id, preserve_auto_start=preserve_auto_start)
 
     async def destroy_partner(self, partner_id: str) -> bool:
+        partner_dir = self._partner_dir(partner_id)
+        existed = partner_dir.exists()
         await self.stop_partner(partner_id, preserve_auto_start=False)
         forget_partner_stores(partner_id)
         forget_partner_links(partner_id)
@@ -1466,12 +1468,47 @@ class PartnerManager:
             get_cron_service().remove_owner_jobs(f"partner:{partner_id}")
         except Exception:
             logger.warning("Failed to clear cron jobs for '%s'", partner_id, exc_info=True)
-        partner_dir = self._partner_dir(partner_id)
+        from deeptutor.knowledge import registry
+        from deeptutor.services.partners.scope import partner_user_id
+
+        kb_root = partner_dir / "workspace" / "knowledge_bases"
+        records = registry.list_records(base_dir=kb_root)
+        # Adopted copies belong to a human account now. Keep their stable IDs,
+        # files and other consumers' references at the original location.
+        retained = [
+            record for record in records if record.created_by != partner_user_id(partner_id)
+        ]
+        # Fail closed: a registry outage must not leave references to erased data.
+        registry.remove_references("partner", partner_id)
+        for record in records:
+            if record not in retained:
+                registry.unregister_kb(record.kb_id)
         if not partner_dir.exists():
             return False
-        shutil.rmtree(partner_dir)
-        logger.info("Partner '%s' destroyed (data deleted)", partner_id)
-        return True
+        if retained:
+            from deeptutor.services.partners.workspace import list_assets, remove_asset
+
+            # Do not let a new partner with this ID rediscover the old partner's
+            # unregistered copies alongside the preserved independent KBs.
+            for asset in list_assets(partner_id)["knowledge_bases"]:
+                if asset.get("legacy"):
+                    remove_asset(partner_id, "knowledge_base", asset["name"])
+            for entry in partner_dir.iterdir():
+                if entry.name == "workspace" and entry.is_dir() and not entry.is_symlink():
+                    for child in entry.iterdir():
+                        if child.name != "knowledge_bases":
+                            if child.is_dir() and not child.is_symlink():
+                                shutil.rmtree(child)
+                            else:
+                                child.unlink()
+                elif entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+        else:
+            shutil.rmtree(partner_dir)
+        logger.info("Partner '%s' destroyed (%d independent KBs retained)", partner_id, len(retained))
+        return existed
 
     def _rehome_shared_channel_state(self) -> None:
         """One-shot: give each channel's formerly shared state to its owner.

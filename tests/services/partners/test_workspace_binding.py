@@ -153,6 +153,7 @@ def test_binding_follows_registry_move_without_copying_resources(partners_root):
 async def test_copied_ima_pointer_reaches_partner_rag_with_source(
     partners_root, fake_orchestrator, monkeypatch
 ) -> None:
+    from deeptutor.knowledge import registry
     from deeptutor.services.rag.pipelines.ima.models import ImaDocument, ImaKnowledgePage
     from deeptutor.services.rag.pipelines.ima.pipeline import ImaPipeline
     from deeptutor.tools.builtin import RAGTool
@@ -171,6 +172,7 @@ async def test_copied_ima_pointer_reaches_partner_rag_with_source(
     report = provision_assets("ada", knowledge_bases=[name])
     assert report["errors"] == []
     assert report["copied"]["knowledge_bases"] == [name]
+    [record] = registry.list_referenced("partner", "ada")
 
     class Client:
         async def search_knowledge(self, query: str, *, limit: int) -> ImaKnowledgePage:
@@ -199,8 +201,8 @@ async def test_copied_ima_pointer_reaches_partner_rag_with_source(
     seen = []
 
     async def handle(self, context):
-        assert context.knowledge_bases == [name]
-        seen.append(await RAGTool().execute(query="三年级乘法", kb_name=name))
+        assert context.knowledge_bases == [record.ref]
+        seen.append(await RAGTool().execute(query="三年级乘法", kb_name=record.ref))
         for event in finish("检索完成"):
             yield event
 
