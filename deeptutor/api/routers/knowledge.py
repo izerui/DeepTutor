@@ -3648,15 +3648,15 @@ def _requested_visibility(value: object) -> str:
 
 
 def _register_created_kb(name: str, visibility: str):
-    """A new physical KB gets a fresh identity, including at a stale location."""
+    """Commit a fresh identity before publishing the new catalog entry."""
     from deeptutor.knowledge import registry
 
-    base_dir = _current_kb_base_dir()
-    stale = registry.find_by_location(base_dir, name)
-    if stale is not None:
-        registry.unregister_kb(stale.kb_id)
-    return registry.register_kb(
-        base_dir=base_dir, name=name, kind=registry.UPLOADED_KIND,
+    def check_available():
+        if name in get_kb_manager().list_knowledge_bases():
+            raise HTTPException(status_code=400, detail=f"Knowledge base '{name}' already exists")
+
+    return registry.register_new_kb(
+        base_dir=_current_kb_base_dir(), name=name, check_available=check_available,
         created_by=get_current_user().id, visibility=visibility,
     )
 
@@ -3714,12 +3714,7 @@ async def create_knowledge_base(
                 resource_id = qualified_kb_id(valid_name, current_workspace_id())
                 if canonical_kb_id(resource_id) != resource_id:
                     raise WorkspaceError("This knowledge base ID is reserved by an earlier move.")
-                ownership = (
-                    write_ownership(_current_kb_base_dir() / valid_name)
-                    if rag_provider == LIGHTRAG_PROVIDER
-                    else nullcontext()
-                )
-                with ownership:
+                with write_ownership(_current_kb_base_dir() / valid_name):
                     result = await _create_knowledge_base_owned(
                         background_tasks,
                         name,
@@ -3730,11 +3725,9 @@ async def create_knowledge_base(
                         rel_paths,
                         indexing_llm,
                         embedding_model,
+                        visibility,
                     )
                 result["id"] = resource_id
-                record = _register_created_kb(valid_name, visibility)
-                result["kb_id"] = record.kb_id
-                result["ref"] = record.ref
                 return result
             finally:
                 if token is not None:
@@ -3755,6 +3748,7 @@ async def _create_knowledge_base_owned(
     rel_paths: list[str] = Form(None),
     indexing_llm: str = Form(""),
     embedding_model: str = Form(""),
+    visibility: str = "private",
 ) -> dict[str, Any]:
     """Create a new knowledge base and initialize it with files."""
     try:
@@ -3828,8 +3822,8 @@ async def _create_knowledge_base_owned(
         task_id = _build_unique_task_id("kb_init", name)
         get_task_stream_manager().ensure_task(task_id)
 
-        # Register KB to kb_config.json immediately with "initializing" status
-        # This ensures the KB appears in the list right away
+        # Readers must see the new identity before they can see its catalog entry.
+        record = _register_created_kb(name, visibility)
         manager.update_kb_status(
             name=name,
             status="initializing",
@@ -3917,6 +3911,8 @@ async def _create_knowledge_base_owned(
                 "name": name,
                 "files": [],
                 "task_id": None,
+                "kb_id": record.kb_id,
+                "ref": record.ref,
             }
 
         uploaded_files, _ = await _save_uploaded_files_off_loop(
@@ -3947,6 +3943,8 @@ async def _create_knowledge_base_owned(
             "name": name,
             "files": uploaded_files,
             "task_id": task_id,
+            "kb_id": record.kb_id,
+            "ref": record.ref,
         }
 
     except HTTPException:

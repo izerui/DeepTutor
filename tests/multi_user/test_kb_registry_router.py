@@ -1,11 +1,13 @@
 """KB registration, guarded deletion, visibility and scoped configuration routes."""
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 import sqlite3
 import threading
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.testclient import TestClient
 import pytest
 
@@ -22,8 +24,9 @@ def knowledge():
 
 async def _create(knowledge, monkeypatch, make_kb, name="physics", visibility="private", **kwargs):
     async def fake_create(*_args):
+        record = knowledge._register_created_kb(name, _args[-1])
         make_kb(current_kb_manager(), name)
-        return {"name": name}
+        return {"name": name, "kb_id": record.kb_id, "ref": record.ref}
 
     monkeypatch.setattr(knowledge, "_create_knowledge_base_owned", fake_create)
     return await knowledge.create_knowledge_base(
@@ -84,6 +87,140 @@ async def test_create_registers_in_destination_workspace(knowledge, as_user, mak
     assert Path(record.base_dir) == Path(destination)
     assert Path(record.base_dir) != Path(home)
     assert record.created_by == "t1"
+
+
+async def _create_uploaded(knowledge, monkeypatch, visibility="private"):
+    monkeypatch.setattr(knowledge, "_assert_provider_ready", lambda *_args: None)
+    monkeypatch.setattr(knowledge, "_resolve_embedding_form", lambda *_args: (None, None))
+    upload = UploadFile(filename="doc.txt", file=BytesIO(b"physics notes"))
+    try:
+        return await knowledge.create_knowledge_base(
+            BackgroundTasks(), name="physics", files=[upload], rag_provider="llamaindex",
+            pageindex_mode="", search_mode="", rel_paths=[], indexing_llm="",
+            embedding_model="", storage_workspace_id=None, visibility=visibility,
+        )
+    finally:
+        await upload.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_stale", [False, True])
+@pytest.mark.parametrize("visibility", ["private", "public"])
+async def test_listing_during_upload_preserves_creation_identity(
+    knowledge, as_user, monkeypatch, with_stale, visibility
+):
+    from deeptutor.multi_user.knowledge_access import list_visible_knowledge_bases, resolve_kb
+
+    with as_user("t1", role="teacher"):
+        base_dir = current_kb_manager().base_dir
+        stale = None
+        if with_stale:
+            stale = registry.register_kb(
+                base_dir=base_dir, name="physics", kind="uploaded", created_by="old"
+            )
+            registry.add_reference(
+                stale.kb_id, referrer_kind="partner", referrer_id="old", created_by="old"
+            )
+        original_save = knowledge._save_uploaded_files_off_loop
+        listed = []
+
+        async def save_then_list(*args, **kwargs):
+            saved = await original_save(*args, **kwargs)
+            # The actual creation helper is still awaiting its save operation.
+            # Run the same access listing used by the threaded list endpoint.
+            listed.extend(await asyncio.to_thread(list_visible_knowledge_bases))
+            [item] = [row for row in listed if row["name"] == "physics"]
+            if stale is not None:
+                assert registry.get_kb(stale.kb_id) is None
+                assert item["kb_id"] != stale.kb_id
+                assert registry.list_unavailable_references("partner", "old")[0].reason == "kb_deleted"
+            assert item["created_by"] == "t1"
+            registry.add_reference(
+                item["kb_id"], referrer_kind="partner", referrer_id="during-upload",
+                created_by="t1",
+            )
+            return saved
+
+        monkeypatch.setattr(knowledge, "_save_uploaded_files_off_loop", save_then_list)
+        result = await _create_uploaded(knowledge, monkeypatch, visibility)
+        [item] = [row for row in listed if row["name"] == "physics"]
+        assert result["kb_id"] == item["kb_id"]
+        assert result["ref"] == item["ref"]
+        record = registry.get_kb(item["kb_id"])
+        assert record.created_by == "t1" and record.visibility == visibility
+        assert resolve_kb(item["ref"]).name == "physics"
+        assert [ref.referrer_id for ref in registry.list_references(record.kb_id)] == ["during-upload"]
+        assert registry.list_unavailable_references("partner", "during-upload") == []
+
+
+@pytest.mark.asyncio
+async def test_duplicate_create_preserves_live_identity(
+    knowledge, as_user, make_kb, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        make_kb(current_kb_manager(), "physics")
+        record = registry.ensure_registered(current_kb_manager().base_dir, "physics", created_by="t1")
+        registry.add_reference(
+            record.kb_id, referrer_kind="partner", referrer_id="live", created_by="t1"
+        )
+        with pytest.raises(HTTPException) as error:
+            await _create_uploaded(knowledge, monkeypatch)
+        assert error.value.status_code == 400
+        assert registry.get_kb(record.kb_id) == record
+        assert len(registry.list_references(record.kb_id)) == 1
+        assert registry.list_unavailable_references("partner", "live") == []
+
+
+@pytest.mark.asyncio
+async def test_new_identity_is_committed_before_catalog_publication(
+    knowledge, as_user, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        stale = registry.register_kb(
+            base_dir=manager.base_dir, name="physics", kind="uploaded", created_by="old"
+        )
+        registry.add_reference(
+            stale.kb_id, referrer_kind="partner", referrer_id="old", created_by="old"
+        )
+        original_update = manager.update_kb_status
+        observed = []
+
+        def observe_publication(*args, **kwargs):
+            # Independent connections must already see the replacement before
+            # the first initializing entry becomes visible in kb_config.json.
+            assert registry.get_kb(stale.kb_id) is None
+            record = registry.find_by_location(manager.base_dir, "physics")
+            assert record.created_by == "t1" and record.visibility == "public"
+            assert registry.list_unavailable_references("partner", "old")[0].reason == "kb_deleted"
+            observed.append(record.kb_id)
+            return original_update(*args, **kwargs)
+
+        monkeypatch.setattr(manager, "update_kb_status", observe_publication)
+        result = await _create_uploaded(knowledge, monkeypatch, "public")
+        assert observed and set(observed) == {result["kb_id"]}
+
+
+@pytest.mark.asyncio
+async def test_same_name_create_cannot_replace_in_progress_identity(
+    knowledge, as_user, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        original_save = knowledge._save_uploaded_files_off_loop
+        observed = []
+
+        async def save_with_competing_create(*args, **kwargs):
+            record = registry.find_by_location(current_kb_manager().base_dir, "physics")
+            with pytest.raises(HTTPException) as error:
+                await _create_uploaded(knowledge, monkeypatch)
+            assert error.value.status_code == 409
+            assert registry.get_kb(record.kb_id) == record
+            observed.append(record.kb_id)
+            return await original_save(*args, **kwargs)
+
+        monkeypatch.setattr(knowledge, "_save_uploaded_files_off_loop", save_with_competing_create)
+        result = await _create_uploaded(knowledge, monkeypatch)
+        assert observed == [result["kb_id"]]
 
 
 @pytest.mark.asyncio

@@ -345,6 +345,41 @@ def register_kb(
     return _record(row)
 
 
+def register_new_kb(
+    *,
+    base_dir: Path | str,
+    name: str,
+    created_by: str,
+    visibility: str,
+    check_available: Callable[[], None],
+) -> KbRecord:
+    """Replace a stale identity before publishing a new catalog entry.
+
+    The caller holds per-KB write ownership through catalog publication.
+    Commit identity replacement before publishing, so concurrent readers cannot
+    associate the new catalog entry with the old uncommitted identity.
+    """
+    _check_visibility(visibility, UPLOADED_KIND)
+    location = _location(base_dir)
+    with _write() as conn:
+        check_available()
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE base_dir = ? AND dir_name = ?", (location, name)
+        ).fetchone()
+        if row is not None:
+            stale = _record(row)
+            _revoke(conn, stale, _references_of(conn, stale.kb_id), reason="kb_deleted")
+            conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (stale.kb_id,))
+        kb_id, now = uuid.uuid4().hex, _now()
+        conn.execute(
+            "INSERT INTO kb_registry (kb_id, name, base_dir, dir_name, kind, "
+            "visibility, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (kb_id, name, location, name, UPLOADED_KIND, visibility, created_by, now, now),
+        )
+        row = conn.execute("SELECT * FROM kb_registry WHERE kb_id = ?", (kb_id,)).fetchone()
+    return _record(row)
+
+
 def get_kb(kb_id: str) -> KbRecord | None:
     with _read() as conn:
         if conn is None:
