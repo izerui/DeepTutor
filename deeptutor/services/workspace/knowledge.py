@@ -106,7 +106,10 @@ def resolve_qualified(kb_ref: str, *, require_write=False):
 
 
 def knowledge_catalog() -> list[dict]:
-    from deeptutor.multi_user.knowledge_access import _list_visible_knowledge_bases
+    from deeptutor.multi_user.knowledge_access import (
+        _list_visible_knowledge_bases,
+        _with_external_private,
+    )
     from deeptutor.services.workspace import get_content_workspace_service
     from deeptutor.services.workspace.context import workspace_context
 
@@ -149,7 +152,7 @@ def knowledge_catalog() -> list[dict]:
                 )
     finally:
         library_request.reset(token)
-    return items
+    return _with_external_private(items)
 
 
 def resolve_selected(kb_ref: str, selected: list[str], *, require_write=False):

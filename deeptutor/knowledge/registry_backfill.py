@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -125,6 +126,15 @@ def backfill_registry() -> dict[str, int]:
                     "D16 grant promotion failed — key left unset so the next "
                     "startup retries"
                 )
+    try:
+        from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+        partner_report = migrate_partner_kb_copies()
+        report["partner_copies"] = len(partner_report["referenced"]) + len(
+            partner_report["adopted"]
+        )
+    except Exception:
+        logger.exception("Partner knowledge-base copy migration failed")
     return report
 
 
@@ -141,6 +151,18 @@ def _sync_root_unguarded(root: Path, *, created_by: str) -> int:
 
     if not root.is_dir():
         return 0
+    # Manager reconciliation tolerates damaged JSON as an empty catalog and
+    # may rewrite it when discovering folders. Keep that failure observable to
+    # the subsequent partner migration instead of manufacturing "missing".
+    try:
+        catalog = json.loads((root / "kb_config.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        pass
+    else:
+        if not isinstance(catalog, dict) or not isinstance(catalog.get("knowledge_bases"), dict):
+            raise ValueError(f"Invalid knowledge catalog: {root}")
+        if any(not isinstance(entry, dict) for entry in catalog["knowledge_bases"].values()):
+            raise ValueError(f"Invalid knowledge entries: {root}")
     manager = KnowledgeBaseManager(base_dir=str(root))
     names = manager.list_knowledge_bases()
     registry.sync_base_dir(

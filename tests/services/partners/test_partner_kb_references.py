@@ -541,3 +541,400 @@ async def test_destroy_fails_closed_on_registry_error(partners_root, monkeypatch
         await manager.destroy_partner("ada")
     assert (source / "raw" / "doc.pdf").exists()
     assert manager.load_config("ada") is not None
+
+
+def _migration_partner(partners_root, *, partner_id="ada", owner_id=""):
+    PartnerManager().save_config(
+        partner_id, PartnerConfig(name=partner_id, owner_id=owner_id), auto_start=False
+    )
+    return _seed_admin_kb(partners_root / partner_id / "workspace")
+
+
+def test_migration_live_source_retires_without_losing_files(partners_root):
+    import json
+
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    source = _seed_admin_kb(partners_root.parent)
+    copy = _migration_partner(partners_root)
+    original = {p.relative_to(copy): p.read_bytes() for p in copy.rglob("*") if p.is_file()}
+    report = migrate_partner_kb_copies()
+    [record] = registry.list_referenced("partner", "ada")
+    assert record.base_dir == str(source.parent)
+    assert report == {
+        "referenced": [{"partner_id": "ada", "name": "physics", "kb_id": record.kb_id}],
+        "adopted": [],
+    }
+    retired = copy.parent / ".retired" / "physics"
+    assert {p.relative_to(retired): p.read_bytes() for p in retired.rglob("*") if p.is_file()} == original
+    assert not copy.exists()
+    assert "physics" not in json.loads((copy.parent / "kb_config.json").read_text())["knowledge_bases"]
+    assert registry.get_meta("partner_copies_migrated_at")
+    assert migrate_partner_kb_copies(force=True) == {"referenced": [], "adopted": []}
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+
+
+@pytest.mark.parametrize("damage", ["json", "shape", "permission"])
+def test_migration_unavailable_source_is_retryable(partners_root, monkeypatch, damage):
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    source = _seed_admin_kb(partners_root.parent)
+    copy = _migration_partner(partners_root)
+    catalog = source.parent / "kb_config.json"
+    original = catalog.read_bytes()
+    read_text = Path.read_text
+    with monkeypatch.context() as patch:
+        if damage == "permission":
+            def denied(path, *args, **kwargs):
+                if path == catalog:
+                    raise PermissionError("synthetic catalog failure")
+                return read_text(path, *args, **kwargs)
+            patch.setattr(Path, "read_text", denied)
+        else:
+            catalog.write_text("{" if damage == "json" else '{"knowledge_bases": []}')
+        assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert registry.list_referenced("partner", "ada") == []
+    assert registry.find_by_location(copy.parent, copy.name) is None
+    assert (copy / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+    catalog.write_bytes(original)
+    assert len(migrate_partner_kb_copies()["referenced"]) == 1
+    assert registry.get_meta("partner_copies_migrated_at")
+
+
+@pytest.mark.parametrize(
+    "failure", ["register", "reference", "notice", "rename", "retire_config", "completion", "retire_completion"]
+)
+def test_migration_resumes_partial_work(partners_root, monkeypatch, failure):
+    from deeptutor.services import file_io
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    copy = _migration_partner(partners_root)
+    retiring = failure in {"rename", "retire_config", "retire_completion"}
+    if retiring:
+        _seed_admin_kb(partners_root.parent)
+    original_add = registry.add_reference
+    original_write = file_io.atomic_write_json
+    original_meta = registry.set_meta
+    original_register = registry.register_kb
+
+    def fail(*args, **kwargs):
+        raise OSError("synthetic partial failure")
+
+    def reference_then_fail(*args, **kwargs):
+        original_add(*args, **kwargs)
+        fail()
+
+    def register_then_fail(*args, **kwargs):
+        original_register(*args, **kwargs)
+        fail()
+
+    def config_fail(path, value, *args, **kwargs):
+        if path == copy.parent / "kb_config.json":
+            fail()
+        return original_write(path, value, *args, **kwargs)
+
+    def completion_fail(key, value):
+        if key.startswith("partner_copy_progress:") and '"done": true' in value:
+            fail()
+        return original_meta(key, value)
+
+    with monkeypatch.context() as patch:
+        if failure == "register":
+            patch.setattr(registry, "register_kb", register_then_fail)
+        elif failure == "reference":
+            patch.setattr(registry, "add_reference", reference_then_fail)
+        elif failure == "notice":
+            patch.setattr(registry, "add_migration_item", fail)
+        elif failure in {"completion", "retire_completion"}:
+            patch.setattr(registry, "set_meta", completion_fail)
+        elif failure == "rename":
+            patch.setattr(Path, "rename", fail)
+        else:
+            patch.setattr(file_io, "atomic_write_json", config_fail)
+        migrate_partner_kb_copies()
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    [record] = registry.list_records()
+    report = migrate_partner_kb_copies()
+    assert registry.list_referenced("partner", "ada") == [record]
+    assert len(report["referenced" if retiring else "adopted"]) == 1
+    assert registry.get_meta("partner_copies_migrated_at")
+    assert migrate_partner_kb_copies(force=True) == {"referenced": [], "adopted": []}
+    location = copy.parent / ".retired" / copy.name if retiring else copy
+    assert (location / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+
+
+@pytest.mark.asyncio
+async def test_migration_adopted_owner_catalog_read_and_partner_lifecycle(partners_root):
+    from deeptutor.api.routers.knowledge import _list_knowledge_bases
+    from deeptutor.multi_user.knowledge_access import (
+        list_visible_knowledge_bases,
+        resolve_kb_document_path,
+    )
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import knowledge_catalog, library_request
+
+    copy = _migration_partner(partners_root, owner_id="alice")
+    report = migrate_partner_kb_copies()
+    [record] = registry.list_referenced("partner", "ada")
+    assert report["adopted"] == [{"partner_id": "ada", "name": "physics", "kb_id": record.kb_id}]
+    assert record.created_by == "alice" and record.visibility == "private"
+    assert record.base_dir == str(copy.parent)
+    [notice] = [i for i in registry.list_migration_items() if i.kind == "partner_copy_adopted"]
+    assert notice.key == "ada:physics"
+    assert notice.data == {**report["adopted"][0], "owner_id": "alice"}
+    assert list_assets("ada")["knowledge_bases"][0]["adopted"] is True
+    manager = PartnerManager()
+    manager.save_config("other", PartnerConfig(name="Other", owner_id="alice"), auto_start=False)
+    registry.add_reference(
+        record.kb_id, referrer_kind="partner", referrer_id="other", created_by="alice"
+    )
+    for stage in ["adopted", "detached", "destroyed", "recreated"]:
+        if stage == "detached":
+            assert remove_asset("ada", "knowledge_base", record.ref)
+        elif stage == "destroyed":
+            assert await manager.destroy_partner("ada")
+        elif stage == "recreated":
+            manager.save_config("ada", PartnerConfig(name="New", owner_id="bob"), auto_start=False)
+        alice = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
+        with user_context(alice):
+            assert [r["ref"] for r in knowledge_catalog()] == [record.ref]
+            token = library_request.set(True)
+            try:
+                [info] = _list_knowledge_bases()
+                assert info.ref == record.ref and info.available is not False
+                assert not info.read_only
+                assert resolve_kb_document_path(info.ref, "doc.pdf").read_bytes() == b"%PDF-fake"
+                assert resolve_kb(info.ref, require_write=True).base_dir == copy.parent
+            finally:
+                library_request.reset(token)
+            workspace = ContentWorkspaceService().create_workspace(
+                stage, resources={"knowledge_bases": []}
+            )["workspace_id"]
+            with workspace_context(workspace):
+                assert list_visible_knowledge_bases() == []
+                for write in [False, True]:
+                    with pytest.raises(HTTPException) as denied:
+                        resolve_kb(record.ref, require_write=write)
+                    assert denied.value.status_code == 403
+            selected = ContentWorkspaceService().create_workspace(
+                stage + " selected", resources={"knowledge_bases": [record.ref]}
+            )["workspace_id"]
+            with workspace_context(selected):
+                assert [r["ref"] for r in list_visible_knowledge_bases()] == [record.ref]
+                assert resolve_kb_document_path(record.ref, "doc.pdf").read_bytes() == b"%PDF-fake"
+        bob = CurrentUser("bob", "Bob", "user", scope_for_user("bob", is_admin=False))
+        with user_context(bob):
+            assert knowledge_catalog() == []
+            assert resolve_kb_document_path(record.ref, "doc.pdf") is None
+            with pytest.raises(HTTPException) as denied:
+                resolve_kb(record.ref)
+            assert denied.value.status_code == 404
+        with partner_content_context("other", manager.load_config("other")):
+            assert resolve_kb(record.ref).read_only
+        if stage != "adopted":
+            with partner_content_context("ada", manager.load_config("ada") or PartnerConfig(name="Ada")):
+                with pytest.raises(HTTPException):
+                    resolve_kb("physics")
+                with pytest.raises(HTTPException):
+                    resolve_kb(record.ref)
+        assert migrate_partner_kb_copies(force=True) == {"referenced": [], "adopted": []}
+        assert registry.get_kb(record.ref) == record
+
+
+@pytest.mark.parametrize("owner_role", ["user", "admin", "unknown", "local"])
+def test_migration_uses_creator_source_root(partners_root, monkeypatch, owner_role):
+    from deeptutor.multi_user import identity
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    owner_id = "" if owner_role == "local" else "alice"
+    monkeypatch.setattr(
+        identity, "get_user_by_id",
+        lambda _: None if owner_role == "unknown" else ("alice", {"role": owner_role}),
+    )
+    root = (
+        scope_for_user("alice", is_admin=False).root
+        if owner_role == "user" else partners_root.parent
+    )
+    source = _seed_admin_kb(root)
+    # Backfill registers shared admin sources under LOCAL_ADMIN_ID first.
+    registry.register_kb(
+        base_dir=source.parent, name="physics", kind="uploaded",
+        created_by="alice" if owner_role == "user" else LOCAL_ADMIN_ID,
+    )
+    copy = _migration_partner(partners_root, owner_id=owner_id)
+    assert len(migrate_partner_kb_copies()["referenced"]) == 1
+    [record] = registry.list_referenced("partner", "ada")
+    assert record.base_dir == str(source.parent)
+    assert not copy.exists()
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_migration_folder_without_catalog_is_readable(partners_root, live):
+    from deeptutor.multi_user.knowledge_access import resolve_kb_document_path
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    copy = _migration_partner(partners_root)
+    (copy.parent / "kb_config.json").unlink()
+    if live:
+        source = _seed_admin_kb(partners_root.parent)
+        (source.parent / "kb_config.json").unlink()
+    report = migrate_partner_kb_copies()
+    assert len(report["referenced" if live else "adopted"]) == 1
+    [record] = registry.list_referenced("partner", "ada")
+    assert resolve_kb_document_path(record.ref, "doc.pdf").read_bytes() == b"%PDF-fake"
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_migration_connector_rows(partners_root, live):
+    import json
+
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    PartnerManager().save_config("ada", PartnerConfig(name="Ada"), auto_start=False)
+    root = partners_root / "ada" / "workspace"
+    entry = _seed_admin_connected_kb(root)
+    if live:
+        _seed_admin_connected_kb(partners_root.parent)
+    report = migrate_partner_kb_copies()
+    assert len(report["referenced" if live else "adopted"]) == 1
+    [record] = registry.list_referenced("partner", "ada")
+    assert record.kind == "weknora" and record.visibility == "private"
+    catalog = json.loads((root / "knowledge_bases" / "kb_config.json").read_text())
+    assert catalog["knowledge_bases"] == ({} if live else {"wiki": entry})
+    assert resolve_kb(record.ref).name == "wiki"
+    assert migrate_partner_kb_copies(force=True) == {"referenced": [], "adopted": []}
+
+
+def test_migration_foreign_connector_does_not_retire_copy(partners_root):
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    PartnerManager().save_config(
+        "ada", PartnerConfig(name="Ada", owner_id="alice"), auto_start=False
+    )
+    _seed_admin_connected_kb(partners_root / "ada" / "workspace")
+    _seed_admin_connected_kb(partners_root.parent)
+    registry.ensure_registered(
+        partners_root.parent / "knowledge_bases", "wiki", created_by=LOCAL_ADMIN_ID
+    )
+    catalog = partners_root / "ada" / "workspace" / "knowledge_bases" / "kb_config.json"
+    before = catalog.read_bytes()
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert catalog.read_bytes() == before
+    assert registry.list_referenced("partner", "ada") == []
+
+
+def test_migration_partner_failure_does_not_block_others_or_complete(partners_root):
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    bad = _migration_partner(partners_root, partner_id="bad")
+    _migration_partner(partners_root, partner_id="good")
+    config = partners_root / "bad" / "config.yaml"
+    original = config.read_bytes()
+    config.write_text("[broken")
+    assert len(migrate_partner_kb_copies()["adopted"]) == 1
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert (bad / "raw" / "doc.pdf").exists()
+    assert registry.list_referenced("partner", "bad") == []
+    config.write_bytes(original)
+    assert migrate_partner_kb_copies()["adopted"][0]["partner_id"] == "bad"
+    assert registry.get_meta("partner_copies_migrated_at")
+
+
+def test_migration_skips_shared_workspace_and_retries_failed_force(partners_root):
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    copy = _migration_partner(partners_root)
+    manager = PartnerManager()
+    manager.save_config(
+        "ada", PartnerConfig(name="Ada", workspace_id="shared"), auto_start=False
+    )
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    assert copy.exists()
+    manager.save_config("ada", PartnerConfig(name="Ada"), auto_start=False)
+    catalog = copy.parent / "kb_config.json"
+    before = catalog.read_bytes()
+    catalog.write_text("{")
+    assert migrate_partner_kb_copies(force=True) == {"referenced": [], "adopted": []}
+    assert not registry.get_meta("partner_copies_migrated_at")
+    catalog.write_bytes(before)
+    assert len(migrate_partner_kb_copies()["adopted"]) == 1
+
+
+@pytest.mark.parametrize("damage", ["copy_catalog", "identity", "traversal", "symlink"])
+def test_migration_unsafe_or_unavailable_inputs_preserve_data(partners_root, damage):
+    from deeptutor.multi_user import identity
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    copy = _migration_partner(partners_root, owner_id="alice")
+    if damage == "identity":
+        identity.USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        identity.USERS_FILE.write_text("{")
+    elif damage == "traversal":
+        (copy.parent / "kb_config.json").write_text('{"knowledge_bases": {"../escape": {}}}')
+    elif damage == "symlink":
+        (copy.parent / "alias").symlink_to(copy, target_is_directory=True)
+    else:
+        (copy.parent / "kb_config.json").write_text("{")
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert registry.list_referenced("partner", "ada") == []
+    assert (copy / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+
+
+def test_migration_preserves_retired_collision_and_backfill_reports_count(partners_root):
+    from deeptutor.knowledge.registry_backfill import backfill_registry
+
+    copy = _migration_partner(partners_root)
+    _seed_admin_kb(partners_root.parent)
+    retired = copy.parent / ".retired" / "physics"
+    retired.mkdir(parents=True)
+    (retired / "old.txt").write_text("old")
+    assert backfill_registry()["partner_copies"] == 1
+    assert (retired / "old.txt").read_text() == "old"
+    [new] = list(retired.parent.glob("physics-*"))
+    assert (new / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+    assert backfill_registry()["partner_copies"] == 0
+
+
+@pytest.mark.parametrize("content", ["{", '{"knowledge_bases": []}', '{"knowledge_bases": {"physics": null}}'])
+def test_migration_backfill_does_not_hide_damaged_source(partners_root, content):
+    from deeptutor.knowledge.registry_backfill import _sync_root_unguarded, backfill_registry
+
+    source = _seed_admin_kb(partners_root.parent)
+    copy = _migration_partner(partners_root)
+    catalog = source.parent / "kb_config.json"
+    catalog.write_text(content)
+    with pytest.raises(ValueError):
+        _sync_root_unguarded(source.parent, created_by=LOCAL_ADMIN_ID)
+    assert backfill_registry()["partner_copies"] == 0
+    assert catalog.read_text() == content
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert registry.list_referenced("partner", "ada") == []
+    assert (copy / "raw" / "doc.pdf").read_bytes() == b"%PDF-fake"
+
+
+def test_migration_pending_retirement_never_switches_to_adoption(partners_root, monkeypatch):
+    from deeptutor.services.partners.kb_migration import migrate_partner_kb_copies
+
+    source = _seed_admin_kb(partners_root.parent)
+    copy = _migration_partner(partners_root)
+    original = Path.rename
+
+    def fail(*args, **kwargs):
+        raise OSError("synthetic rename failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rename", fail)
+        assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    hidden = source.parent / ".offline"
+    original(source, hidden)
+    assert migrate_partner_kb_copies() == {"referenced": [], "adopted": []}
+    assert registry.find_by_location(copy.parent, copy.name) is None
+    assert registry.get_meta("partner_copies_migrated_at") is None
+    assert (copy / "raw" / "doc.pdf").exists()
+    original(hidden, source)
+    assert len(migrate_partner_kb_copies()["referenced"]) == 1

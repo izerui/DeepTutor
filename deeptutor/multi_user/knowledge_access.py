@@ -412,6 +412,31 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
     }
 
 
+def _with_external_private(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Include independently owned KBs outside the account's storage scopes."""
+    from deeptutor.knowledge import registry
+    from deeptutor.services.workspace.knowledge import workspace_id_for_kb_base_dir
+
+    user = get_current_user()
+    present = {item.get("kb_id") for item in items}
+    result = list(items)
+    for record in registry.list_records(visibility="private", created_by=user.id):
+        if record.kb_id in present or workspace_id_for_kb_base_dir(record.base_dir) is not None:
+            continue
+        result.append(
+            {
+                "id": record.ref,
+                "name": record.name,
+                "source": "user",
+                "assigned": False,
+                "read_only": False,
+                "provenance_label": "Created by you",
+                **_registry_fields(record, owned=True),
+            }
+        )
+    return result
+
+
 def _account_names() -> dict[str, str]:
     from .identity import load_users
     from .models import LOCAL_ADMIN_ID
