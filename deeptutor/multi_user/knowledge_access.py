@@ -88,7 +88,17 @@ def resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource
         return resolve_qualified(kb_ref)
     selected = None if library_request.get() else current_resources().knowledge_bases
     if selected is not None:
-        return resolve_selected(kb_ref, selected, require_write=require_write)
+        try:
+            return resolve_selected(kb_ref, selected, require_write=require_write)
+        except HTTPException:
+            if require_write:
+                raise
+            # D14: public / referenced KBs bypass workspace selections, but the
+            # caller's own private KBs stay constrained by the allowlist.
+            fallback = _legacy_registry_fallback(kb_ref)
+            if fallback is None:
+                raise
+            return fallback
     if parse_kb_id(kb_ref) is not None or canonical_kb_id(kb_ref) != kb_ref:
         return resolve_qualified(kb_ref, require_write=require_write)
     if kb_ref and not kb_ref.startswith((ADMIN_PREFIX, USER_PREFIX)):
@@ -114,7 +124,7 @@ def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResourc
         raise HTTPException(status_code=403, detail="This knowledge base is read-only for you")
     # D14: workspace selections only narrow the caller's own private KBs.
     own_private = record.visibility == "private" and record.created_by == user.id
-    if own_private and kb_ref not in learning_source_kbs.get() and not library_request.get():
+    if own_private and not (not require_write and kb_ref in learning_source_kbs.get()) and not library_request.get():
         selected = current_resources().knowledge_bases
         if selected is not None and not _selection_allows(record, selected):
             raise HTTPException(
@@ -156,6 +166,34 @@ def _shared_admin_resource(name: str, *, require_write: bool) -> KnowledgeResour
         return None
     if require_write:
         raise HTTPException(status_code=403, detail="Shared knowledge bases are read-only")
+    return KnowledgeResource(
+        id=f"{ADMIN_PREFIX}{name}",
+        name=name,
+        base_dir=admin_kb_base_dir(),
+        source="admin",
+        assigned=True,
+        read_only=True,
+    )
+
+
+def _legacy_registry_fallback(kb_ref: str) -> KnowledgeResource | None:
+    """Bypass a workspace 403 when the legacy ref points at a public/referenced KB.
+
+    The caller's own private KBs stay constrained by the workspace allowlist;
+    only KBs readable through the registry (public or via a registered reader)
+    that belong to someone else get the bypass (D14).
+    """
+    from deeptutor.knowledge import registry
+
+    _, name = _strip_resource_prefix(kb_ref)
+    # Try admin library first (covers ``admin:kb:<name>`` and bare names).
+    record = registry.find_by_location(admin_kb_base_dir(), name)
+    if record is None:
+        return None
+    user = get_current_user()
+    own_private = record.visibility == "private" and record.created_by == user.id
+    if own_private or not registry.can_read(record, user):
+        return None
     return KnowledgeResource(
         id=f"{ADMIN_PREFIX}{name}",
         name=name,

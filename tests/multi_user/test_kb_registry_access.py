@@ -123,3 +123,75 @@ def test_grants_no_longer_open_admin_kbs(as_user, seed_user):
         with pytest.raises(HTTPException) as denied:
             resolve_kb("admin:kb:secret")
         assert denied.value.status_code == 403
+
+
+def test_workspace_allowlist_does_not_block_legacy_public_admin_refs(as_user, make_kb):
+    """D14: public KBs bypass workspace allowlists even for legacy refs."""
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+
+    registry.register_kb(
+        base_dir=admin_kb_base_dir(),
+        name="public-math",
+        kind="uploaded",
+        created_by="local-admin",
+        visibility="public",
+    )
+    registry.register_kb(
+        base_dir=admin_kb_base_dir(),
+        name="private-answers",
+        kind="uploaded",
+        created_by="local-admin",
+    )
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        make_kb(manager, "my-notes")
+        registry.register_kb(
+            base_dir=manager.base_dir, name="my-notes", kind="uploaded", created_by="t1"
+        )
+        narrow = ContentWorkspaceService().create_workspace(
+            "Empty", resources={"knowledge_bases": []}
+        )["workspace_id"]
+        with workspace_context(narrow):
+            # Public admin KB via legacy ref is readable read-only.
+            resource = resolve_kb("admin:kb:public-math")
+            assert resource.read_only is True and resource.assigned is True
+            # Bare name also works.
+            bare = resolve_kb("public-math")
+            assert bare.id == "admin:kb:public-math" and bare.read_only is True
+            # Private admin KB is still denied.
+            with pytest.raises(HTTPException) as private:
+                resolve_kb("admin:kb:private-answers")
+            assert private.value.status_code == 403
+            # Caller's own private KB outside allowlist is still denied.
+            with pytest.raises(HTTPException) as own:
+                resolve_kb("my-notes")
+            assert own.value.status_code == 403
+
+
+def test_resolve_registered_learning_source_bypass_requires_read(as_user, make_kb):
+    """learning_source_kbs bypass must not grant writes."""
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import learning_source_kbs
+
+    with as_user("t1", role="teacher"):
+        manager = current_kb_manager()
+        make_kb(manager, "mine")
+        record = registry.register_kb(
+            base_dir=manager.base_dir, name="mine", kind="uploaded", created_by="t1"
+        )
+        narrow = ContentWorkspaceService().create_workspace(
+            "Empty", resources={"knowledge_bases": []}
+        )["workspace_id"]
+        token = learning_source_kbs.set(frozenset({record.ref}))
+        try:
+            with workspace_context(narrow):
+                # Read via learning source bypass works.
+                assert resolve_kb(record.ref).name == "mine"
+                # Write is still blocked by workspace selection.
+                with pytest.raises(HTTPException) as denied:
+                    resolve_kb(record.ref, require_write=True)
+                assert denied.value.status_code == 403
+        finally:
+            learning_source_kbs.reset(token)
