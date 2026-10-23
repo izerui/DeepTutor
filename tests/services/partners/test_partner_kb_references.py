@@ -184,10 +184,136 @@ def test_legacy_readable_resource_does_not_transfer_ownership(partners_root, mon
     )
     actor = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
     with user_context(actor):
-        assert provision_assets("ada", knowledge_bases=["admin:kb:physics"])["errors"] == []
-    [record] = registry.list_referenced("partner", "ada")
+        assert provision_assets("ada", knowledge_bases=["admin:kb:physics"])["errors"]
+    record = registry.find_by_location(source.parent, "physics")
     assert record.created_by == LOCAL_ADMIN_ID
+    assert registry.list_referenced("partner", "ada") == []
+
+
+@pytest.mark.parametrize("scope_kind", ["book", "mastery_template"])
+def test_scoped_private_read_cannot_be_delegated(partners_root, monkeypatch, scope_kind):
+    from deeptutor.multi_user import partner_access
+
+    manager = PartnerManager()
+    manager.save_config("ada", PartnerConfig(name="Ada", owner_id="alice"), auto_start=False)
+    monkeypatch.setattr(partner_access, "_manager", lambda: manager)
+    source = _seed_admin_kb(partners_root.parent)
+    record = registry.ensure_registered(source.parent, "physics", created_by=LOCAL_ADMIN_ID)
+    registry.add_reference(
+        record.kb_id, referrer_kind=scope_kind, referrer_id="active", created_by=LOCAL_ADMIN_ID
+    )
+    active = True
+    registry.register_reference_reader(
+        scope_kind, lambda referrer_id, user_id: active and referrer_id == "active" and user_id == "alice"
+    )
+    actor = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
+    with user_context(actor):
+        assert resolve_kb(record.ref).read_only
+        assert provision_assets("ada", knowledge_bases=[record.ref])["errors"]
+        active = False
+        assert not registry.can_read(record, actor)
+    assert registry.list_referenced("partner", "ada") == []
+    assert not registry.can_read(record, partner_user("ada"))
+    assert (source / "raw" / "doc.pdf").exists()
+
+
+@pytest.mark.parametrize("visibility,source_owner", [("public", LOCAL_ADMIN_ID), ("private", "alice")])
+def test_creator_can_delegate_public_or_own_private_kb(
+    partners_root, monkeypatch, visibility, source_owner
+):
+    from deeptutor.multi_user import partner_access
+
+    manager = PartnerManager()
+    manager.save_config("ada", PartnerConfig(name="Ada", owner_id="alice"), auto_start=False)
+    monkeypatch.setattr(partner_access, "_manager", lambda: manager)
+    source = _seed_admin_kb(partners_root.parent)
+    record = registry.ensure_registered(source.parent, "physics", created_by=source_owner)
+    registry.set_visibility(record.kb_id, visibility)
+    actor = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
+    with user_context(actor):
+        assert provision_assets("ada", knowledge_bases=[record.ref])["errors"] == []
     assert registry.list_references(record.kb_id)[0].created_by == "alice"
+    with user_context(partner_user("ada")):
+        assert resolve_kb(record.ref).read_only
+
+
+@pytest.mark.parametrize("target_owner", ["alice", ""])
+def test_admin_delegation_accounts_for_actual_partner_creator(
+    partners_root, monkeypatch, target_owner
+):
+    from deeptutor.multi_user import partner_access
+
+    manager = PartnerManager()
+    manager.save_config("ada", PartnerConfig(name="Ada", owner_id=target_owner), auto_start=False)
+    monkeypatch.setattr(partner_access, "_manager", lambda: manager)
+    source = _seed_admin_kb(partners_root.parent)
+    record = registry.ensure_registered(source.parent, "physics", created_by="admin2")
+    registry.set_visibility(record.kb_id, "public")
+    actor = CurrentUser("admin2", "Admin", "admin", scope_for_user("admin2", is_admin=True))
+    with user_context(actor):
+        assert provision_assets("ada", knowledge_bases=[record.ref])["errors"] == []
+    assert registry.list_references(record.kb_id)[0].created_by == (target_owner or LOCAL_ADMIN_ID)
+    with pytest.raises(registry.KbVisibilityError):
+        registry.set_visibility(record.kb_id, "private")
+    registry.set_visibility(record.kb_id, "private", force=True)
+    assert registry.list_referenced("partner", "ada") == []
+    assert len(registry.list_unavailable_references("partner", "ada")) == 1
+    assert not registry.can_read(registry.get_kb(record.ref), partner_user("ada"))
+
+
+@pytest.mark.parametrize(
+    "source_owner,target_owner,allowed",
+    [("alice", "alice", True), ("admin2", "alice", False),
+     ("admin2", "", False), (LOCAL_ADMIN_ID, "", True)],
+)
+def test_admin_connector_delegation_uses_target_owner(
+    partners_root, monkeypatch, source_owner, target_owner, allowed
+):
+    from deeptutor.multi_user import partner_access
+
+    manager = PartnerManager()
+    manager.save_config("ada", PartnerConfig(name="Ada", owner_id=target_owner), auto_start=False)
+    monkeypatch.setattr(partner_access, "_manager", lambda: manager)
+    _seed_admin_connected_kb(partners_root.parent)
+    record = registry.ensure_registered(
+        partners_root.parent / "knowledge_bases", "wiki", created_by=source_owner
+    )
+    actor = CurrentUser("admin2", "Admin", "admin", scope_for_user("admin2", is_admin=True))
+    with user_context(actor):
+        report = provision_assets("ada", knowledge_bases=[record.ref])
+    assert bool(report["errors"]) is not allowed
+    refs = registry.list_references(record.kb_id)
+    assert bool(refs) is allowed
+    if allowed:
+        assert refs[0].created_by == (target_owner or LOCAL_ADMIN_ID)
+
+
+def test_withdrawal_before_reference_write_cannot_be_laundered(partners_root, monkeypatch):
+    from deeptutor.multi_user import partner_access
+
+    manager = PartnerManager()
+    manager.save_config("ada", PartnerConfig(name="Ada", owner_id="alice"), auto_start=False)
+    monkeypatch.setattr(partner_access, "_manager", lambda: manager)
+    source = _seed_admin_kb(partners_root.parent)
+    record = registry.ensure_registered(source.parent, "physics", created_by=LOCAL_ADMIN_ID)
+    registry.set_visibility(record.kb_id, "public")
+    # A previous delegation has been withdrawn; a rejected retry must preserve its tombstone.
+    registry.add_reference(
+        record.kb_id, referrer_kind="partner", referrer_id="ada", created_by="alice"
+    )
+    original = registry.add_reference
+
+    def withdraw_then_write(*args, **kwargs):
+        registry.set_visibility(record.kb_id, "private", force=True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(registry, "add_reference", withdraw_then_write)
+    actor = CurrentUser("alice", "Alice", "user", scope_for_user("alice", is_admin=False))
+    with user_context(actor):
+        assert provision_assets("ada", knowledge_bases=[record.ref])["errors"]
+    assert registry.list_referenced("partner", "ada") == []
+    assert len(registry.list_unavailable_references("partner", "ada")) == 1
+    assert not registry.can_read(registry.get_kb(record.ref), partner_user("ada"))
 
 
 def test_unregistered_foreign_readonly_resource_is_not_claimed(partners_root, monkeypatch):

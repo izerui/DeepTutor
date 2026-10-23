@@ -88,6 +88,43 @@ def test_connectors_are_private_and_only_partners_may_reference_them(tmp_path):
     assert [ref.referrer_id for ref in registry.list_references(vault.kb_id)] == ["ada"]
 
 
+@pytest.mark.parametrize("revoked", [False, True])
+def test_add_reference_guard_preserves_state_and_excludes_concurrent_writes(tmp_path, revoked):
+    import sqlite3
+
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="physics", kind="uploaded", created_by="owner",
+        visibility="public",
+    )
+    registry.add_reference(
+        kb.kb_id, referrer_kind="partner", referrer_id="ada", created_by="alice",
+        doc_ids=["original"],
+    )
+    if revoked:
+        registry.set_visibility(kb.kb_id, "private", force=True)
+    before_live = registry.list_references(kb.kb_id)
+    before_revoked = registry.list_unavailable_references("partner", "ada")
+    targets = []
+
+    def reject(target):
+        targets.append(target)
+        # A separate SQLite writer cannot withdraw visibility during validation.
+        with sqlite3.connect(registry._db_path(), timeout=0) as concurrent:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                concurrent.execute("BEGIN IMMEDIATE")
+        raise registry.KbReferenceError("delegation rejected")
+
+    with pytest.raises(registry.KbReferenceError, match="delegation rejected"):
+        registry.add_reference(
+            kb.kb_id, referrer_kind="partner", referrer_id="ada", created_by="bob",
+            validate_target=reject,
+        )
+    assert targets == [registry.get_kb(kb.ref)]
+    assert targets[0].visibility == ("private" if revoked else "public")
+    assert registry.list_references(kb.kb_id) == before_live
+    assert registry.list_unavailable_references("partner", "ada") == before_revoked
+
+
 def test_making_private_is_blocked_only_by_other_owners_references(tmp_path):
     kb = registry.register_kb(
         base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1", visibility="public"

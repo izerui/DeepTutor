@@ -190,10 +190,13 @@ def _copy_knowledge_base(kb_ref: str, partner_id: str) -> str:
     record = registry.resolve_ref(kb_ref)
     if record is None:
         raise ValueError("Knowledge base cannot be safely registered")
-    user_id = get_current_user().id
+    actor = get_current_user()
+    owner = partner_owner_id(partner_id) or LOCAL_ADMIN_ID
 
-    kind = record.kind
-    if kind in NON_RETRIEVABLE_KB_TYPES:
+    def validate_target(target: registry.KbRecord) -> None:
+        assert_partner_manageable(partner_id)
+        if (partner_owner_id(partner_id) or LOCAL_ADMIN_ID) != owner:
+            raise ValueError("Partner creator changed during knowledge base provisioning")
         # Obsidian, MarginNote and subagent KBs are each driven by an
         # *exclusive* ``KnowledgeCapability``: when one is in the turn's KB
         # selection it replaces the whole tool surface. A partner passes ALL of
@@ -205,17 +208,24 @@ def _copy_knowledge_base(kb_ref: str, partner_id: str) -> str:
         # copy simply failed for want of a folder. It became reachable the
         # moment the branch below started registering pointer entries, so the
         # refusal has to be explicit.
-        raise ValueError(
-            f"A {kind} knowledge base cannot be assigned to a partner: "
-            "it takes over the whole conversation when selected."
-        )
-
-    if registry.is_connector(record):
-        owner = partner_owner_id(partner_id) or LOCAL_ADMIN_ID
-        if record.created_by != owner:
+        if target.kind in NON_RETRIEVABLE_KB_TYPES:
+            raise ValueError(
+                f"A {target.kind} knowledge base cannot be assigned to a partner: "
+                "it takes over the whole conversation when selected."
+            )
+        if registry.is_connector(target) and target.created_by != owner:
             raise ValueError("A personal connector can only be referenced by its creator's partner")
+        # Scoped read access cannot be converted into a permanent delegation.
+        # This runs on the fresh record inside the reference write transaction.
+        if target.visibility != "public" and not registry.can_write(target, actor):
+            raise ValueError("Delegating a private knowledge base requires write authority")
+
     registry.add_reference(
-        record.kb_id, referrer_kind="partner", referrer_id=partner_id, created_by=user_id
+        record.kb_id,
+        referrer_kind="partner",
+        referrer_id=partner_id,
+        created_by=owner,
+        validate_target=validate_target,
     )
     return record.name
 

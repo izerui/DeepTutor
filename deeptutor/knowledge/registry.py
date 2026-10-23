@@ -797,9 +797,18 @@ def add_reference(
     referrer_id: str,
     doc_ids: list[str] | None = None,
     created_by: str,
+    validate_target: Callable[[KbRecord], None] | None = None,
 ) -> None:
+    """Add a reference, optionally validating its fresh target before any write.
+
+    The validator runs under BEGIN IMMEDIATE, excluding concurrent visibility
+    and reference changes. It must raise to reject and must not write registry
+    state. Omitting it preserves the existing trusted-caller contract.
+    """
     with _write() as conn:
         record = _reference_target(conn, kb_id, referrer_kind)
+        if validate_target is not None:
+            validate_target(record)
         conn.execute(
             "INSERT OR REPLACE INTO kb_references (kb_id, referrer_kind, referrer_id, doc_ids, "
             "created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
