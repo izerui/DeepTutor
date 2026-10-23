@@ -21,13 +21,16 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import logging
 from pathlib import Path
 import threading
 import time
 import uuid
 
-from deeptutor.services.file_io import atomic_write_json
+from deeptutor.services.file_io import atomic_write_json, atomic_write_text
 from deeptutor.services.path_service import get_path_service
+
+logger = logging.getLogger(__name__)
 
 COURSE_COLORS: tuple[str, ...] = (
     "#C65D2E",
@@ -247,6 +250,33 @@ def _lock_for(path: Path) -> threading.RLock:
         return lock
 
 
+def _sync_kb_references(course_id: str, course: StudyCourse | None) -> None:
+    """Replace the course's whole-KB references, without granting read access.
+
+    Errors propagate so the caller can roll back the course file while still
+    holding its lock. Registry replacement/removal is itself transactional.
+    """
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.context import get_current_user
+
+    if course is None:
+        registry.remove_references("course", course_id)
+        return
+    user = get_current_user()
+    refs: dict[str, None] = {}
+    for resource in course.resources:
+        if resource.kind != "knowledge_base":
+            continue
+        record = registry.resolve_ref(resource.ref_id)
+        if (
+            record is not None
+            and not registry.is_connector(record)
+            and registry.can_read(record, user)
+        ):
+            refs[record.kb_id] = None
+    registry.replace_references("course", course_id, list(refs.items()), created_by=user.id)
+
+
 class CourseService:
     """Small durable registry stored inside the active user's workspace."""
 
@@ -318,6 +348,22 @@ class CourseService:
 
     def _save(self, courses: list[StudyCourse]) -> None:
         atomic_write_json(self.index_file, {"courses": [course.to_dict() for course in courses]})
+
+    def _save_with_kb_references(
+        self, courses: list[StudyCourse], course_id: str, course: StudyCourse | None,
+    ) -> None:
+        """Save and sync under the caller's course lock; fail without losing old refs."""
+        previous = self.index_file.read_text(encoding="utf-8")
+        self._save(courses)
+        try:
+            _sync_kb_references(course_id, course)
+        except Exception:
+            try:
+                atomic_write_text(self.index_file, previous)
+            except Exception:
+                logger.exception("Could not roll back course %s after KB sync failed", course_id)
+                raise
+            raise
 
     @staticmethod
     def _assert_unique(courses: list[StudyCourse], name: str, except_id: str = "") -> None:
@@ -425,6 +471,7 @@ class CourseService:
         clean_ref = str(ref_id or "").strip()
         if not clean_ref:
             raise ValueError("A resource reference is required.")
+        clean_label = (str(label or "").strip() or clean_ref)[:120]
         target = str(course_id or "").strip()
         with self._lock:
             courses = self._load()
@@ -441,17 +488,30 @@ class CourseService:
             )
             if existing is not None:
                 return existing
+            if clean_kind == "knowledge_base":
+                from deeptutor.knowledge import registry
+                from deeptutor.multi_user.context import get_current_user
+
+                record = registry.resolve_ref(clean_ref)
+                if record is not None and registry.can_read(record, get_current_user()):
+                    clean_ref = record.ref
+                    for item in course.resources:
+                        if (
+                            item.kind == clean_kind
+                            and registry.resolve_ref(item.ref_id) == record
+                        ):
+                            return item
             resource = CourseResource(
                 id=f"res_{uuid.uuid4().hex[:12]}",
                 kind=clean_kind,
                 ref_id=clean_ref,
-                label=(str(label or "").strip() or clean_ref)[:120],
+                label=clean_label,
                 position=len(course.resources),
                 added_at=time.time(),
             )
             course.resources.append(resource)
             course.updated_at = resource.added_at
-            self._save(courses)
+            self._save_with_kb_references(courses, course.id, course)
             return resource
 
     def detach_resource(self, course_id: str, resource_id: str) -> None:
@@ -470,7 +530,7 @@ class CourseService:
                 resource.position = position
             course.resources = kept
             course.updated_at = time.time()
-            self._save(courses)
+            self._save_with_kb_references(courses, course.id, course)
 
     def append_agent_note(self, course_id: str, note: str) -> StudyCourse:
         """Add one assistant observation about the learner in this course.
@@ -574,7 +634,7 @@ class CourseService:
             kept = [course for course in courses if course.id != target]
             if len(kept) == len(courses):
                 raise CourseNotFoundError(target)
-            self._save(kept)
+            self._save_with_kb_references(kept, target, None)
 
 
 def get_course_service() -> CourseService:

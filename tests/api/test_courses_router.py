@@ -150,7 +150,7 @@ def test_missing_course_returns_404(course_service: CourseService) -> None:
 
 def test_state_degrades_when_every_subsystem_fails(
     course_service: CourseService,
-    failing_subsystems: None,
+    request: pytest.FixtureRequest,
 ) -> None:
     with TestClient(_build_app()) as client:
         course = _create_course(client, instructions="Use epsilon-delta proofs.")
@@ -160,6 +160,9 @@ def test_state_degrades_when_every_subsystem_fails(
                 json={"kind": kind, "ref_id": f"missing-{kind}"},
             )
             assert attached.status_code == 200
+        # Prepare persisted resources before the outage: attaching now requires
+        # a successful registry sync, while reading state must still degrade.
+        request.getfixturevalue("failing_subsystems")
         response = client.get(f"/api/courses/{course['id']}/state")
 
     assert response.status_code == 200
