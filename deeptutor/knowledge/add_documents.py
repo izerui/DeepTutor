@@ -590,8 +590,10 @@ async def _bootstrap_index_from_files(
                 "index_action": "create",
             },
         )
-    except Exception:
-        if provider != LIGHTRAG_PROVIDER:
+    except Exception as exc:
+        from deeptutor.knowledge.document_mutation import DocumentRecordingError
+
+        if provider != LIGHTRAG_PROVIDER or isinstance(exc, DocumentRecordingError):
             raise
         logger.warning(
             "LightRAG bootstrap for '%s' published before bookkeeping failed",
@@ -700,7 +702,9 @@ async def add_documents(
         )
         return result.processed_count
     except Exception as exc:
-        if published_count:
+        from deeptutor.knowledge.document_mutation import DocumentRecordingError
+
+        if published_count and not isinstance(exc, DocumentRecordingError):
             logger.warning(
                 "LightRAG append for '%s' published before bookkeeping failed",
                 kb_name,

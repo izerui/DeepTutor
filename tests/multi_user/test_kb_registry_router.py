@@ -408,8 +408,11 @@ def test_ready_registry_failure_does_not_publish_success(as_user, make_kb, monke
         registry.ensure_registered(manager.base_dir, "physics", created_by="t1")
         manager.update_kb_status("physics", "processing")
         _fail_registry_commit(monkeypatch)
-        with pytest.raises(sqlite3.OperationalError, match="injected"):
+        from deeptutor.knowledge.document_mutation import DocumentRecordingError
+
+        with pytest.raises(DocumentRecordingError, match="injected") as failed:
             manager.update_kb_status("physics", "ready")
+        assert isinstance(failed.value.__cause__, sqlite3.OperationalError)
         assert manager.get_kb_status("physics")["status"] == "processing"
         assert registry.list_documents(registry.find_by_location(manager.base_dir, "physics").ref) == []
 

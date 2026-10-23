@@ -48,6 +48,12 @@ from deeptutor.knowledge.add_documents import (
     hashes_for_indexed_files,
     remove_raw_document,
 )
+from deeptutor.knowledge.document_mutation import (
+    DocumentRecordingError,
+    async_document_mutation,
+    document_mutation,
+    finish_document_worker,
+)
 from deeptutor.knowledge.initializer import KnowledgeBaseInitializer
 from deeptutor.knowledge.kb_types import is_connected_kb, supports_local_raw_files
 from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -654,6 +660,11 @@ def _document_staging(kb_dir: Path, prefix: str):
 
 
 def _save_registered_uploads(files, target_dir: Path, *, registry_name: str, **kwargs):
+    with document_mutation(target_dir.resolve().parent.parent, registry_name):
+        return _publish_registered_uploads(files, target_dir, registry_name=registry_name, **kwargs)
+
+
+def _publish_registered_uploads(files, target_dir: Path, *, registry_name: str, **kwargs):
     """Stage a batch and restore overwritten files if document registration fails."""
     target_dir = target_dir.resolve()
     with _document_staging(target_dir.parent, ".document-upload-") as temp:
@@ -1247,7 +1258,9 @@ async def run_initialization_task(
 
             error_msg = str(e)
             trace = _tb.format_exc()
-            if getattr(initializer, "index_published", False):
+            if getattr(initializer, "index_published", False) and not isinstance(
+                e, DocumentRecordingError
+            ):
                 _task_log(
                     task_id,
                     "LightRAG index was published; final status bookkeeping will be reconciled.",
@@ -1530,7 +1543,7 @@ async def run_upload_processing_task(
 
             error_msg = f"Upload processing failed (KB '{kb_name}'): {e}"
             trace = _tb.format_exc()
-            if index_published:
+            if index_published and not isinstance(e, DocumentRecordingError):
                 _task_log(
                     task_id,
                     "LightRAG index changes were published; final upload bookkeeping "
@@ -3331,6 +3344,12 @@ async def create_kb_folder(kb_name: str, payload: CreateFolderPayload):
 
 @router.post("/knowledge-bases/{kb_name}/files/move")
 async def move_kb_file(kb_name: str, payload: MoveFilePayload):
+    manager, resolved_name, _ = _writable_kb(kb_name)
+    async with async_document_mutation(manager.base_dir, resolved_name):
+        return await finish_document_worker(_move_kb_file, kb_name, payload)
+
+
+def _move_kb_file(kb_name: str, payload: MoveFilePayload):
     """Move a file/folder between organizational folders (display only).
 
     Moving never re-indexes: folders don't affect retrieval, so this is a pure
@@ -3510,6 +3529,36 @@ async def kb_source_page(
 async def delete_kb_file(
     kb_name: str, filename: str, confirm: bool = False, force: bool = False
 ):
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force document deletion.")
+    manager, resolved_name, _ = _writable_kb(kb_name)
+    async with async_document_mutation(manager.base_dir, resolved_name):
+        kb_entry = _load_kb_entry_or_404(manager, resolved_name)
+        _assert_kb_writable_or_409(resolved_name, kb_entry)
+        raw_dir = manager.get_knowledge_base_path(resolved_name) / "raw"
+        target = _resolve_raw_file_or_404(raw_dir, filename)
+        from deeptutor.knowledge import registry
+
+        record = registry.find_by_location(manager.base_dir, resolved_name)
+        if record is not None:
+            if not registry.can_write(record, get_current_user()):
+                raise HTTPException(status_code=403, detail="This knowledge base is read-only.")
+            _assert_document_deletable(
+                record, target.relative_to(raw_dir.resolve()).as_posix(),
+                confirm=confirm, force=force,
+            )
+        provider = _validate_registered_provider(kb_entry.get("rag_provider") or DEFAULT_PROVIDER)
+        if provider in {PAGEINDEX_PROVIDER, PAGEINDEX_OSS_PROVIDER}:
+            from deeptutor.services.rag.factory import get_pipeline
+
+            await get_pipeline(provider, kb_base_dir=str(manager.base_dir)).remove_document(
+                resolved_name, target.name,
+            )
+        # Re-resolve authority and references in the short local commit after provider IO.
+        return await finish_document_worker(_delete_kb_file, kb_name, filename, confirm, force)
+
+
+def _delete_kb_file(kb_name: str, filename: str, confirm: bool, force: bool):
     """Remove a single raw document from a knowledge base.
 
     Unlike deleting the whole KB, this works while the KB is in an *error*
@@ -3547,13 +3596,6 @@ async def delete_kb_file(
                     _assert_document_deletable(
                         record, rel_path, confirm=confirm, force=force,
                         document=document, references=references,
-                    )
-                provider = _validate_registered_provider(kb_entry.get("rag_provider") or DEFAULT_PROVIDER)
-                if provider in {PAGEINDEX_PROVIDER, PAGEINDEX_OSS_PROVIDER}:
-                    from deeptutor.services.rag.factory import get_pipeline
-
-                    await get_pipeline(provider, kb_base_dir=str(manager.base_dir)).remove_document(
-                        resolved_name, target.name,
                     )
                 os.replace(target, backup)
                 removal = remove_raw_document(Path(kb_dir), target)
@@ -4415,7 +4457,7 @@ async def run_reindex_task(
 
             error_msg = str(e)
             trace = _tb.format_exc()
-            if index_published:
+            if index_published and not isinstance(e, DocumentRecordingError):
                 _task_log(
                     task_id,
                     "LightRAG version was published; final status bookkeeping will be reconciled.",

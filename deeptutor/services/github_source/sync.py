@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
@@ -362,6 +363,9 @@ async def _incremental_sync(
                 removed_count += 1
             except Exception as exc:
                 logger.warning("Failed to remove %s: %s", rel, exc)
+    from deeptutor.knowledge.registry import refresh_documents
+
+    await asyncio.to_thread(refresh_documents, base_dir, kb_name)
     return SyncResult(ok=True, files_added=len(downloaded), files_removed=removed_count)
 
 

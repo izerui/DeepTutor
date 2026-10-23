@@ -1295,10 +1295,16 @@ def document_hashes(raw_dir: Path) -> dict[str, str]:
 
 
 def refresh_documents(base_dir: Path | str, name: str) -> list[KbDocument]:
-    record = find_by_location(base_dir, name)
-    if record is None or is_connector(record):
-        return []
-    raw_dir = Path(record.base_dir) / record.dir_name / "raw"
-    if not raw_dir.is_dir():
-        return []
-    return sync_documents(record.kb_id, document_hashes(raw_dir))
+    from deeptutor.knowledge.document_mutation import DocumentRecordingError, document_mutation
+
+    try:
+        with document_mutation(base_dir, name):
+            record = find_by_location(base_dir, name)
+            if record is None or is_connector(record):
+                return []
+            raw_dir = Path(record.base_dir) / record.dir_name / "raw"
+            if not raw_dir.is_dir():
+                return []
+            return sync_documents(record.kb_id, document_hashes(raw_dir))
+    except Exception as exc:
+        raise DocumentRecordingError(f"Document recording failed for '{name}': {exc}") from exc

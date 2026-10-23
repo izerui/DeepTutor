@@ -10,6 +10,7 @@ import json
 import logging
 from pathlib import Path
 
+from deeptutor.knowledge.document_mutation import DocumentRecordingError
 from deeptutor.services.file_io import atomic_write_json
 
 # Use unified logging system
@@ -161,6 +162,8 @@ class ProgressTracker:
                     "message_params": progress.get("message_params"),
                 },
             )
+        except DocumentRecordingError:
+            raise
         except Exception as e:
             _logger_instance().warning("Failed to save progress to kb_config.json: %s", e)
 
