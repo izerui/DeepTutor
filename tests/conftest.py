@@ -309,3 +309,19 @@ def _isolate_usage_ledger(monkeypatch, tmp_path):
     from deeptutor.services.llm import usage_ledger
 
     monkeypatch.setattr(usage_ledger, "ledger_path", lambda: tmp_path / "usage.sqlite3")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_kb_registry(monkeypatch, tmp_path):
+    """The KB registry is one deployment-wide SQLite file; every test gets its own.
+
+    Reference readers are process-global too: a test that registers one must
+    not leak it into the next.
+    """
+    from deeptutor.knowledge import registry
+
+    monkeypatch.setattr(registry, "DB_PATH_OVERRIDE", tmp_path / "kb_registry.sqlite3")
+    monkeypatch.setattr(registry, "_readers", dict(registry._readers))
+    # Builtin reader modules are imported once per process; reset the flag so
+    # each test imports them into its own reader copy.
+    monkeypatch.setattr(registry, "_builtin_readers_loaded", False)

@@ -139,3 +139,30 @@ def seed_user(mu_isolated_root):
         return save_user(username, hash_password(password), role=role)  # type: ignore[arg-type]
 
     return _seed
+
+
+@pytest.fixture
+def make_kb():
+    """Write a minimal knowledge base into ``manager``'s catalog.
+
+    Ordinary KBs get a ``raw/doc.md`` so the manager's orphan prune keeps them;
+    connected entries (an ``entry`` with a ``type``) get no folder, like the
+    real connect routes.
+    """
+
+    def _make(manager, name: str, entry: dict | None = None, *, text: str = "hello"):
+        folder = Path(manager.base_dir) / name
+        if entry is None or "type" not in entry:
+            (folder / "raw").mkdir(parents=True, exist_ok=True)
+            (folder / "raw" / "doc.md").write_text(text, encoding="utf-8")
+        manager.config = manager._load_config()
+        manager.config.setdefault("knowledge_bases", {})[name] = entry or {
+            "path": name,
+            "rag_provider": "llamaindex",
+            "status": "ready",
+            "description": name,
+        }
+        manager._save_config()
+        return folder
+
+    return _make
