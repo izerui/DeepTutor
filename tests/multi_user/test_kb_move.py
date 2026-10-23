@@ -21,6 +21,147 @@ from deeptutor.services.workspace.kb_move import move_kb, preview_kb_move
 from deeptutor.services.workspace.knowledge import qualified_kb_id
 
 
+@pytest.mark.parametrize("compensation_failure", ["read", "write", "write_after_commit"])
+def test_registry_compensation_failure_retains_destination_until_recovery(
+    as_user, monkeypatch, compensation_failure,
+):
+    from deeptutor.knowledge import registry
+    from deeptutor.services.workspace import data_migration
+
+    with as_user("alice"):
+        _make_kb("atlas", b"retained")
+        source = current_kb_manager().base_dir
+        record = registry.register_kb(
+            base_dir=source, name="atlas", kind="uploaded", created_by="alice",
+        )
+        service = ContentWorkspaceService()
+        destination = service.create_workspace("Destination")["workspace_id"]
+        other = service.create_workspace("Other")["workspace_id"]
+        with workspace_context(destination):
+            _make_kb("existing", b"untouched")
+            target = current_kb_manager().base_dir
+        relocate = registry.relocate_kb
+        get_record = registry.get_kb
+        committed = False
+
+        def fail_after_commit(kb_id, base_dir):
+            nonlocal committed
+            if Path(base_dir) == target:
+                relocate(kb_id, base_dir)
+                committed = True
+                raise registry.KbRegistryError("forward committed")
+            if compensation_failure == "write_after_commit":
+                relocate(kb_id, base_dir)
+            raise registry.KbRegistryError("compensation unavailable")
+
+        def unavailable_read(kb_id):
+            if committed:
+                raise registry.KbRegistryError("compensation unavailable")
+            return get_record(kb_id)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(registry, "relocate_kb", fail_after_commit)
+            if compensation_failure == "read":
+                patch.setattr(registry, "get_kb", unavailable_read)
+            with pytest.raises(registry.KbRegistryError, match="compensation"):
+                move_kb(qualified_kb_id("atlas"), destination)
+            operation = data_migration.operations()[0]
+            assert operation["status"] == "recovery_required"
+            assert json.loads(
+                (Path(operation["recovery_path"]) / "operation.json").read_text()
+            )["kb_id"] == record.kb_id
+            if compensation_failure != "write_after_commit":
+                with pytest.raises(registry.KbRegistryError, match="compensation"):
+                    data_migration.recover_operation(operation["id"])
+            with pytest.raises(WorkspaceError, match="needs recovery"):
+                move_kb(qualified_kb_id("atlas", destination), other)
+            with pytest.raises(WorkspaceError, match="needs recovery"):
+                data_migration.migrate_data("", other, ["knowledge_bases"])
+        registered = source if compensation_failure == "write_after_commit" else target
+        assert registry.get_kb(record.kb_id).base_dir == str(registered)
+        assert resolve_kb(record.ref).base_dir == registered
+        assert (target / "atlas/raw/source.pdf").read_bytes() == b"retained"
+        assert (source / "atlas/raw/source.pdf").read_bytes() == b"retained"
+        assert "atlas" in json.loads((target / "kb_config.json").read_text())["knowledge_bases"]
+        assert data_migration.recover_operation(operation["id"])["status"] == "recovered"
+        assert data_migration.recover_operation(operation["id"])["status"] == "recovered"
+        assert resolve_kb(record.ref).base_dir == source
+        assert not (target / "atlas").exists()
+        assert (target / "existing/raw/source.pdf").read_bytes() == b"untouched"
+        assert "atlas" not in json.loads((target / "kb_config.json").read_text())["knowledge_bases"]
+        assert move_kb(qualified_kb_id("atlas"), other)["status"] == "moved"
+
+
+@pytest.mark.parametrize("failure", ["commit_marker", "cleanup"])
+def test_single_move_journal_commit_boundary(as_user, monkeypatch, failure):
+    from deeptutor.knowledge import registry
+    from deeptutor.services.workspace import data_migration, kb_move
+
+    with as_user("alice"):
+        _make_kb("atlas", b"journal-boundary")
+        source = current_kb_manager().base_dir
+        record = registry.register_kb(
+            base_dir=source, name="atlas", kind="uploaded", created_by="alice",
+        )
+        destination = ContentWorkspaceService().create_workspace("Target")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir
+        write = kb_move.atomic_write_json
+        remove = kb_move.shutil.rmtree
+
+        def fail_marker(path, value):
+            if path.name == "operation.json" and value["status"] == "committed":
+                raise OSError("commit marker unavailable")
+            return write(path, value)
+
+        def fail_cleanup(path, *args, **kwargs):
+            if Path(path).name.startswith(".kb-moved-"):
+                raise OSError("cleanup unavailable")
+            return remove(path, *args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            if failure == "commit_marker":
+                patch.setattr(kb_move, "atomic_write_json", fail_marker)
+                with pytest.raises(OSError, match="commit marker"):
+                    move_kb(qualified_kb_id("atlas"), destination)
+            else:
+                patch.setattr(kb_move.shutil, "rmtree", fail_cleanup)
+                assert move_kb(qualified_kb_id("atlas"), destination)["cleanup_path"]
+        operation = data_migration.operations()[0]
+        assert operation["status"] == ("recovered" if failure == "commit_marker" else "committed")
+        expected = source if failure == "commit_marker" else target
+        assert resolve_kb(record.ref).base_dir == expected
+        assert data_migration.recover_operation(operation["id"])["status"] == (
+            "recovered" if failure == "commit_marker" else "completed"
+        )
+        assert resolve_kb(record.ref).base_dir == expected
+        assert (expected / "atlas/raw/source.pdf").read_bytes() == b"journal-boundary"
+        assert not list(source.glob(".kb-moved-*"))
+
+
+def test_failed_move_does_not_remove_an_unpublished_destination(as_user, monkeypatch):
+    from deeptutor.services.workspace import data_migration, kb_move
+
+    with as_user("alice"):
+        _make_kb("atlas", b"source")
+        destination = ContentWorkspaceService().create_workspace("Target")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir / "atlas"
+        copy = kb_move._copy_kb
+
+        def collision(source, stage):
+            copy(source, stage)
+            target.mkdir()
+            (target / "external").write_bytes(b"keep")
+
+        monkeypatch.setattr(kb_move, "_copy_kb", collision)
+        with pytest.raises(WorkspaceError, match="already contains"):
+            move_kb(qualified_kb_id("atlas"), destination)
+        assert (target / "external").read_bytes() == b"keep"
+        assert resolve_kb("atlas").name == "atlas"
+        assert data_migration.operations()[0]["status"] == "recovered"
+
+
 def _make_kb(name: str, marker: bytes) -> None:
     manager = current_kb_manager()
     folder = manager.base_dir / name

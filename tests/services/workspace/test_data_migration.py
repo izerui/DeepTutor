@@ -16,6 +16,29 @@ from deeptutor.services.workspace.models import WorkspaceError
 from tests.services.workspace.test_data_scope import account as account
 
 
+def test_single_kb_journal_blocks_migration_and_rejects_unsafe_recovery(account):
+    from deeptutor.services.file_io import atomic_write_json
+    from deeptutor.services.workspace import data_migration
+
+    destination = account.create_workspace("Destination")["workspace_id"]
+    operation_id = "a" * 32
+    journal = data_migration._journal_root() / operation_id / "operation.json"
+    atomic_write_json(journal, {
+        "id": operation_id, "kind": "kb_move", "status": "recovery_required",
+        "created_at": "",
+        "plan": {
+            "source_workspace_id": "", "target_workspace_id": destination,
+            "features": ["knowledge_bases"], "name": "../escape",
+        },
+    })
+    assert data_migration.operations()[0]["status"] == "unreadable"
+    with pytest.raises(WorkspaceError, match="unreadable"):
+        data_migration.assert_no_pending_recovery(reject_unreadable=True)
+    with pytest.raises(WorkspaceError, match="unreadable"):
+        data_migration.recover_operation(operation_id)
+    assert journal.exists()
+
+
 def test_independent_task_board_is_not_part_of_workspace_data_migration(account):
     from deeptutor.services.task_board import CreateCard, UpdateCard, get_task_board_store
 

@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS registry_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS kb_admin_legacy_names (
+    name TEXT PRIMARY KEY,
+    kb_id TEXT NOT NULL REFERENCES kb_registry(kb_id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS kb_revoked_references (
     kb_id TEXT NOT NULL,
     kb_name TEXT NOT NULL,
@@ -402,6 +406,31 @@ def find_by_location(base_dir: Path | str, name: str) -> KbRecord | None:
     return _record(row) if row is not None else None
 
 
+def find_admin_legacy_name(name: str) -> KbRecord | None:
+    """Resolve a historical admin name to identity only, never to permission."""
+    with _read() as conn:
+        if conn is None:
+            return None
+        row = conn.execute(
+            "SELECT r.* FROM kb_registry r JOIN kb_admin_legacy_names a "
+            "ON r.kb_id = a.kb_id WHERE a.name = ?", (name,),
+        ).fetchone()
+    return _record(row) if row is not None else None
+
+
+def _retain_admin_legacy_names(conn: sqlite3.Connection, *, kb_id: str | None = None) -> None:
+    from deeptutor.multi_user.paths import get_admin_path_service
+
+    root = _location(get_admin_path_service().get_knowledge_bases_root())
+    # Only the shared admin-default namespace is global. Account/workspace
+    # aliases remain in their existing account-private runtime files.
+    conn.execute(
+        "INSERT OR IGNORE INTO kb_admin_legacy_names (name, kb_id) "
+        "SELECT dir_name, kb_id FROM kb_registry WHERE base_dir = ? "
+        "AND (? IS NULL OR kb_id = ?)", (root, kb_id, kb_id),
+    )
+
+
 def list_records(
     *,
     visibility: str | None = None,
@@ -558,6 +587,7 @@ def relocate_kb(kb_id: str, base_dir: Path | str) -> KbRecord:
     """Point a record at a new ``base_dir`` (the KB folder was moved); the id is kept."""
     try:
         with _write() as conn:
+            _retain_admin_legacy_names(conn, kb_id=_strip_ref(kb_id))
             updated = conn.execute(
                 "UPDATE kb_registry SET base_dir = ?, updated_at = ? WHERE kb_id = ?",
                 (_location(base_dir), _now(), _strip_ref(kb_id)),
@@ -574,6 +604,12 @@ def relocate_base_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int
     """Follow a whole catalog moved to another root; returns the number of records moved."""
     try:
         with _write() as conn:
+            from deeptutor.multi_user.paths import get_admin_path_service
+
+            if _location(old_base_dir) == _location(
+                get_admin_path_service().get_knowledge_bases_root()
+            ):
+                _retain_admin_legacy_names(conn)
             return conn.execute(
                 "UPDATE kb_registry SET base_dir = ?, updated_at = ? WHERE base_dir = ?",
                 (_location(new_base_dir), _now(), _location(old_base_dir)),

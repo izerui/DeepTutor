@@ -161,7 +161,9 @@ def _shared_admin_resource(name: str, *, require_write: bool) -> KnowledgeResour
     """A legacy ``admin:kb:<name>`` / bare-name read of an admin KB, decided by the registry."""
     from deeptutor.knowledge import registry
 
-    record = registry.find_by_location(admin_kb_base_dir(), name)
+    record = registry.find_admin_legacy_name(name) or registry.find_by_location(
+        admin_kb_base_dir(), name
+    )
     if record is None or not registry.can_read(record, get_current_user()):
         return None
     if require_write:
@@ -194,9 +196,13 @@ def _legacy_registry_fallback(kb_ref: str) -> KnowledgeResource | None:
         checked = _resolve_registered(record.ref, require_write=False)
         return replace(checked, id=resource.id)
 
-    _, name = _strip_resource_prefix(kb_ref)
+    prefix, name = _strip_resource_prefix(kb_ref)
+    if prefix == "user":
+        return None
     # Try admin library first (covers ``admin:kb:<name>`` and bare names).
-    record = registry.find_by_location(admin_kb_base_dir(), name)
+    record = registry.find_admin_legacy_name(name) or registry.find_by_location(
+        admin_kb_base_dir(), name
+    )
     if record is None:
         return None
     user = get_current_user()

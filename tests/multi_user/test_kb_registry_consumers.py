@@ -8,6 +8,66 @@ from deeptutor.knowledge import registry
 from deeptutor.multi_user.knowledge_access import current_kb_manager, list_visible_knowledge_bases
 
 
+@pytest.mark.parametrize("whole_catalog", [False, True])
+def test_shared_legacy_consumer_follows_move_and_current_permissions(
+    as_user, make_kb, whole_catalog,
+):
+    from fastapi import HTTPException
+
+    from deeptutor.book.kb_health import fingerprint_kb_documents
+    from deeptutor.multi_user.knowledge_access import resolve_kb
+    from deeptutor.services.workspace import ContentWorkspaceService, data_migration, kb_move
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    with as_user("root", role="admin"):
+        manager = current_kb_manager()
+        make_kb(manager, "atlas", text="shared history")
+        record = registry.register_kb(
+            base_dir=manager.base_dir, name="atlas", kind="uploaded",
+            created_by="root", visibility="public",
+        )
+        destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
+        with workspace_context(destination):
+            target = current_kb_manager().base_dir
+    with as_user("reader"):
+        saved = "admin:kb:atlas"
+        assert resolve_kb(saved).base_dir == manager.base_dir
+        fingerprints = fingerprint_kb_documents(saved)
+        assert fingerprints
+        selected = ContentWorkspaceService().create_workspace(
+            "Reader", resources={"knowledge_bases": []},
+        )["workspace_id"]
+    with as_user("root", role="admin"):
+        if whole_catalog:
+            data_migration.migrate_data("", destination, ["knowledge_bases"])
+        else:
+            kb_move.move_kb(qualified_kb_id("atlas"), destination)
+    with as_user("reader"):
+        for workspace in ("", selected):
+            with workspace_context(workspace):
+                assert resolve_kb(saved).base_dir == target
+                assert fingerprint_kb_documents(saved) == fingerprints
+                assert resolve_kb("atlas").base_dir == target
+                with pytest.raises(HTTPException):
+                    resolve_kb(saved, require_write=True)
+                for private_alias in (
+                    "user:kb:atlas", "account:kb:atlas",
+                    qualified_kb_id("atlas", destination),
+                ):
+                    with pytest.raises(HTTPException):
+                        resolve_kb(private_alias)
+    with as_user("root", role="admin"):
+        registry.set_visibility(record.kb_id, "private", force=True)
+    with as_user("reader"):
+        for workspace in ("", selected):
+            with workspace_context(workspace):
+                for ref in (saved, "atlas", record.ref):
+                    with pytest.raises(HTTPException):
+                        resolve_kb(ref)
+                assert fingerprint_kb_documents(saved) == {}
+
+
 def _public_physics(as_user, make_kb):
     with as_user("t1", role="teacher"):
         manager = current_kb_manager()

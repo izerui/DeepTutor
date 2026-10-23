@@ -973,6 +973,10 @@ def _read_journal(path: Path) -> dict:
             or (kb_ids and "knowledge_bases" not in features)
         ):
             raise ValueError("journal knowledge base identities are invalid")
+        if row.get("kind") == "kb_move":
+            from .kb_move import _validate_kb_move_journal
+
+            _validate_kb_move_journal(row)
     return row
 
 
@@ -1070,6 +1074,10 @@ def recover_operation(operation_id: str) -> dict:
             ) from exc
         if result["status"] in {"completed", "exported", "recovered"}:
             return result
+        if result.get("kind") == "kb_move":
+            from .kb_move import _recover_kb_move
+
+            return _recover_kb_move(result, journal)
         plan = result["plan"]
         with workspace_context(plan["source_workspace_id"]):
             source = get_path_service()

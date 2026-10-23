@@ -117,6 +117,27 @@ def test_legacy_admin_refs_read_public_admin_kbs_without_a_grant(as_user, make_k
         assert write.value.status_code == 403
 
 
+def test_account_move_does_not_publish_a_global_admin_alias(as_user, make_kb):
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.kb_move import move_kb
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    with as_user("owner"):
+        manager = current_kb_manager()
+        make_kb(manager, "local")
+        record = registry.register_kb(
+            base_dir=manager.base_dir, name="local", kind="uploaded", created_by="owner",
+        )
+        destination = ContentWorkspaceService().create_workspace("Moved")["workspace_id"]
+        move_kb(qualified_kb_id("local"), destination)
+        assert resolve_kb("user:kb:local").name == "local"
+    assert registry.find_admin_legacy_name("local") is None
+    with as_user("stranger"):
+        for ref in ("admin:kb:local", "user:kb:local", "account:kb:local", record.ref):
+            with pytest.raises(HTTPException):
+                resolve_kb(ref)
+
+
 def test_grants_no_longer_open_admin_kbs(as_user, seed_user):
     from deeptutor.multi_user.grants import save_grant
 

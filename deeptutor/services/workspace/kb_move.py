@@ -7,6 +7,7 @@ until the destination, catalog entries, and redirects have been published.
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -25,6 +26,7 @@ from deeptutor.services.workspace.activity import data_activity
 from deeptutor.services.workspace.context import workspace_context
 from deeptutor.services.workspace.data_migration import (
     _files,
+    _journal_root,
     _snapshot,
     assert_no_pending_recovery,
 )
@@ -328,9 +330,9 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
         if not plan["source_workspace_id"]:
             old_ids.add(_legacy_account_id(name))
         moved_record = registry.find_by_location(source_root, name)
-        stage = target_root / f".kb-move-{uuid.uuid4().hex}"
-        published = False
-        source_hidden = None
+        operation_id = uuid.uuid4().hex
+        stage = target_root / f".kb-move-{operation_id}"
+        source_hidden = source_root / f".kb-moved-{operation_id}"
         from deeptutor.services.workspace import get_content_workspace_service
 
         catalog = get_content_workspace_service()
@@ -341,6 +343,25 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
                 ref in old_ids for ref in (row.get("resources") or {}).get("knowledge_bases") or []
             )
         }
+        journal = _journal_root() / operation_id / "operation.json"
+        operation = {
+            "id": operation_id,
+            "kind": "kb_move",
+            "status": "transferring",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "recovery_path": str(journal.parent),
+            "plan": {**plan, "features": ["knowledge_bases"]},
+            "kb_id": moved_record.kb_id if moved_record else None,
+            "publish_pending": False,
+            "source_before": source_before,
+            "target_before": target_before,
+            "source_config_existed": source_config_existed,
+            "target_config_existed": target_config_existed,
+            "aliases_before": aliases_before,
+            "aliases_existed": aliases_existed,
+            "assignment_before": assignment_before,
+        }
+        atomic_write_json(journal, operation)
         try:
             if source_path.is_dir():
                 _copy_kb(source_path, stage)
@@ -365,8 +386,9 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
                     raise WorkspaceError(
                         f"Destination already contains a knowledge base named '{name}'."
                     )
+                operation["publish_pending"] = True
+                atomic_write_json(journal, operation)
                 stage.rename(target_path)
-                published = True
             target_next = deepcopy(target_before)
             target_next["knowledge_bases"][name] = deepcopy(source_before["knowledge_bases"][name])
             source_next = deepcopy(source_before)
@@ -390,42 +412,120 @@ def move_kb(source_id: str, target_workspace_id: str) -> dict:
             atomic_write_json(aliases_path, aliases_next)
             atomic_write_json(source_config_path, source_next)
             if source_path.is_dir():
-                source_hidden = source_root / f".kb-moved-{uuid.uuid4().hex}"
                 source_path.rename(source_hidden)
             # Publish the stable reference only after all filesystem writes succeed.
             if moved_record is not None:
                 registry.relocate_kb(moved_record.kb_id, target_root)
-        except BaseException:
-            if source_hidden is not None and source_hidden.exists():
-                source_hidden.rename(source_path)
-            if source_config_existed:
-                atomic_write_json(source_config_path, source_before)
-            else:
-                source_config_path.unlink(missing_ok=True)
-            if target_config_existed:
-                atomic_write_json(target_config_path, target_before)
-            else:
-                target_config_path.unlink(missing_ok=True)
-            _restore_assignments(assignment_before)
-            if aliases_existed:
-                atomic_write_json(aliases_path, aliases_before)
-            else:
-                aliases_path.unlink(missing_ok=True)
-            if published:
-                shutil.rmtree(target_path)
-            if stage.exists():
-                shutil.rmtree(stage)
-            if moved_record is not None:
-                current = registry.get_kb(moved_record.kb_id)
-                if current is not None and current.base_dir != moved_record.base_dir:
-                    registry.relocate_kb(moved_record.kb_id, source_root)
-            raise
-        if source_hidden is not None:
+            atomic_write_json(journal, {**operation, "status": "committed"})
+            operation["status"] = "committed"
+        except BaseException as exc:
             try:
-                shutil.rmtree(source_hidden)
-            except OSError:
-                # The hidden original remains available for manual recovery;
-                # it does not appear as an active knowledge base.
-                plan["cleanup_path"] = str(source_hidden)
+                _recover_kb_move(operation, journal)
+            except BaseException as recovery_error:
+                operation["status"] = "recovery_required"
+                operation["error"] = f"{exc}; recovery: {recovery_error}"
+                atomic_write_json(journal, operation)
+                raise recovery_error from exc
+            raise
+        try:
+            _recover_kb_move(operation, journal)
+        except OSError:
+            plan["cleanup_path"] = str(source_hidden)
         plan["status"] = "moved"
         return plan
+
+
+def _validate_kb_move_journal(row: dict) -> None:
+    name = row["plan"].get("name")
+    if (
+        not isinstance(name, str) or not name or name in {".", ".."}
+        or "/" in name or "\\" in name
+        or len(row["id"]) != 32
+        or any(c not in "0123456789abcdef" for c in row["id"])
+        or row["plan"]["source_workspace_id"] == row["plan"]["target_workspace_id"]
+    ):
+        raise ValueError("Invalid knowledge move identity")
+    for key in ("source_before", "target_before"):
+        if not isinstance(row.get(key), dict) or not isinstance(
+            row[key].get("knowledge_bases"), dict
+        ):
+            raise ValueError("Invalid knowledge move catalog")
+    for key in ("aliases_before", "assignment_before"):
+        if not isinstance(row.get(key), dict):
+            raise ValueError("Invalid knowledge move backup")
+    for key in (
+        "source_config_existed", "target_config_existed", "aliases_existed", "publish_pending",
+    ):
+        if not isinstance(row.get(key), bool):
+            raise ValueError("Invalid knowledge move backup flag")
+    if row.get("kb_id") is not None and (
+        not isinstance(row["kb_id"], str) or not row["kb_id"]
+    ):
+        raise ValueError("Invalid knowledge move registry identity")
+    if (
+        name not in row["source_before"]["knowledge_bases"]
+        or name in row["target_before"]["knowledge_bases"]
+        or not isinstance(row["source_before"]["knowledge_bases"].get(name), dict)
+    ):
+        raise ValueError("Invalid knowledge move original catalogs")
+
+
+def _recover_kb_move(row: dict, journal: Path) -> dict:
+    """Compensate before removing the published destination; safe to retry."""
+    _validate_kb_move_journal(row)
+    plan = row["plan"]
+    source, _ = _root(plan["source_workspace_id"])
+    target, _ = _root(plan["target_workspace_id"])
+    if source == target:
+        raise WorkspaceError("Knowledge move roots coincide; manual recovery is required.")
+    name = plan["name"]
+    hidden = source / f".kb-moved-{row['id']}"
+    stage = target / f".kb-move-{row['id']}"
+    if row["status"] == "committed":
+        if hidden.exists():
+            shutil.rmtree(hidden)
+        row["status"] = "completed"
+    else:
+        if hidden.exists():
+            if (source / name).exists():
+                raise WorkspaceError("Knowledge move source changed; manual recovery is required.")
+            hidden.rename(source / name)
+        if (
+            not is_connected_kb(row["source_before"]["knowledge_bases"][name])
+            and not (source / name).is_dir()
+        ):
+            raise WorkspaceError("Knowledge move source is missing; manual recovery is required.")
+        source_config = source / "kb_config.json"
+        if row["source_config_existed"]:
+            atomic_write_json(source_config, row["source_before"])
+        else:
+            source_config.unlink(missing_ok=True)
+        # Both locations and catalogs remain usable until the registry confirms
+        # compensation. A committed update can itself raise on its final read.
+        if row["kb_id"]:
+            record = registry.get_kb(row["kb_id"])
+            if record is None or record.base_dir not in {
+                str(source.resolve()), str(target.resolve()),
+            }:
+                raise WorkspaceError("Knowledge base location changed; manual recovery is required.")
+            if record.base_dir != str(source.resolve()):
+                registry.relocate_kb(row["kb_id"], source)
+        _restore_assignments(row["assignment_before"])
+        aliases_path = _move_aliases_path()
+        if row["aliases_existed"]:
+            atomic_write_json(aliases_path, row["aliases_before"])
+        else:
+            aliases_path.unlink(missing_ok=True)
+        target_config = target / "kb_config.json"
+        if row["target_config_existed"]:
+            atomic_write_json(target_config, row["target_before"])
+        else:
+            target_config.unlink(missing_ok=True)
+        if row["publish_pending"] and (target / name).exists():
+            shutil.rmtree(target / name)
+        if stage.exists():
+            shutil.rmtree(stage)
+        row["status"] = "recovered"
+    row.pop("error", None)
+    atomic_write_json(journal, row)
+    return row
