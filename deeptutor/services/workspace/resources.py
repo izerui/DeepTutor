@@ -163,6 +163,25 @@ def resource_catalog(*, workspace_id: str = "") -> dict:
     return {"skills": skills, "mcp": mcp, "knowledge_bases": knowledge_catalog()}
 
 
+def _knowledge_resource_id(resource_id: str) -> str:
+    """Compare registry and legacy refs only within this account's storage scopes."""
+    from deeptutor.knowledge import registry
+    from deeptutor.services.workspace.knowledge import (
+        canonical_kb_id,
+        qualified_kb_id,
+        workspace_id_for_kb_base_dir,
+    )
+
+    resource_id = canonical_kb_id(resource_id)
+    if resource_id.startswith("kb:"):
+        record = registry.get_kb(resource_id)
+        if record is not None:
+            origin = workspace_id_for_kb_base_dir(record.base_dir)
+            if origin is not None:
+                return canonical_kb_id(qualified_kb_id(record.dir_name, origin))
+    return resource_id
+
+
 def resource_usage(kind: str, resource_id: str, *, skill_workspace: str = "") -> list[dict]:
     """Account-local impact preview for library edits and deletion."""
     from deeptutor.services.workspace import get_content_workspace_service
@@ -174,12 +193,16 @@ def resource_usage(kind: str, resource_id: str, *, skill_workspace: str = "") ->
 
     if kind not in {"skills", "mcp", "knowledge_bases"}:
         raise WorkspaceError("Unknown resource type.")
+    if kind == "knowledge_bases":
+        resource_id = _knowledge_resource_id(resource_id)
     rows = get_content_workspace_service().list_workspaces()
     result = []
     for row in rows:
         if row["kind"] == "system":
             continue
         selected = (row.get("resources") or {}).get(kind)
+        if kind == "knowledge_bases" and selected is not None:
+            selected = [_knowledge_resource_id(rid) for rid in selected]
         uses = selected is None or resource_id in selected
         if kind == "skills" and skill_workspace:
             uses = uses and row["workspace_id"] == skill_workspace
@@ -187,8 +210,8 @@ def resource_usage(kind: str, resource_id: str, *, skill_workspace: str = "") ->
             parsed = parse_kb_id(resource_id)
             origin = "" if row["kind"] == "general" else row["workspace_id"]
             uses = (
-                parsed is None
-                or parsed[0] == origin
+                (parsed is None and not resource_id.startswith("kb:"))
+                or (parsed is not None and parsed[0] == origin)
                 or any(
                     (old := parse_kb_id(previous_id)) is not None
                     and old[0] == origin
@@ -212,7 +235,7 @@ def knowledge_migration_blockers(source_id: str) -> list[str]:
         row["display_name"]
         for row in get_content_workspace_service()._catalog()
         if any(
-            rid.startswith(prefix)
+            _knowledge_resource_id(rid).startswith(prefix)
             for rid in (row.get("resources") or {}).get("knowledge_bases") or []
         )
     ]

@@ -8,6 +8,205 @@ from deeptutor.knowledge import registry
 from deeptutor.multi_user.knowledge_access import current_kb_manager, list_visible_knowledge_bases
 
 
+@pytest.fixture
+def list_client(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from deeptutor.services import config
+
+    monkeypatch.setattr(config, "load_config_with_main", lambda *_args: {})
+    from deeptutor.api.routers import knowledge
+
+    app = FastAPI()
+    app.include_router(knowledge.router, prefix="/api")
+    with TestClient(app) as client:
+        yield client
+
+
+@pytest.mark.parametrize("route", ["/api/knowledge-bases", "/api/knowledge-bases/list"])
+@pytest.mark.parametrize("origin_kind", ["account", "workspace"])
+@pytest.mark.parametrize("selection_format", ["registry", "legacy", "mixed"])
+def test_selected_kb_is_available_through_list_route(
+    as_user, make_kb, list_client, route, origin_kind, selection_format
+):
+    from fastapi import HTTPException
+    from deeptutor.multi_user.knowledge_access import resolve_kb
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    with as_user("owner"):
+        service = ContentWorkspaceService()
+        origin = (
+            service.create_workspace("Origin")["workspace_id"]
+            if origin_kind == "workspace" else ""
+        )
+        with workspace_context(origin):
+            make_kb(current_kb_manager(), "physics")
+            [access] = list_visible_knowledge_bases()
+        legacy = qualified_kb_id("physics", origin)
+        selection = {
+            "registry": [access["ref"]],
+            "legacy": [legacy],
+            "mixed": [legacy, access["ref"]],
+        }[selection_format]
+        consumer = service.create_workspace(
+            "Consumer", resources={"knowledge_bases": selection}
+        )["workspace_id"]
+        with workspace_context(consumer):
+            # A same-name local KB must not substitute for the selected source.
+            make_kb(current_kb_manager(), "physics")
+            local = registry.register_kb(
+                base_dir=current_kb_manager().base_dir,
+                name="physics", kind="uploaded", created_by="owner",
+            )
+            response = list_client.get(route)
+            assert response.status_code == 200
+            [row] = response.json()
+            assert row["id"] == legacy
+            assert row["kb_id"] == access["kb_id"]
+            assert row["available"] is True
+            assert row["statistics"]["raw_documents"] == 1
+            assert row["owned"] is True and row["read_only"] is False
+            with pytest.raises(HTTPException) as denied:
+                resolve_kb(local.ref)
+            assert denied.value.status_code == 403
+
+
+@pytest.mark.parametrize("route", ["/api/knowledge-bases", "/api/knowledge-bases/list"])
+@pytest.mark.parametrize("mode", ["ordinary", "library", "workspace"])
+@pytest.mark.parametrize("failure", [None, "missing", "metadata"])
+@pytest.mark.parametrize("publisher_role", ["teacher", "admin"])
+def test_foreign_public_list_preserves_privacy_and_access_metadata(
+    as_user, make_kb, list_client, monkeypatch, route, mode, failure, publisher_role
+):
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import library_request
+
+    with as_user("publisher", role=publisher_role):
+        manager = current_kb_manager()
+        if failure != "missing":
+            make_kb(manager, "atlas")
+        record = registry.register_kb(
+            base_dir=manager.base_dir, name="atlas", kind="uploaded",
+            created_by="publisher", visibility="public",
+        )
+        make_kb(manager, "secret")
+        if failure == "metadata":
+            def fail_info(*args, **kwargs):
+                raise ValueError("Invalid metadata")
+
+            monkeypatch.setattr(manager, "get_info", fail_info)
+    with as_user("reader"):
+        workspace = (
+            ContentWorkspaceService().create_workspace(
+                "Narrow", resources={"knowledge_bases": []}
+            )["workspace_id"] if mode == "workspace" else ""
+        )
+        with workspace_context(workspace):
+            token = library_request.set(mode == "library")
+            try:
+                response = list_client.get(route)
+            finally:
+                library_request.reset(token)
+        assert response.status_code == 200
+        [row] = response.json()
+        assert row["ref"] == record.ref
+        assert row["path"] is None
+        assert record.base_dir not in response.text
+        assert row["assigned"] is True
+        assert row["source"] == ("admin" if publisher_role == "admin" else "user")
+        assert row["read_only"] is True and row["owned"] is False
+        assert row["available"] is (failure is None)
+        assert row["created_by"] == "publisher" and row["kind"] == "uploaded"
+        assert row["visibility"] == "public"
+
+
+@pytest.mark.parametrize("route", ["/api/knowledge-bases", "/api/knowledge-bases/list"])
+@pytest.mark.parametrize("kind", ["uploaded", "obsidian"])
+def test_own_metadata_error_keeps_authoritative_registry_fields(
+    as_user, make_kb, list_client, monkeypatch, tmp_path, route, kind
+):
+    with as_user("owner"):
+        manager = current_kb_manager()
+        if kind == "obsidian":
+            manager.register_obsidian_vault("broken", str(tmp_path))
+            (manager.base_dir / "broken").mkdir(exist_ok=True)
+        else:
+            make_kb(manager, "broken")
+        [access] = list_visible_knowledge_bases()
+
+        def fail_info(*args, **kwargs):
+            raise ValueError("Invalid metadata")
+
+        monkeypatch.setattr(manager, "get_info", fail_info)
+        response = list_client.get(route)
+        assert response.status_code == 200
+        [row] = response.json()
+        assert row["status"] == "error"
+        for key in (
+            "kb_id", "ref", "visibility", "created_by", "owned", "kind",
+            "connector", "assigned", "source", "read_only", "provenance_label",
+        ):
+            assert row[key] == access[key]
+
+
+@pytest.mark.parametrize("origin_kind", ["account", "workspace"])
+@pytest.mark.parametrize("selection_format", ["registry", "legacy", "mixed"])
+def test_migration_blockers_and_usage_match_both_kb_identities(
+    as_user, make_kb, origin_kind, selection_format
+):
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+    from deeptutor.services.workspace.resources import knowledge_migration_blockers, resource_usage
+    from deeptutor.services.workspace.data_migration import preview
+
+    with as_user("owner"):
+        service = ContentWorkspaceService()
+        origin = (
+            service.create_workspace("Origin")["workspace_id"]
+            if origin_kind == "workspace" else ""
+        )
+        with workspace_context(origin):
+            make_kb(current_kb_manager(), "physics")
+            [access] = list_visible_knowledge_bases()
+        other = service.create_workspace("Unrelated")["workspace_id"]
+        with workspace_context(other):
+            make_kb(current_kb_manager(), "physics")
+            [other_access] = list_visible_knowledge_bases()
+        legacy = qualified_kb_id("physics", origin)
+        selection = {
+            "registry": [access["ref"]],
+            "legacy": [legacy],
+            "mixed": [legacy, access["ref"]],
+        }[selection_format]
+        consumer = service.create_workspace(
+            "Consumer", resources={"knowledge_bases": selection}
+        )["workspace_id"]
+        assert "Consumer" in knowledge_migration_blockers(origin)[0]
+        assert any(
+            "Consumer" in blocker
+            for blocker in preview(origin, consumer, ["knowledge_bases"])["blockers"]
+        )
+        assert knowledge_migration_blockers(other) == []
+        legacy_usage = resource_usage("knowledge_bases", legacy)
+        assert resource_usage("knowledge_bases", access["ref"]) == legacy_usage
+        assert consumer in {row["workspace_id"] for row in legacy_usage}
+        assert other not in {row["workspace_id"] for row in legacy_usage}
+        assert consumer not in {
+            row["workspace_id"]
+            for row in resource_usage("knowledge_bases", other_access["ref"])
+        }
+        service.update_workspace(consumer, resources={"knowledge_bases": []})
+        assert knowledge_migration_blockers(origin) == []
+    with as_user("outsider"):
+        ContentWorkspaceService().create_workspace("Foreign")
+        assert resource_usage("knowledge_bases", access["ref"]) == []
+        assert knowledge_migration_blockers(origin) == []
+
+
 def test_list_annotates_own_kbs_and_adds_public_ones(as_user, make_kb):
     with as_user("t1", role="teacher"):
         manager = current_kb_manager()

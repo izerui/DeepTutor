@@ -2808,16 +2808,21 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
     result = []
     for access in list_visible_kb_access():
         try:
-            resource = resolve_kb(access["id"])
+            resource = resolve_kb(access.get("ref") or access["id"])
             info = manager_for_resource(resource).get_info(resource.name, refresh_config=False)
             result.append(
                 KnowledgeBaseInfo(
                     **{
                         **info,
-                        "id": resource.id,
+                        "id": access["id"],
                         "name": resource.name,
                         "is_default": info.get("is_default", False),
                         "statistics": info.get("statistics", {}),
+                        "path": (
+                            None
+                            if resource.assigned or access.get("owned") is False
+                            else info.get("path")
+                        ),
                         "source": resource.source,
                         "assigned": resource.assigned,
                         "read_only": resource.read_only,
@@ -2835,6 +2840,8 @@ def _resource_knowledge_bases() -> list[KnowledgeBaseInfo]:
                     statistics={},
                     status="unavailable",
                     available=False,
+                    source=access.get("source"),
+                    assigned=access.get("assigned", False),
                     read_only=access.get("read_only", False),
                     provenance_label=access.get("provenance_label", ""),
                     **_registry_info(access),
@@ -2875,6 +2882,7 @@ def _list_knowledge_bases():
         errors = []
 
         for name in kb_names:
+            access = access_by_id.get(f"{own_prefix}{name}", {})
             try:
                 info = manager.get_info(
                     name,
@@ -2929,7 +2937,12 @@ def _list_knowledge_bases():
                                 path=str(kb_dir),
                                 status="error",
                                 progress=fallback_progress,
-                                source="admin" if get_current_user().is_admin else "user",
+                                source=access.get("source")
+                                or ("admin" if get_current_user().is_admin else "user"),
+                                assigned=access.get("assigned", False),
+                                read_only=access.get("read_only", False),
+                                provenance_label=access.get("provenance_label"),
+                                **_registry_info(access),
                             )
                         )
                 except Exception as fallback_err:
