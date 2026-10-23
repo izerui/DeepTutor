@@ -8,8 +8,8 @@ creating the goal and the tutor then cannot read a word of it.
 
 The re-attachment goes through ``learning_source_access``, which lifts the
 *workspace selection* filter for the topic's refs. It must not lift the
-*account assignment* check: a saved topic pointing at an admin KB this account
-was never assigned (or has since lost) stays unreadable inside the turn.
+*registry* check: a saved topic pointing at an admin KB that is not public (or
+has since been withdrawn) stays unreadable inside the turn.
 """
 
 from __future__ import annotations
@@ -46,11 +46,23 @@ def _kb_source(index: int, ref: str) -> TopicSource:
 
 @pytest.fixture
 def learner(mu_isolated_root, seed_user, monkeypatch):
-    seed_user("admin", role="admin")
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
+
+    admin = seed_user("admin", role="admin")
     user = seed_user("student")
-    grant = learner_grant(user["id"])
-    grant["knowledge_bases"] = [{"resource_id": ASSIGNED, "name": "calculus"}]
-    save_grant(user["id"], grant)
+    save_grant(user["id"], learner_grant(user["id"]))
+    # Grants no longer hand out KBs; a public admin KB is what every learner reads.
+    registry.register_kb(
+        base_dir=admin_kb_base_dir(),
+        name="calculus",
+        kind="uploaded",
+        created_by=admin["id"],
+        visibility="public",
+    )
+    registry.register_kb(
+        base_dir=admin_kb_base_dir(), name="answer-keys", kind="uploaded", created_by=admin["id"]
+    )
     monkeypatch.setattr("deeptutor.capabilities.setup.binding._intro_pending", lambda _c: False)
     return user
 

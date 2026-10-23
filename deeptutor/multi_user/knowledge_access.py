@@ -25,6 +25,7 @@ from .paths import get_account_path_service, get_admin_path_service, get_current
 ADMIN_PREFIX = "admin:kb:"
 USER_PREFIX = "user:kb:"
 DEFAULT_KB_ALIASES = {"", "default", "current", "selected", "默认", "默认知识库", "当前知识库"}
+REGISTRY_PREFIX = "kb:"
 
 
 @lru_cache(maxsize=128)
@@ -68,22 +69,9 @@ def _strip_resource_prefix(value: str) -> tuple[str | None, str]:
     return None, raw
 
 
-def _assigned_admin_names() -> set[str]:
-    user = get_current_user()
-    if user.is_admin:
-        return set()
-    out: set[str] = set()
-    for item in load_grant(user.id).get("knowledge_bases", []) or []:
-        name = str(item.get("name") or item.get("kb_name") or "").strip()
-        resource_id = str(item.get("resource_id") or item.get("id") or "")
-        if resource_id.startswith(ADMIN_PREFIX):
-            name = resource_id[len(ADMIN_PREFIX) :]
-        if name:
-            out.add(name)
-    return out
-
-
 def resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource:
+    if str(kb_ref or "").startswith(REGISTRY_PREFIX):
+        return _resolve_registered(str(kb_ref), require_write=require_write)
     from deeptutor.services.workspace.context import current_workspace_id
     from deeptutor.services.workspace.knowledge import (
         canonical_kb_id,
@@ -110,6 +98,74 @@ def resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource
     return _resolve_kb(kb_ref, require_write=require_write)
 
 
+def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResource:
+    """``kb:<id>`` — served from the record's own location, whoever's scope that is."""
+    from deeptutor.knowledge import registry
+    from deeptutor.services.workspace.knowledge import learning_source_kbs, library_request
+    from deeptutor.services.workspace.resources import current_resources
+
+    record = registry.get_kb(kb_ref)
+    user = get_current_user()
+    # Unreadable and unknown look the same: a private KB's existence is not public.
+    if record is None or not registry.can_read(record, user):
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    writable = registry.can_write(record, user)
+    if require_write and not writable:
+        raise HTTPException(status_code=403, detail="This knowledge base is read-only for you")
+    # D14: workspace selections only narrow the caller's own private KBs.
+    own_private = record.visibility == "private" and record.created_by == user.id
+    if own_private and kb_ref not in learning_source_kbs.get() and not library_request.get():
+        selected = current_resources().knowledge_bases
+        if selected is not None and not _selection_allows(record, selected):
+            raise HTTPException(
+                status_code=403, detail="Knowledge base is not assigned to this workspace"
+            )
+    base_dir = Path(record.base_dir)
+    if _manager_for(str(base_dir)).get_kb_entry(record.dir_name) is None:
+        raise HTTPException(status_code=404, detail="Knowledge base is unavailable")
+    return KnowledgeResource(
+        id=record.ref,
+        name=record.dir_name,
+        base_dir=base_dir,
+        source="admin" if base_dir == admin_kb_base_dir().resolve() else "user",
+        assigned=record.created_by != user.id and not user.is_admin,
+        read_only=not writable,
+    )
+
+
+def _selection_allows(record: Any, selected: list[str]) -> bool:
+    from deeptutor.services.workspace.knowledge import (
+        canonical_kb_id,
+        qualified_kb_id,
+        workspace_id_for_kb_base_dir,
+    )
+
+    chosen = {canonical_kb_id(ref) for ref in selected}
+    if record.ref in chosen:
+        return True
+    workspace_id = workspace_id_for_kb_base_dir(record.base_dir)
+    return workspace_id is not None and qualified_kb_id(record.dir_name, workspace_id) in chosen
+
+
+def _shared_admin_resource(name: str, *, require_write: bool) -> KnowledgeResource | None:
+    """A legacy ``admin:kb:<name>`` / bare-name read of an admin KB, decided by the registry."""
+    from deeptutor.knowledge import registry
+
+    record = registry.find_by_location(admin_kb_base_dir(), name)
+    if record is None or not registry.can_read(record, get_current_user()):
+        return None
+    if require_write:
+        raise HTTPException(status_code=403, detail="Shared knowledge bases are read-only")
+    return KnowledgeResource(
+        id=f"{ADMIN_PREFIX}{name}",
+        name=name,
+        base_dir=admin_kb_base_dir(),
+        source="admin",
+        assigned=True,
+        read_only=True,
+    )
+
+
 def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResource:
     user = get_current_user()
     requested_source, name = _strip_resource_prefix(kb_ref)
@@ -127,23 +183,12 @@ def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResourc
         )
 
     user_manager = current_kb_manager()
-    assigned_names = _assigned_admin_names()
 
     if requested_source == "admin":
-        if name not in assigned_names:
-            raise HTTPException(status_code=403, detail="Knowledge base is not assigned to you")
-        if require_write:
-            raise HTTPException(
-                status_code=403, detail="Assigned admin knowledge bases are read-only"
-            )
-        return KnowledgeResource(
-            id=f"admin:kb:{name}",
-            name=name,
-            base_dir=admin_kb_base_dir(),
-            source="admin",
-            assigned=True,
-            read_only=True,
-        )
+        shared = _shared_admin_resource(name, require_write=require_write)
+        if shared is None:
+            raise HTTPException(status_code=403, detail="Knowledge base is not shared with you")
+        return shared
 
     if requested_source == "user":
         resolved = _resolve_default_or_name(user_manager, name)
@@ -178,19 +223,9 @@ def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResourc
             read_only=False,
         )
 
-    if name in assigned_names:
-        if require_write:
-            raise HTTPException(
-                status_code=403, detail="Assigned admin knowledge bases are read-only"
-            )
-        return KnowledgeResource(
-            id=f"admin:kb:{name}",
-            name=name,
-            base_dir=admin_kb_base_dir(),
-            source="admin",
-            assigned=True,
-            read_only=True,
-        )
+    shared = _shared_admin_resource(name, require_write=require_write)
+    if shared is not None:
+        return shared
 
     raise HTTPException(status_code=404, detail=f"Knowledge base '{name}' not found")
 

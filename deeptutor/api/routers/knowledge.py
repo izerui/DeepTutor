@@ -4473,7 +4473,7 @@ async def websocket_progress(websocket: WebSocket, kb_name: str):
     try:
         from deeptutor.services.workspace.knowledge import parse_kb_id
 
-        if parse_kb_id(kb_name) is not None:
+        if parse_kb_id(kb_name) is not None or kb_name.startswith("kb:"):
             resource = resolve_kb(kb_name)
             base_dir, kb_name = resource.base_dir, resource.name
             # Qualified catalogs use the durable polling path below, avoiding
