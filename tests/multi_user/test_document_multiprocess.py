@@ -18,6 +18,139 @@ from deeptutor.knowledge import document_mutation, registry
 from deeptutor.services.rag.pipelines.lightrag import write_lock
 
 
+SOURCE_OPERATIONS = [
+    "github-full", "github-write", "github-remove", "web-write", "web-remove",
+]
+
+
+def _source_path(operation):
+    if operation.startswith("web"):
+        from deeptutor.services.web_source.crawler import _source_filename
+
+        return _source_filename({"url": "https://example.test/"}, "https://example.test/doc", "/")
+    return "doc.md"
+
+
+async def _source_job(base, operation, patch, connection, fail, barrier):
+    """Only network, index and source-status boundaries are fake."""
+    from deeptutor.knowledge import add_documents
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.services.github_source import sync as github
+    from deeptutor.services.web_source import crawler, sync as web
+
+    raw = base / "kb/raw"
+    record = registry.find_by_location(base, "kb")
+    target = raw / _source_path(operation)
+    remove = operation.endswith("remove")
+    original_sync = registry.sync_documents
+
+    def prepared():
+        with sqlite3.connect(registry._db_path(), timeout=0) as database:
+            database.execute("BEGIN IMMEDIATE")
+            database.rollback()
+        connection.send("prepared")
+
+    def recording(*args):
+        if fail == "record":
+            barrier()
+            raise OSError("injected source registration failure")
+        return original_sync(*args)
+
+    patch.setattr(registry, "sync_documents", recording)
+    if fail == "commit":
+        original_open = registry._open
+
+        class FailedCommit:
+            def __init__(self, database):
+                self.database = database
+
+            def __getattr__(self, name):
+                return getattr(self.database, name)
+
+            def execute(self, sql, *args):
+                if sql == "COMMIT":
+                    barrier()
+                    raise OSError("injected source commit failure")
+                return self.database.execute(sql, *args)
+
+        patch.setattr(registry, "_open", lambda path: FailedCommit(original_open(path)))
+    patch.setattr(KnowledgeBaseManager, "update_web_source_state", lambda *a, **k: None)
+    patch.setattr(github, "_record_sync_success", lambda *a, **k: None)
+    patch.setattr(github, "_record_sync_failure", lambda *a, **k: None)
+    patch.setattr(
+        "deeptutor.services.rag.provider_binding.resolve_bound_provider",
+        lambda *a: "llamaindex",
+    )
+    patch.setattr(
+        "deeptutor.services.web_source.scheduler.get_web_source_sync_scheduler",
+        lambda: SimpleNamespace(repo=SimpleNamespace(record_pairings=lambda **k: None)),
+    )
+
+    async def index(*args, **kwargs):
+        assert {doc.rel_path: doc.content_hash for doc in registry.list_documents(record.ref)} == (
+            registry.document_hashes(raw)
+        )
+        assert target.exists() != remove
+        # Native ownership is deliberately non-reentrant: indexing must receive
+        # a released raw-publication lock, including after async worker dispatch.
+        with write_lock.write_ownership(raw.parent):
+            pass
+        if fail == "index":
+            raise OSError("injected source indexing failure")
+        return 1
+
+    patch.setattr(github, "_index_files", index)
+    patch.setattr(add_documents, "add_documents", index)
+    patch.setattr(web, "_rebuild_index_after_removal", index)
+
+    class Client:
+        async def get_latest_commit_sha(self, *args):
+            return "new"
+
+        async def get_tree(self, *args, **kwargs):
+            return [SimpleNamespace(path="doc.md")]
+
+        async def compare_commits(self, *args):
+            if remove:
+                prepared()
+            return [SimpleNamespace(path="doc.md", status="removed" if remove else "modified")]
+
+        async def download_file(self, *args):
+            prepared()
+            return b"source"
+
+    if operation.startswith("github"):
+        result = await github.sync_source(
+            "kb", {"id": "s", "repo": "owner/repo",
+                   "last_synced_sha": "" if operation == "github-full" else "old"},
+            base_dir=str(base), client=Client(),
+        )
+    else:
+        async def crawl(*args, **kwargs):
+            prepared()
+            # A surviving page keeps deletion-only rebuild valid.
+            pages = [crawler.CrawledPage(
+                url="https://example.test/kept", title="Kept",
+                markdown="kept", content_hash="kept",
+            )]
+            if not remove:
+                pages.append(crawler.CrawledPage(
+                    url="https://example.test/doc", title="Doc",
+                    markdown="source", content_hash="new",
+                ))
+            return crawler.CrawlResult(pages=pages)
+
+        patch.setattr(crawler, "crawl_docs_site", crawl)
+        result = await web.sync_source(
+            "kb", {"id": "s", "url": "https://example.test/",
+                   "page_hashes": {_source_path(operation): "old"}},
+            base_dir=str(base),
+        )
+    assert result.ok == (not fail), result
+    if fail:
+        assert "injected source" in result.error
+
+
 def _receive(connection, expected):
     assert connection.poll(15), f"worker did not report {expected}"
     message = connection.recv()
@@ -108,7 +241,9 @@ def _process_job(base, database, operation, connection, *, pause=False, fail=Fal
             patch.setattr(os, "replace", restore)
 
         async def execute():
-            if operation == "refresh":
+            if operation in SOURCE_OPERATIONS:
+                await _source_job(base, operation, patch, connection, fail, barrier)
+            elif operation == "refresh":
                 await document_mutation.run_document_worker(
                     base, "kb", registry.refresh_documents, base, "kb",
                 )
@@ -160,11 +295,13 @@ def _process_job(base, database, operation, connection, *, pause=False, fail=Fal
                     )
 
                 def before_publish(root):
+                    hashes = registry.document_hashes(raw)
                     assert registry.find_document(record.ref, "doc.md").content_hash == (
                         registry.document_hashes(raw)["doc.md"]
                     )
                     assert not (root / "meta.json").exists()
                     barrier()
+                    assert registry.document_hashes(raw) == hashes
 
                 patch.setattr(pipeline, "_run_indexing", indexed)
                 invoke = (
@@ -187,7 +324,7 @@ def _process_job(base, database, operation, connection, *, pause=False, fail=Fal
                 raise
             connection.send("rolled_back")
         else:
-            assert not fail
+            assert not fail or operation in SOURCE_OPERATIONS
             connection.send("done")
     connection.close()
 
@@ -227,6 +364,107 @@ def _seed(base, *, folder=False):
     )
     [first] = registry.refresh_documents(base, "kb")
     return raw, record, first
+
+
+def _seed_source(base, operation):
+    raw, record, _ = _seed(base)
+    target = raw / _source_path(operation)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"original")
+    registry.refresh_documents(base, "kb")
+    first = registry.find_document(record.ref, _source_path(operation))
+    return raw, record, first
+
+
+@pytest.mark.parametrize("operation", SOURCE_OPERATIONS)
+@pytest.mark.parametrize("owner", ["refresh", "native_initialize", "native_bootstrap"])
+def test_process_source_waits_before_raw_publication(tmp_path, operation, owner):
+    from deeptutor.services.rag.pipelines.lightrag import storage
+
+    raw, record, first = _seed_source(tmp_path, operation)
+    initial = registry.document_hashes(raw)
+    ctx = multiprocessing.get_context("spawn")
+    workers = []
+    try:
+        workers.append(_start(ctx, tmp_path, owner, pause=True))
+        _receive(workers[0][1], "paused")
+        workers.append(_start(ctx, tmp_path, operation))
+        _receive(workers[1][1], "prepared")
+        _receive(workers[1][1], "busy")
+        assert registry.document_hashes(raw) == initial
+        assert registry.find_document(record.ref, first.rel_path) == first
+        assert storage.latest_published_root(raw.parent) is None
+        with sqlite3.connect(registry._db_path(), timeout=0) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.rollback()
+        workers[0][1].send("release")
+        for _, connection in workers:
+            _receive(connection, "done")
+    finally:
+        _cleanup(workers)
+    if owner.startswith("native"):
+        assert storage.latest_published_root(raw.parent) is not None
+    current = registry.find_document(record.ref, first.rel_path)
+    assert current.doc_id == first.doc_id
+    assert current.deleted == operation.endswith("remove")
+    assert current.version == (1 if current.deleted else 2)
+    if not current.deleted:
+        assert (raw / first.rel_path).read_bytes() == b"source"
+    for doc in registry.list_documents(record.ref):
+        if doc.rel_path not in initial:
+            assert doc.version == 1
+    assert {doc.rel_path: doc.content_hash for doc in registry.list_documents(record.ref)} == (
+        registry.document_hashes(raw)
+    )
+
+
+@pytest.mark.parametrize("operation", SOURCE_OPERATIONS)
+@pytest.mark.parametrize("failure", ["record", "commit"])
+def test_process_source_recording_failure_compensates_before_next_writer(
+    tmp_path, operation, failure,
+):
+    raw, record, first = _seed_source(tmp_path, operation)
+    initial = registry.document_hashes(raw)
+    metadata = raw.parent / "metadata.json"
+    metadata.write_text('{"file_hashes": {"doc.md": "indexed"}}')
+    original_metadata = metadata.read_bytes()
+    ctx = multiprocessing.get_context("spawn")
+    workers = []
+    try:
+        workers.append(_start(ctx, tmp_path, operation, fail=failure))
+        _receive(workers[0][1], "prepared")
+        _receive(workers[0][1], "paused")
+        assert registry.find_document(record.ref, first.rel_path) == first
+        workers.append(_start(ctx, tmp_path, "refresh"))
+        _receive(workers[1][1], "busy")
+        workers[0][1].send("release")
+        for _, connection in workers:
+            _receive(connection, "done")
+    finally:
+        _cleanup(workers)
+    assert registry.document_hashes(raw) == initial
+    assert registry.find_document(record.ref, first.rel_path) == first
+    assert metadata.read_bytes() == original_metadata
+    assert {doc.rel_path: doc.content_hash for doc in registry.list_documents(record.ref)} == initial
+
+
+@pytest.mark.parametrize("operation", [op for op in SOURCE_OPERATIONS if op != "github-remove"])
+def test_process_source_indexing_failure_leaves_required_records(tmp_path, operation):
+    raw, record, first = _seed_source(tmp_path, operation)
+    workers = []
+    try:
+        workers.append(_start(multiprocessing.get_context("spawn"), tmp_path, operation, fail="index"))
+        _receive(workers[0][1], "prepared")
+        _receive(workers[0][1], "done")
+    finally:
+        _cleanup(workers)
+    current = registry.find_document(record.ref, first.rel_path)
+    assert current.doc_id == first.doc_id
+    assert current.deleted == operation.endswith("remove")
+    assert current.version == (1 if current.deleted else 2)
+    assert {doc.rel_path: doc.content_hash for doc in registry.list_documents(record.ref)} == (
+        registry.document_hashes(raw)
+    )
 
 
 @pytest.mark.parametrize("operation", ["move", "folder_move", "delete", "upload-B"])

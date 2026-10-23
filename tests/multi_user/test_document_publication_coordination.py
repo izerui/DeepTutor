@@ -345,7 +345,8 @@ async def test_github_final_removal_refresh_precedes_source_success(
                 return b"after"
 
         async def index(*args, **kwargs):
-            assert (raw / "doc.md").exists(), "reproduce index-before-final-removal ordering"
+            assert not (raw / "doc.md").exists()
+            assert registry.find_document(record.ref, "doc.md").deleted
             return 2
 
         def succeeded(*args, **kwargs):
@@ -394,12 +395,11 @@ async def test_web_removal_and_changes_recorded_after_rebuild(
         original = registry.document_hashes
 
         async def crawl(*args, **kwargs):
-            (raw / "kept.md").write_text("after")
-            (raw / "added.md").write_text("new")
             return SimpleNamespace(
                 ok=True, pages_removed=["doc.md"], pages_added=["added.md"],
                 pages_updated=["kept.md"], pages_unchanged=[], changed_paths=[],
                 page_hashes={}, page_count=2, navigation={}, pairings=[], url="https://example.test",
+                prepared_writes={raw / "kept.md": b"after", raw / "added.md": b"new"},
             )
 
         class Service:
@@ -408,13 +408,14 @@ async def test_web_removal_and_changes_recorded_after_rebuild(
 
             async def initialize(self, **kwargs):
                 assert not (raw / "doc.md").exists()
+                assert registry.find_document(record.ref, "doc.md").deleted
+                assert registry.find_document(record.ref, "added.md").version == 1
                 indexed.extend(kwargs["file_paths"])
                 return True
 
         def hashes(path):
             assert threading.get_ident() != loop_thread
-            assert indexed
-            if fail_recording:
+            if fail_recording and indexed:
                 raise OSError("injected final refresh")
             return original(path)
 

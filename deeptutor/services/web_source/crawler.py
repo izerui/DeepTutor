@@ -548,6 +548,7 @@ class CrawlDiff:
     pages_unchanged: list[str] = field(default_factory=list)
     pages_removed: list[str] = field(default_factory=list)
     changed_paths: list[str] = field(default_factory=list)
+    prepared_writes: dict[Path, bytes] = field(default_factory=dict)
     navigation: dict = field(default_factory=dict)
     pairings: list[dict] = field(default_factory=list)
 
@@ -566,6 +567,7 @@ async def crawl_and_diff(
     *,
     max_depth: int | None = None,
     max_pages: int | None = None,
+    publish: bool = True,
 ) -> CrawlDiff:
     """Crawl one source, diff against stored hashes, write changed pages.
 
@@ -578,7 +580,8 @@ async def crawl_and_diff(
     5. Report deleted pages for the caller to remove from raw storage and index.
     6. Build a navigation manifest.
 
-    The caller is responsible for indexing and metadata persistence.
+    The caller is responsible for indexing and metadata persistence. With
+    ``publish=False``, it must publish ``prepared_writes`` with its removals.
     """
     from deeptutor.services.web_source.navigation import build_navigation_manifest
 
@@ -641,14 +644,14 @@ async def crawl_and_diff(
 
     # 4. Write new/changed pages
     changed_paths: list[str] = []
+    writes = {}
     for fname in added + updated:
         content = page_contents.get(fname, "")
         full_content = strip_leading_snapshot_provenance(content)
         dest = _contained_path(raw_dir, fname)
         if dest is None:
             return CrawlDiff(ok=False, error=f"Unsafe page filename: {fname}", url=url)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(full_content, encoding="utf-8")
+        writes[dest] = full_content.encode("utf-8")
         changed_paths.append(str(dest))
 
     # 5. Build navigation manifest. Deletions are deliberately left to the
@@ -665,6 +668,11 @@ async def crawl_and_diff(
     page_file_map = {page.url: fname for page, fname in zip(result.pages, page_files)}
     pairings = detect_bilingual_pairings(result.pages, page_file_map)
 
+    from deeptutor.knowledge.document_mutation import publish_source_documents
+
+    if publish:
+        await publish_source_documents(raw_dir.parent.parent, raw_dir.parent.name, writes)
+
     return CrawlDiff(
         ok=True,
         url=url,
@@ -676,6 +684,7 @@ async def crawl_and_diff(
         pages_unchanged=unchanged,
         pages_removed=removed,
         changed_paths=changed_paths,
+        prepared_writes=writes,
         navigation=nav_manifest,
         pairings=pairings,
     )

@@ -10,6 +10,7 @@ import re
 from urllib.parse import urlsplit, urlunsplit
 
 from deeptutor.knowledge.add_documents import DEFAULT_BASE_DIR
+from deeptutor.knowledge.document_mutation import publish_source_documents
 from deeptutor.services.github_source.client import (
     GitHubAPIError,
     GitHubClient,
@@ -282,15 +283,16 @@ async def _full_sync(
     tree = await client.get_tree(repo, branch, path_prefix=path_prefix, glob=glob)
     entries = _filter_markdown_entries(tree, path_prefix, glob)
     downloaded = []
+    writes = {}
     for entry in entries:
         rel = _raw_rel_path(entry.path, path_prefix)
         dest = _contained_dest(raw_dir, rel)
         if dest is None:
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
         content = await client.download_file(repo, entry.path, latest_sha)
-        dest.write_bytes(content)
+        writes[dest] = content
         downloaded.append(str(dest))
+    await publish_source_documents(base_dir, kb_name, writes)
     if downloaded:
         await _index_files(
             kb_name,
@@ -330,15 +332,20 @@ async def _incremental_sync(
         else:
             added_or_modified.append(ch.path)
     downloaded = []
+    writes = {}
     for gh_path in added_or_modified:
         rel = _raw_rel_path(gh_path, path_prefix)
         dest = _contained_dest(raw_dir, rel)
         if dest is None:
             continue
         content = await client.download_file(repo, gh_path, new_sha)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
+        writes[dest] = content
         downloaded.append(str(dest))
+    removal_paths = [
+        target for rel in removed
+        if (target := _contained_dest(raw_dir, rel)) is not None
+    ]
+    removed_count = await publish_source_documents(base_dir, kb_name, writes, removal_paths)
     if downloaded:
         await _index_files(
             kb_name,
@@ -350,18 +357,6 @@ async def _incremental_sync(
                 else {}
             ),
         )
-    removed_count = 0
-    for rel in removed:
-        target = _contained_dest(raw_dir, rel)
-        if target is not None and target.exists():
-            try:
-                from deeptutor.knowledge.add_documents import remove_raw_document
-
-                kb_dir = Path(base_dir) / kb_name
-                remove_raw_document(kb_dir, target)
-                removed_count += 1
-            except Exception as exc:
-                logger.warning("Failed to remove %s: %s", rel, exc)
     from deeptutor.knowledge.document_mutation import run_document_worker
     from deeptutor.knowledge.registry import refresh_documents
 

@@ -120,6 +120,7 @@ async def sync_source(
             raw_dir,
             max_depth=max_depth,
             max_pages=max_pages,
+            publish=False,
         )
     except Exception as exc:
         logger.exception("Crawl failed for %s", source["url"])
@@ -133,21 +134,14 @@ async def sync_source(
     # Remove deleted raw pages and their file-hash records first. A full
     # provider rebuild below is required because most providers do not expose
     # a reliable per-document vector deletion operation.
-    removed_count = 0
+    removal_paths = []
     removal_errors: list[str] = []
     for fname in diff.pages_removed:
         target = _contained_path(raw_dir, fname)
         if target is None:
             removal_errors.append(f"{fname}: path escapes the knowledge base")
             continue
-        try:
-            from deeptutor.knowledge.add_documents import remove_raw_document
-
-            remove_raw_document(kb_dir, target)
-            removed_count += 1
-        except Exception as exc:
-            logger.warning("Failed to remove %s: %s", fname, exc)
-            removal_errors.append(f"{fname}: {exc}")
+        removal_paths.append(target)
 
     if removal_errors:
         error = "Failed to remove deleted pages: " + "; ".join(removal_errors)
@@ -156,6 +150,9 @@ async def sync_source(
 
     indexed = 0
     try:
+        from deeptutor.knowledge.document_mutation import publish_source_documents
+
+        await publish_source_documents(base_dir, kb_name, diff.prepared_writes, removal_paths)
         if diff.pages_removed:
             indexed = await _rebuild_index_after_removal(kb_name, raw_dir, base_dir)
         elif diff.changed_paths:
@@ -213,7 +210,7 @@ async def sync_source(
         diff.url,
         len(diff.pages_added),
         len(diff.pages_updated),
-        removed_count,
+        len(removal_paths),
         len(diff.pages_unchanged),
         indexed,
         len(diff.pairings),
@@ -223,7 +220,7 @@ async def sync_source(
         ok=True,
         pages_added=len(diff.pages_added),
         pages_updated=len(diff.pages_updated),
-        pages_removed=removed_count,
+        pages_removed=len(removal_paths),
         pages_unchanged=len(diff.pages_unchanged),
         bilingual_pairs_count=len(diff.pairings),
     )
