@@ -349,3 +349,82 @@ def test_course_sync_serializes_with_concurrent_mutations(
             assert other.get(course.id).resources == []
         else:
             assert other.list_courses() == []
+
+
+@pytest.mark.parametrize("reason,cleanup", [
+    ("made_private", "detach"), ("made_private", "delete"), ("made_private", "restore"),
+    ("kb_deleted", "detach"), ("kb_deleted", "delete"),
+])
+def test_course_retains_revocations_until_resource_removed_or_restored(
+    as_user, make_kb, tmp_path, reason, cleanup,
+):
+    from deeptutor.services.courses import CourseService
+
+    record = _public_physics(as_user, make_kb)
+    with as_user("u2"):
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Borrowed")
+        resource = service.attach_resource(course.id, kind="knowledge_base", ref_id=record.ref)
+    with as_user("admin", role="admin"):
+        if reason == "made_private":
+            registry.set_visibility(record.kb_id, "private", force=True)
+        else:
+            registry.unregister_kb(record.kb_id)
+    [revoked] = registry.list_unavailable_references("course", course.id)
+    assert revoked.reason == reason
+    with as_user("u2"):
+        notebook = service.attach_resource(course.id, kind="notebook", ref_id="notes")
+        assert registry.list_unavailable_references("course", course.id) == [revoked]
+        service.detach_resource(course.id, notebook.id)
+        assert registry.list_unavailable_references("course", course.id) == [revoked]
+        assert service.get(course.id).resources[0].id == resource.id
+        assert registry.list_references(record.kb_id) == []
+        if cleanup == "detach":
+            service.detach_resource(course.id, resource.id)
+        elif cleanup == "delete":
+            service.delete(course.id)
+        else:
+            with as_user("t1", role="teacher"):
+                registry.set_visibility(record.kb_id, "public")
+            service.attach_resource(course.id, kind="notebook", ref_id="restored")
+            [reference] = registry.list_references(record.kb_id)
+            assert reference.referrer_id == course.id
+        assert registry.list_unavailable_references("course", course.id) == []
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_course_revalidates_visibility_before_replacing_references(
+    as_user, make_kb, tmp_path, monkeypatch, existing,
+):
+    from deeptutor.services.courses import CourseService
+
+    record = _public_physics(as_user, make_kb)
+    with as_user("u2"):
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Borrowed")
+        if existing:
+            service.attach_resource(course.id, kind="knowledge_base", ref_id=record.ref)
+        before = service.index_file.read_bytes()
+        replace = registry.replace_references
+        withdrawn = []
+
+        def withdraw_then_replace(*args, **kwargs):
+            # Deterministically commit withdrawal after course validation but
+            # before replacement acquires its registry write transaction.
+            assert args[2] == [(record.kb_id, None)]
+            with as_user("admin" if existing else "t1", role="admin" if existing else "teacher"):
+                registry.set_visibility(record.kb_id, "private", force=existing)
+            withdrawn.extend(registry.list_unavailable_references("course", course.id))
+            return replace(*args, **kwargs)
+
+        monkeypatch.setattr(registry, "replace_references", withdraw_then_replace)
+        with pytest.raises(registry.KbReferenceError, match="read"):
+            service.attach_resource(
+                course.id,
+                kind="notebook" if existing else "knowledge_base",
+                ref_id="notes" if existing else record.ref,
+            )
+        assert service.index_file.read_bytes() == before
+        assert registry.list_references(record.kb_id) == []
+        assert registry.list_unavailable_references("course", course.id) == withdrawn
+        assert len(withdrawn) == int(existing)

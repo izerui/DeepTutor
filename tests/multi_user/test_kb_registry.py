@@ -395,3 +395,57 @@ def test_set_visibility_force_revokes_concurrent_reference(tmp_path):
     assert registry.list_references(kb.kb_id) == []
     [revoked] = registry.list_unavailable_references("course", "c1")
     assert revoked.reason == "made_private"
+
+
+def test_guarded_replacement_holds_sqlite_write_lock_during_read_check(tmp_path, make_user, monkeypatch):
+    import sqlite3
+
+    kb = registry.register_kb(
+        base_dir=tmp_path, name="shared", kind="uploaded", created_by="t1", visibility="public"
+    )
+    user = make_user("u2")
+    can_read = registry.can_read
+    checked = []
+
+    def check_while_writer_attempts(record, reader):
+        # An independent connection bypasses the process RLock and proves the
+        # SQLite transaction itself excludes visibility/revocation writers.
+        conn = sqlite3.connect(registry._db_path(), timeout=0, isolation_level=None)
+        try:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                conn.execute("BEGIN IMMEDIATE")
+        finally:
+            conn.close()
+        checked.append(record.kb_id)
+        return can_read(record, reader)
+
+    monkeypatch.setattr(registry, "can_read", check_while_writer_attempts)
+    registry.replace_references(
+        "course", "c1", [(kb.ref, None)], created_by=user.id, readable_by=user,
+    )
+    assert checked == [kb.kb_id]
+    with pytest.raises(registry.KbVisibilityError, match="other accounts"):
+        registry.set_visibility(kb.kb_id, "private")
+    registry.set_visibility(kb.kb_id, "private", force=True)
+    assert registry.list_references(kb.kb_id) == []
+    assert registry.list_unavailable_references("course", "c1")[0].reason == "made_private"
+
+
+def test_guarded_replacement_preserves_live_and_revoked_rows_on_rejection(tmp_path, make_user):
+    own = registry.register_kb(base_dir=tmp_path, name="own", kind="uploaded", created_by="u2")
+    shared = registry.register_kb(
+        base_dir=tmp_path, name="shared", kind="uploaded", created_by="t1", visibility="public"
+    )
+    registry.replace_references(
+        "course", "c1", [(own.kb_id, None), (shared.kb_id, None)], created_by="u2",
+    )
+    registry.set_visibility(shared.kb_id, "private", force=True)
+    live = registry.list_references(own.kb_id)
+    revoked = registry.list_unavailable_references("course", "c1")
+    with pytest.raises(registry.KbReferenceError, match="read"):
+        registry.replace_references(
+            "course", "c1", [(shared.kb_id, None)], created_by="u2", readable_by=make_user("u2"),
+        )
+    assert registry.list_references(own.kb_id) == live
+    assert registry.list_references(shared.kb_id) == []
+    assert registry.list_unavailable_references("course", "c1") == revoked

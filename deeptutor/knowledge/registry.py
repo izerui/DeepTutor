@@ -170,7 +170,8 @@ class RevokedReference:
 
     Kept outside ``kb_references`` (no foreign key, so it survives the KB's
     deletion) and never consulted by :func:`can_read`: the referrer lost
-    access. Cleared when the referrer re-states its references.
+    access. Cleared when the referrer re-states its references, except for
+    unavailable identities explicitly retained by the referrer.
     """
 
     kb_id: str
@@ -781,19 +782,40 @@ def replace_references(
     refs: list[tuple[str, list[str] | None]],
     *,
     created_by: str,
+    readable_by: CurrentUser | None = None,
+    retain_revoked_kb_ids: Sequence[str] = (),
 ) -> None:
-    """Atomically make ``refs`` (``(kb_id or kb:<id>, doc_ids)``) the referrer's whole set."""
+    """Atomically replace live references and settle earlier revocations.
+
+    ``readable_by`` rechecks access using fresh targets while visibility and
+    reference writers are excluded by BEGIN IMMEDIATE. Failure changes nothing.
+    ``retain_revoked_kb_ids`` preserves unavailable resources still held by the
+    referrer, unless they are successfully restored in ``refs``. Defaults keep
+    the existing whole-set restatement contract.
+    """
     with _write() as conn:
         targets = [(_reference_target(conn, kb_id, referrer_kind), doc_ids) for kb_id, doc_ids in refs]
+        if readable_by is not None:
+            for record, _docs in targets:
+                if not can_read(record, readable_by):
+                    raise KbReferenceError(f"Knowledge base {record.kb_id} is no longer readable.")
+        retained = {_strip_ref(kb_id) for kb_id in retain_revoked_kb_ids}
+        retained.difference_update(record.kb_id for record, _docs in targets)
         conn.execute(
             "DELETE FROM kb_references WHERE referrer_kind = ? AND referrer_id = ?",
             (referrer_kind, referrer_id),
         )
-        # Re-stating the whole set (e.g. a republished path with replacement
-        # material) settles every earlier revocation for this referrer.
-        conn.execute(
-            "DELETE FROM kb_revoked_references WHERE referrer_kind = ? AND referrer_id = ?",
+        revoked = conn.execute(
+            "SELECT kb_id FROM kb_revoked_references WHERE referrer_kind = ? AND referrer_id = ?",
             (referrer_kind, referrer_id),
+        ).fetchall()
+        conn.executemany(
+            "DELETE FROM kb_revoked_references WHERE referrer_kind = ? AND referrer_id = ? "
+            "AND kb_id = ?",
+            [
+                (referrer_kind, referrer_id, row["kb_id"])
+                for row in revoked if row["kb_id"] not in retained
+            ],
         )
         now = _now()
         conn.executemany(

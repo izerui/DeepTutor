@@ -264,17 +264,26 @@ def _sync_kb_references(course_id: str, course: StudyCourse | None) -> None:
         return
     user = get_current_user()
     refs: dict[str, None] = {}
+    retained: set[str] = set()
     for resource in course.resources:
         if resource.kind != "knowledge_base":
             continue
+        # Canonical identities survive deletion, unlike registry resolution.
+        if resource.ref_id.startswith(registry.REF_PREFIX):
+            retained.add(resource.ref_id[len(registry.REF_PREFIX) :])
         record = registry.resolve_ref(resource.ref_id)
+        if record is not None:
+            retained.add(record.kb_id)
         if (
             record is not None
             and not registry.is_connector(record)
             and registry.can_read(record, user)
         ):
             refs[record.kb_id] = None
-    registry.replace_references("course", course_id, list(refs.items()), created_by=user.id)
+    registry.replace_references(
+        "course", course_id, list(refs.items()), created_by=user.id,
+        readable_by=user, retain_revoked_kb_ids=sorted(retained),
+    )
 
 
 class CourseService:
