@@ -12,6 +12,11 @@ from deeptutor.services.rag.factory import (
     has_ready_provider_index,
     normalize_provider_name,
 )
+from deeptutor.knowledge.kb_types import (
+    CONNECTED_KB_TYPES,
+    CONNECTOR_CONFIG_FIELDS,
+    CONNECTOR_PROVIDERS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +40,21 @@ def _default_payload() -> dict[str, Any]:
         },
         "knowledge_bases": {},
     }
+
+
+def validate_kb_config_update(
+    current: dict[str, Any], update: dict[str, Any], *, connector_maintenance: bool = True
+) -> None:
+    """Generic settings may round-trip identity, but cannot rebind it."""
+    changed = {key for key, value in update.items() if value != current.get(key)}
+    if changed & {"type", "path"}:
+        raise ValueError("Knowledge-base type/source changes require an explicit connector operation.")
+    if current.get("type") not in CONNECTED_KB_TYPES or not connector_maintenance:
+        if changed & CONNECTOR_CONFIG_FIELDS or (
+            "rag_provider" in changed
+            and normalize_provider_name(update["rag_provider"]) in CONNECTOR_PROVIDERS
+        ):
+            raise ValueError("Uploaded or inconsistent knowledge bases cannot receive connector configuration.")
 
 
 class KnowledgeBaseConfigService:
@@ -147,9 +167,25 @@ class KnowledgeBaseConfigService:
 
     def set_kb_config(self, kb_name: str, config: dict[str, Any]) -> None:
         self._refresh()
+        entry = self._config.get("knowledge_bases", {}).get(kb_name, {"path": kb_name})
+        self._validate_identity_update(kb_name, entry, config)
         entry = self._ensure_kb(kb_name)
         entry.update(config)
         self._save()
+
+    def _validate_identity_update(
+        self, kb_name: str, entry: dict[str, Any], config: dict[str, Any]
+    ) -> None:
+        """Keep generic retrieval writes from changing a KB's identity."""
+        from deeptutor.knowledge import registry
+
+        record = registry.find_by_location(self.config_path.parent, kb_name)
+        validate_kb_config_update(
+            entry, config,
+            connector_maintenance=record is None or (
+                record.kind == registry.kind_of(entry) and record.visibility == "private"
+            ),
+        )
 
     def get_rag_provider(self, kb_name: str) -> str:
         return normalize_provider_name(self.get_kb_config(kb_name).get("rag_provider"))
@@ -243,4 +279,4 @@ def get_kb_config_service() -> KnowledgeBaseConfigService:
     )
 
 
-__all__ = ["KnowledgeBaseConfigService", "get_kb_config_service"]
+__all__ = ["KnowledgeBaseConfigService", "get_kb_config_service", "validate_kb_config_update"]

@@ -290,6 +290,7 @@ def _sync_kb_references(course_id: str, course: StudyCourse | None) -> None:
             retained.add(record.kb_id)
         if (
             record is not None
+            and registry.classification_is_consistent(record)
             and not registry.is_connector(record)
             and registry.can_read(record, user)
         ):

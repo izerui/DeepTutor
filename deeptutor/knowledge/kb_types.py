@@ -113,6 +113,14 @@ CONNECTED_KB_TYPES = frozenset(
     }
 )
 
+# Source pointers and credentials used by the connected KB implementations.
+CONNECTOR_CONFIG_FIELDS = frozenset({
+    "agent_kind", "cwd", "partner_id", "server_url", "api_key", "client_id",
+    "knowledge_base_id", "vault_path", "external_path", "db_path", "device_id",
+    "zim_name", "zim_title",
+})
+CONNECTOR_PROVIDERS = frozenset({"lightrag-server", "ima", "weknora", "kiwix"})
+
 
 # Connected kinds the ``rag`` tool cannot retrieve from: an Obsidian vault has no
 # index at all (its capability navigates the live files) and a subagent is not a
@@ -172,6 +180,8 @@ __all__ = [
     "MARGINNOTE4_KB_TYPE",
     "KIWIX_KB_TYPE",
     "CONNECTED_KB_TYPES",
+    "CONNECTOR_CONFIG_FIELDS",
+    "CONNECTOR_PROVIDERS",
     "NON_RETRIEVABLE_KB_TYPES",
     "is_connected_kb",
     "supports_local_raw_files",

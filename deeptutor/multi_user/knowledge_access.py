@@ -482,7 +482,7 @@ def _with_public(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             **_registry_fields(record, owned=record.created_by == user.id),
             "created_by_name": names.get(record.created_by, ""),
         }
-        for record in extra
+        for record in extra if registry.can_read(record, user)
     ]
 
 

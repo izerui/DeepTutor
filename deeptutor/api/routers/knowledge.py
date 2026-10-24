@@ -2297,10 +2297,12 @@ async def update_kb_config(kb_name: str, config: dict):
     """Update configuration for a specific knowledge base."""
     try:
         from deeptutor.services.rag.index_probe import has_ready_provider_index
+        from deeptutor.services.config.knowledge_base_config import validate_kb_config_update
 
         config = dict(config or {})
         service, kb_name, kb_base_dir = _kb_config_target(kb_name, require_write=True)
         current_config = service.get_kb_config(kb_name)
+        validate_kb_config_update(current_config, config)
         # Older clients may send back the full GET payload while editing a
         # retrieval setting. Preserve those no-op fields, but disallow rebinding.
         if any(
@@ -2343,6 +2345,8 @@ async def update_kb_config(kb_name: str, config: dict):
         return {"status": "success", "kb_name": kb_name, "config": service.get_kb_config(kb_name)}
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"Error updating config for KB '{kb_name}': {e}")
         raise HTTPException(status_code=500, detail=str(e))

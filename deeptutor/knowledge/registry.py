@@ -29,7 +29,9 @@ import threading
 from typing import TYPE_CHECKING, Any, Literal
 import uuid
 
-from deeptutor.knowledge.kb_types import CONNECTED_KB_TYPES
+from deeptutor.knowledge.kb_types import (
+    CONNECTED_KB_TYPES, CONNECTOR_CONFIG_FIELDS, CONNECTOR_PROVIDERS,
+)
 
 if TYPE_CHECKING:
     from deeptutor.multi_user.models import CurrentUser
@@ -334,8 +336,47 @@ def kind_of(entry: Any) -> str:
     return str(kind) if kind in CONNECTOR_KINDS else UPLOADED_KIND
 
 
+def config_kind(record: KbRecord) -> str | None:
+    """Read the on-disk kind used by direct consumers of a registry record."""
+    path = Path(record.base_dir) / "kb_config.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        # Registry-only records have no readable resource yet. Keep their
+        # declared restrictions; resolution separately requires a live entry.
+        return record.kind
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    entries = payload.get("knowledge_bases")
+    if not isinstance(entries, dict):
+        return None
+    if record.dir_name not in entries:
+        # Preserve unavailable registry rows in lists without inventing a new
+        # classification; resource resolution still requires an actual entry.
+        return record.kind
+    entry = entries.get(record.dir_name)
+    if not isinstance(entry, dict):
+        return None
+    if entry.get("type") is not None and not isinstance(entry["type"], str):
+        return None
+    if entry.get("rag_provider") is not None and not isinstance(entry["rag_provider"], str):
+        return None
+    if kind_of(entry) == UPLOADED_KIND and (
+        any(entry.get(key) for key in CONNECTOR_CONFIG_FIELDS)
+        or (entry.get("rag_provider") or "").strip().lower() in CONNECTOR_PROVIDERS
+    ):
+        return None
+    return kind_of(entry)
+
+
+def classification_is_consistent(record: KbRecord) -> bool:
+    return record.kind == config_kind(record)
+
+
 def is_connector(record: KbRecord) -> bool:
-    return record.kind in CONNECTOR_KINDS
+    return record.kind in CONNECTOR_KINDS or config_kind(record) != UPLOADED_KIND
 
 
 def _check_visibility(visibility: str, kind: str) -> None:
@@ -681,6 +722,8 @@ def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRec
             raise KbRegistryError(f"Knowledge base {kb_id} is not registered.")
         record = _record(row)
         _check_visibility(visibility, record.kind)
+        if visibility == "public" and is_connector(record):
+            raise KbVisibilityError("Inconsistent or connected knowledge bases cannot be made public.")
         foreign: list[KbReference] = []
         if visibility == "private" and record.visibility == "public":
             foreign = [
@@ -829,6 +872,8 @@ def _reference_target(conn: sqlite3.Connection, kb_id: str, referrer_kind: str) 
     if row is None:
         raise KbReferenceError(f"Knowledge base {kb_id} is not registered.")
     record = _record(row)
+    if not classification_is_consistent(record):
+        raise KbReferenceError("Knowledge-base classification is inconsistent; repair it before sharing.")
     if is_connector(record) and referrer_kind not in CONNECTOR_REFERRER_KINDS:
         raise KbReferenceError(
             "Personal connectors cannot be shared. Upload the material to a knowledge "
@@ -1057,10 +1102,20 @@ def _load_builtin_readers() -> None:
 
 
 def can_read(record: KbRecord, user: CurrentUser) -> bool:
-    if user.is_admin or record.visibility == "public" or record.created_by == user.id:
+    if user.is_admin or record.created_by == user.id:
+        return True
+    if not classification_is_consistent(record):
+        return False
+    connector = is_connector(record)
+    if record.visibility == "public" and not connector:
         return True
     _load_builtin_readers()
     for reference in list_references(record.kb_id):
+        if connector and (
+            reference.referrer_kind not in CONNECTOR_REFERRER_KINDS
+            or reference.created_by != record.created_by
+        ):
+            continue
         reader = _readers.get(reference.referrer_kind)
         if reader is None:
             continue

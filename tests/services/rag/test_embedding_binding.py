@@ -591,18 +591,22 @@ async def test_old_full_config_updates_preserve_binding(catalog, tmp_path, monke
     from fastapi import HTTPException
 
     from deeptutor.api.routers import knowledge
-    from deeptutor.services import config
     from deeptutor.services.config.knowledge_base_config import KnowledgeBaseConfigService
 
     write_entry(tmp_path)
     service = KnowledgeBaseConfigService(tmp_path / "kb_config.json")
-    monkeypatch.setattr(config, "get_kb_config_service", lambda: service)
+    monkeypatch.setattr(
+        knowledge, "_kb_config_target",
+        lambda name, **_kwargs: (service, name, tmp_path),
+    )
     payload = {**service.get_kb_config("kb"), "search_mode": "local"}
     assert (await knowledge.update_kb_config("kb", payload))["status"] == "success"
     assert read_entry(tmp_path)["embedding_selection"] == selection("a")
+    before = service.config_path.read_bytes()
     with pytest.raises(HTTPException) as exc:
         await knowledge.update_kb_config("kb", {**payload, "embedding_selection": selection("b")})
     assert exc.value.status_code == 409
+    assert service.config_path.read_bytes() == before
 
 
 @pytest.mark.asyncio
