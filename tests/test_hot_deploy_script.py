@@ -216,7 +216,7 @@ def _run_basepath_check(
                 validate_frontend_runtime_inputs "$pod"
 
         """)
-        test_script += "        " + chunk.replace("\n", "\n        ")
+        test_script += chunk
         test_script += textwrap.dedent(f"""
                 echo "REACHED_PACKAGING"
             }}
@@ -261,6 +261,8 @@ class TestBasepathBehavioural:
         )
         assert r.returncode != 0
         assert "REACHED_PACKAGING" not in r.stdout
+        assert "IndentationError" not in r.stderr
+        assert "FileNotFoundError" in r.stderr
 
     def test_pod_manifest_missing_basepath_key_aborts(self) -> None:
         """Pod manifest is {} — basePath key absent. Must not fall back to ''."""
@@ -270,6 +272,8 @@ class TestBasepathBehavioural:
         )
         assert r.returncode != 0
         assert "REACHED_PACKAGING" not in r.stdout
+        assert "IndentationError" not in r.stderr
+        assert "ERROR:missing" in r.stderr
 
     def test_pod_manifest_null_basepath_aborts(self) -> None:
         """Pod manifest has basePath: null — not a string."""
@@ -279,6 +283,8 @@ class TestBasepathBehavioural:
         )
         assert r.returncode != 0
         assert "REACHED_PACKAGING" not in r.stdout
+        assert "IndentationError" not in r.stderr
+        assert "ERROR:not-string" in r.stderr
 
     def test_pod_manifest_numeric_basepath_aborts(self) -> None:
         """Pod manifest has basePath: 42 — not a string."""
@@ -288,6 +294,8 @@ class TestBasepathBehavioural:
         )
         assert r.returncode != 0
         assert "REACHED_PACKAGING" not in r.stdout
+        assert "IndentationError" not in r.stderr
+        assert "ERROR:not-string" in r.stderr
 
     def test_prefix_mismatch_aborts(self) -> None:
         r = _run_basepath_check(
