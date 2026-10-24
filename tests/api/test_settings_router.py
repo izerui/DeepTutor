@@ -721,6 +721,13 @@ def test_llm_provider_choices_include_onomeo() -> None:
     assert llm["onomeo"]["base_url"] == "https://onomeo.com/v1"
 
 
+def test_llm_provider_choices_include_runcrate() -> None:
+    llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
+
+    assert llm["runcrate"]["label"] == "Runcrate"
+    assert llm["runcrate"]["base_url"] == "https://api.runcrate.ai/v1"
+
+
 def test_llm_provider_choices_include_novita() -> None:
     llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
 

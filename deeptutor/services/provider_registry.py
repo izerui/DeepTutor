@@ -362,6 +362,16 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://onomeo.com/v1",
     ),
     ProviderSpec(
+        name="runcrate",
+        keywords=("runcrate",),
+        env_key="RUNCRATE_API_KEY",
+        display_name="Runcrate",
+        backend="openai_compat",
+        is_gateway=True,
+        detect_by_base_keyword="runcrate",
+        default_api_base="https://api.runcrate.ai/v1",
+    ),
+    ProviderSpec(
         name="volcengine",
         keywords=("volcengine", "volces", "ark"),
         env_key="OPENAI_API_KEY",
