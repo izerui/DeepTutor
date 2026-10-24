@@ -78,9 +78,9 @@ export default function KbKiwixArticlesSection({ kb }: { kb: KnowledgeBase }) {
                 <p className="text-[13px] font-medium">{article.title}</p>
                 <p className="mt-1 line-clamp-3 text-[11px] text-[var(--muted-foreground)]">{article.excerpt}</p>
               </div>
-              <button type="button" disabled={!!openingPath} onClick={() => void openArticle(article)} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50">
+              {!kb.read_only && <button type="button" disabled={!!openingPath} onClick={() => void openArticle(article)} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50">
                 {openingPath === article.article_path ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BookOpen className="h-3.5 w-3.5" />}{t("Read article")}
-              </button>
+              </button>}
             </div>
           </li>
         ))}

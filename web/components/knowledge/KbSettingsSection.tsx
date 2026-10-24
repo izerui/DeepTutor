@@ -2,7 +2,10 @@
 
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { ArrowRight, Star, Trash2 } from "lucide-react";
+import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { listKnowledgeBaseReferences, type KnowledgeBaseReference } from "@/features/knowledge/api/catalog";
+import type { KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import {
   listWorkspaces,
@@ -19,9 +22,10 @@ import {
 
 interface KbSettingsSectionProps {
   kb: KnowledgeBase;
-  onSetDefault: () => Promise<void>;
-  onDelete: () => Promise<void>;
+  onSetDefault?: () => Promise<void>;
+  onDelete?: () => Promise<void>;
   onMove?: (targetWorkspaceId: string) => Promise<void>;
+  onVisibilityChange?: (visibility: KnowledgeBaseVisibility, force: boolean) => Promise<void>;
 }
 
 export default function KbSettingsSection({
@@ -29,6 +33,7 @@ export default function KbSettingsSection({
   onSetDefault,
   onDelete,
   onMove,
+  onVisibilityChange,
 }: KbSettingsSectionProps) {
   const { t } = useTranslation();
   const [workspaces, setWorkspaces] = useState<ChatWorkspaceRegistration[]>([]);
@@ -37,21 +42,65 @@ export default function KbSettingsSection({
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
   const sourceId = knowledgeBaseRef(kb);
-  const sourceWorkspaceId = sourceId.startsWith("account:kb:")
+  const moveSourceId = kb.id && !kb.id.startsWith("kb:") ? kb.id : sourceId;
+  const sourceWorkspaceId = moveSourceId.startsWith("account:kb:")
     ? ""
-    : sourceId.startsWith("workspace:")
-      ? sourceId.slice("workspace:".length).split(":kb:")[0]
+    : moveSourceId.startsWith("workspace:")
+      ? moveSourceId.slice("workspace:".length).split(":kb:")[0]
       : null;
+  const { isAdmin, isTeacher, allowPrivateKb } = useAuthStatus();
+  const canWrite = !kb.read_only && allowPrivateKb;
+  const canManage = Boolean(kb.kb_id) && canWrite;
+  const [references, setReferences] = useState<KnowledgeBaseReference[] | null>(null);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
   useEffect(() => {
-    void listWorkspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
-  }, []);
+    let alive = true;
+    setReferences(null);
+    setVisibilityError(null);
+    if (canManage) {
+      listKnowledgeBaseReferences(sourceId).then((items) => {
+        if (alive) setReferences(items);
+      }).catch((error) => {
+        if (alive) setVisibilityError(error instanceof Error ? error.message : String(error));
+      });
+    }
+    return () => { alive = false; };
+  }, [canManage, sourceId, kb.visibility]);
+
+  const changeVisibility = async (next: KnowledgeBaseVisibility) => {
+    if (!onVisibilityChange || !canManage) return;
+    const foreign = (references ?? []).some((item) => item.created_by !== kb.created_by);
+    let force = false;
+    if (next === "private" && foreign && isAdmin) {
+      if (!window.confirm(t("Other accounts reference this knowledge base. Make it private anyway?"))) return;
+      force = true;
+    }
+    setVisibilityBusy(true);
+    setVisibilityError(null);
+    try {
+      await onVisibilityChange(next, force);
+    } catch (error) {
+      setVisibilityError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setVisibilityBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!canWrite || !onMove || sourceWorkspaceId === null) return;
+    let alive = true;
+    void listWorkspaces().then((items) => { if (alive) setWorkspaces(items); })
+      .catch(() => { if (alive) setWorkspaces([]); });
+    return () => { alive = false; };
+  }, [canWrite, onMove, sourceWorkspaceId]);
 
   const reviewMove = async () => {
     setMoveBusy(true);
     setMoveError(null);
     try {
-      setMovePreview(await previewKnowledgeMove(sourceId, targetWorkspaceId));
+      setMovePreview(await previewKnowledgeMove(moveSourceId, targetWorkspaceId));
     } catch (error) {
       setMoveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -129,7 +178,7 @@ export default function KbSettingsSection({
         </dl>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+      {(kb.is_default || (canWrite && kb.can_set_default && onSetDefault)) && <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
         <div>
           <div className="text-[12.5px] font-medium text-[var(--foreground)]">
             {t("Default knowledge base")}
@@ -146,16 +195,16 @@ export default function KbSettingsSection({
         ) : (
           <button
             type="button"
-            onClick={() => void onSetDefault()}
+            onClick={() => void onSetDefault?.()}
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[12px] font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
           >
             <Star className="h-3 w-3" />
             {t("Set as default")}
           </button>
         )}
-      </section>
+      </section>}
 
-      {!kb.read_only && onMove && sourceWorkspaceId !== null && (
+      {canWrite && onMove && sourceWorkspaceId !== null && (
         <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
           <div>
             <div className="text-[12.5px] font-medium text-[var(--foreground)]">
@@ -215,7 +264,33 @@ export default function KbSettingsSection({
         </section>
       )}
 
-      <section className="space-y-3 rounded-lg border border-red-200 bg-red-50/40 p-3 dark:border-red-900/60 dark:bg-red-950/15">
+      {kb.kb_id && <section className="space-y-2 border-t border-[var(--border)] pt-4">
+        <h3 className="text-sm font-medium">{t("Visibility")}</h3>
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {kb.connector ? t("Connectors are always private.") : kb.visibility === "public"
+            ? t("Public knowledge bases are readable by every signed-in account and usable in chat.")
+            : t("Only you can see this knowledge base. Items that reference it can still read it.")}
+        </p>
+        {canManage && onVisibilityChange && !kb.connector && (kb.visibility === "public" || isTeacher) && (
+          <button type="button" disabled={visibilityBusy || references === null}
+            onClick={() => void changeVisibility(kb.visibility === "public" ? "private" : "public")}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs disabled:opacity-50">
+            {kb.visibility === "public" ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
+            {kb.visibility === "public" ? t("Make private") : t("Make public")}
+          </button>
+        )}
+        {canManage && references !== null && <div className="text-xs text-[var(--muted-foreground)]">
+          <h4 className="font-medium">{t("Referenced by")}</h4>
+          {references.length === 0 ? <p>{t("Not referenced anywhere.")}</p> : (
+            <ul className="mt-1 list-disc break-all pl-4">{references.map((item) => (
+              <li key={`${item.referrer_kind}:${item.referrer_id}`}>{item.referrer_kind}: {item.referrer_id}</li>
+            ))}</ul>
+          )}
+        </div>}
+        {visibilityError && <p role="alert" className="text-xs text-red-600">{visibilityError}</p>}
+      </section>}
+
+      {canWrite && onDelete && <section className="space-y-3 rounded-lg border border-red-200 bg-red-50/40 p-3 dark:border-red-900/60 dark:bg-red-950/15">
         <div>
           <div className="text-[12.5px] font-medium text-red-700 dark:text-red-300">
             {t("Danger zone")}
@@ -238,7 +313,7 @@ export default function KbSettingsSection({
           <Trash2 className="h-3 w-3" />
           {t("Delete knowledge base")}
         </button>
-      </section>
+      </section>}
     </div>
   );
 }

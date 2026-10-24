@@ -7,6 +7,8 @@ export {
   connectWeKnora,
   createKnowledgeBase,
   deleteKnowledgeBase,
+  listKnowledgeBaseReferences,
+  setKnowledgeBaseVisibility,
   getKnowledgeUploadPolicy,
   invalidateKnowledgeCaches,
   listImaKnowledgeBases,
@@ -26,6 +28,7 @@ export {
   listKiwixArchives,
   setDefaultKnowledgeBase,
 } from "./client";
+export type { KnowledgeBaseReference } from "./client";
 
 export type {
   IndexingLLMSelection,

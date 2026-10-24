@@ -23,7 +23,6 @@ import {
   Upload,
 } from "lucide-react";
 import type {
-  IndexingLLMSelection,
   LinkedFolderInfo,
   KnowledgeUploadPolicy,
   SyncFolderResponse,
@@ -53,6 +52,7 @@ import KbLinkedFoldersSection from "./KbLinkedFoldersSection";
 import KbWebSourcesSection from "./KbWebSourcesSection";
 import KbMarginNoteDevicesSection from "./KbMarginNoteDevicesSection";
 import KbKiwixArticlesSection from "./KbKiwixArticlesSection";
+import type { KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import KnowledgeEngineIcon, {
   knowledgeSourceIconId,
 } from "./KnowledgeEngineIcon";
@@ -62,7 +62,7 @@ interface KnowledgeBaseDetailProps {
   uploadPolicy: KnowledgeUploadPolicy;
   task?: TaskState;
   history: HistoryEntry[];
-  onCreate: () => void;
+  onCreate?: () => void;
   onUpload: (
     kbName: string,
     files: File[],
@@ -86,6 +86,7 @@ interface KnowledgeBaseDetailProps {
   onSetDefault: (kbName: string) => Promise<void>;
   onDelete: (kbName: string) => Promise<void>;
   onMove?: (kbName: string, targetWorkspaceId: string) => Promise<void>;
+  onVisibilityChange?: (kbName: string, visibility: KnowledgeBaseVisibility, force: boolean) => Promise<void>;
   onClearHistory: (kbName: string) => void;
   onBack?: () => void;
 }
@@ -123,6 +124,7 @@ export default function KnowledgeBaseDetail({
   onSetDefault,
   onDelete,
   onMove,
+  onVisibilityChange,
   onClearHistory,
   onBack,
 }: KnowledgeBaseDetailProps) {
@@ -145,13 +147,13 @@ export default function KnowledgeBaseDetail({
               "Pick a knowledge base from the list, or create a new one to get started.",
             )}
           </p>
-          <button
+          {onCreate && <button
             type="button"
             onClick={onCreate}
             className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
           >
             {t("Create your first knowledge base")}
-          </button>
+          </button>}
         </div>
       </main>
     );
@@ -335,9 +337,7 @@ export default function KnowledgeBaseDetail({
                   onClearHistory={() => onClearHistory(knowledgeBaseRef(kb))}
                   onRetry={handleRetry}
                   onUpload={(files, destSubdir) =>
-                    kb.read_only
-                      ? Promise.resolve()
-                      : onUpload(knowledgeBaseRef(kb), files, destSubdir)
+                    onUpload(knowledgeBaseRef(kb), files, destSubdir)
                   }
                 />
               )}
@@ -358,9 +358,7 @@ export default function KnowledgeBaseDetail({
                   kb={kb}
                   task={task}
                   onReindex={(configFingerprint, embeddingModel) =>
-                    kb.read_only
-                      ? Promise.resolve()
-                      : status === "error" &&
+                    status === "error" &&
                           kbProvider(kb) !== "lightrag" &&
                           !embeddingModel
                         ? handleRetry()
@@ -390,17 +388,10 @@ export default function KnowledgeBaseDetail({
               {activeSection === "settings" && (
                 <KbSettingsSection
                   kb={kb}
-                  onMove={onMove ? (targetWorkspaceId) => onMove(knowledgeBaseRef(kb), targetWorkspaceId) : undefined}
-                  onSetDefault={() =>
-                    kb.read_only
-                      ? Promise.resolve()
-                      : onSetDefault(knowledgeBaseRef(kb))
-                  }
-                  onDelete={() =>
-                    kb.read_only
-                      ? Promise.resolve()
-                      : onDelete(knowledgeBaseRef(kb))
-                  }
+                  onMove={!kb.read_only && onMove ? (targetWorkspaceId) => onMove(kb.id && !kb.id.startsWith("kb:") ? kb.id : knowledgeBaseRef(kb), targetWorkspaceId) : undefined}
+                  onSetDefault={!kb.read_only && kb.can_set_default ? () => onSetDefault(knowledgeBaseRef(kb)) : undefined}
+                  onDelete={!kb.read_only ? () => onDelete(knowledgeBaseRef(kb)) : undefined}
+                  onVisibilityChange={!kb.read_only && onVisibilityChange ? (visibility, force) => onVisibilityChange(knowledgeBaseRef(kb), visibility, force) : undefined}
                 />
               )}
             </div>

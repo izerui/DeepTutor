@@ -1,7 +1,7 @@
 "use client";
 
 import { FeaturePage, PageHeader, pageActionClass, pageGridClass } from '@/components/layout/FeaturePage'
-import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { groupKnowledgeBases, knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,6 +16,9 @@ import {
   Search,
   Server,
   Star,
+  Globe,
+  Lock,
+  Plug,
 } from "lucide-react";
 import {
   kbDocCount,
@@ -39,9 +42,9 @@ interface KnowledgeHomeProps {
   kbs: KnowledgeBase[];
   providers: RagProviderSummary[];
   onOpenKb: (name: string) => void;
-  onOpenEngine: (id: string) => void;
-  onOpenSource: (id: "obsidian" | "marginnote4" | "kiwix") => void;
-  onCreate: () => void;
+  onOpenEngine?: (id: string) => void;
+  onOpenSource?: (id: "obsidian" | "marginnote4" | "kiwix") => void;
+  onCreate?: () => void;
   activeSection: KnowledgeHomeSection;
   onSectionChange: (section: KnowledgeHomeSection) => void;
 }
@@ -121,6 +124,7 @@ export default function KnowledgeHome({
     if (!q) return kbs;
     return kbs.filter((kb) => kb.name.toLowerCase().includes(q));
   }, [kbs, query]);
+  const groups = groupKnowledgeBases(filteredKbs);
 
   const groupedProviders = useMemo(
     () => ({
@@ -175,7 +179,8 @@ export default function KnowledgeHome({
       <button
         key={provider.id}
         type="button"
-        onClick={() => onOpenEngine(provider.id)}
+        disabled={!onOpenEngine}
+        onClick={() => onOpenEngine?.(provider.id)}
         className="group flex min-w-0 flex-col gap-2 rounded-2xl border border-[var(--border)] p-3.5 text-left transition-colors hover:border-[var(--ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       >
         <div className="flex items-center justify-between gap-2">
@@ -209,7 +214,7 @@ export default function KnowledgeHome({
     <button
       key={source.id}
       type="button"
-      onClick={() => onOpenSource(source.id)}
+      onClick={() => onOpenSource?.(source.id)}
       className="group flex min-w-0 flex-col gap-2 rounded-2xl border border-[var(--border)] p-3.5 text-left transition-colors hover:border-[var(--ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
     >
       <div className="flex min-w-0 items-center gap-2.5">
@@ -236,7 +241,7 @@ export default function KnowledgeHome({
         <PageHeader
           title={t("Knowledge Center")}
           description={t("Manage your knowledge bases and retrieval engines.")}
-          action={
+          action={onCreate ?
           <button
             type="button"
             onClick={onCreate}
@@ -245,7 +250,7 @@ export default function KnowledgeHome({
             <Plus size={14} />
             {t("New knowledge base")}
           </button>
-          }
+          : undefined}
         />
 
         <div
@@ -263,7 +268,7 @@ export default function KnowledgeHome({
             {
               id: "knowledge-engines" as const,
               label: t("Knowledge engines"),
-              count: providers.length + externalSources.length,
+              count: providers.length + (onOpenSource ? externalSources.length : 0),
               icon: Cpu,
             },
           ].map((item) => {
@@ -341,29 +346,42 @@ export default function KnowledgeHome({
                     "Create one to upload documents and retrieve grounded context in chat.",
                   )}
                 </p>
-                <button
+                {onCreate && <button
                   type="button"
                   onClick={onCreate}
                   className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3.5 py-2 text-[12.5px] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
                 >
                   <Plus size={14} />
                   {t("New knowledge base")}
-                </button>
+                </button>}
               </div>
             ) : filteredKbs.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-[12px] text-[var(--muted-foreground)]">
                 {t("No matches")}
               </div>
             ) : (
-              <div className={pageGridClass(2)}>
-                {filteredKbs.map((kb) => {
+              <div className="space-y-6">
+                {([
+                  [t("Public knowledge bases"), Globe, groups.publicKbs],
+                  [t("My private knowledge bases"), Lock, groups.privateKbs],
+                  [t("My connectors"), Plug, groups.connectors],
+                ] as const).map(([title, Icon, items]) => items.length > 0 && (
+                <section key={title} className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-medium">
+                    <Icon className="h-3.5 w-3.5" />{title}<span>{items.length}</span>
+                  </h3>
+                  <div className={pageGridClass(2)}>
+                {items.map((kb) => {
                   const docs = kbDocCount(kb);
+                  const provenance = kb.owned === false && kb.created_by_name
+                    ? t("Shared by {{name}}", { name: kb.created_by_name })
+                    : kb.provenance_label;
                   return (
                     <button
                       key={knowledgeBaseRef(kb)}
                       type="button"
                       onClick={() => onOpenKb(knowledgeBaseRef(kb))}
-                      className="group flex flex-col gap-2 rounded-2xl border border-[var(--border)] p-4 text-left transition-colors hover:border-[var(--ring)]"
+                      className="group flex min-w-0 flex-col gap-2 rounded-lg border border-[var(--border)] p-4 text-left transition-colors hover:border-[var(--ring)]"
                     >
                       <div className="flex items-start gap-3">
                         <KnowledgeEngineIcon
@@ -386,11 +404,12 @@ export default function KnowledgeHome({
                               />
                             )}
                           </div>
-                          {kb.provenance_label && <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">{kb.provenance_label}</p>}
+                          {provenance && <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">{provenance}</p>}
                           <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
                             <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5">
                               {providerName(kbProvider(kb))}
                             </span>
+                            {kb.visibility === "public" && <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" />{t("Public")}</span>}
                             {docs !== null && (
                               <span>
                                 {docs} {t("docs")}
@@ -402,6 +421,9 @@ export default function KnowledgeHome({
                     </button>
                   );
                 })}
+                  </div>
+                </section>
+                ))}
               </div>
             )}
           </section>
@@ -463,7 +485,7 @@ export default function KnowledgeHome({
               </div>
             </section>
 
-            <section>
+            {onOpenSource && <section>
               <div className="mb-3 flex items-start gap-2">
                 <Library className="mt-0.5 h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
                 <div>
@@ -480,7 +502,7 @@ export default function KnowledgeHome({
               <div className={pageGridClass(2)}>
                 {externalSources.map(renderExternalSource)}
               </div>
-            </section>
+            </section>}
           </div>
         )}
     </FeaturePage>

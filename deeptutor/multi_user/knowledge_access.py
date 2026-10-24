@@ -412,6 +412,7 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
     return {
         "kb_id": record.kb_id,
         "ref": record.ref,
+        "legacy_refs": registry.admin_legacy_refs(record.kb_id),
         "visibility": record.visibility,
         "created_by": record.created_by,
         "owned": owned,

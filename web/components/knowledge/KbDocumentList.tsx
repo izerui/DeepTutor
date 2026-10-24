@@ -1,6 +1,7 @@
 "use client";
 
 import Tooltip from "@/shared/ui/Tooltip";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -21,6 +22,7 @@ import { invalidateClientCache } from "@/lib/client-cache";
 import {
   createKbFolder,
   deleteKbFile,
+  KbFileDeleteBlockedError,
   listKnowledgeBaseFiles,
   moveKbFile,
   type KnowledgeBaseFile,
@@ -29,6 +31,7 @@ import { docIconFor, formatBytes } from "@/lib/doc-attachments";
 
 interface KbDocumentListProps {
   kbName: string;
+  readOnly?: boolean;
   /** Refresh trigger: bumping this prop forces a re-fetch (e.g. after upload). */
   refreshKey?: number;
   selectedFile: string | null;
@@ -108,12 +111,15 @@ function buildTree(entries: KnowledgeBaseFile[]): {
 export default function KbDocumentList({
   kbName,
   refreshKey = 0,
+  readOnly = false,
   selectedFile,
   onSelect,
   collapsed,
   onToggleCollapsed,
 }: KbDocumentListProps) {
   const { t } = useTranslation();
+  const { isAdmin, allowPrivateKb } = useAuthStatus();
+  const canWrite = !readOnly && allowPrivateKb;
   const [files, setFiles] = useState<KnowledgeBaseFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -209,10 +215,27 @@ export default function KbDocumentList({
   };
 
   const handleDelete = async (path: string) => {
+    if (!canWrite) return;
     setConfirmDeleteFor(null);
     setBusy(true);
     try {
-      await deleteKbFile(kbName, path);
+      try {
+        await deleteKbFile(kbName, path);
+      } catch (err) {
+        if (!(err instanceof KbFileDeleteBlockedError)) throw err;
+        const details = `${err.message}\n\n${t("Referenced by: {{items}}", {
+          items: err.references.map((item) => `${item.referrer_kind}:${item.referrer_id}`).join(", "),
+        })}`;
+        if (err.code === "requires_confirmation") {
+          if (!window.confirm(`${details}\n\n${t("Delete this document anyway?")}`)) return;
+          await deleteKbFile(kbName, path, { confirm: true });
+        } else if (isAdmin) {
+          if (!window.confirm(`${details}\n\n${t("Force delete this document? Items that cite it will lose it.")}`)) return;
+          await deleteKbFile(kbName, path, { force: true });
+        } else {
+          throw new Error(details);
+        }
+      }
       // Drop the preview if the deleted file was the one being shown.
       if (selectedFile === path) onSelect(null);
       await load(true);
@@ -288,7 +311,7 @@ export default function KbDocumentList({
               e.preventDefault();
               e.stopPropagation();
               const src = e.dataTransfer.getData("text/plain");
-              if (src) void handleMove(src, node.path);
+              if (src && canWrite) void handleMove(src, node.path);
             }}
             style={indent}
             className={`flex cursor-pointer items-center gap-1 rounded-md py-1.5 pr-2 text-left transition-colors ${
@@ -323,7 +346,7 @@ export default function KbDocumentList({
     return (
       <li key={`f:${node.path}`} className="group/row relative">
         <div
-          draggable
+          draggable={canWrite}
           onDragStart={(e) => {
             e.dataTransfer.setData("text/plain", node.path);
             e.dataTransfer.effectAllowed = "move";
@@ -358,7 +381,7 @@ export default function KbDocumentList({
               </div>
             </div>
           </button>
-          {confirmDeleteFor === node.path ? (
+          {canWrite && (confirmDeleteFor === node.path ? (
             <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
               <span className="px-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
                 {t("Delete?")}
@@ -416,10 +439,10 @@ export default function KbDocumentList({
                 </button>
               </Tooltip>
             </div>
-          )}
+          ))}
         </div>
 
-        {moveMenuFor === node.path && (
+        {canWrite && moveMenuFor === node.path && (
           <>
             <div
               className="fixed inset-0 z-10"
@@ -474,7 +497,7 @@ export default function KbDocumentList({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Tooltip label={t("New folder")} side="top">
+          {canWrite && <Tooltip label={t("New folder")} side="top">
             <button
               type="button"
               onClick={() => {
@@ -486,7 +509,7 @@ export default function KbDocumentList({
             >
               <FolderPlus size={13} strokeWidth={1.7} />
             </button>
-          </Tooltip>
+          </Tooltip>}
           <Tooltip label={t("Refresh")} side="top">
             <button
               type="button"
@@ -515,7 +538,7 @@ export default function KbDocumentList({
         </div>
       </div>
 
-      {newFolderOpen && (
+      {canWrite && newFolderOpen && (
         <div className="flex items-center gap-1 px-2.5 pb-1.5">
           <input
             value={newFolderName}
@@ -548,7 +571,7 @@ export default function KbDocumentList({
         onDrop={(e) => {
           e.preventDefault();
           const src = e.dataTransfer.getData("text/plain");
-          if (src) void handleMove(src, "");
+          if (src && canWrite) void handleMove(src, "");
         }}
       >
         {error ? (

@@ -1,6 +1,8 @@
 "use client";
 
-import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
 import { moveKnowledgeBase, resourceUsage } from "@/lib/workspaces-api";
 import { apiFetch, apiUrl } from "@/lib/api";
 import type { EmbeddingModelSelection } from "@/features/knowledge/model/types";
@@ -18,7 +20,6 @@ import {
   knowledgeBaseRoute,
 } from "@/lib/resource-routes";
 import type {
-  IndexingLLMSelection,
   LinkedFolderInfo,
   SyncFolderResponse,
 } from "@/features/knowledge/model/types";
@@ -49,6 +50,7 @@ const ConnectKiwixModal = dynamic(() => import("./ConnectKiwixModal"));
 
 export default function KnowledgePage() {
   const { t } = useTranslation();
+  const { isAdmin, allowPrivateKb } = useAuthStatus();
   const router = useRouter();
   const routeParams = useParams<{ kbName?: string }>();
   const searchParams = useSearchParams();
@@ -92,8 +94,9 @@ export default function KnowledgePage() {
   // composer can select them, but they are agents, not knowledge bases — keep
   // them out of the Knowledge Center entirely.
   const kbs = useMemo(
-    () => allKbs.filter((kb) => kb.metadata?.type !== "subagent"),
-    [allKbs],
+    () => allKbs.filter((kb) => kb.metadata?.type !== "subagent").map((kb) =>
+      allowPrivateKb ? kb : { ...kb, read_only: true, can_set_default: false }),
+    [allKbs, allowPrivateKb],
   );
 
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
@@ -163,17 +166,15 @@ export default function KnowledgePage() {
     // request is still in flight. Once loading finishes, the normal existence
     // check below may repair an actually stale name to the default KB.
     if (loading && explicitSelection) return explicitSelection;
-    const exact = kbs.find((kb) => knowledgeBaseRef(kb) === explicitSelection);
+    const exact = kbs.find((kb) => knowledgeBaseMatches(kb, explicitSelection ?? ""));
     if (exact) return knowledgeBaseRef(exact);
-    const legacy = kbs.filter((kb) => kb.name === explicitSelection);
-    if (legacy.length === 1) return knowledgeBaseRef(legacy[0]);
     if (explicitSelection) return explicitSelection;
     if (!kbs.length) return null;
     return knowledgeBaseRef(kbs.find((kb) => kb.is_default) ?? kbs[0]);
   }, [explicitSelection, kbs, loading]);
 
   const selectedKb = useMemo(
-    () => kbs.find((kb) => knowledgeBaseRef(kb) === selectedKbName) ?? null,
+    () => kbs.find((kb) => knowledgeBaseMatches(kb, selectedKbName ?? "")) ?? null,
     [kbs, selectedKbName],
   );
 
@@ -183,16 +184,17 @@ export default function KnowledgePage() {
     if (
       loading ||
       !explicitSelection ||
-      kbs.some((kb) => knowledgeBaseRef(kb) === explicitSelection || kb.name === explicitSelection)
+      kbs.some((kb) => knowledgeBaseMatches(kb, explicitSelection))
     ) return;
     let cancelled = false;
     void apiFetch(
       apiUrl(`/api/knowledge-bases/${encodeURIComponent(explicitSelection)}?resource_library=true`),
     )
       .then((response) => response.ok ? response.json() : null)
-      .then((detail: { id?: string } | null) => {
-        if (!cancelled && detail?.id && kbs.some((kb) => knowledgeBaseRef(kb) === detail.id)) {
-          setExplicitSelection(detail.id);
+      .then((detail: { id?: string; ref?: string } | null) => {
+        const ref = detail?.ref || detail?.id;
+        if (!cancelled && ref && kbs.some((kb) => knowledgeBaseMatches(kb, ref))) {
+          setExplicitSelection(ref);
         }
       })
       .catch(() => undefined);
@@ -244,7 +246,7 @@ export default function KnowledgePage() {
     }) => {
       try {
         const result = await createKb(params);
-        openKb(result.id || `account:kb:${params.name}`);
+        openKb(result.ref || result.id || `account:kb:${params.name}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         throw err;
@@ -267,6 +269,14 @@ export default function KnowledgePage() {
     [openKb, refresh, setError],
   );
 
+  const handleVisibilityChange = useCallback(
+    async (name: string, visibility: KnowledgeBaseVisibility, force: boolean) => {
+      await setKnowledgeBaseVisibility(name, visibility, { force });
+      await refresh({ force: true, showSpinner: false });
+    },
+    [refresh],
+  );
+
   const handleSetDefault = useCallback(
     async (name: string) => {
       try {
@@ -281,19 +291,29 @@ export default function KnowledgePage() {
   const handleDelete = useCallback(
     async (name: string) => {
       try {
-        const workspaces = await resourceUsage("knowledge_bases", name);
+        const kb = kbs.find((item) => knowledgeBaseMatches(item, name));
+        const usageId = kb?.id && !kb.id.startsWith("kb:") ? kb.id : name;
+        const [workspaces, references] = await Promise.all([
+          resourceUsage("knowledge_bases", usageId),
+          listKnowledgeBaseReferences(name),
+        ]);
         const impact = workspaces.length
           ? "\n\n" +
             t("Used by workspaces: {{names}}", { names: workspaces.join(", ") })
           : "";
-        if (
-          !window.confirm(
-            t('Delete knowledge base "{{name}}"?', { name }) + impact,
-          )
-        )
+        const referenced = references.length ? "\n\n" + t("Referenced by: {{items}}", {
+          items: references.map((item) => `${item.referrer_kind}:${item.referrer_id}`).join(", "),
+        }) : "";
+        if (references.length && !isAdmin) {
+          window.alert(t("Remove these references before deleting.") + referenced);
           return;
-        await deleteKb(name);
-        if (explicitSelection === name) {
+        }
+        const question = references.length
+          ? t("Delete anyway? Every item that references it will lose this material.")
+          : t('Delete knowledge base "{{name}}"?', { name: kb?.name ?? name });
+        if (!window.confirm(question + impact + referenced)) return;
+        await deleteKb(name, { force: references.length > 0 });
+        if (kb && knowledgeBaseMatches(kb, explicitSelection ?? "")) {
           setExplicitSelection(null);
           setView("home");
         }
@@ -301,7 +321,7 @@ export default function KnowledgePage() {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [deleteKb, explicitSelection, setError, t],
+    [deleteKb, explicitSelection, isAdmin, kbs, setError, t],
   );
 
   const handleUpload = useCallback(
@@ -426,13 +446,13 @@ export default function KnowledgePage() {
               kbs={kbs}
               providers={providers}
               onOpenKb={openKb}
-              onOpenEngine={openEngine}
-              onOpenSource={openSource}
-              onCreate={openCreate}
+              onOpenEngine={allowPrivateKb ? openEngine : undefined}
+              onOpenSource={allowPrivateKb ? openSource : undefined}
+              onCreate={allowPrivateKb ? openCreate : undefined}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
-          ) : view === "engine" && selectedProvider ? (
+          ) : view === "engine" && selectedProvider && allowPrivateKb ? (
             <EngineDetail
               provider={selectedProvider}
               kbs={kbs}
@@ -451,9 +471,9 @@ export default function KnowledgePage() {
               kbs={kbs}
               providers={providers}
               onOpenKb={openKb}
-              onOpenEngine={openEngine}
-              onOpenSource={openSource}
-              onCreate={openCreate}
+              onOpenEngine={allowPrivateKb ? openEngine : undefined}
+              onOpenSource={allowPrivateKb ? openSource : undefined}
+              onCreate={allowPrivateKb ? openCreate : undefined}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
@@ -469,7 +489,7 @@ export default function KnowledgePage() {
                   ? (historyByKb[knowledgeBaseRef(selectedKb)] ?? [])
                   : []
               }
-              onCreate={openCreate}
+              onCreate={allowPrivateKb ? openCreate : undefined}
               onUpload={handleUpload}
               onLinkFolder={handleLinkFolder}
               onUnlinkFolder={handleUnlinkFolder}
@@ -479,6 +499,7 @@ export default function KnowledgePage() {
               onSetDefault={handleSetDefault}
               onDelete={handleDelete}
               onMove={handleMove}
+              onVisibilityChange={handleVisibilityChange}
               onClearHistory={clearHistory}
               onBack={() => {
                 setHomeSection("knowledge-bases");
@@ -489,7 +510,7 @@ export default function KnowledgePage() {
         </div>
       )}
 
-      {createOpen ? (
+      {createOpen && allowPrivateKb ? (
         <CreateKbModal
           isOpen
           onClose={() => setCreateOpen(false)}
@@ -510,7 +531,7 @@ export default function KnowledgePage() {
           }}
         />
       ) : null}
-      {kiwixOpen ? (
+      {kiwixOpen && allowPrivateKb ? (
         <ConnectKiwixModal
           onClose={() => setKiwixOpen(false)}
           onConnect={async (params) => {

@@ -156,6 +156,8 @@ export function lightRagVersionDisplayState(
   return "inactive";
 }
 
+export type KnowledgeBaseVisibility = "public" | "private";
+
 export interface KnowledgeBase {
   id?: string;
   name: string;
@@ -216,6 +218,16 @@ export interface KnowledgeBase {
   read_only?: boolean;
   provenance_label?: string;
   available?: boolean;
+  kb_id?: string;
+  ref?: string;
+  legacy_refs?: string[];
+  can_set_default?: boolean;
+  visibility?: KnowledgeBaseVisibility;
+  created_by?: string;
+  created_by_name?: string;
+  owned?: boolean;
+  kind?: string;
+  connector?: boolean;
 }
 
 export type ProviderConnectionStatus =
@@ -349,14 +361,18 @@ export type KbDetailSection = (typeof KB_DETAIL_SECTIONS)[number];
  * add-documents / index-versions would all render empty against it; what it
  * does have is the devices that feed it. Every other KB has the reverse.
  */
-export const kbDetailSections = (kb: KnowledgeBase): KbDetailSection[] =>
-  isMarginNoteKb(kb)
+export const kbDetailSections = (kb: KnowledgeBase): KbDetailSection[] => {
+  const sections: KbDetailSection[] = isMarginNoteKb(kb)
     ? ["devices", "settings"]
     : kb.metadata?.type === "kiwix"
       ? ["kiwix", "settings"]
     : KB_DETAIL_SECTIONS.filter(
         (section) => section !== "devices" && section !== "kiwix" && (section !== "folders" || !kb.metadata?.type),
       );
+  return kb.read_only
+    ? sections.filter((section) => !["add", "folders", "github", "web", "devices"].includes(section))
+    : sections;
+};
 
 /** Local source folders belong to ordinary, DeepTutor-managed indexed KBs. */
 export const kbSupportsLinkedFolders = (kb: KnowledgeBase): boolean =>
@@ -560,6 +576,47 @@ export function validateFiles(
 }
 
 /** Resource identity is distinct from its display name across workspace catalogs. */
-export function knowledgeBaseRef(kb: { id?: string; name: string; assigned?: boolean }): string {
+type KnowledgeBaseRefSource = Pick<KnowledgeBase, "id" | "name" | "assigned" | "kb_id" | "owned" | "legacy_refs">;
+
+export function knowledgeBaseRef(kb: KnowledgeBaseRefSource): string {
+  if (kb.kb_id) return `kb:${kb.kb_id}`;
+  if (kb.id?.startsWith("kb:")) return kb.id;
   return kb.assigned && kb.id ? kb.id : kb.id?.startsWith('account:kb:') || kb.id?.startsWith('workspace:') ? kb.id : kb.name;
+}
+
+export function knowledgeBaseMatches(kb: KnowledgeBaseRefSource, ref: string): boolean {
+  if (!ref) return false;
+  if (ref === kb.id || kb.legacy_refs?.includes(ref)) return true;
+  // Only current-scope legacy rows accept bare names. Ownership alone does not
+  // distinguish an adopted external library or another workspace's namesake.
+  const local = !kb.assigned && kb.owned !== false &&
+    (!kb.id || kb.id.startsWith("user:kb:") || kb.id.startsWith("admin:kb:"));
+  if (ref === kb.name) return local;
+  // The unqualified list IDs are emitted only for the account's default scope;
+  // selected workspace/catalog rows already carry their qualified storage ID.
+  if (local && kb.id && ref === `account:kb:${kb.name}`) return true;
+  return ref === knowledgeBaseRef(kb);
+}
+
+export function knowledgeBaseSelectionRefs(kb: KnowledgeBaseRefSource): string[] {
+  return [...new Set([knowledgeBaseRef(kb), kb.id, kb.name, `account:kb:${kb.name}`, ...(kb.legacy_refs ?? [])])]
+    .filter((ref): ref is string => typeof ref === "string" && knowledgeBaseMatches(kb, ref));
+}
+
+export function groupKnowledgeBases<T extends Pick<KnowledgeBase, "visibility" | "connector">>(kbs: T[]) {
+  const groups: { publicKbs: T[]; privateKbs: T[]; connectors: T[] } = {
+    publicKbs: [], privateKbs: [], connectors: [],
+  };
+  for (const kb of kbs) {
+    if (kb.connector) groups.connectors.push(kb);
+    else if (kb.visibility === "public") groups.publicKbs.push(kb);
+    else groups.privateKbs.push(kb);
+  }
+  return groups;
+}
+
+export function canCreateKnowledgeBases(
+  policy: { allow_private_kb: boolean } | null | undefined,
+): boolean {
+  return policy?.allow_private_kb ?? true;
 }

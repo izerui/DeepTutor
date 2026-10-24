@@ -23,6 +23,70 @@ def list_client(monkeypatch):
         yield client
 
 
+def test_admin_aliases_follow_identity_after_relocation_without_namesake_leak(
+    as_user, make_kb, list_client, tmp_path,
+):
+    from deeptutor.multi_user.knowledge_access import admin_kb_manager
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+
+    manager = admin_kb_manager()
+    make_kb(manager, "shared-name")
+    original = registry.register_kb(
+        base_dir=manager.base_dir, name="shared-name", kind="uploaded",
+        created_by="local-admin", visibility="public",
+    )
+    with as_user("reader"):
+        rows = list_client.get("/api/knowledge-bases/list").json()
+        row = next(item for item in rows if item["kb_id"] == original.kb_id)
+        assert row["legacy_refs"] == ["admin:kb:shared-name"]
+
+    # Synthetic destination only: registry relocation must retain authoritative
+    # admin identity even if another public library has the same display name.
+    destination = KnowledgeBaseManager(base_dir=tmp_path / "relocated")
+    make_kb(destination, "shared-name")
+    registry.relocate_kb(original.kb_id, destination.base_dir)
+    with as_user("other", role="teacher"):
+        other = current_kb_manager()
+        make_kb(other, "shared-name")
+        namesake = registry.register_kb(
+            base_dir=other.base_dir, name="shared-name", kind="uploaded",
+            created_by="other", visibility="public",
+        )
+    with as_user("reader"):
+        rows = list_client.get("/api/knowledge-bases/list").json()
+        by_id = {item["kb_id"]: item for item in rows}
+        assert by_id[original.kb_id]["legacy_refs"] == ["admin:kb:shared-name"]
+        assert by_id[namesake.kb_id]["legacy_refs"] == []
+        detail = list_client.get(f"/api/knowledge-bases/{original.ref}")
+        assert detail.status_code == 200
+        assert detail.json()["legacy_refs"] == ["admin:kb:shared-name"]
+        assert detail.json()["kb_id"] == original.kb_id
+        legacy = list_client.get("/api/knowledge-bases/admin:kb:shared-name")
+        assert legacy.json()["kb_id"] == original.kb_id
+    assert registry.admin_legacy_refs(namesake.kb_id) == []
+
+
+def test_private_admin_aliases_are_never_exposed_to_foreign_viewers(
+    as_user, make_kb, list_client,
+):
+    from deeptutor.multi_user.knowledge_access import admin_kb_manager
+
+    manager = admin_kb_manager()
+    make_kb(manager, "private-admin-alias")
+    record = registry.register_kb(
+        base_dir=manager.base_dir, name="private-admin-alias", kind="uploaded",
+        created_by="local-admin",
+    )
+    with as_user("foreign"):
+        response = list_client.get("/api/knowledge-bases/list")
+        assert response.status_code == 200
+        assert all(row["kb_id"] != record.kb_id for row in response.json())
+        detail = list_client.get(f"/api/knowledge-bases/{record.ref}")
+        assert detail.status_code == 404
+        assert "legacy_refs" not in detail.json()
+        assert "private-admin-alias" not in detail.text
+
+
 @pytest.mark.parametrize("route", ["/api/knowledge-bases", "/api/knowledge-bases/list"])
 @pytest.mark.parametrize("origin_kind", ["account", "workspace"])
 @pytest.mark.parametrize("selection_format", ["registry", "legacy", "mixed"])

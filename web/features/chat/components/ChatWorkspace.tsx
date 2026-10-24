@@ -4,7 +4,7 @@ import { COMMAND_CONFIRMATION_FAILED } from "@/features/chat/transport/command-d
 
 import { ResourceReuseContext, useResourceReusePolicy } from "@/components/chat/home/ResourceReuse";
 import { retainedKnowledgeBases } from "@/lib/resource-reuse";
-import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches, knowledgeBaseSelectionRefs } from "@/lib/knowledge-helpers";
 import { assetPath, scopedUrl } from "@/lib/workspace-scope";
 import { watchingRoute } from "@/lib/learning-routes";
 
@@ -319,13 +319,13 @@ export default function ChatWorkspace() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [knowledgeBasesLoaded, setKnowledgeBasesLoaded] = useState(false);
   const availableKbNames = useMemo(
-    () => new Set(knowledgeBases.map(knowledgeBaseRef)),
+    () => new Set(knowledgeBases.flatMap(knowledgeBaseSelectionRefs)),
     [knowledgeBases],
   );
   // Sent-message reference chips show the readable KB name; the snapshot
   // stores the qualified ref, so the label is resolved through this map.
   const kbDisplayNames = useMemo(
-    () => Object.fromEntries(knowledgeBases.map((kb) => [knowledgeBaseRef(kb), kb.name])),
+    () => Object.fromEntries(knowledgeBases.flatMap((kb) => knowledgeBaseSelectionRefs(kb).map((ref) => [ref, kb.name]))),
     [knowledgeBases],
   );
   // A connected agent to preselect once it loads, from `?agent=<name>` on the
@@ -2159,7 +2159,7 @@ export default function ChatWorkspace() {
     (name: string) => {
       const current = state.knowledgeBases;
       const providerOf = (kbName: string) => {
-        const kb = knowledgeBases.find((item) => knowledgeBaseRef(item) === kbName);
+        const kb = knowledgeBases.find((item) => knowledgeBaseMatches(item, kbName));
         return kb?.metadata?.rag_provider || kb?.statistics?.rag_provider || "";
       };
       const selectingOss = providerOf(name) === "pageindex-oss";

@@ -240,6 +240,7 @@ class KnowledgeBaseInfo(BaseModel):
     available: bool = True
     kb_id: str | None = None
     ref: str | None = None
+    legacy_refs: list[str] = Field(default_factory=list)
     visibility: str | None = None
     created_by: str | None = None
     created_by_name: str | None = None
@@ -251,6 +252,7 @@ class KnowledgeBaseInfo(BaseModel):
 _REGISTRY_INFO_KEYS = (
     "kb_id",
     "ref",
+    "legacy_refs",
     "visibility",
     "created_by",
     "created_by_name",
@@ -3216,6 +3218,11 @@ async def get_knowledge_base_details(kb_name: str):
         resource = resolve_kb(kb_name)
         manager = manager_for_resource(resource)
         info = manager.get_info(resource.name)
+        from deeptutor.knowledge import registry
+        from deeptutor.multi_user.knowledge_access import _registry_fields
+
+        record = registry.find_by_location(resource.base_dir, resource.name)
+        info.update(_registry_fields(record, owned=record is not None and record.created_by == get_current_user().id))
         can_set_default = _can_set_default(resource.base_dir, read_only=resource.read_only)
         info.update(
             {

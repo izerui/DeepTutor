@@ -1,6 +1,6 @@
 "use client";
 
-import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBase } from "@/lib/knowledge-helpers";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Database } from "lucide-react";
@@ -31,7 +31,7 @@ export default function KnowledgeSelector({
   pinned = false,
   embedded = false,
 }: {
-  knowledgeBases: { id?: string; name: string; provenance_label?: string }[];
+  knowledgeBases: KnowledgeBase[];
   selected: string[];
   onToggle: (name: string) => void;
   placement?: "top" | "bottom";
@@ -66,7 +66,7 @@ export default function KnowledgeSelector({
     count === 0
       ? t("Knowledge")
       : count === 1
-        ? (knowledgeBases.find((kb) => knowledgeBaseRef(kb) === selected[0])
+        ? (knowledgeBases.find((kb) => knowledgeBaseMatches(kb, selected[0]))
             ?.name ?? selected[0])
         : `${count} ${t("knowledge bases")}`;
   const menuPlacementClass =
@@ -147,13 +147,14 @@ export default function KnowledgeSelector({
                   kb.name.toLowerCase().includes(query.toLowerCase().trim()),
                 )
                 .map((kb) => {
-                  const active = selected.includes(knowledgeBaseRef(kb));
+                  const savedRef = selected.find((ref) => knowledgeBaseMatches(kb, ref));
+                  const active = savedRef !== undefined;
                   return (
                     <button
                       key={knowledgeBaseRef(kb)}
                       type="button"
                       aria-pressed={active}
-                      onClick={() => onToggle(knowledgeBaseRef(kb))}
+                      onClick={() => onToggle(savedRef ?? knowledgeBaseRef(kb))}
                       className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors active:bg-[var(--muted)]/70 ${
                         active
                           ? "bg-[var(--primary)]/[0.06]"

@@ -1,6 +1,7 @@
 export {
   createKbFolder,
   deleteKbFile,
+  KbFileDeleteBlockedError,
   knowledgeBaseFilePath,
   knowledgeBaseFilePreviewTextPath,
   listKnowledgeBaseFiles,

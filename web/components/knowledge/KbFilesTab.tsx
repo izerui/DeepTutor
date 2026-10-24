@@ -63,6 +63,7 @@ export default function KbFilesTab({ kb, task }: KbFilesTabProps) {
     <div className="flex h-full min-h-0">
       <KbDocumentList
         kbName={kbRef}
+        readOnly={kb.read_only}
         refreshKey={refreshKey}
         selectedFile={selectedFile?.name ?? null}
         onSelect={setSelectedFile}

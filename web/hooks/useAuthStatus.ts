@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchAuthStatus } from "@/lib/auth";
+import { canCreateKnowledgeBases } from "@/lib/knowledge-helpers";
 
 export interface LearningPolicyState {
   /** Surfaces this account may open. Everything else is hidden, not a 403. */
@@ -15,6 +16,8 @@ export interface AuthStatusState {
   authenticated: boolean;
   /** Whether the authenticated user is an admin. */
   isAdmin: boolean;
+  isTeacher: boolean;
+  allowPrivateKb: boolean;
   /** Stable account id for account-scoped browser state. */
   userId: string | null;
   /** False when the runtime status endpoint could not be reached. */
@@ -33,6 +36,8 @@ const INITIAL: AuthStatusState = {
   enabled: false,
   authenticated: false,
   isAdmin: false,
+  isTeacher: false,
+  allowPrivateKb: false,
   userId: null,
   statusAvailable: false,
   loading: true,
@@ -65,6 +70,8 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     enabled: Boolean(status?.enabled),
     authenticated: Boolean(status?.authenticated),
     isAdmin: status?.role === "admin",
+    isTeacher: Boolean(status?.is_teacher) || status?.role === "admin",
+    allowPrivateKb: status?.role !== "student" || canCreateKnowledgeBases(status?.student_policy),
     userId:
       typeof status?.user_id === "string" && status.user_id.trim()
         ? status.user_id

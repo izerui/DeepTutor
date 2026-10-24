@@ -481,6 +481,25 @@ def find_admin_legacy_name(name: str) -> KbRecord | None:
     return _record(row) if row is not None else None
 
 
+def admin_legacy_refs(kb_id: str) -> list[str]:
+    """Global admin aliases only; callers must authorize the KB before exposing these."""
+    from deeptutor.multi_user.paths import get_admin_path_service
+
+    root = _location(get_admin_path_service().get_knowledge_bases_root())
+    with _read() as conn:
+        if conn is None:
+            return []
+        rows = conn.execute(
+            "SELECT name FROM kb_admin_legacy_names WHERE kb_id = ? "
+            "UNION SELECT dir_name AS name FROM kb_registry "
+            "WHERE kb_id = ? AND base_dir = ? AND NOT EXISTS "
+            "(SELECT 1 FROM kb_admin_legacy_names a WHERE a.name = dir_name) "
+            "ORDER BY name",
+            (_strip_ref(kb_id), _strip_ref(kb_id), root),
+        ).fetchall()
+    return [f"admin:kb:{row['name']}" for row in rows]
+
+
 def _retain_admin_legacy_names(conn: sqlite3.Connection, *, kb_id: str | None = None) -> None:
     from deeptutor.multi_user.paths import get_admin_path_service
 

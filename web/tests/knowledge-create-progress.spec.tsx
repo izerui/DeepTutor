@@ -77,6 +77,9 @@ it("completes empty creation without opening a progress socket or task stream", 
 
 it("tracks creation when the server accepts an indexing task", async () => {
   fixture.create.mockResolvedValue({
+    id: "account:kb:papers",
+    ref: "kb:fixed",
+    kb_id: "fixed",
     task_id: "index-task",
     files: ["text.txt"],
   });
@@ -91,11 +94,11 @@ it("tracks creation when the server accepts an indexing task", async () => {
   });
   expect(Socket.instances).toHaveLength(1);
   expect(Socket.instances[0].url).toContain(
-    "/papers/progress?task_id=index-task",
+    "/kb%3Afixed/progress?task_id=index-task",
   );
   expect(Stream.instances).toHaveLength(1);
   expect(Stream.instances[0].url).toContain("/tasks/index-task/stream");
-  expect(result.current.tasksByKb.papers).toMatchObject({
+  expect(result.current.tasksByKb["kb:fixed"]).toMatchObject({
     taskId: "index-task",
     executing: true,
   });

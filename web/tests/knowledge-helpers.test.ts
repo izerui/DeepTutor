@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   getFileExtension,
+  groupKnowledgeBases,
+  knowledgeBaseMatches,
+  knowledgeBaseRef,
+  knowledgeBaseSelectionRefs,
+  canCreateKnowledgeBases,
   isMarginNoteKb,
   kbCanReindex,
   kbDetailSections,
@@ -15,6 +20,42 @@ import {
   providerConnectionStatus,
   type KnowledgeBase,
 } from "../lib/knowledge-helpers";
+
+test("registry selections preserve scoped legacy references without matching namesakes", () => {
+  const local: KnowledgeBase = { name: "notes", id: "user:kb:notes", kb_id: "local", owned: true };
+  const external: KnowledgeBase = { name: "notes", id: "kb:external", kb_id: "external", owned: true };
+  const shared: KnowledgeBase = { name: "notes", id: "kb:shared", kb_id: "shared", owned: false, assigned: true };
+  const moved: KnowledgeBase = { name: "renamed", id: "kb:moved", kb_id: "moved", legacy_refs: ["admin:kb:notes"], owned: false };
+  assert.equal(knowledgeBaseRef(local), "kb:local");
+  for (const ref of ["notes", "user:kb:notes", "account:kb:notes", "kb:local"]) assert.equal(knowledgeBaseMatches(local, ref), true);
+  for (const kb of [external, shared, moved]) assert.equal(knowledgeBaseMatches(kb, "notes"), false);
+  for (const kb of [local, external, shared]) assert.equal(knowledgeBaseMatches(kb, "admin:kb:notes"), false);
+  assert.equal(knowledgeBaseMatches(moved, "admin:kb:notes"), true);
+  assert.ok(knowledgeBaseSelectionRefs(moved).includes("admin:kb:notes"));
+  assert.ok(!knowledgeBaseSelectionRefs(external).includes("notes"));
+  assert.ok(knowledgeBaseSelectionRefs(local).includes("account:kb:notes"));
+  assert.equal(knowledgeBaseMatches({ name: "notes", owned: false }, "notes"), false);
+  assert.equal(knowledgeBaseMatches({ ...local, id: "workspace:other:kb:notes" }, "account:kb:notes"), false);
+  assert.equal(knowledgeBaseMatches({ ...local, id: "workspace:other:kb:notes" }, "notes"), false);
+  assert.equal(knowledgeBaseRef({ name: "notes", id: "account:kb:notes" }), "account:kb:notes");
+});
+
+test("knowledge groups and student policy retain public reads without write sections", () => {
+  const kbs: KnowledgeBase[] = [
+    { name: "public", visibility: "public", owned: false },
+    { name: "private", visibility: "private" },
+    { name: "connector", connector: true },
+    { name: "legacy" },
+  ];
+  const groups = groupKnowledgeBases(kbs);
+  assert.deepEqual(groups.publicKbs.map((kb) => kb.name), ["public"]);
+  assert.deepEqual(groups.privateKbs.map((kb) => kb.name), ["private", "legacy"]);
+  assert.deepEqual(groups.connectors.map((kb) => kb.name), ["connector"]);
+  assert.equal(canCreateKnowledgeBases(null), true);
+  assert.equal(canCreateKnowledgeBases({ allow_private_kb: false }), false);
+  assert.equal(canCreateKnowledgeBases({ allow_private_kb: true }), true);
+  assert.deepEqual(kbDetailSections({ name: "owned", owned: true, read_only: true }), ["files", "versions", "settings"]);
+});
 
 test("knowledge upload extension matching supports compound Docling suffixes", () => {
   const allowed = [".gz", ".tar.gz", ".xml", ".dclg.xml"];

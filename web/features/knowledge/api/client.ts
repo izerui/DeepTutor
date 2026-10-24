@@ -58,6 +58,16 @@ export interface KnowledgeBaseSummary {
   read_only?: boolean;
   provenance_label?: string;
   available?: boolean;
+  kb_id?: string;
+  ref?: string;
+  legacy_refs?: string[];
+  can_set_default?: boolean;
+  visibility?: "public" | "private";
+  created_by?: string;
+  created_by_name?: string;
+  owned?: boolean;
+  kind?: string;
+  connector?: boolean;
 }
 
 export interface RagProviderSummary {
@@ -740,6 +750,8 @@ export function knowledgeBaseFilePreviewTextPath(
 
 export interface KnowledgeTaskResponse {
   id?: string;
+  kb_id?: string;
+  ref?: string;
   task_id?: string;
   message?: string;
   noop?: boolean;
@@ -751,6 +763,7 @@ export async function readErrorDetail(
 ): Promise<string> {
   try {
     const body = await res.json();
+    if (body?.detail && typeof body.detail === "object" && body.detail.message) return String(body.detail.message);
     if (body?.detail) return String(body.detail);
   } catch {
     // body wasn't JSON; fall through
@@ -770,6 +783,7 @@ function appendFilesWithPaths(form: FormData, files: File[]): void {
 
 export async function createKnowledgeBase(payload: {
   name: string;
+  visibility?: "public" | "private";
   provider: string;
   files: File[];
   storageWorkspaceId?: string;
@@ -780,6 +794,7 @@ export async function createKnowledgeBase(payload: {
   const form = new FormData();
   form.append("name", payload.name);
   form.append("rag_provider", payload.provider);
+  if (payload.visibility) form.append("visibility", payload.visibility);
   if (payload.storageWorkspaceId !== undefined)
     form.append("storage_workspace_id", payload.storageWorkspaceId);
   if (payload.pageindexMode) {
@@ -1417,10 +1432,26 @@ export async function moveKbFile(
 export async function deleteKbFile(
   name: string,
   filename: string,
+  options?: { confirm?: boolean; force?: boolean },
 ): Promise<{ was_indexed: boolean }> {
-  const res = await apiFetch(apiUrl(knowledgeBaseFilePath(name, filename)), {
+  const url = new URL(knowledgeBaseFilePath(name, filename), "http://knowledge.local");
+  if (options?.confirm) url.searchParams.set("confirm", "true");
+  if (options?.force) url.searchParams.set("force", "true");
+  const res = await apiFetch(apiUrl(`${url.pathname}${url.search}`), {
     method: "DELETE",
   });
+  if (res.status === 409) {
+    const body = await res.json().catch(() => null);
+    const detail = body?.detail;
+    if (detail?.code === "requires_confirmation" || detail?.code === "document_referenced") {
+      throw new KbFileDeleteBlockedError(
+        String(detail.message || "Failed to delete file"),
+        detail.code,
+        Array.isArray(detail.references) ? detail.references : [],
+      );
+    }
+    throw new Error(typeof detail === "string" ? detail : "Failed to delete file");
+  }
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to delete file"));
   }
@@ -1526,11 +1557,11 @@ export async function retryKnowledgeBase(
  * listed but not removable from the UI. A body has no such limit, so this is
  * the one delete that reaches every registered entry.
  */
-export async function deleteKnowledgeBase(name: string): Promise<void> {
+export async function deleteKnowledgeBase(name: string, options?: { force?: boolean }): Promise<void> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/delete`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, force: Boolean(options?.force) }),
   });
   if (!res.ok) {
     throw new Error(
@@ -1538,6 +1569,47 @@ export async function deleteKnowledgeBase(name: string): Promise<void> {
     );
   }
   invalidateKnowledgeCaches();
+}
+
+export interface KnowledgeBaseReference {
+  kb_id: string;
+  referrer_kind: string;
+  referrer_id: string;
+  doc_ids: string[] | null;
+  created_by: string;
+}
+
+export class KbFileDeleteBlockedError extends Error {
+  constructor(
+    message: string,
+    readonly code: "requires_confirmation" | "document_referenced",
+    readonly references: KnowledgeBaseReference[],
+  ) {
+    super(message);
+    this.name = "KbFileDeleteBlockedError";
+  }
+}
+
+export async function setKnowledgeBaseVisibility(
+  ref: string,
+  visibility: "public" | "private",
+  options?: { force?: boolean },
+): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
+  const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ visibility, force: Boolean(options?.force) }),
+  });
+  if (!res.ok) throw new Error(await readErrorDetail(res, "Failed to change visibility"));
+  invalidateKnowledgeCaches();
+  return res.json();
+}
+
+export async function listKnowledgeBaseReferences(ref: string): Promise<KnowledgeBaseReference[]> {
+  const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/references`), { cache: "no-store" });
+  if (!res.ok) throw new Error(await readErrorDetail(res, "Failed to load references"));
+  const data = await res.json();
+  return Array.isArray(data?.references) ? data.references : [];
 }
 
 // ── GitHub sources ───────────────────────────────────────────────────

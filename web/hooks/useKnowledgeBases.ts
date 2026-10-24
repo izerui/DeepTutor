@@ -206,7 +206,7 @@ export function useKnowledgeBases() {
       const fileCount = params.files.length;
       if (result.task_id) {
         progress.startTask({
-          kbName: result.id || params.name,
+          kbName: result.ref || result.id || params.name,
           taskId: result.task_id,
           kind: "create",
           label: `Create ${params.name}`,
@@ -331,8 +331,8 @@ export function useKnowledgeBases() {
   );
 
   const deleteKb = useCallback(
-    async (kbName: string) => {
-      await deleteKbApi(kbName);
+    async (kbName: string, options?: { force?: boolean }) => {
+      await deleteKbApi(kbName, options);
       progress.cleanupKb(kbName);
       history.removeKb(kbName);
       await load({ force: true, showSpinner: false });

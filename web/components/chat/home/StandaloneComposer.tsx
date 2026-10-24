@@ -19,7 +19,7 @@
 
 import { ResourceReuseContext, useResourceReusePolicy } from "./ResourceReuse";
 import { retainedKnowledgeBases } from "@/lib/resource-reuse";
-import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches } from "@/lib/knowledge-helpers";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { MessageSquare } from "lucide-react";
@@ -547,7 +547,7 @@ function StandaloneComposerImpl({
   const handleToggleKB = useCallback(
     (name: string) => {
       const providerOf = (kbName: string) => {
-        const kb = knowledgeBases.find((item) => knowledgeBaseRef(item) === kbName);
+        const kb = knowledgeBases.find((item) => knowledgeBaseMatches(item, kbName));
         return (
           (kb?.metadata?.rag_provider as string | undefined) ||
           (kb?.statistics?.rag_provider as string | undefined) ||
