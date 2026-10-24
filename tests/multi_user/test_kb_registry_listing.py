@@ -87,6 +87,85 @@ def test_private_admin_aliases_are_never_exposed_to_foreign_viewers(
         assert "private-admin-alias" not in detail.text
 
 
+@pytest.mark.parametrize("scope", ["account", "inherited_workspace"])
+def test_scoped_aliases_follow_storage_not_unqualified_list_ids(
+    as_user, make_kb, list_client, tmp_path, scope,
+):
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.services.workspace import ContentWorkspaceService
+    from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.knowledge import qualified_kb_id
+
+    with as_user("teacher", role="teacher"):
+        make_kb(current_kb_manager(), "notes")
+        account = registry.register_kb(
+            base_dir=current_kb_manager().base_dir, name="notes",
+            kind="uploaded", created_by="teacher", visibility="public",
+        )
+        workspace = ContentWorkspaceService().create_workspace("W")["workspace_id"]
+        with workspace_context(workspace):
+            make_kb(current_kb_manager(), "notes")
+            local = registry.register_kb(
+                base_dir=current_kb_manager().base_dir, name="notes",
+                kind="uploaded", created_by="teacher",
+                visibility="private" if scope == "inherited_workspace" else "public",
+            )
+        external_manager = KnowledgeBaseManager(base_dir=tmp_path / "external")
+        make_kb(external_manager, "notes")
+        external = registry.register_kb(
+            base_dir=external_manager.base_dir, name="notes",
+            kind="uploaded", created_by="teacher",
+        )
+        with workspace_context(workspace if scope == "inherited_workspace" else ""):
+            response = list_client.get("/api/knowledge-bases/list")
+            assert response.status_code == 200
+            rows = {row["kb_id"]: row for row in response.json()}
+            current = local if scope == "inherited_workspace" else account
+            public = account if scope == "inherited_workspace" else local
+            assert rows[current.kb_id]["id"] == "user:kb:notes"
+            assert rows[public.kb_id]["id"] == public.ref
+            assert rows[account.kb_id]["legacy_refs"] == ["account:kb:notes"]
+            assert rows[local.kb_id]["legacy_refs"] == [qualified_kb_id("notes", workspace)]
+            assert rows[external.kb_id]["legacy_refs"] == []
+            for record in (account, local):
+                detail = list_client.get(f"/api/knowledge-bases/{record.ref}")
+                assert detail.status_code == 200
+                assert detail.json()["legacy_refs"] == rows[record.kb_id]["legacy_refs"]
+            # The saved alias still resolves A, even while the current bare name is W.
+            detail = list_client.get("/api/knowledge-bases/account:kb:notes")
+            assert detail.json()["kb_id"] == account.kb_id
+    with as_user("foreign"):
+        response = list_client.get("/api/knowledge-bases/list")
+        assert all(row["legacy_refs"] == [] for row in response.json())
+
+
+def test_storage_alias_reserved_by_a_move_does_not_identify_a_reused_name(
+    as_user, make_kb, list_client, monkeypatch,
+):
+    from deeptutor.services.workspace import ContentWorkspaceService, knowledge
+    from deeptutor.services.workspace.context import workspace_context
+
+    with as_user("teacher", role="teacher"):
+        make_kb(current_kb_manager(), "notes")
+        replacement = registry.register_kb(
+            base_dir=current_kb_manager().base_dir, name="notes",
+            kind="uploaded", created_by="teacher", visibility="public",
+        )
+        workspace = ContentWorkspaceService().create_workspace("Destination")["workspace_id"]
+        with workspace_context(workspace):
+            make_kb(current_kb_manager(), "notes")
+            moved = registry.register_kb(
+                base_dir=current_kb_manager().base_dir, name="notes",
+                kind="uploaded", created_by="teacher", visibility="public",
+            )
+        destination = knowledge.qualified_kb_id("notes", workspace)
+        monkeypatch.setattr(knowledge, "move_aliases", lambda: {"account:kb:notes": destination})
+        rows = list_client.get("/api/knowledge-bases/list").json()
+        replacement_row = next(row for row in rows if row["kb_id"] == replacement.kb_id)
+        assert "account:kb:notes" not in replacement_row["legacy_refs"]
+        assert list_client.get("/api/knowledge-bases/account:kb:notes").json()["kb_id"] == moved.kb_id
+
+
 @pytest.mark.parametrize("route", ["/api/knowledge-bases", "/api/knowledge-bases/list"])
 @pytest.mark.parametrize("origin_kind", ["account", "workspace"])
 @pytest.mark.parametrize("selection_format", ["registry", "legacy", "mixed"])

@@ -91,6 +91,46 @@ it("matches and deselects relocated admin aliases without selecting a namesake",
   expect(screen.getByTestId("selection").textContent).toBe('["kb:moved"]');
 });
 
+it.each(["account", "inherited_workspace"] as const)(
+  "keeps an account alias on A through deselect/reselect in %s",
+  (scope) => {
+    // Matches the actual /list response asserted by the Python scope test:
+    // inherited W also has a user:kb ID; public A is a canonical extra row.
+    const account: KnowledgeBase = {
+      name: "notes", id: scope === "account" ? "user:kb:notes" : "kb:A",
+      kb_id: "A", owned: true, assigned: scope !== "account", read_only: false,
+      visibility: "public", legacy_refs: ["account:kb:notes"],
+      provenance_label: scope === "account" ? "Created by you" : "Public knowledge base",
+    };
+    const workspace: KnowledgeBase = {
+      name: "notes", id: scope === "account" ? "kb:W" : "user:kb:notes",
+      kb_id: "W", owned: true, assigned: scope === "account", read_only: false,
+      visibility: scope === "account" ? "public" : "private",
+      legacy_refs: ["workspace:W:kb:notes"],
+      provenance_label: scope === "account" ? "Public knowledge base" : "Created by you",
+    };
+    function Picker() {
+      const [selected, setSelected] = useState(["account:kb:notes"]);
+      return <><KnowledgeSelector embedded knowledgeBases={[workspace, account]}
+        selected={selected} onToggle={(ref) => setSelected((old) =>
+          old.includes(ref) ? old.filter((value) => value !== ref) : [...old, ref])} />
+        <output data-testid="selection">{JSON.stringify(selected)}</output></>;
+    }
+    render(<Picker />);
+    const a = screen.getByRole("button", { name: `notes${account.provenance_label}` });
+    const w = screen.getByRole("button", { name: `notes${workspace.provenance_label}` });
+    expect(a).toHaveAttribute("aria-pressed", "true");
+    expect(w).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(a);
+    expect(screen.getByTestId("selection").textContent).toBe("[]");
+    expect(a).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(a);
+    expect(screen.getByTestId("selection").textContent).toBe('["kb:A"]');
+    expect(a).toHaveAttribute("aria-pressed", "true");
+    expect(w).toHaveAttribute("aria-pressed", "false");
+  },
+);
+
 it.each([true, false])("preserves files without delete, move or folder controls (readOnly=%s)", async (readOnly) => {
   fixture.auth.allowPrivateKb = readOnly;
   render(<KbDocumentList kbName="kb:own" readOnly={readOnly} collapsed={false}

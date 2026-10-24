@@ -587,19 +587,16 @@ export function knowledgeBaseRef(kb: KnowledgeBaseRefSource): string {
 export function knowledgeBaseMatches(kb: KnowledgeBaseRefSource, ref: string): boolean {
   if (!ref) return false;
   if (ref === kb.id || kb.legacy_refs?.includes(ref)) return true;
-  // Only current-scope legacy rows accept bare names. Ownership alone does not
-  // distinguish an adopted external library or another workspace's namesake.
+  // Unqualified list IDs identify the current scope, which may be a workspace.
+  // Qualified aliases must come from the server's viewer-scoped storage identity.
   const local = !kb.assigned && kb.owned !== false &&
     (!kb.id || kb.id.startsWith("user:kb:") || kb.id.startsWith("admin:kb:"));
   if (ref === kb.name) return local;
-  // The unqualified list IDs are emitted only for the account's default scope;
-  // selected workspace/catalog rows already carry their qualified storage ID.
-  if (local && kb.id && ref === `account:kb:${kb.name}`) return true;
   return ref === knowledgeBaseRef(kb);
 }
 
 export function knowledgeBaseSelectionRefs(kb: KnowledgeBaseRefSource): string[] {
-  return [...new Set([knowledgeBaseRef(kb), kb.id, kb.name, `account:kb:${kb.name}`, ...(kb.legacy_refs ?? [])])]
+  return [...new Set([knowledgeBaseRef(kb), kb.id, kb.name, ...(kb.legacy_refs ?? [])])]
     .filter((ref): ref is string => typeof ref === "string" && knowledgeBaseMatches(kb, ref));
 }
 

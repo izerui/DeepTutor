@@ -22,7 +22,7 @@ import {
 } from "../lib/knowledge-helpers";
 
 test("registry selections preserve scoped legacy references without matching namesakes", () => {
-  const local: KnowledgeBase = { name: "notes", id: "user:kb:notes", kb_id: "local", owned: true };
+  const local: KnowledgeBase = { name: "notes", id: "user:kb:notes", kb_id: "local", owned: true, legacy_refs: ["account:kb:notes"] };
   const external: KnowledgeBase = { name: "notes", id: "kb:external", kb_id: "external", owned: true };
   const shared: KnowledgeBase = { name: "notes", id: "kb:shared", kb_id: "shared", owned: false, assigned: true };
   const moved: KnowledgeBase = { name: "renamed", id: "kb:moved", kb_id: "moved", legacy_refs: ["admin:kb:notes"], owned: false };
@@ -35,7 +35,12 @@ test("registry selections preserve scoped legacy references without matching nam
   assert.ok(!knowledgeBaseSelectionRefs(external).includes("notes"));
   assert.ok(knowledgeBaseSelectionRefs(local).includes("account:kb:notes"));
   assert.equal(knowledgeBaseMatches({ name: "notes", owned: false }, "notes"), false);
-  assert.equal(knowledgeBaseMatches({ ...local, id: "workspace:other:kb:notes" }, "account:kb:notes"), false);
+  const inherited = { ...local, legacy_refs: ["workspace:other:kb:notes"] };
+  assert.equal(knowledgeBaseMatches(inherited, "account:kb:notes"), false);
+  assert.equal(knowledgeBaseMatches(inherited, "notes"), true);
+  assert.ok(!knowledgeBaseSelectionRefs(inherited).includes("account:kb:notes"));
+  assert.equal(knowledgeBaseMatches({ ...local, legacy_refs: undefined }, "account:kb:notes"), false);
+  assert.equal(knowledgeBaseMatches({ ...inherited, id: "workspace:other:kb:notes" }, "account:kb:notes"), false);
   assert.equal(knowledgeBaseMatches({ ...local, id: "workspace:other:kb:notes" }, "notes"), false);
   assert.equal(knowledgeBaseRef({ name: "notes", id: "account:kb:notes" }), "account:kb:notes");
 });

@@ -408,11 +408,26 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
     if record is None:
         return {"owned": owned}
     from deeptutor.knowledge import registry
+    from deeptutor.services.workspace.knowledge import (
+        canonical_kb_id,
+        qualified_kb_id,
+        workspace_id_for_kb_base_dir,
+    )
+
+    legacy_refs = registry.admin_legacy_refs(record.kb_id)
+    # Storage classification is relative to this viewer's catalogs, not the
+    # creator or the unqualified list ID (which also occurs in workspaces).
+    storage_scope = workspace_id_for_kb_base_dir(record.base_dir)
+    if storage_scope is not None:
+        storage_ref = qualified_kb_id(record.dir_name, storage_scope)
+        # A historical move may reserve this spelling for another identity.
+        if canonical_kb_id(storage_ref) == storage_ref:
+            legacy_refs.append(storage_ref)
 
     return {
         "kb_id": record.kb_id,
         "ref": record.ref,
-        "legacy_refs": registry.admin_legacy_refs(record.kb_id),
+        "legacy_refs": legacy_refs,
         "visibility": record.visibility,
         "created_by": record.created_by,
         "owned": owned,

@@ -1,6 +1,6 @@
 "use client";
 
-import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
 import { moveKnowledgeBase, resourceUsage } from "@/lib/workspaces-api";
@@ -102,6 +102,19 @@ export default function KnowledgePage() {
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
     initialKb,
   );
+  const [directDetail, setDirectDetail] = useState<{
+    requestedRef: string;
+    kb: KnowledgeBase;
+    catalog: KnowledgeBase[];
+  } | null>(null);
+  const directKb = useMemo(() => {
+    if (directDetail?.requestedRef !== explicitSelection || directDetail?.catalog !== allKbs) {
+      return null;
+    }
+    return allowPrivateKb
+      ? directDetail.kb
+      : { ...directDetail.kb, read_only: true, can_set_default: false };
+  }, [directDetail, explicitSelection, allKbs, allowPrivateKb]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(
     initialEngine,
   );
@@ -168,19 +181,21 @@ export default function KnowledgePage() {
     if (loading && explicitSelection) return explicitSelection;
     const exact = kbs.find((kb) => knowledgeBaseMatches(kb, explicitSelection ?? ""));
     if (exact) return knowledgeBaseRef(exact);
+    if (directKb) return knowledgeBaseRef(directKb);
     if (explicitSelection) return explicitSelection;
     if (!kbs.length) return null;
     return knowledgeBaseRef(kbs.find((kb) => kb.is_default) ?? kbs[0]);
-  }, [explicitSelection, kbs, loading]);
+  }, [explicitSelection, kbs, loading, directKb]);
 
   const selectedKb = useMemo(
-    () => kbs.find((kb) => knowledgeBaseMatches(kb, selectedKbName ?? "")) ?? null,
-    [kbs, selectedKbName],
+    () => kbs.find((kb) => knowledgeBaseMatches(kb, selectedKbName ?? "")) ?? directKb,
+    [kbs, selectedKbName, directKb],
   );
 
-  // Saved links may still contain the original qualified ID after a move.
-  // The detail endpoint resolves that ID through the server's move alias.
+  // Detail authorization is broader than catalog membership. Resolve saved
+  // move aliases and authorized private links without adding catalog entries.
   useEffect(() => {
+    setDirectDetail(null);
     if (
       loading ||
       !explicitSelection ||
@@ -191,15 +206,19 @@ export default function KnowledgePage() {
       apiUrl(`/api/knowledge-bases/${encodeURIComponent(explicitSelection)}?resource_library=true`),
     )
       .then((response) => response.ok ? response.json() : null)
-      .then((detail: { id?: string; ref?: string } | null) => {
+      .then((detail: KnowledgeBase | null) => {
         const ref = detail?.ref || detail?.id;
-        if (!cancelled && ref && kbs.some((kb) => knowledgeBaseMatches(kb, ref))) {
-          setExplicitSelection(ref);
+        if (!cancelled && ref && detail && detail.metadata?.type !== "subagent") {
+          if (kbs.some((kb) => knowledgeBaseMatches(kb, ref))) {
+            setExplicitSelection(ref);
+          } else {
+            setDirectDetail({ requestedRef: explicitSelection, kb: detail, catalog: allKbs });
+          }
         }
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [explicitSelection, kbs, loading]);
+  }, [explicitSelection, kbs, loading, allKbs]);
 
   // The effective engine selection: respect the pick if it still exists.
   const selectedProvider = useMemo(
@@ -291,7 +310,8 @@ export default function KnowledgePage() {
   const handleDelete = useCallback(
     async (name: string) => {
       try {
-        const kb = kbs.find((item) => knowledgeBaseMatches(item, name));
+        const kb = kbs.find((item) => knowledgeBaseMatches(item, name)) ??
+          (selectedKb && knowledgeBaseMatches(selectedKb, name) ? selectedKb : null);
         const usageId = kb?.id && !kb.id.startsWith("kb:") ? kb.id : name;
         const [workspaces, references] = await Promise.all([
           resourceUsage("knowledge_bases", usageId),
@@ -313,7 +333,8 @@ export default function KnowledgePage() {
           : t('Delete knowledge base "{{name}}"?', { name: kb?.name ?? name });
         if (!window.confirm(question + impact + referenced)) return;
         await deleteKb(name, { force: references.length > 0 });
-        if (kb && knowledgeBaseMatches(kb, explicitSelection ?? "")) {
+        if (name === selectedKbName || (kb && knowledgeBaseMatches(kb, explicitSelection ?? ""))) {
+          setDirectDetail(null);
           setExplicitSelection(null);
           setView("home");
         }
@@ -321,7 +342,7 @@ export default function KnowledgePage() {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [deleteKb, explicitSelection, isAdmin, kbs, setError, t],
+    [deleteKb, explicitSelection, isAdmin, kbs, selectedKb, selectedKbName, setError, t],
   );
 
   const handleUpload = useCallback(
