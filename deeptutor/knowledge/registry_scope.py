@@ -51,7 +51,9 @@ def is_retired_source(base_dir: str | Path) -> bool:
     return relative.parts[1:4] == ("workspace", "knowledge_bases", ".retired")
 
 
-def archived_source_roots(*, base_dir: str | Path | None = None) -> set[str]:
+def archived_source_roots(
+    *, base_dir: str | Path | None = None, require_resolved: bool = False,
+) -> set[str]:
     """Read physical archive flags, including catalogs of former owners.
 
     Transfers do not move files or catalogs. Read the retained account catalogs
@@ -96,12 +98,14 @@ def archived_source_roots(*, base_dir: str | Path | None = None) -> set[str]:
             failures.append(exc)
     if failures and not resolved:
         raise WorkspaceError("The source workspace registry could not be read.") from failures[0]
+    if require_resolved and not resolved:
+        raise WorkspaceError("The source workspace is missing from its registry.")
     return archived
 
 
-def source_is_archived(base_dir: str | Path) -> bool:
+def source_is_archived(base_dir: str | Path, *, require_resolved: bool = False) -> bool:
     root = Path(base_dir).resolve()
-    return str(root) in archived_source_roots(base_dir=root)
+    return str(root) in archived_source_roots(base_dir=root, require_resolved=require_resolved)
 
 
 def indexed_records() -> list[registry.KbRecord]:

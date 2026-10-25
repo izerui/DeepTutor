@@ -36,7 +36,10 @@ def _engine() -> BookEngine:
     engine.storage = type(
         "_CompilingStorage",
         (),
-        {"load_book": lambda _self, book_id: Book(id=book_id, status=BookStatus.COMPILING)},
+        {
+            "path_service": get_book_storage().path_service,
+            "load_book": lambda _self, book_id: Book(id=book_id, status=BookStatus.COMPILING),
+        },
     )()
     return engine
 
@@ -225,7 +228,10 @@ async def test_compile_is_rejected_while_book_is_paused() -> None:
     engine.storage = type(
         "_PausedStorage",
         (),
-        {"load_book": lambda _self, book_id: Book(id=book_id, status=BookStatus.PAUSED)},
+        {
+            "path_service": get_book_storage().path_service,
+            "load_book": lambda _self, book_id: Book(id=book_id, status=BookStatus.PAUSED),
+        },
     )()
 
     from deeptutor.book.engine import BookPausedError

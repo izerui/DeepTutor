@@ -35,6 +35,7 @@ from deeptutor.book.models import (
     LearningCaptureStatus,
     Spine,
 )
+from deeptutor.book.source_access import content_writable
 from deeptutor.book.storage import get_book_storage
 from deeptutor.book.streaming import SOURCE as BOOK_SOURCE
 from deeptutor.multi_user.audit import log_admin_action, log_usage
@@ -274,12 +275,13 @@ def _resolve_book_or_404(
         engine = get_book_engine()
         if engine.load_book(book_id) is not None:
             storage = getattr(engine, "storage", get_book_storage())
+            writable = content_writable(storage)
             resolved = ResolvedBook(
                 engine=engine,
                 source="own",
-                permission="edit",
-                can_edit=True,
-                can_delete=True,
+                permission="edit" if writable else "read",
+                can_edit=writable,
+                can_delete=writable,
                 learning=storage,
             )
     if resolved is None:
@@ -344,6 +346,9 @@ def _claim_content_mutation(
     should know the book moved — they just do not refuse a stale one.
     """
 
+    storage = getattr(resolved.engine, "storage", None)
+    if not resolved.can_edit or (storage is not None and not content_writable(storage)):
+        raise HTTPException(status_code=404, detail="Book not found")
     book = resolved.engine.load_book(book_id)
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -377,7 +382,6 @@ def _claim_content_mutation(
 
     book.revision = current + 1
     book.updated_at = time.time()
-    storage = getattr(resolved.engine, "storage", None)
     if storage is None:
         # Lightweight embedded engines used by SDK hosts may not expose their
         # persistence object; they are single-user and have no shared writes.
@@ -773,7 +777,7 @@ async def get_book(book_id: str, include_blocks: bool = True) -> dict[str, Any]:
 
     # Opening a book is the correctly-scoped moment to notice that its
     # compilation died with a previous process and pick it back up.
-    if not resolved.is_shared:
+    if not resolved.is_shared and resolved.can_edit:
         await engine.maybe_resume_on_open(book_id)
     book = engine.load_book(book_id) or book
 
@@ -899,6 +903,8 @@ def _locked_writable(
         raise HTTPException(status_code=409, detail="Book location or identity changed; reload and retry.")
     if not book_registry._can_write(conn, current, get_current_user()):
         raise HTTPException(status_code=403, detail="Only the book's creator or an admin may manage it.")
+    if not content_writable(resolved.engine.storage):
+        raise HTTPException(status_code=403, detail="This book's source is read-only.")
     return current
 
 
@@ -1466,7 +1472,7 @@ async def book_health(book_id: str) -> dict[str, Any]:
     resolved = _resolve_book_or_404(book_id)
     book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
-    if resolved.is_shared and not resolved.can_edit:
+    if not resolved.can_edit:
         # Drift detection persists stale-page state on the canonical Book. A
         # read-only collaborator may inspect it, but must not mutate it merely
         # by opening the health banner.

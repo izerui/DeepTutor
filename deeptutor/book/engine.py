@@ -80,6 +80,7 @@ from .models import (
     Spine,
 )
 from .overview_copy import overview_copy
+from .source_access import content_writable, content_writer, require_content_writable
 from .storage import BookStorage, get_book_storage
 from .streaming import (
     STAGE_COMPILATION,
@@ -393,9 +394,11 @@ class BookEngine:
         progress = self.storage.load_progress(book_id)
         if progress is None:
             progress = Progress(book_id=book_id)
-            self.storage.save_progress(progress)
+            if content_writable(self.storage):
+                self.storage.save_progress(progress)
         return progress
 
+    @content_writer
     def delete_book(self, book_id: str) -> bool:
         deleted = self.storage.delete_book(book_id)
         if deleted:
@@ -405,6 +408,7 @@ class BookEngine:
     @contextmanager
     def recoverable_deletion(self, book_id: str) -> Iterator[bool]:
         """Finalize runtime effects only after the enclosing registry commit."""
+        require_content_writable(self.storage)
         with self.storage.recoverable_deletion(book_id) as deleted:
             yield deleted
         if deleted:
@@ -423,6 +427,7 @@ class BookEngine:
         # so deletion is the only place allowed to close it.
         close_book_bus(book_id, storage=self.storage)
 
+    @content_writer
     def set_page_chat_session(self, *, book_id: str, page_id: str, session_id: str) -> Book | None:
         """Persist the chat session associated with a specific book page."""
         book = self.storage.load_book(book_id)
@@ -478,6 +483,7 @@ class BookEngine:
 
     # ── Stage 1: Ideation ────────────────────────────────────────────────
 
+    @content_writer
     @workspace_writer
     @_with_book_sources
     async def create_book(
@@ -574,6 +580,7 @@ class BookEngine:
 
     # ── Stage 2: Spine ───────────────────────────────────────────────────
 
+    @content_writer
     @workspace_writer
     @_with_book_sources
     async def confirm_proposal(
@@ -908,6 +915,7 @@ class BookEngine:
 
     # ── Stage 3: confirm spine + create page shells ─────────────────────
 
+    @content_writer
     @workspace_writer
     @_with_book_sources
     async def confirm_spine(
@@ -1046,6 +1054,7 @@ class BookEngine:
             if self._runtimes.get(book_id) is runtime:
                 self._runtimes.pop(book_id, None)
 
+    @content_writer
     async def pause_book(
         self,
         *,
@@ -1092,6 +1101,7 @@ class BookEngine:
         )
         return self.storage.list_pages(book_id)
 
+    @content_writer
     async def resume_book(
         self,
         *,
@@ -1160,6 +1170,8 @@ class BookEngine:
         a reason the user has to clear first, and silently retrying would burn
         the quota they just ran out of. Returns whether work was queued.
         """
+        if not content_writable(self.storage):
+            return False
         book = self.storage.load_book(book_id)
         if book is None or book.status != BookStatus.COMPILING:
             return False
@@ -1188,6 +1200,7 @@ class BookEngine:
             return False
         return True
 
+    @content_writer
     async def rebuild_book(
         self,
         *,
@@ -1229,6 +1242,7 @@ class BookEngine:
 
     # ── Stage 3-4: compile a single page (current page) ──────────────────
 
+    @content_writer
     async def compile_page(
         self,
         *,
@@ -1294,6 +1308,7 @@ class BookEngine:
         if runtime.in_flight.get(page_id) is task:
             runtime.in_flight.pop(page_id, None)
 
+    @content_writer
     @workspace_writer
     @_with_book_sources
     async def _compile_page_now(
@@ -1611,6 +1626,7 @@ class BookEngine:
 
     # ── Block-level controls (Phase 1: regenerate single block) ─────────
 
+    @content_writer
     @_with_book_sources
     async def regenerate_block(
         self,
@@ -1688,6 +1704,7 @@ class BookEngine:
 
     # ── Maintenance / health (Phase 4) ─────────────────────────────────
 
+    @content_writer
     def kb_drift_report(self, book_id: str) -> dict[str, Any]:
         """Compute and persist the current KB drift report for *book_id*."""
         from .kb_health import mark_drift_on_book
@@ -1697,6 +1714,7 @@ class BookEngine:
             return {"book_id": book_id, "has_drift": False, "missing": True}
         return report.to_dict()
 
+    @content_writer
     def refresh_kb_fingerprints(
         self, book_id: str, *, force: bool = False
     ) -> dict[str, Any] | None:
@@ -1816,6 +1834,7 @@ class BookEngine:
 
     # ── Block CRUD operations (Phase 3) ────────────────────────────────
 
+    @content_writer
     @_with_book_sources
     async def insert_block(
         self,
@@ -1888,6 +1907,7 @@ class BookEngine:
         )
         return block
 
+    @content_writer
     async def update_block(
         self,
         *,
@@ -1934,6 +1954,7 @@ class BookEngine:
         )
         return block
 
+    @content_writer
     async def delete_block(self, *, book_id: str, page_id: str, block_id: str) -> bool:
         page = self.storage.load_page(book_id, page_id)
         if page is None:
@@ -1949,6 +1970,7 @@ class BookEngine:
         )
         return True
 
+    @content_writer
     async def move_block(
         self, *, book_id: str, page_id: str, block_id: str, new_position: int
     ) -> bool:
@@ -1969,6 +1991,7 @@ class BookEngine:
         )
         return True
 
+    @content_writer
     async def change_block_type(
         self,
         *,
@@ -2004,6 +2027,7 @@ class BookEngine:
 
     # ── Deep-dive sub-page (Phase 3) ──────────────────────────────────
 
+    @content_writer
     async def create_deep_dive_subpage(
         self,
         *,
@@ -2089,6 +2113,7 @@ class BookEngine:
     def _page_to_chapter(self, book_id: str) -> dict[str, str]:
         return {p.id: p.chapter_id for p in self.storage.list_pages(book_id) if p.chapter_id}
 
+    @content_writer
     async def record_quiz_attempt(
         self,
         *,
@@ -2113,6 +2138,7 @@ class BookEngine:
 
     # ── Reading position / bookmarks ────────────────────────────────────
 
+    @content_writer
     def mark_page_visited(self, *, book_id: str, page_id: str) -> Progress:
         """Remember where the reader is, so they can pick the book back up."""
         progress = self.load_progress(book_id)
@@ -2120,12 +2146,14 @@ class BookEngine:
             self.storage.save_progress(progress)
         return progress
 
+    @content_writer
     def toggle_page_bookmark(self, *, book_id: str, page_id: str) -> Progress:
         progress = self.load_progress(book_id)
         progress_ops.toggle_bookmark(progress, page_id)
         self.storage.save_progress(progress)
         return progress
 
+    @content_writer
     async def supplement_for_weakness(
         self,
         *,

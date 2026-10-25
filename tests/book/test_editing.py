@@ -12,12 +12,14 @@ import pytest
 
 from deeptutor.book.engine import BookEngine
 from deeptutor.book.models import Block, BlockStatus, BlockType, Book, Page, PageStatus
+from deeptutor.book.storage import get_book_storage
 
 
 class _Storage:
     """In-memory stand-in holding exactly one page."""
 
     def __init__(self, page: Page) -> None:
+        self.path_service = get_book_storage().path_service
         self.page = page
         self.book = Book(id=page.book_id or "bk")
         self.logs: list[str] = []

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from deeptutor.book import registry
 from deeptutor.book.learning_overlay import BookLearningOverlay
 from deeptutor.book.models import Book, Progress
+from deeptutor.book.source_access import content_writable
 from deeptutor.book.storage import BookStorage, get_book_storage
 from deeptutor.services.path_service import PathService
 
@@ -225,12 +226,13 @@ def resolve_book(book_id: str) -> ResolvedBook | None:
         book = own_storage.load_book(book_id)
         if book is None:
             return None
+        writable = content_writable(own_storage)
         return ResolvedBook(
             engine=get_book_engine(),
             source="own",
-            permission="edit",
-            can_edit=True,
-            can_delete=True,
+            permission="edit" if writable else "read",
+            can_edit=writable,
+            can_delete=writable,
             learning=own_storage,
             record=ensure_book_registered(book, own_storage),
         )
@@ -246,7 +248,7 @@ def _located(record: registry.BookRecord, user: CurrentUser) -> ResolvedBook | N
     if book is None:
         return None
     _retry_links(book, record)
-    writable = registry.can_write_book(record, user)
+    writable = registry.can_write_book(record, user) and content_writable(engine.storage)
     return ResolvedBook(
         engine=engine,
         source="shared",
@@ -274,6 +276,7 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
     )
     results: list[tuple[Book, ResolvedBook]] = []
     own_ids: set[str] = set()
+    writable = content_writable(own_storage) if own_books else False
     for book in own_books:
         record = records.get(book.id)
         if record is not None:
@@ -285,9 +288,9 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
                 ResolvedBook(
                     engine=own_engine,
                     source="own",
-                    permission="edit",
-                    can_edit=True,
-                    can_delete=True,
+                    permission="edit" if writable else "read",
+                    can_edit=writable,
+                    can_delete=writable,
                     learning=own_storage,
                     record=record,
                 ),
