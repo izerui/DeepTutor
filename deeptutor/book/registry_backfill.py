@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
+import time
 
 from deeptutor.book import registry, sharing
 from deeptutor.book.storage import BookStorage
@@ -76,8 +77,13 @@ def _freeze_inventory(root: Path) -> dict:
     stored = registry.get_meta(_INVENTORY_KEY)
     if stored is not None:
         return json.loads(stored)
-    snapshot = {"base_dir": str(root.resolve()), "targets": _inventory(root), "grants": None}
-    # Freeze targets even if account preflight subsequently fails.
+    snapshot = {
+        "base_dir": str(root.resolve()), "targets": {}, "grants": None,
+        "started_ns": time.time_ns(), "inventory_complete": False,
+        "attempts": 0, "observed": [], "pending": {},
+    }
+    # Commit the original fence before any enumeration/stat can fail. An empty
+    # target map with inventory_complete=False is an obligation, not success.
     with registry._write() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO registry_meta (key, value) VALUES (?, ?)",
@@ -86,6 +92,79 @@ def _freeze_inventory(root: Path) -> dict:
         return json.loads(conn.execute(
             "SELECT value FROM registry_meta WHERE key = ?", (_INVENTORY_KEY,),
         ).fetchone()[0])
+
+
+def _resume_inventory() -> dict:
+    """Recover only directories proven to predate the durable start fence.
+
+    Kernel ctime (not editable manifest timestamps or mtime alone) is evidence
+    of prior existence. A directory changed after the fence stays pending.
+    A later listing is a complete original census only if the shelf directory
+    itself has not changed since that fence; otherwise unknown obligations
+    remain, even if all currently visible old books have been migrated.
+    """
+    with registry._write() as conn:
+        snapshot = json.loads(conn.execute(
+            "SELECT value FROM registry_meta WHERE key = ?", (_INVENTORY_KEY,),
+        ).fetchone()[0])
+        # Already-frozen v1 inventories predate the start/unknown-state schema.
+        if snapshot.get("inventory_complete", True):
+            return snapshot
+        snapshot["attempts"] += 1
+        conn.execute(
+            "UPDATE registry_meta SET value = ? WHERE key = ?",
+            (json.dumps(snapshot), _INVENTORY_KEY),
+        )
+    # The attempt is durable even if the process exits during filesystem I/O.
+    with registry._write() as conn:
+        snapshot = json.loads(conn.execute(
+            "SELECT value FROM registry_meta WHERE key = ?", (_INVENTORY_KEY,),
+        ).fetchone()[0])
+        if snapshot.get("inventory_complete", True):
+            return snapshot
+        root = Path(snapshot["base_dir"])
+        try:
+            try:
+                before = root.lstat()
+            except FileNotFoundError:
+                # Only the first observation can establish an absent shelf.
+                # Absence after an interrupted/failed attempt cannot erase it.
+                if snapshot["attempts"] == 1 and not snapshot["observed"]:
+                    snapshot["inventory_complete"] = True
+            else:
+                if not stat.S_ISDIR(before.st_mode):
+                    raise ValueError(f"Unsafe legacy shelf: {root}")
+                names = {child.name for child in root.iterdir() if child.name.startswith("book_")}
+                snapshot["observed"] = sorted(set(snapshot["observed"]) | names)
+                for dirname in snapshot["observed"]:
+                    if dirname in snapshot["targets"]:
+                        continue
+                    try:
+                        info = (root / dirname).lstat()
+                        if not stat.S_ISDIR(info.st_mode):
+                            raise ValueError("Not a canonical book directory")
+                        if not 0 < info.st_ctime_ns < snapshot["started_ns"] <= time.time_ns():
+                            raise ValueError("Directory cannot be proven to predate migration")
+                        snapshot["targets"][dirname] = [info.st_dev, info.st_ino]
+                        snapshot["pending"].pop(dirname, None)
+                    except (OSError, ValueError) as exc:
+                        snapshot["pending"][dirname] = str(exc)
+                        logger.warning("Legacy inventory target pending %s: %s", root / dirname, exc)
+                after = root.lstat()
+                unchanged_census = (
+                    (before.st_dev, before.st_ino, before.st_ctime_ns, before.st_mtime_ns)
+                    == (after.st_dev, after.st_ino, after.st_ctime_ns, after.st_mtime_ns)
+                    and 0 < after.st_ctime_ns < snapshot["started_ns"] <= time.time_ns()
+                    and after.st_mtime_ns < snapshot["started_ns"]
+                )
+                snapshot["inventory_complete"] = unchanged_census and not snapshot["pending"]
+        except (OSError, ValueError):
+            logger.exception("Legacy shelf inventory remains unknown: %s", root)
+        conn.execute(
+            "UPDATE registry_meta SET value = ? WHERE key = ?",
+            (json.dumps(snapshot), _INVENTORY_KEY),
+        )
+        return snapshot
 
 
 def _freeze_grants(users: dict, raw: dict) -> dict:
@@ -339,6 +418,8 @@ def backfill_book_registry() -> dict[str, int]:
         users, raw = _accounts()
         if snapshot is not None and snapshot["grants"] is None:
             snapshot = _freeze_grants(users, raw)
+        if snapshot is not None:
+            snapshot = _resume_inventory()
     except Exception:
         logger.exception("Book migration preflight unavailable; retry without publication")
         return report
@@ -369,6 +450,6 @@ def backfill_book_registry() -> dict[str, int]:
     if snapshot is not None:
         with user_context(local_admin_user()):
             migrated = _migrate(snapshot, report)
-        if complete and migrated:
+        if complete and migrated and snapshot.get("inventory_complete", True):
             registry.set_meta(SHELF_MIGRATED_KEY, registry._now())
     return report

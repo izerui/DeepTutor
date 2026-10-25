@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 
@@ -409,7 +411,8 @@ def test_durable_outbox_survives_process_exit(seed_user, tmp_path):
         backfill._sync_scope("local-admin")
     backfill._freeze_inventory(shelf.path_service.get_book_dir())
     users, raw = backfill._accounts()
-    snapshot = backfill._freeze_grants(users, raw)
+    backfill._freeze_grants(users, raw)
+    snapshot = backfill._resume_inventory()
     worker = r"""
 import json
 import os
@@ -495,4 +498,158 @@ def test_global_marker_write_failure_keeps_completed_books_withdrawn(seed_user, 
     monkeypatch.setattr(registry, "set_meta", write)
     assert backfill.backfill_book_registry()["promoted"] == 0
     assert registry.get_book("bk_read").visibility == "private"
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+
+
+@pytest.mark.parametrize("failure", ["iterdir", "lstat"])
+@pytest.mark.parametrize("replace_grants", [False, True])
+def test_first_inventory_failure_preserves_boundary_and_legacy_evidence(
+    seed_user, monkeypatch, tmp_path, failure, replace_grants,
+):
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    root = shelf.path_service.get_book_dir()
+    method = getattr(Path, failure)
+    failed_path = root if failure == "iterdir" else shelf.book_root("bk_edit")
+    unavailable = True
+
+    def fail(path, *args, **kwargs):
+        if unavailable and path == failed_path:
+            raise PermissionError("synthetic first inventory failure")
+        return method(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, failure, fail)
+    backfill.backfill_book_registry()
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    first_boundary = registry.get_meta(backfill._INVENTORY_KEY)
+    (tmp_path / "first-inventory-boundary.json").write_text(first_boundary or "null")
+    unavailable = False
+
+    # Startup continued. A new book is explicitly private before retry.
+    private_kb = kbs.register_kb(
+        base_dir=root.parent / "new-sources", name="new-private",
+        kind="uploaded", created_by="local-admin",
+    )
+    shelf.save_book(Book(
+        id="bk_new", title="Deliberately private", knowledge_bases=[private_kb.ref], created_at=1,
+    ))
+    # Neither an editable manifest date nor a backdated mtime is old-inventory proof.
+    os.utime(shelf.book_root("bk_new"), (1, 1))
+    registry.register_book(
+        base_dir=root, dir_name="book_bk_new", title="Deliberately private",
+        created_by="local-admin", visibility="private",
+    )
+    if replace_grants:
+        _permission("alice", {"create": False})
+        _permission("bob", {"create": True})
+    backfill.backfill_book_registry()
+
+    assert registry.get_book("bk_new").visibility == "private"
+    assert ("book_auto_public", "bk_new") not in _items()
+    assert kbs.list_references(private_kb.kb_id) == []
+    assert registry.get_book("bk_read").visibility == "public"
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert _items()[("book_auto_public", "bk_edit")]["users"] == ["alice", "bob"]
+    assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()
+    assert first_boundary is not None
+    first = json.loads(first_boundary)
+    current = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    (tmp_path / "retried-inventory-boundary.json").write_text(json.dumps(current))
+    assert first["inventory_complete"] is False
+    assert current["started_ns"] == first["started_ns"]
+    assert current["grants"] == first["grants"]
+    assert "book_bk_new" not in current["targets"]
+    assert "book_bk_new" in current["pending"]
+    # Unknown original inventory is an obligation, not an empty successful scan.
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    with user_context(local_admin_user()):
+        registry.set_book_visibility("bk_read", "private")
+    assert backfill.backfill_book_registry()["promoted"] == 0
+    assert registry.get_book("bk_read").visibility == "private"
+    assert registry.get_book("bk_new").visibility == "private"
+    assert kbs.list_references(private_kb.kb_id) == []
+
+
+@pytest.mark.parametrize("empty_root", [False, True])
+def test_unknown_inventory_cannot_complete_when_shelf_disappears(
+    seed_user, monkeypatch, tmp_path, empty_root,
+):
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    root = shelf.path_service.get_book_dir()
+    original = Path.iterdir
+
+    def fail(path):
+        if path == root:
+            raise OSError("synthetic unknown shelf")
+        return original(path)
+
+    monkeypatch.setattr(Path, "iterdir", fail)
+    backfill.backfill_book_registry()
+    first = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    monkeypatch.setattr(Path, "iterdir", original)
+    saved = tmp_path / "temporarily-unmounted-shelf"
+    root.rename(saved)
+    if empty_root:
+        root.mkdir()
+    _permission("alice", {"create": False})
+    _permission("bob", {"create": True})
+    backfill.backfill_book_registry()
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    state = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert state["started_ns"] == first["started_ns"]
+    assert state["inventory_complete"] is False
+    assert state["grants"] == first["grants"]
+    if empty_root:
+        root.rmdir()
+    saved.rename(root)
+    backfill.backfill_book_registry()
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert _items()[("book_auto_public", "bk_edit")]["users"] == ["alice", "bob"]
+    assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()
+    # The restored children have old ctime, but the whole original census is unknown.
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+
+
+@pytest.mark.parametrize("failure", ["iterdir", "lstat"])
+def test_unchanged_original_inventory_can_finish_after_first_failure(seed_user, monkeypatch, failure):
+    shelf, _, _ = _setup(seed_user)
+    original = getattr(Path, failure)
+    failed_path = shelf.path_service.get_book_dir() if failure == "iterdir" else shelf.book_root("bk_edit")
+
+    def fail(path, *args, **kwargs):
+        if path == failed_path:
+            raise PermissionError("synthetic unchanged inventory failure")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, failure, fail)
+    backfill.backfill_book_registry()
+    boundary = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert boundary["inventory_complete"] is False
+    monkeypatch.setattr(Path, failure, original)
+    backfill.backfill_book_registry()
+    recovered = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert recovered["started_ns"] == boundary["started_ns"]
+    assert recovered["inventory_complete"] is True
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    assert registry.get_book("bk_read").visibility == "public"
+    assert registry.get_book("bk_edit").visibility == "public"
+
+
+def test_already_frozen_v1_inventory_keeps_its_original_targets(seed_user):
+    shelf, _, _ = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    backfill._freeze_inventory(shelf.path_service.get_book_dir())
+    users, raw = backfill._accounts()
+    backfill._freeze_grants(users, raw)
+    snapshot = backfill._resume_inventory()
+    assert snapshot["inventory_complete"]
+    legacy = {key: snapshot[key] for key in ("base_dir", "targets", "grants")}
+    registry.set_meta(backfill._INVENTORY_KEY, json.dumps(legacy))
+    shelf.save_book(Book(id="bk_new", title="New private"))
+    _permission("alice", {"create": True})
+    backfill.backfill_book_registry()
+    assert registry.get_book("bk_new").visibility == "private"
+    assert registry.get_book("bk_hidden").visibility == "public"
+    assert ("book_auto_public", "bk_new") not in _items()
     assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
