@@ -132,10 +132,12 @@ async function mounted() {
   await screen.findByText("A");
   return view;
 }
-async function switchToB(view: ReturnType<typeof render>) {
+async function switchToB(view: ReturnType<typeof render>, runCleanup = true) {
   window.history.replaceState(null, "", "/learning/books/same?dt_workspace=B");
-  view.rerender(<BookPage />);
-  await screen.findByText("B");
+  if (runCleanup) {
+    view.rerender(<BookPage />);
+    await screen.findByText("B");
+  }
   await act(settle);
 }
 async function regenerate() {
@@ -158,6 +160,7 @@ async function confirm() {
 }
 
 describe("detached book mutations", () => {
+  describe.each([true, false])("workspace switch with keyed cleanup=%s", runCleanup => {
   it.each(["regenerate", "compile"])("stops an old %s conflict before any request in B", async operation => {
     fixture.get.mockResolvedValueOnce(detail("A", 1));
     const view = await mounted();
@@ -165,13 +168,13 @@ describe("detached book mutations", () => {
     const first = Socket.instances[0];
     expect(first.url).toContain("dt_workspace=A");
     expect(first.sent[0]).toMatchObject({ book_id: "same", page_id: "page", expected_revision: 1 });
-    await switchToB(view);
+    await switchToB(view, runCleanup);
     const requests = fixture.fetch.mock.calls.length;
     await act(async () => { first.emit(conflict); await settle(); });
     expect(Socket.instances.map(socket => socket.url)).not.toContain("ws://localhost/ws/books?dt_workspace=B");
     expect(Socket.instances).toHaveLength(1);
     expect(fixture.fetch).toHaveBeenCalledTimes(requests);
-    expect(screen.getByTestId("reader")).toHaveTextContent("B");
+    expect(screen.getByTestId("reader")).toHaveTextContent(runCleanup ? "B" : "A");
     expect(fixture.notify).not.toHaveBeenCalled();
   });
 
@@ -182,7 +185,7 @@ describe("detached book mutations", () => {
     await compile();
     await act(async () => { Socket.instances[0].emit(conflict); await settle(); });
     expect(fixture.get).toHaveBeenCalledTimes(2);
-    await switchToB(view);
+    await switchToB(view, runCleanup);
     const requests = fixture.fetch.mock.calls.length;
     await act(async () => { refresh.resolve(detail("A", 7)); await settle(); });
     expect(Socket.instances.map(socket => socket.url)).not.toContain("ws://localhost/ws/books?dt_workspace=B");
@@ -200,7 +203,7 @@ describe("detached book mutations", () => {
     await screen.findByTestId("spine");
     await confirm();
     if (phase === "refresh") expect(fixture.get).toHaveBeenCalledTimes(2);
-    await switchToB(view);
+    await switchToB(view, runCleanup);
     const requests = fixture.fetch.mock.calls.length;
     await act(async () => {
       if (phase === "confirmation") confirmation.resolve({ pages: detail("A").pages, book_revision: 7 });
@@ -210,7 +213,9 @@ describe("detached book mutations", () => {
     expect(Socket.instances.map(socket => socket.url)).not.toContain("ws://localhost/ws/books?dt_workspace=B");
     expect(Socket.instances).toHaveLength(0);
     expect(fixture.fetch).toHaveBeenCalledTimes(requests);
-    expect(screen.getByTestId("reader")).toHaveTextContent("B");
+    if (runCleanup) expect(screen.getByTestId("reader")).toHaveTextContent("B");
+    else expect(screen.getByTestId("spine")).toBeInTheDocument();
+  });
   });
 
   it.each(["same", "book:same"])("keeps current own-book regeneration retry bound to %s in A", async ref => {

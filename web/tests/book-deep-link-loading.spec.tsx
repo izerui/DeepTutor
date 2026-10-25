@@ -108,6 +108,11 @@ vi.mock("@/app/(workspace)/learning/books/components/PageReader", () => ({
 
 import BookPage from "@/app/(workspace)/learning/books/BooksRoute";
 
+function setFixtureWorkspace(workspace: string) {
+  fixture.workspace = workspace;
+  window.history.replaceState(null, "", `/learning/books?dt_workspace=${encodeURIComponent(workspace)}`);
+}
+
 function readyDetail() {
   const progress = {
     current_page_id: null,
@@ -142,7 +147,7 @@ function readyDetail() {
 
 beforeEach(() => {
   fixture.params = {};
-  fixture.workspace = "";
+  setFixtureWorkspace("");
   fixture.reader.mockReset();
   fixture.references.mockReset();
   fixture.delete.mockReset().mockResolvedValue({ deleted: true });
@@ -193,7 +198,7 @@ describe("book deep-link loading", () => {
 
   it.each(["reference", "workspace"])("discards delayed page and progress from an old %s with the same model ID", async change => {
     fixture.params = { bookId: change === "reference" ? "book:book-1" : "book-1" };
-    fixture.workspace = "first";
+    setFixtureWorkspace("first");
     const old = readyDetail();
     old.pages[0].block_count = 1;
     let resolvePage!: (value: unknown) => void;
@@ -205,7 +210,7 @@ describe("book deep-link loading", () => {
     await screen.findByTestId("page-reader");
     await waitFor(() => expect(fixture.getPage).toHaveBeenCalled());
     if (change === "reference") fixture.params = { bookId: "book-1" };
-    else fixture.workspace = "second";
+    else setFixtureWorkspace("second");
     rerender(<BookPage />);
     await screen.findByTestId("page-reader");
     await act(async () => {

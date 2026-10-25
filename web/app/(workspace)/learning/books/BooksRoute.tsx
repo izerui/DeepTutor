@@ -134,6 +134,12 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     alive.current = true
     return () => { alive.current = false }
   }, [])
+  // Navigation may change the URL before React cleans up the keyed reader.
+  // Request helpers read that URL, so cleanup alone cannot bind a retry.
+  const isActiveReader = useCallback(
+    () => alive.current && activeWorkspaceId() === workspaceId,
+    [workspaceId]
+  )
   const [view, setView] = useState<View>(requestedBookId ? 'opening' : requestedLearningCreation() ? 'creator' : 'list')
 
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
@@ -187,18 +193,18 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   /** Run a mutation, surfacing failures instead of dropping them. */
   const guard = useCallback(
     async (action: string, run: () => Promise<void>): Promise<void> => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       try {
         await run()
       } catch (err) {
-        if (!alive.current) return
+        if (!isActiveReader()) return
         if (err instanceof BookApiError && err.status === 409 && selectedBookId) {
           try {
             const latest = await bookApi.get(selectedBookId, {
               includeBlocks: false,
               workspaceId,
             })
-            if (!alive.current) return
+            if (!isActiveReader()) return
             revisionRef.current = latest.book.revision
             setDetail(latest)
           } catch {
@@ -213,11 +219,11 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         console.error(`${action} failed:`, err)
       }
     },
-    [selectedBookId, workspaceId, t]
+    [selectedBookId, workspaceId, t, isActiveReader]
   )
 
   const refreshBooks = useCallback(async () => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     setLoadingBooks(true)
     try {
       const data = await learningLibrary<Book>('books')
@@ -229,7 +235,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     } finally {
       setLoadingBooks(false)
     }
-  }, [t])
+  }, [t, isActiveReader])
 
   /**
    * Load a book without its block payloads.
@@ -241,15 +247,15 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   const loadBookDetail = useCallback(async (id: string, shouldApply: () => boolean = () => true) => {
     // A detached mutation must not refresh or start another operation. The
     // keyed reader protects state; this boundary also stops outgoing work.
-    if (!alive.current) return null
+    if (!isActiveReader()) return null
     const data = await bookApi.get(id, { includeBlocks: false, workspaceId })
-    if (!alive.current) return null
+    if (!isActiveReader()) return null
     if (shouldApply()) {
       revisionRef.current = data.book.revision
       setDetail(data)
     }
     return data
-  }, [workspaceId])
+  }, [workspaceId, isActiveReader])
 
   /** Replace one page in-place, leaving the rest of the book untouched. */
   const mergePage = useCallback((page: Page) => {
@@ -272,7 +278,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
 
   const hydratePage = useCallback(
     async (pageId: string) => {
-      if (!selectedBookId || !alive.current) return
+      if (!selectedBookId || !isActiveReader()) return
       try {
         const { page } = await bookApi.getPage(selectedBookId, pageId)
         mergePage(page)
@@ -280,12 +286,12 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         console.error('hydratePage failed:', err)
       }
     },
-    [selectedBookId, mergePage]
+    [selectedBookId, mergePage, isActiveReader]
   )
 
   const refreshLearningCaptures = useCallback(
     async (bookId: string) => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       setLoadingLearningCaptures(true)
       try {
         const { captures } = await bookApi.listLearningCaptures(bookId)
@@ -302,7 +308,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         setLoadingLearningCaptures(false)
       }
     },
-    [t]
+    [t, isActiveReader]
   )
 
   // Debounced per page, so a burst of block events costs one fetch.
@@ -443,7 +449,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
 
   const handleSelectBook = useCallback(
     async (id: string | null, openPageId?: string | null) => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const requestId = ++selectionRequestRef.current
       if (!id) {
         setSelectedBookId(null)
@@ -459,7 +465,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       }
       setSelectedBookId(id)
       const data = await loadBookDetail(id, () => selectionRequestRef.current === requestId)
-      if (!data || !alive.current || selectionRequestRef.current !== requestId) return
+      if (!data || !isActiveReader() || selectionRequestRef.current !== requestId) return
       const hasReadableContent = data.pages.some(
         p => p.status !== 'pending' || (p.block_count ?? p.blocks.length) > 0
       )
@@ -488,7 +494,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         setView('reader')
       }
     },
-    [loadBookDetail, requestedBookId, router]
+    [loadBookDetail, requestedBookId, router, isActiveReader]
   )
 
   // Resource identity belongs in the path: /books/<book>[/pages/<page>].
@@ -505,7 +511,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     // to say so and hand the reader back; otherwise the shell is where they
     // stay. Selecting nothing returns to the library and to its URL.
     void handleSelectBook(requestedBookId, requestedPageId).catch(err => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       if (lastDeepLinkedBookId.current !== requestedBookId) return
       notify(
         t('{{action}} failed: {{reason}}', {
@@ -517,7 +523,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       console.error('Open book failed:', err)
       void handleSelectBook(null)
     })
-  }, [requestedBookId, requestedPageId, selectedBookId, handleSelectBook, t])
+  }, [requestedBookId, requestedPageId, selectedBookId, handleSelectBook, t, isActiveReader])
 
   useEffect(() => {
     if (view !== 'reader' || !selectedBookId) {
@@ -531,7 +537,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     guard('Delete book', async () => {
       const id = bookRequestRef(book)
       await bookApi.delete(id, book.content_workspace_id ?? '', { force })
-      if (!alive.current) return
+      if (!isActiveReader()) return
       if (selectedBookId === id) {
         setSelectedBookId(null)
         setDetail(null)
@@ -546,7 +552,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     // intentionally reject 409; DELETE still authorizes that local location.
     if (book.ref) {
       const { references } = await bookApi.references(book.ref, book.content_workspace_id ?? '')
-      if (!alive.current) return
+      if (!isActiveReader()) return
       if (references.length) {
         setReferencedDelete({ book, references })
         return
@@ -556,7 +562,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   })
 
   const handleResumeBook = async () => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !canEditBook) return
     setResumingBook(true)
     try {
@@ -564,7 +570,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       await loadBookDetail(selectedBookId!)
       await refreshBooks()
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = bookErrorMessage(err, t)
       notify(t('Could not resume: {{message}}', { message: msg }), {
         tone: 'error',
@@ -579,7 +585,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   }
 
   const handlePauseBook = async () => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !canEditBook || detail.book.status !== 'compiling') return
     setPausingBook(true)
     try {
@@ -588,7 +594,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       await loadBookDetail(selectedBookId!)
       await refreshBooks()
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = bookErrorMessage(err, t)
       notify(t('Could not pause: {{message}}', { message: msg }), {
         tone: 'error',
@@ -630,11 +636,11 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     fallback_language: string
     depth: BookDepth
   }) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     setCreating(true)
     try {
       const result = await bookApi.create(payload, handleCreationEvent)
-      if (!alive.current) return
+      if (!isActiveReader()) return
       setPendingBook(result.book)
       setPendingProposal(result.proposal)
       router.push(bookRoute(bookRequestRef(result.book)))
@@ -645,7 +651,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleConfirmProposal = async (edited: BookProposal) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!pendingBook || pendingBook.can_edit === false) return
     setConfirmingProposal(true)
     try {
@@ -653,7 +659,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       // and `useBookStream` is already listening. Passing one too would feed
       // the timeline every event twice.
       const result = await bookApi.confirmProposal(selectedBookId || bookRequestRef(pendingBook), edited, pendingBook.revision)
-      if (!alive.current) return
+      if (!isActiveReader()) return
       setPendingBook(result.book)
       setPendingProposal(null)
       if (!await loadBookDetail(selectedBookId || bookRequestRef(result.book))) return
@@ -669,7 +675,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     autoCompile: boolean,
     blockTypes: string[] | null
   ) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !canEditBook) return
     setConfirmingSpine(true)
     try {
@@ -680,7 +686,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         currentRevision(),
         blockTypes ?? undefined
       )
-      if (!alive.current) return
+      if (!isActiveReader()) return
       // Claim the token this call just advanced before anything else runs.
       // The refresh below would also pick it up, but the compile that starts
       // in the same handler must not be able to read the old one.
@@ -695,7 +701,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       }
       await refreshBooks()
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = bookErrorMessage(err, t)
       notify(t('Confirm spine failed: {{message}}', { message: msg }), {
         tone: 'error',
@@ -711,7 +717,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
 
   const compilePage = useCallback(
     async (pageId: string, force = false) => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       if (!selectedBookId || !canEditBook) return
       setCompilingPageId(pageId)
       try {
@@ -719,7 +725,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         // finished page. The engine coalesces it with any run already in
         // flight, so opening a page the worker reached first is free.
         const run = async () => {
-          if (!alive.current) return
+          if (!isActiveReader()) return
           const { page, book_revision } = await bookApi.compilePage(
             selectedBookId,
             pageId,
@@ -732,7 +738,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         try {
           await run()
         } catch (err) {
-          if (!alive.current) return
+          if (!isActiveReader()) return
           // A stale token is not a failed compile, and telling the reader
           // "generation failed" for one is how the whole feature came to look
           // broken. Catch up on the book and ask again, once.
@@ -741,7 +747,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
           await run()
         }
       } catch (err) {
-        if (!alive.current) return
+        if (!isActiveReader()) return
         const msg = bookErrorMessage(err, t)
         notify(t('Compile failed: {{message}}', { message: msg }), {
           tone: 'error',
@@ -753,12 +759,12 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         setCompilingPageId(current => (current === pageId ? null : current))
       }
     },
-    [selectedBookId, canEditBook, currentRevision, applyBookRevision, mergePage, loadBookDetail, t]
+    [selectedBookId, canEditBook, currentRevision, applyBookRevision, mergePage, loadBookDetail, t, isActiveReader]
   )
 
   const handleSelectPage = useCallback(
     (pageId: string) => {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       setSelectedPageId(pageId)
       if (selectedBookId && requestedPageId !== pageId) {
         router.push(bookRoute(selectedBookId, pageId))
@@ -778,7 +784,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         void compilePage(pageId)
       }
     },
-    [detail, canEditBook, compilePage, requestedPageId, router, selectedBookId]
+    [detail, canEditBook, compilePage, requestedPageId, router, selectedBookId, isActiveReader]
   )
 
   // A ?page= change on a book that is already open just moves the reader.
@@ -817,7 +823,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   }, [view, selectedBookId, selectedPage, hydratePage])
 
   const handleUpdateBody = async (block: Block, body: string) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !selectedPage) return
     const pageId = selectedPage.id
     try {
@@ -831,7 +837,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       applyBookRevision(book_revision)
       await hydratePage(pageId)
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = err instanceof Error ? err.message : String(err)
       notify(t('Could not save your edit: {{message}}', { message: msg }), {
         tone: 'error',
@@ -855,7 +861,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     })
 
   const handleRegenerateBlock = async (block: Block) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !selectedPage || regeneratingBlockIdRef.current) return
     const bookId = selectedBookId!
     const isSharedBook = detail.book.source === 'shared'
@@ -873,7 +879,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         // Shared books keep the conflict visible to protect another editor's
         // newly-written content.
         if (
-          !alive.current ||
+          !isActiveReader() ||
           !(err instanceof BookApiError) ||
           err.code !== 'book_revision_conflict' ||
           isSharedBook ||
@@ -888,7 +894,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       const { book_revision } = result
       applyBookRevision(book_revision)
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = bookErrorMessage(err, t)
       notify(t('Regenerate block failed: {{message}}', { message: msg }), {
         tone: 'error',
@@ -1024,7 +1030,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
    * startling and expensive.
    */
   const handleRequestSupplement = async (block: Block) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail || !selectedPage) return
     const pageId = selectedPage.id
     const topic = (block.params?.topic as string | undefined) || selectedPage.title || ''
@@ -1039,7 +1045,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       applyBookRevision(book_revision)
       await hydratePage(pageId)
     } catch (err) {
-      if (!alive.current) return
+      if (!isActiveReader()) return
       const msg = err instanceof Error ? err.message : String(err)
       notify(t('Could not add extra practice: {{message}}', { message: msg }), {
         tone: 'error',
@@ -1079,7 +1085,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     context_after?: string
     source_locator?: string
   }) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail) return
     const result = await bookApi.createLearningCapture(selectedBookId!, {
       ...payload,
@@ -1090,7 +1096,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleApproveCapture = async (capture: LearningCapture) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail) return
     const result = await bookApi.updateLearningCapture(selectedBookId!, capture.id, {
       status: 'approved',
@@ -1103,7 +1109,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   }
 
   const handleRejectCapture = async (capture: LearningCapture) => {
-    if (!alive.current) return
+    if (!isActiveReader()) return
     if (!detail) return
     const result = await bookApi.updateLearningCapture(selectedBookId!, capture.id, {
       status: 'rejected',
