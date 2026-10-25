@@ -16,7 +16,8 @@ import re
 from typing import Any, Iterable, Sequence
 
 from .models import Block, BlockStatus, BlockType, Book, Chapter, Page, Spine
-from .storage import BookStorage, get_book_storage
+from .registry import strip_ref
+from .storage import BookStorage
 
 DEFAULT_MAX_CONTEXT_CHARS = 32_000
 DEFAULT_MAX_PAGE_CHARS = 12_000
@@ -97,25 +98,27 @@ def build_book_context(
     block_char_limit: int = DEFAULT_MAX_BLOCK_CHARS,
 ) -> BookContextResult:
     """Load selected book pages and serialize them into compact LLM context."""
+    from deeptutor.multi_user.book_access import readable_book_storage
 
     refs = normalize_book_references(book_references)
     if not refs:
         return BookContextResult()
 
-    store = storage or get_book_storage()
     warnings: list[str] = []
     sections: list[str] = []
 
     for ref in refs:
-        book = store.load_book(ref.book_id)
+        store = storage if storage is not None else readable_book_storage(ref.book_id)
+        book_id = strip_ref(ref.book_id)
+        book = store.load_book(book_id) if store is not None else None
         if book is None:
             warnings.append(f"book_not_found:{ref.book_id}")
             continue
 
-        spine = store.load_spine(ref.book_id)
+        spine = store.load_spine(book_id)
         page_sections: list[str] = []
         for page_id in ref.page_ids:
-            page = store.load_page(ref.book_id, page_id)
+            page = store.load_page(book_id, page_id)
             if page is None:
                 warnings.append(f"page_not_found:{ref.book_id}:{page_id}")
                 continue

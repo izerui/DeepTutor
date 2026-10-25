@@ -295,6 +295,11 @@ class TurnExecutor:
                 payload.get("partner_group_references")
             )
             question_notebook_references = payload.get("question_notebook_references", []) or []
+            from deeptutor.multi_user.book_access import book_reading_scope
+
+            book_knowledge_bases = resource_scope.enter_context(
+                book_reading_scope(payload.get("book_references", []) or [])
+            )
             book_context_result = build_book_context(payload.get("book_references", []) or [])
             book_references = book_context_result.references
             reading_references = _reading_references(payload.get("reading_references"))
@@ -916,7 +921,11 @@ class TurnExecutor:
                 # memory and every other auto-mounted built-in.
                 allowed_builtin_tools=[] if selection_tutor_context else None,
                 active_capability=payload.get("capability"),
-                knowledge_bases=payload.get("knowledge_bases", []),
+                # Learner policy has already filtered the ordinary selection.
+                # Only server-resolved bindings from this reading scope add KBs.
+                knowledge_bases=list(dict.fromkeys([
+                    *(payload.get("knowledge_bases") or []), *book_knowledge_bases,
+                ])),
                 attachments=attachments,
                 config_overrides=request_config,
                 language=payload.get("language", "en"),

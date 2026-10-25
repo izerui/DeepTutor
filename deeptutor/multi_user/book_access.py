@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 from pathlib import Path
@@ -317,6 +319,48 @@ def shared_book_exists(book_id: str) -> bool:
     return _admin_storage().book_exists(book_id)
 
 
+def readable_book_storage(book_id: str) -> BookStorage | None:
+    """Resolve the requested identity before stripping its canonical prefix."""
+    resolved = resolve_book(book_id)
+    return resolved.engine.storage if resolved is not None else None
+
+
+@contextmanager
+def book_reading_scope(book_references: Any) -> Iterator[list[str]]:
+    """Open bound books for this turn and yield only usable fixed KB refs.
+
+    A local collision has no registry identity. Raw/pending KB names are never
+    resolved in the reader's namespace; the D2 reader rechecks permission on
+    every subsequent retrieval.
+    """
+    from fastapi import HTTPException
+
+    from deeptutor.book.context import normalize_book_references
+    from deeptutor.knowledge import registry as kb_registry
+    from deeptutor.multi_user.knowledge_access import resolve_kb
+
+    records = []
+    for ref in normalize_book_references(book_references):
+        resolved = resolve_book(ref.book_id)
+        if resolved is not None and resolved.record is not None:
+            records.append(resolved.record)
+    with registry.reading_book(*(record.ref for record in records)):
+        usable: list[str] = []
+        for record in records:
+            if not registry.book_kb_reader(record.book_id, get_current_user().id):
+                continue
+            for kb_id in registry.book_kb_links(record.book_id).values():
+                kb = kb_registry.get_kb(kb_id) if kb_id else None
+                if kb is None or kb_registry.is_connector(kb) or kb.ref in usable:
+                    continue
+                try:
+                    resolve_kb(kb.ref)
+                except (HTTPException, ValueError):
+                    continue
+                usable.append(kb.ref)
+        yield usable
+
+
 def admin_book_catalog() -> list[dict[str, Any]]:
     from deeptutor.book.engine import BookEngine
 
@@ -336,10 +380,12 @@ __all__ = [
     "ResolvedBook",
     "accessible_books",
     "admin_book_catalog",
+    "book_reading_scope",
     "can_create_book",
     "engine_for",
     "ensure_book_registered",
     "prepare_new_book",
+    "readable_book_storage",
     "register_current_scope_book",
     "resolve_book",
     "shared_book_exists",
