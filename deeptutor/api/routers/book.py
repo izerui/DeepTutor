@@ -45,7 +45,6 @@ from deeptutor.multi_user.book_access import (
     resolve_book,
 )
 from deeptutor.multi_user.context import get_current_user
-from deeptutor.multi_user.identity import remove_book_permission_overrides
 from deeptutor.runtime.stream_bus import StreamBus
 
 router = APIRouter()
@@ -853,14 +852,11 @@ async def delete_book(book_id: str, force: bool = False) -> dict[str, Any]:
         if record is not None:
             book_registry._unregister(conn, book_id)
             book_sharing.sync_protection(conn, book_id)
-        # A foreign same-ID record must retain its legacy ACLs too.
-        clean_overrides = record is not None or current is None
-    if user.is_admin and clean_overrides:
-        affected = remove_book_permission_overrides(book_id)
+    if user.is_admin:
         log_admin_action(
             "book_delete",
             summary={
-                "book_id": book_id, "acl_users_cleaned": len(affected),
+                "book_id": book_id,
                 "forced_references": len(references),
             },
         )

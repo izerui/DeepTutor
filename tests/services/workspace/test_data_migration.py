@@ -16,6 +16,345 @@ from deeptutor.services.workspace.models import WorkspaceError
 from tests.services.workspace.test_data_scope import account as account
 
 
+@pytest.fixture
+def registered_stores(account):
+    from deeptutor.book import registry as books
+    from deeptutor.book.models import Book
+    from deeptutor.book.storage import BookStorage
+    from deeptutor.knowledge import registry as kbs
+
+    target_id = account.create_workspace("Destination")["workspace_id"]
+    with workspace_context():
+        source = get_path_service()
+        BookStorage(path_service=source).save_book(Book(id="bk_move", title="Moving"))
+        kb_dir = source.get_knowledge_bases_root() / "atlas"
+        kb_dir.mkdir(parents=True)
+        (kb_dir / "document.md").write_text("retained KB")
+        kb = kbs.register_kb(
+            base_dir=kb_dir.parent, name="atlas",
+            kind="uploaded", created_by="scope-test",
+        )
+        book = books.register_new_book(
+            base_dir=source.get_book_dir(), dir_name="book_bk_move",
+            title="Moving", created_by="scope-test",
+        )
+        books.set_book_kb_links(book.book_id, {"atlas": kb.kb_id})
+        books.set_book_visibility(book.book_id, "public")
+    with workspace_context(target_id):
+        target = get_path_service()
+        unrelated_book = books.register_book(
+            base_dir=target.get_book_dir(), dir_name="book_bk_unrelated",
+            title="Unrelated", created_by="other",
+        )
+        unrelated_kb = kbs.register_kb(
+            base_dir=target.get_knowledge_bases_root(), name="unrelated",
+            kind="uploaded", created_by="other",
+        )
+    return source, target, target_id, book, kb, unrelated_book, unrelated_kb
+
+
+@pytest.mark.parametrize("features", [["book"], ["book", "knowledge_bases"]])
+def test_registered_migration_preserves_identity_links_and_visibility(registered_stores, features):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, other_book, other_kb = registered_stores
+    references = kbs.list_references(kb.kb_id)
+    books.set_meta("shared_shelf_inventory_v1", '{"original_boundary": true}')
+    result = migrate_data("", target_id, features)
+    assert result["status"] == "completed"
+    assert books.get_book(book.book_id).base_dir == str(target.get_book_dir().resolve())
+    assert books.get_book(book.book_id).visibility == "public"
+    assert books.book_kb_links(book.book_id) == {"atlas": kb.kb_id}
+    assert kbs.list_references(kb.kb_id) == references
+    assert books.get_meta("shared_shelf_inventory_v1") == '{"original_boundary": true}'
+    assert books.get_meta(f"visibility_intent_v1:{book.book_id}") == "public"
+    expected_kb = target if "knowledge_bases" in features else source
+    assert kbs.get_kb(kb.kb_id).base_dir == str(expected_kb.get_knowledge_bases_root().resolve())
+    assert books.get_book(other_book.book_id) == other_book
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+    assert not source.get_book_dir().exists()
+    assert (target.get_book_dir() / "book_bk_move").is_dir()
+    assert migration.recover_operation(result["id"])["status"] == "completed"
+
+
+@pytest.mark.parametrize("failure", ["between", "commit", "marker", "written_marker"])
+def test_joint_registry_failures_restore_both_before_removing_copies(
+    registered_stores, monkeypatch, failure,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, other_book, other_kb = registered_stores
+    if failure == "commit":
+        with books._write() as conn:
+            conn.execute("CREATE TABLE commit_parent(id TEXT PRIMARY KEY)")
+            conn.execute(
+                "CREATE TABLE commit_child(id TEXT REFERENCES commit_parent(id) "
+                "DEFERRABLE INITIALLY DEFERRED)"
+            )
+            conn.execute(
+                "CREATE TRIGGER fail_commit AFTER UPDATE OF base_dir ON book_registry "
+                "BEGIN INSERT INTO commit_child VALUES ('missing'); END"
+            )
+    relocate = books._relocate_book
+    write = migration.atomic_write_json
+    observed = []
+
+    def fail_between(conn, book_id, destination):
+        assert conn.execute("SELECT base_dir FROM kb_registry WHERE kb_id=?", (kb.kb_id,)).fetchone()[0] == str(target.get_knowledge_bases_root())
+        # An independent reader still sees the pre-transaction locations.
+        assert kbs.get_kb(kb.kb_id).base_dir == kb.base_dir
+        observed.append("between")
+        raise OSError("injected between metadata writes")
+
+    def fail_marker(path, payload):
+        if payload.get("status") == "committed":
+            assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+            assert kbs.get_kb(kb.kb_id).base_dir == str(target.get_knowledge_bases_root())
+            if failure == "written_marker":
+                write(path, payload)
+            observed.append("marker")
+            raise OSError("injected marker failure")
+        return write(path, payload)
+
+    with monkeypatch.context() as patch:
+        if failure == "between":
+            patch.setattr(books, "_relocate_book", fail_between)
+        elif failure in {"marker", "written_marker"}:
+            patch.setattr(migration, "atomic_write_json", fail_marker)
+        with pytest.raises((OSError, sqlite3.IntegrityError)):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    assert books._relocate_book is relocate
+    if failure != "commit":
+        assert observed
+    operation = migration.operations()[0]
+    assert operation["status"] == "failed"
+    assert operation["book_registry_ids"] == [book.book_id]
+    assert operation["registry_snapshot"]["knowledge_bases"][0]["name"] == "atlas"
+    assert books.get_book(book.book_id).base_dir == book.base_dir
+    assert kbs.get_kb(kb.kb_id).base_dir == kb.base_dir
+    assert books.get_book(other_book.book_id) == other_book
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+    assert (source.get_book_dir() / book.dir_name).is_dir()
+    assert (source.get_knowledge_bases_root() / "atlas/document.md").read_text() == "retained KB"
+    assert not target.get_book_dir().exists()
+    assert not target.get_knowledge_bases_root().exists()
+    assert migration.recover_operation(operation["id"])["status"] == "recovered"
+
+
+@pytest.mark.parametrize("interrupt", ["before_marker", "after_marker", "compensation"])
+def test_interrupted_registry_migration_recovers_via_journal(
+    registered_stores, monkeypatch, interrupt,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, other_book, other_kb = registered_stores
+    write = migration.atomic_write_json
+    relocate = books._relocate_book
+
+    def stop_marker(path, payload):
+        if payload.get("status") == "committed":
+            if interrupt == "after_marker":
+                write(path, payload)
+            if interrupt == "compensation":
+                raise OSError("marker unavailable")
+            raise KeyboardInterrupt("synthetic process interruption")
+        return write(path, payload)
+
+    def stop_restore(conn, book_id, destination):
+        if str(destination) == book.base_dir:
+            # KB restore was executed first; the joint rollback must undo it.
+            assert conn.execute("SELECT base_dir FROM kb_registry WHERE kb_id=?", (kb.kb_id,)).fetchone()[0] == kb.base_dir
+            raise OSError("book compensation unavailable")
+        return relocate(conn, book_id, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", stop_marker)
+        if interrupt == "compensation":
+            patch.setattr(books, "_relocate_book", stop_restore)
+        with pytest.raises(WorkspaceError if interrupt == "compensation" else KeyboardInterrupt):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    operation = migration.operations()[0]
+    assert operation["status"] == {
+        "before_marker": "transferring", "after_marker": "committed",
+        "compensation": "recovery_required",
+    }[interrupt]
+    assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+    assert kbs.get_kb(kb.kb_id).base_dir == str(target.get_knowledge_bases_root())
+    assert source.get_book_dir().exists() and target.get_book_dir().exists()
+    with pytest.raises(WorkspaceError, match="recovery"):
+        migrate_data("", target_id, ["book"])
+    if interrupt == "compensation":
+        with monkeypatch.context() as patch:
+            patch.setattr(books, "_relocate_book", stop_restore)
+            with pytest.raises(OSError, match="compensation"):
+                migration.recover_operation(operation["id"])
+        assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+        assert kbs.get_kb(kb.kb_id).base_dir == str(target.get_knowledge_bases_root())
+        assert source.get_book_dir().exists() and target.get_book_dir().exists()
+    result = migration.recover_operation(operation["id"])
+    committed = interrupt == "after_marker"
+    assert result["status"] == ("completed" if committed else "recovered")
+    expected = target if committed else source
+    assert books.get_book(book.book_id).base_dir == str(expected.get_book_dir())
+    assert kbs.get_kb(kb.kb_id).base_dir == str(expected.get_knowledge_bases_root())
+    assert books.get_book(other_book.book_id) == other_book
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+    assert migration.recover_operation(operation["id"]) == result
+
+
+@pytest.mark.parametrize("change", ["location", "replacement", "new_source"])
+def test_registry_change_during_copy_is_not_adopted_or_discarded(
+    registered_stores, monkeypatch, change, tmp_path,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, _, _, _ = registered_stores
+    copy = migration.shutil.copytree
+    changed = False
+
+    def copy_then_change(*args, **kwargs):
+        nonlocal changed
+        result = copy(*args, **kwargs)
+        if not changed:
+            changed = True
+            with books._write() as conn:
+                if change == "location":
+                    books._relocate_book(conn, book.book_id, tmp_path / "elsewhere")
+                elif change == "replacement":
+                    conn.execute("UPDATE book_registry SET created_at='replacement' WHERE book_id=?", (book.book_id,))
+                else:
+                    books._register(
+                        conn, base_dir=source.get_book_dir(), dir_name="book_bk_later",
+                        title="New registration", created_by="scope-test",
+                    )
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration.shutil, "copytree", copy_then_change)
+        with pytest.raises(WorkspaceError):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    operation = migration.operations()[0]
+    assert source.get_book_dir().exists()
+    if change == "new_source":
+        assert books.get_book("bk_later").base_dir == book.base_dir
+        assert operation["status"] == "failed"
+    else:
+        assert operation["status"] == "recovery_required"
+        assert target.get_book_dir().exists()
+        before = books.get_book(book.book_id)
+        with pytest.raises(WorkspaceError, match="manual recovery"):
+            migration.recover_operation(operation["id"])
+        assert books.get_book(book.book_id) == before
+        assert target.get_book_dir().exists()
+
+
+def test_legacy_kb_journal_remains_recoverable(registered_stores, monkeypatch):
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, _, kb, _, other_kb = registered_stores
+    write = migration.atomic_write_json
+
+    def stop_marker(path, payload):
+        if payload.get("status") == "committed":
+            raise KeyboardInterrupt("before journal commit")
+        return write(path, payload)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", stop_marker)
+        with pytest.raises(KeyboardInterrupt):
+            migrate_data("", target_id, ["knowledge_bases"])
+    operation = migration.operations()[0]
+    operation.pop("registry_snapshot")
+    operation.pop("book_registry_ids")
+    write(Path(operation["recovery_path"]) / "operation.json", operation)
+    assert migration.recover_operation(operation["id"])["status"] == "recovered"
+    assert kbs.get_kb(kb.kb_id).base_dir == str(source.get_knowledge_bases_root())
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+    assert not target.get_knowledge_bases_root().exists()
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+def test_location_compensation_preserves_a_later_visibility_decision(
+    registered_stores, monkeypatch, deferred,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, _, target_id, book, kb, _, _ = registered_stores
+    write = migration.atomic_write_json
+    relocate = books._relocate_book
+
+    def withdraw_before_marker(path, payload):
+        if payload.get("status") == "committed":
+            books.set_book_visibility(book.book_id, "private")
+            raise OSError("marker unavailable after explicit withdrawal")
+        return write(path, payload)
+
+    def defer_restore(conn, book_id, destination):
+        if str(destination) == book.base_dir:
+            raise OSError("compensation temporarily unavailable")
+        return relocate(conn, book_id, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", withdraw_before_marker)
+        if deferred:
+            patch.setattr(books, "_relocate_book", defer_restore)
+        with pytest.raises(WorkspaceError if deferred else OSError):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    operation = migration.operations()[0]
+    assert operation["status"] == ("recovery_required" if deferred else "failed")
+    assert migration.recover_operation(operation["id"])["status"] == "recovered"
+    restored = books.get_book(book.book_id)
+    assert restored.base_dir == str(source.get_book_dir())
+    assert restored.visibility == "private"
+    assert books.get_meta(f"visibility_intent_v1:{book.book_id}") == "private"
+    assert kbs.list_references(kb.kb_id) == []
+
+
+@pytest.mark.parametrize("corruption", ["missing_snapshot", "id_mismatch", "wrong_location"])
+def test_invalid_book_recovery_evidence_preserves_copies(
+    registered_stores, monkeypatch, corruption,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, _, _, _ = registered_stores
+    write = migration.atomic_write_json
+
+    def stop_marker(path, payload):
+        if payload.get("status") == "committed":
+            raise KeyboardInterrupt("before journal commit")
+        return write(path, payload)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", stop_marker)
+        with pytest.raises(KeyboardInterrupt):
+            migrate_data("", target_id, ["book"])
+    operation = migration.operations()[0]
+    if corruption == "missing_snapshot":
+        operation.pop("registry_snapshot")
+    elif corruption == "id_mismatch":
+        operation["book_registry_ids"] = ["bk_other"]
+    else:
+        operation["registry_snapshot"]["book"][0]["base_dir"] = str(target.get_book_dir())
+    write(Path(operation["recovery_path"]) / "operation.json", operation)
+    with pytest.raises(WorkspaceError, match="unreadable|manual recovery"):
+        migration.recover_operation(operation["id"])
+    with pytest.raises(WorkspaceError):
+        migration.assert_no_pending_recovery(reject_unreadable=True)
+    assert source.get_book_dir().exists() and target.get_book_dir().exists()
+    assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+
+
 def test_single_kb_journal_blocks_migration_and_rejects_unsafe_recovery(account):
     from deeptutor.services.file_io import atomic_write_json
     from deeptutor.services.workspace import data_migration

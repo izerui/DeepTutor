@@ -324,12 +324,13 @@ async def test_failed_creation_emits_no_ready_and_can_retry(as_user, proposal, m
 async def test_repaired_storage_creation_freezes_d22_without_scanning(
     as_user, proposal, monkeypatch, tmp_path, seed_user,
 ):
-    from deeptutor.multi_user.book_permission import BookPermission
-    from deeptutor.multi_user.identity import set_book_permission
+    from deeptutor.multi_user import identity
 
     seed_user("root", role="admin")
     seed_user("reader")
-    set_book_permission("reader", BookPermission(default="read"))
+    users = identity.load_users()
+    users["reader"]["book_permission"] = {"default": "read"}
+    identity._write_users(users)
     with as_user("root", role="admin"):
         engine = BookEngine()
         _write("bk_legacy")

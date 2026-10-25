@@ -18,7 +18,7 @@ from deeptutor.services.path_service import PathService
 from .book_permission import permission_for_user
 from .context import get_current_user
 from .models import LOCAL_ADMIN_ID, CurrentUser, UserScope
-from .paths import get_admin_path_service, get_current_path_service
+from .paths import get_current_path_service
 
 if TYPE_CHECKING:
     from deeptutor.book.engine import BookEngine
@@ -31,10 +31,6 @@ def _auth_enabled() -> bool:
     from deeptutor.services.auth import AUTH_ENABLED
 
     return bool(AUTH_ENABLED)
-
-
-def _admin_storage() -> BookStorage:
-    return BookStorage(path_service=get_admin_path_service())
 
 
 def _owner_id() -> str:
@@ -128,6 +124,7 @@ def register_current_scope_book(book_id: str) -> registry.BookRecord | None:
 def prepare_new_book(book: Book, storage: BookStorage) -> registry.BookRecord:
     """Complete birth prerequisites before publishing a manifest or ready event."""
     from deeptutor.book.registry_backfill import ensure_shelf_creation_boundary
+    from deeptutor.multi_user.paths import get_admin_path_service
 
     base_dir = storage.path_service.get_book_dir()
     if base_dir.resolve() == get_admin_path_service().get_book_dir().resolve():
@@ -315,10 +312,6 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
     return results
 
 
-def shared_book_exists(book_id: str) -> bool:
-    return _admin_storage().book_exists(book_id)
-
-
 def readable_book_storage(book_id: str) -> BookStorage | None:
     """Resolve the requested identity before stripping its canonical prefix."""
     resolved = resolve_book(book_id)
@@ -361,25 +354,26 @@ def book_reading_scope(book_references: Any) -> Iterator[list[str]]:
         yield usable
 
 
-def admin_book_catalog() -> list[dict[str, Any]]:
-    from deeptutor.book.engine import BookEngine
-
-    engine = BookEngine(storage=_admin_storage())
-    return [
-        {
+def public_book_catalog() -> list[dict[str, Any]]:
+    """Manifest summaries of public canonical books, across all owners."""
+    rows = []
+    for record in registry.list_book_records(visibility="public"):
+        book = engine_for(record).load_book(record.book_id)
+        if book is None:
+            continue
+        rows.append({
             "book_id": book.id,
             "title": book.title,
             "status": book.status.value,
             "updated_at": book.updated_at,
-        }
-        for book in engine.list_books()
-    ]
+        })
+    return rows
 
 
 __all__ = [
     "ResolvedBook",
     "accessible_books",
-    "admin_book_catalog",
+    "public_book_catalog",
     "book_reading_scope",
     "can_create_book",
     "engine_for",
@@ -388,6 +382,5 @@ __all__ = [
     "readable_book_storage",
     "register_current_scope_book",
     "resolve_book",
-    "shared_book_exists",
     "storage_for",
 ]

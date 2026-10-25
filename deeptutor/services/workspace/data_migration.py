@@ -281,30 +281,6 @@ def _backend() -> str:
     return "pocketbase" if is_pocketbase_enabled() else "sqlite"
 
 
-def _shared_source_blockers(source_id: str, selected: set[str]) -> list[str]:
-    """The admin default catalogue remains the canonical shared resource store."""
-    from deeptutor.multi_user.context import get_current_user
-    from deeptutor.services.auth import AUTH_ENABLED
-
-    if source_id or not AUTH_ENABLED or not get_current_user().is_admin:
-        return []
-    from deeptutor.multi_user.book_permission import normalize_book_permission
-    from deeptutor.multi_user.identity import list_user_info
-
-    blockers = set()
-    for user in list_user_info():
-        if user.get("role") == "admin":
-            continue
-        permission = normalize_book_permission(user.get("book_permission"))
-        if "book" in selected and (
-            permission.default != "none" or any(level != "none" for _, level in permission.books)
-        ):
-            blockers.add(
-                "Books are shared with other accounts. Remove those grants before moving the shared catalogue, or export a copy."
-            )
-    return sorted(blockers)
-
-
 def preview(
     source_id: str, target_id: str, features: list[str], *, session_ids: set[str] | None = None
 ) -> dict:
@@ -330,7 +306,6 @@ def preview(
         target_id = target_scope.workspace_id
         rows = [row for row in data["features"] if row["feature"] in selected]
         blockers = [row["error"] for row in rows if row["error"]]
-        blockers.extend(_shared_source_blockers(source_id, selected))
         if "knowledge_bases" in selected:
             from deeptutor.services.workspace.resources import knowledge_migration_blockers
 
@@ -586,15 +561,7 @@ def migrate_data(
             "plan": plan,
             "recovery_path": str(root),
         }
-        if "knowledge_bases" in plan["features"]:
-            # Persist identities before relocation so interrupted precommit work
-            # can restore only this catalog, never unrelated destination records.
-            result["kb_registry_ids"] = [
-                record.kb_id
-                for record in registry.list_records(
-                    base_dir=_feature_path(source, "knowledge_bases")
-                )
-            ]
+        result.update(_registry_snapshot(plan, source))
         journal = root / "operation.json"
         atomic_write_json(journal, result)
         installed = []
@@ -670,11 +637,7 @@ def migrate_data(
                         local_ids,
                         target_id,
                     )
-            if "knowledge_bases" in plan["features"]:
-                registry.relocate_base_dir(
-                    _feature_path(source, "knowledge_bases"),
-                    _feature_path(target, "knowledge_bases"),
-                )
+            _relocate_registries(result, source, target)
             # A failed commit-marker write must still take the rollback path.
             atomic_write_json(journal, {**result, "status": "committed"})
             result["status"] = "committed"
@@ -921,7 +884,10 @@ def _restore_sessions(root: Path, source, target) -> None:
 
 
 def _restore_kb_registry(result: dict, source, target) -> None:
-    """Undo precommit relocation before deleting the destination copies."""
+    """Undo both registries before deleting copies; accept pre-D7 KB journals."""
+    if "registry_snapshot" in result:
+        _relocate_registries(result, source, target, restore=True)
+        return
     source_root = _feature_path(source, "knowledge_bases").resolve()
     target_root = _feature_path(target, "knowledge_bases").resolve()
     for kb_id in result.get("kb_registry_ids", []):
@@ -931,6 +897,84 @@ def _restore_kb_registry(result: dict, source, target) -> None:
         if record.base_dir != str(target_root):
             raise WorkspaceError("Knowledge base location changed; manual recovery is required.")
         registry.relocate_kb(kb_id, source_root)
+
+
+def _registry_snapshot(plan: dict, source) -> dict:
+    """Freeze exact identities/locations before any files are copied."""
+    from deeptutor.book.sharing import shared_write
+
+    selected = set(plan["features"]) & {"knowledge_bases", "book"}
+    if not selected:
+        return {}
+    snapshot = {}
+    with shared_write() as conn:
+        for feature, table, id_key, name_key in (
+            ("knowledge_bases", "main.kb_registry", "kb_id", "dir_name"),
+            ("book", "books.book_registry", "book_id", "dir_name"),
+        ):
+            if feature not in selected:
+                continue
+            snapshot[feature] = [
+                dict(row) for row in conn.execute(
+                    f"SELECT {id_key} AS id, base_dir, {name_key} AS name, created_by, "
+                    f"created_at FROM {table} WHERE base_dir = ? ORDER BY {id_key}",
+                    (str(_feature_path(source, feature).resolve()),),
+                )
+            ]
+    return {
+        "registry_snapshot": snapshot,
+        "kb_registry_ids": [row["id"] for row in snapshot.get("knowledge_bases", [])],
+        "book_registry_ids": [row["id"] for row in snapshot.get("book", [])],
+    }
+
+
+def _relocate_registries(result: dict, source, target, *, restore: bool = False) -> None:
+    """Both location changes share D2's crash-atomic writer and recovery boundary."""
+    from deeptutor.book import registry as books
+    from deeptutor.book.sharing import shared_write
+
+    snapshot = result.get("registry_snapshot")
+    if not snapshot:
+        return
+    with shared_write() as conn:
+        for feature, table, id_key, name_key in (
+            ("knowledge_bases", "main.kb_registry", "kb_id", "dir_name"),
+            ("book", "books.book_registry", "book_id", "dir_name"),
+        ):
+            if feature not in snapshot:
+                continue
+            source_root = str(_feature_path(source, feature).resolve())
+            target_root = str(_feature_path(target, feature).resolve())
+            if not restore:
+                current_ids = {
+                    row[0] for row in conn.execute(
+                        f"SELECT {id_key} FROM {table} WHERE base_dir = ?", (source_root,),
+                    )
+                }
+                if current_ids != {row["id"] for row in snapshot[feature]}:
+                    raise WorkspaceError("Registry inventory changed; retain copies for recovery.")
+            for saved in snapshot[feature]:
+                row = conn.execute(
+                    f"SELECT * FROM {table} WHERE {id_key} = ?", (saved["id"],),
+                ).fetchone()
+                if (
+                    saved["base_dir"] != source_root
+                    or row is None
+                    or row[name_key] != saved["name"]
+                    or row["created_by"] != saved["created_by"]
+                    or row["created_at"] != saved["created_at"]
+                    or row["base_dir"] not in (
+                        {source_root, target_root} if restore else {source_root}
+                    )
+                ):
+                    raise WorkspaceError("Registry identity or location changed; manual recovery is required.")
+                destination = source_root if restore else target_root
+                if row["base_dir"] == destination:
+                    continue
+                if feature == "knowledge_bases":
+                    registry._relocate_kb(conn, saved["id"], destination)
+                else:
+                    books._relocate_book(conn, saved["id"], destination)
 
 
 def _read_journal(path: Path) -> dict:
@@ -973,6 +1017,34 @@ def _read_journal(path: Path) -> dict:
             or (kb_ids and "knowledge_bases" not in features)
         ):
             raise ValueError("journal knowledge base identities are invalid")
+        book_ids = row.get("book_registry_ids", [])
+        if (
+            not isinstance(book_ids, list)
+            or any(not isinstance(book_id, str) or not book_id for book_id in book_ids)
+            or (book_ids and "book" not in features)
+        ):
+            raise ValueError("journal book identities are invalid")
+        snapshot = row.get("registry_snapshot")
+        if snapshot is not None:
+            selected = set(features) & {"book", "knowledge_bases"}
+            if not isinstance(snapshot, dict) or set(snapshot) != selected:
+                raise ValueError("journal registry snapshot is invalid")
+            for feature, entries in snapshot.items():
+                if not isinstance(entries, list) or any(
+                    not isinstance(entry, dict)
+                    or any(
+                        not isinstance(entry.get(key), str) or not entry[key]
+                        for key in ("id", "base_dir", "name", "created_by", "created_at")
+                    )
+                    for entry in entries
+                ):
+                    raise ValueError("journal registry locations are invalid")
+                ids = [entry["id"] for entry in entries]
+                expected = kb_ids if feature == "knowledge_bases" else book_ids
+                if ids != expected or len(ids) != len(set(ids)):
+                    raise ValueError("journal registry identities do not match snapshot")
+        elif book_ids:
+            raise ValueError("journal book locations are missing")
         if row.get("kind") == "kb_move":
             from .kb_move import _validate_kb_move_journal
 

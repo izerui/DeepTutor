@@ -49,6 +49,45 @@ def _manifest(shelf, book_id):
     return shelf.path_service.get_book_manifest_file(book_id)
 
 
+@pytest.mark.parametrize("legacy", [
+    {"default": "read", "books": {"bk_edit": "edit"}},
+    {"mode": "list", "book_ids": ["bk_read", "bk_edit"], "actions": {"delete": True}},
+    {"mode": "all", "actions": {"create": False}},
+])
+def test_presnapshot_identity_failure_survives_normalization_and_create_save(seed_user, legacy):
+    from deeptutor.multi_user.book_permission import BookPermission, legacy_book_shares
+
+    shelf, _, _ = _setup(seed_user)
+    _permission("alice", legacy)
+    original = identity.USERS_FILE.read_bytes()
+    identity.USERS_FILE.write_text("{")
+    assert backfill.backfill_book_registry()["promoted"] == 0
+    before = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert not before.get("grants")
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    # The original identity is repaired before normal read/edit traffic resumes.
+    identity.USERS_FILE.write_bytes(original)
+    identity.get_user("alice")
+    assert next(row for row in identity.list_user_info() if row["username"] == "alice")[
+        "book_permission"
+    ] == {"create": legacy.get("actions", {}).get("create", True)}
+    assert identity.set_book_permission("alice", BookPermission(create=False))
+    stored = json.loads(identity.USERS_FILE.read_text())["alice"]["book_permission"]
+    assert legacy_book_shares(stored) == legacy_book_shares(legacy)
+    assert backfill.backfill_book_registry()["promoted"] >= 2
+    assert registry.get_book("bk_read").visibility == "public"
+    assert registry.get_book("bk_edit").visibility == "public"
+    after = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert after["started_ns"] == before["started_ns"]
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    # Once migrated, an explicit withdrawal cannot be undone by retained evidence.
+    with user_context(local_admin_user()):
+        registry.set_book_visibility("bk_edit", "private")
+    assert backfill.backfill_book_registry()["promoted"] == 0
+    assert registry.get_book("bk_edit").visibility == "private"
+    assert shelf.load_book("bk_edit") is not None
+
+
 def test_every_scope_and_r1_notices(seed_user):
     shelf, alice, bob = _setup(seed_user)
     before = {path: path.read_bytes() for path in shelf.path_service.get_book_dir().rglob("*.json")}

@@ -62,12 +62,14 @@ def shared_env(tmp_path, monkeypatch):
     default_learner = save_user("default-learner", "hash", role="user", preset="learner")
     books_without_acl = save_user("books-without-acl", "hash", role="user", preset="learner")
     reader = save_user("reader", "hash", role="user", preset="learner")
-    set_book_permission("alice", BookPermission(books=(("bk_shared", "read"),)))
-    set_book_permission("bob", BookPermission(books=(("bk_shared", "read"),)))
-    set_book_permission("editor", BookPermission(books=(("bk_shared", "edit"),)))
+    # Stored grants are inert; use raw legacy fixtures, never the live create API.
+    users = identity.load_users()
+    for name, level in (("alice", "read"), ("bob", "read"), ("editor", "edit")):
+        users[name]["book_permission"] = {"books": {"bk_shared": level}}
+    identity._write_users(users)
     set_book_permission("default-learner", BookPermission(create=False))
     set_book_permission("books-without-acl", BookPermission(create=False))
-    set_book_permission("reader", BookPermission(create=False, books=(("bk_shared", "read"),)))
+    set_book_permission("reader", BookPermission(create=False))
     books_grant = deepcopy(learner_grant(reader["id"]))
     books_grant["learning_policy"]["allowed_surfaces"] = ["chat", "reading", "books"]
     save_grant(books_without_acl["id"], deepcopy(books_grant))
@@ -422,8 +424,8 @@ def test_real_creation_transports_expose_registered_private_book(shared_env, mon
     assert payload["group"] == "mine" and payload["can_set_visibility"]
 
 
-def test_admin_delete_cleans_explicit_book_permissions(shared_env) -> None:
-    from deeptutor.multi_user.book_permission import normalize_book_permission
+def test_admin_delete_preserves_inert_legacy_evidence(shared_env) -> None:
+    from deeptutor.multi_user.book_permission import legacy_book_shares
     from deeptutor.multi_user.identity import get_user
 
     client, canonical = shared_env
@@ -437,5 +439,5 @@ def test_admin_delete_cleans_explicit_book_permissions(shared_env) -> None:
     alice = get_user("alice")
     editor = get_user("editor")
     assert alice is not None and editor is not None
-    assert "bk_shared" not in normalize_book_permission(alice.get("book_permission")).books_dict()
-    assert "bk_shared" not in normalize_book_permission(editor.get("book_permission")).books_dict()
+    assert legacy_book_shares(alice.get("book_permission")).level_for("bk_shared") == "read"
+    assert legacy_book_shares(editor.get("book_permission")).level_for("bk_shared") == "edit"

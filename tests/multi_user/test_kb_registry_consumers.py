@@ -296,7 +296,7 @@ def test_kb_move_registry_and_files_commit_together(
             target = current_kb_manager().base_dir
         source_config = (source / "kb_config.json").read_bytes()
         assert not (target / "kb_config.json").exists()
-        relocate_name = "relocate_base_dir" if whole_catalog else "relocate_kb"
+        relocate_name = "_relocate_kb" if whole_catalog else "relocate_kb"
         relocate = getattr(registry, relocate_name)
 
         def fail_relocation(*args, **kwargs):
@@ -308,7 +308,7 @@ def test_kb_move_registry_and_files_commit_together(
             if failure:
                 # Fail only the forward relocation; rollback must remain usable.
                 def forward_only(*args, **kwargs):
-                    if Path(args[1]).resolve() == target.resolve():
+                    if Path(args[2] if whole_catalog else args[1]).resolve() == target.resolve():
                         return fail_relocation(*args, **kwargs)
                     return relocate(*args, **kwargs)
 
@@ -349,7 +349,6 @@ def test_kb_grants_no_longer_block_moves_or_migrations(
     from deeptutor.multi_user.grants import load_grant, save_grant
     from deeptutor.services import auth
     from deeptutor.services.workspace import ContentWorkspaceService
-    from deeptutor.services.workspace.data_migration import _shared_source_blockers
     from deeptutor.services.workspace.kb_move import preview_kb_move
     from deeptutor.services.workspace.knowledge import qualified_kb_id
 
@@ -363,7 +362,6 @@ def test_kb_grants_no_longer_block_moves_or_migrations(
         make_kb(current_kb_manager(), "atlas")
         destination = ContentWorkspaceService().create_workspace("Research")["workspace_id"]
         assert preview_kb_move(qualified_kb_id("atlas"), destination)["blockers"] == []
-        assert _shared_source_blockers("", {"knowledge_bases"}) == []
 
 
 @pytest.mark.asyncio
@@ -813,7 +811,7 @@ async def test_kb_migration_commit_failure_restores_registry_sessions_and_files(
         with workspace_context(destination):
             target = current_kb_manager().base_dir
         write = data_migration.atomic_write_json
-        relocate = registry.relocate_kb
+        relocate = registry._relocate_kb
 
         def fail_commit(path, payload):
             if payload.get("status") == "committed":
@@ -821,13 +819,15 @@ async def test_kb_migration_commit_failure_restores_registry_sessions_and_files(
                 raise OSError("injected commit journal failure")
             return write(path, payload)
 
-        def fail_restore(*args, **kwargs):
-            raise registry.KbRegistryError("injected recovery failure")
+        def fail_restore(conn, kb_id, base_dir):
+            if str(base_dir) == str(source.resolve()):
+                raise registry.KbRegistryError("injected recovery failure")
+            return relocate(conn, kb_id, base_dir)
 
         with monkeypatch.context() as patch:
             patch.setattr(data_migration, "atomic_write_json", fail_commit)
             if recovery_fails:
-                patch.setattr(registry, "relocate_kb", fail_restore)
+                patch.setattr(registry, "_relocate_kb", fail_restore)
             with pytest.raises(
                 WorkspaceError if recovery_fails else OSError,
                 match="Recover" if recovery_fails else "commit journal",
@@ -850,7 +850,7 @@ async def test_kb_migration_commit_failure_restores_registry_sessions_and_files(
         ] == "retained message"
         with workspace_context(destination):
             assert await get_sqlite_session_store().get_session(session["id"]) is None
-        assert registry.relocate_kb is relocate
+        assert registry._relocate_kb is relocate
 
 
 def test_kb_migration_cleanup_recovery_keeps_relocated_registry(

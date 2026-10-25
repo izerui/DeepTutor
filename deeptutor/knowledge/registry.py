@@ -717,15 +717,20 @@ def adopt_partner_copy(kb_id: str, *, partner_id: str, owner_id: str) -> KbRecor
         ).fetchone())
 
 
+def _relocate_kb(conn: sqlite3.Connection, kb_id: str, base_dir: Path | str) -> int:
+    """Relocate within an existing writer, preserving legacy canonical aliases."""
+    _retain_admin_legacy_names(conn, kb_id=kb_id)
+    return conn.execute(
+        "UPDATE kb_registry SET base_dir = ?, updated_at = ? WHERE kb_id = ?",
+        (_location(base_dir), _now(), kb_id),
+    ).rowcount
+
+
 def relocate_kb(kb_id: str, base_dir: Path | str) -> KbRecord:
     """Point a record at a new ``base_dir`` (the KB folder was moved); the id is kept."""
     try:
         with _write() as conn:
-            _retain_admin_legacy_names(conn, kb_id=_strip_ref(kb_id))
-            updated = conn.execute(
-                "UPDATE kb_registry SET base_dir = ?, updated_at = ? WHERE kb_id = ?",
-                (_location(base_dir), _now(), _strip_ref(kb_id)),
-            ).rowcount
+            updated = _relocate_kb(conn, _strip_ref(kb_id), base_dir)
     except sqlite3.IntegrityError as exc:
         raise KbRegistryError("Another knowledge base is registered at that location.") from exc
     record = get_kb(kb_id)

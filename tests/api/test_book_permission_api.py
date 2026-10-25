@@ -49,11 +49,10 @@ def permission_client(tmp_path, monkeypatch):
     return TestClient(app), alice
 
 
-def test_admin_can_list_books_and_set_permission(permission_client) -> None:
+def test_retired_catalog_and_create_only_permission(permission_client) -> None:
     client, alice = permission_client
     catalog = client.get("/api/multi-user/admin/books")
-    assert catalog.status_code == 200
-    assert catalog.json()["books"][0]["book_id"] == "bk_shared"
+    assert catalog.status_code == 404
 
     response = client.put(
         f"/api/multi-user/users/{alice['id']}/book-permission",
@@ -66,30 +65,51 @@ def test_admin_can_list_books_and_set_permission(permission_client) -> None:
     assert response.status_code == 200
     assert response.json()["permission"] == {
         "create": False,
-        "default": "none",
-        "books": {"bk_shared": "edit"},
     }
+    assert client.get(
+        f"/api/multi-user/users/{alice['id']}/book-permission"
+    ).json()["permission"] == {"create": False}
 
 
-def test_permission_api_rejects_unknown_book_and_delete_level(permission_client) -> None:
+def test_permission_api_ignores_retired_book_levels(permission_client) -> None:
     client, alice = permission_client
     unknown = client.put(
         f"/api/multi-user/users/{alice['id']}/book-permission",
         json={"books": {"bk_missing": "read"}},
     )
-    assert unknown.status_code == 400
+    assert unknown.status_code == 200
+    assert unknown.json()["permission"] == {"create": True}
 
     delete = client.put(
         f"/api/multi-user/users/{alice['id']}/book-permission",
         json={"books": {"bk_shared": "delete"}},
     )
-    assert delete.status_code == 422
+    assert delete.status_code == 200
+    assert delete.json()["permission"] == {"create": True}
 
 
-def test_permission_api_rejects_default_edit(permission_client) -> None:
+def test_permission_api_ignores_retired_default(permission_client) -> None:
     client, alice = permission_client
     response = client.put(
         f"/api/multi-user/users/{alice['id']}/book-permission",
         json={"default": "edit"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["permission"] == {"create": True}
+
+
+def test_policy_request_cannot_add_legacy_grants(permission_client):
+    from deeptutor.multi_user import identity
+
+    client, alice = permission_client
+    users = identity.load_users()
+    users["alice"]["book_permission"] = {"default": "none", "books": {"bk_old": "read"}}
+    identity._write_users(users)
+    url = f"/api/multi-user/users/{alice['id']}/book-permission"
+    assert client.put(url, json={
+        "create": False, "default": "read", "books": {"bk_new": "edit"},
+    }).json()["permission"] == {"create": False}
+    assert identity.load_users()["alice"]["book_permission"] == {
+        "create": False, "default": "none", "books": {"bk_old": "read"},
+    }
+    assert client.put(url, json={"create": "false"}).status_code == 422

@@ -206,7 +206,7 @@ def test_guardian_report_requires_active_relationship_and_is_audited(mu_isolated
     body = report.json()
     assert body["learner"]["username"] == "learner"
     assert body["assigned_materials"] == []
-    assert body["book_permission"]["default"] == "none"
+    assert body["book_permission"] == {"create": True}
 
     audit_path = mu_isolated_root / "data" / "system" / "audit" / "usage.jsonl"
     events = [json.loads(line) for line in audit_path.read_text().splitlines()]
@@ -216,8 +216,32 @@ def test_guardian_report_requires_active_relationship_and_is_audited(mu_isolated
     assert "learner-password" not in audit_path.read_text()
 
 
-def test_guardian_can_assign_only_read_access_to_approved_books(mu_isolated_root, monkeypatch):
+def test_guardian_materials_are_public_read_only_and_assignment_retired(mu_isolated_root, monkeypatch):
+    from deeptutor.book import registry as books
+    from deeptutor.book.models import Book
+    from deeptutor.book.storage import BookStorage
+    from deeptutor.multi_user.paths import get_admin_path_service
+    from deeptutor.services.path_service import PathService
+
     client, users = _client(mu_isolated_root, monkeypatch)
+    books.register_book(
+        base_dir=get_admin_path_service().get_book_dir(), dir_name="book_bk_approved",
+        title="Approved", created_by="local-admin", visibility="public",
+    )
+    books.register_book(
+        base_dir=get_admin_path_service().get_book_dir(), dir_name="book_bk_private",
+        title="Private", created_by="local-admin",
+    )
+    foreign = BookStorage(path_service=PathService(workspace_root=mu_isolated_root / "foreign"))
+    foreign.save_book(Book(id="bk_foreign", title="Foreign public"))
+    books.register_book(
+        base_dir=foreign.path_service.get_book_dir(), dir_name="book_bk_foreign",
+        title="Foreign public", created_by="teacher", visibility="public",
+    )
+    books.register_book(
+        base_dir=foreign.path_service.get_book_dir(), dir_name="book_bk_missing",
+        title="Missing manifest", created_by="teacher", visibility="public",
+    )
     learner_id = users["learner"]["id"]
     created = client.post(
         "/api/multi-user/guardians",
@@ -229,6 +253,7 @@ def test_guardian_can_assign_only_read_access_to_approved_books(mu_isolated_root
         },
     )
     assert created.status_code == 201
+    assert created.json()["relationship"]["permissions"] == ["assign_materials", "view_reports"]
 
     materials_url = f"/api/multi-user/learners/{learner_id}/materials"
     denied = client.put(materials_url, headers=_auth("stranger-token"), json={"book_ids": []})
@@ -238,47 +263,38 @@ def test_guardian_can_assign_only_read_access_to_approved_books(mu_isolated_root
         headers=_auth("guardian-token"),
         json={"book_ids": ["bk_missing"]},
     )
-    assert unknown.status_code == 400
-    assert unknown.json()["detail"] == "Unknown approved book id: bk_missing"
+    assert unknown.status_code == 410
 
     assigned = client.put(
         materials_url,
         headers=_auth("guardian-token"),
         json={"book_ids": ["bk_private", "bk_approved"]},
     )
-    assert assigned.status_code == 200
-    permission = assigned.json()["book_permission"]
-    assert permission["books"] == {"bk_private": "read", "bk_approved": "read"}
-    assert permission["create"] is True
-    assert permission["default"] == "none"
+    assert assigned.status_code == 410
 
     catalog = client.get(materials_url, headers=_auth("guardian-token"))
     assert catalog.status_code == 200
     assert {item["book_id"] for item in catalog.json()["materials"] if item["assigned"]} == {
-        "bk_private",
         "bk_approved",
+        "bk_foreign",
     }
-
-    from deeptutor.multi_user.book_permission import BookPermission
-    from deeptutor.multi_user.identity import set_book_permission
-
-    assert set_book_permission("learner", BookPermission(create=True, default="read"))
+    assert all(item["permission"] == "read" for item in catalog.json()["materials"])
     narrowed = client.put(
         materials_url,
         headers=_auth("guardian-token"),
         json={"book_ids": ["bk_approved"]},
     )
-    assert narrowed.status_code == 200
-    assert narrowed.json()["book_permission"]["default"] == "read"
-    assert narrowed.json()["book_permission"]["books"] == {"bk_private": "none"}
+    assert narrowed.status_code == 410
 
     report = client.get(
         f"/api/multi-user/learners/{learner_id}/guardian-report",
         headers=_auth("guardian-token"),
     )
     assert report.status_code == 200
+    assert report.json()["book_permission"] == {"create": True}
     assert {item["book_id"] for item in report.json()["assigned_materials"]} == {
         "bk_approved",
+        "bk_foreign",
     }
 
     reset = client.post(

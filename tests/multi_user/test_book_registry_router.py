@@ -426,7 +426,7 @@ def test_http_models_and_routes(owned, as_user):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("explicit", [False, True])
-async def test_admin_collision_deletes_only_selected_location(owned, as_user, monkeypatch, explicit):
+async def test_admin_collision_deletes_only_selected_location(owned, as_user, explicit):
     canonical, _kb = owned
     with as_user("owner", role="teacher"):
         registry.replace_book_references("course", "c1", ["bk_one"], created_by="owner")
@@ -438,20 +438,16 @@ async def test_admin_collision_deletes_only_selected_location(owned, as_user, mo
         local_before = snapshot(store.book_root("bk_one"))
         local_bus = get_book_bus("bk_one", storage=store)
         canonical_bus = get_book_bus("bk_one", storage=canonical.engine.storage)
-        cleaned = []
-        monkeypatch.setattr(router, "remove_book_permission_overrides", lambda bid: cleaned.append(bid) or [])
         await router.delete_book("book:bk_one" if explicit else "bk_one", force=True)
         if explicit:
             assert registry.get_book("bk_one") is None
             assert snapshot(store.book_root("bk_one")) == local_before
             assert canonical_bus._closed and not local_bus._closed
-            assert cleaned == ["bk_one"]
             assert registry.list_unavailable_book_references("course", "c1")[0].reason == "book_deleted"
         else:
             assert registry.get_book("bk_one") == record
             assert snapshot(canonical.engine.storage.book_root("bk_one")) == canonical_before
             assert local_bus._closed and not canonical_bus._closed
-            assert cleaned == []
             assert registry.list_book_references("bk_one")[0].referrer_id == "c1"
             assert registry.list_unavailable_book_references("course", "c1") == []
 

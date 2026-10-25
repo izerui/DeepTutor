@@ -49,6 +49,15 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _stored_book_permission(raw: Any, *, create: bool | None = None) -> dict[str, Any]:
+    """Preserve legacy evidence until D22 can freeze it; never accept new grants."""
+    stored = deepcopy(raw) if isinstance(raw, dict) else {}
+    stored["create"] = (
+        canonical_book_permission(raw)["create"] if create is None else create
+    )
+    return stored
+
+
 def _canonical_record(
     username: str,
     value: Any,
@@ -83,7 +92,7 @@ def _canonical_record(
         "preset": preset,
     }
     if "book_permission" in value:
-        record["book_permission"] = canonical_book_permission(value.get("book_permission"))
+        record["book_permission"] = _stored_book_permission(value.get("book_permission"))
     if "learner_profile" in value:
         record["learner_profile"] = normalize_profile(value.get("learner_profile"))
     return record
@@ -253,7 +262,7 @@ def save_user(
             "disabled": bool(existing.get("disabled", False)),
             "avatar": str(existing.get("avatar") or ""),
             "preset": effective_preset,
-            "book_permission": canonical_book_permission(existing.get("book_permission")),
+            "book_permission": _stored_book_permission(existing.get("book_permission")),
             "learner_profile": normalize_profile(existing.get("learner_profile")),
         }
         users[username] = record
@@ -318,7 +327,7 @@ def set_learner_profile(username: str, profile: dict[str, Any] | None) -> dict[s
 
 
 def set_book_permission(username: str, permission: BookPermission) -> bool:
-    """Atomically replace one ordinary user's shared-book permission."""
+    """Save only create, retaining inert evidence for a pending D22 retry."""
 
     if not USERS_FILE.exists():
         return False
@@ -327,41 +336,11 @@ def set_book_permission(username: str, permission: BookPermission) -> bool:
         record = users.get(username)
         if record is None:
             return False
-        record["book_permission"] = public_permission_dict(permission)
+        record["book_permission"] = _stored_book_permission(
+            record.get("book_permission"), create=permission.create
+        )
         _write_users(users)
     return True
-
-
-def remove_book_permission_overrides(book_id: str) -> list[str]:
-    """Remove a deleted shared book from every explicit ACL.
-
-    Returns affected user ids for the deletion audit summary.
-    """
-
-    if not USERS_FILE.exists():
-        return []
-    affected: list[str] = []
-    with _USERS_WRITE_LOCK:
-        users = load_users()
-        changed = False
-        for record in users.values():
-            permission = normalize_book_permission(record.get("book_permission"))
-            books = permission.books_dict()
-            if book_id not in books:
-                continue
-            books.pop(book_id)
-            record["book_permission"] = public_permission_dict(
-                BookPermission(
-                    create=permission.create,
-                    default=permission.default,
-                    books=tuple(books.items()),
-                )
-            )
-            affected.append(str(record.get("id") or ""))
-            changed = True
-        if changed:
-            _write_users(users)
-    return affected
 
 
 def delete_user(username: str) -> bool:

@@ -15,11 +15,7 @@ from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from deeptutor.api.routers.auth import require_admin, require_auth
 from deeptutor.multi_user.audit import log_admin_action, log_guardian_action
-from deeptutor.multi_user.book_permission import (
-    BookDefaultLevel,
-    BookPermission,
-    BookPermissionLevel,
-)
+from deeptutor.multi_user.book_permission import BookPermission
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.device_credentials import revoke_device_credentials_for_user
 from deeptutor.multi_user.grants import (
@@ -67,9 +63,8 @@ class GrantPayload(BaseModel):
 
 
 class BookPermissionPayload(BaseModel):
+    # Pydantic ignores retired fields still sent by older clients.
     create: StrictBool = True
-    default: BookDefaultLevel = "none"
-    books: dict[str, BookPermissionLevel] = Field(default_factory=dict)
 
 
 class GuardianAuthorizationPayload(BaseModel):
@@ -367,13 +362,6 @@ async def admin_migration_results(_: object = Depends(require_admin)) -> dict[st
     return {"items": [item.to_dict() for item in registry.list_migration_items()]}
 
 
-@router.get("/admin/books")
-async def admin_books(_: object = Depends(require_admin)) -> dict[str, Any]:
-    from deeptutor.multi_user.book_access import admin_book_catalog
-
-    return {"books": admin_book_catalog()}
-
-
 @router.get("/guardians")
 async def list_guardian_relationships(
     include_revoked: bool = False,
@@ -489,7 +477,7 @@ async def guardian_report(
     learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "view_reports"
     )
-    from deeptutor.multi_user.book_access import admin_book_catalog
+    from deeptutor.multi_user.book_access import public_book_catalog
     from deeptutor.multi_user.book_permission import (
         normalize_book_permission,
         public_permission_dict,
@@ -498,9 +486,7 @@ async def guardian_report(
     permission = normalize_book_permission(learner_record.get("book_permission"))
     permission_dict = public_permission_dict(permission)
     assigned_materials = [
-        {**book, "permission": permission.level_for(book["book_id"])}
-        for book in admin_book_catalog()
-        if permission.level_for(book["book_id"]) != "none"
+        {**book, "permission": "read"} for book in public_book_catalog()
     ]
     grant = load_grant(learner_user_id)
     _log_supervisor_action(
@@ -533,20 +519,13 @@ async def guardian_material_catalog(
     learner_user_id: str,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
-    _learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
+    _learner_username, _learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "assign_materials"
     )
-    from deeptutor.multi_user.book_access import admin_book_catalog
-    from deeptutor.multi_user.book_permission import normalize_book_permission
+    from deeptutor.multi_user.book_access import public_book_catalog
 
-    permission = normalize_book_permission(learner_record.get("book_permission"))
     materials = [
-        {
-            **book,
-            "assigned": permission.level_for(book["book_id"]) != "none",
-            "permission": permission.level_for(book["book_id"]),
-        }
-        for book in admin_book_catalog()
+        {**book, "assigned": True, "permission": "read"} for book in public_book_catalog()
     ]
     _log_supervisor_action(
         "guardian_material_catalog_view",
@@ -564,46 +543,14 @@ async def assign_guardian_materials(
     payload: GuardianMaterialsPayload,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
-    learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
-        current, learner_user_id, "assign_materials"
-    )
-    from deeptutor.multi_user.book_access import admin_book_catalog
-    from deeptutor.multi_user.book_permission import (
-        BookPermission,
-        normalize_book_permission,
-        public_permission_dict,
-    )
-
-    catalog = admin_book_catalog()
-    catalog_ids = {book["book_id"] for book in catalog}
-    unknown = next((book_id for book_id in payload.book_ids if book_id not in catalog_ids), None)
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown approved book id: {unknown}")
-
-    # Guardians hand out the admin-approved catalogue as read-only material.
-    # Admins remain the only source of edit/create capability.
-    existing = normalize_book_permission(learner_record.get("book_permission"))
-    selected_ids = set(payload.book_ids)
-    permission = BookPermission(
-        create=existing.create,
-        default=existing.default,
-        books=tuple(
-            (book["book_id"], "read" if book["book_id"] in selected_ids else "none")
-            for book in catalog
-            if (book["book_id"] in selected_ids) != (existing.default == "read")
+    _require_guardian_access(current, learner_user_id, "assign_materials")
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Per-learner book assignment has been retired. Public books are available "
+            "to every account; ask a teacher or an admin to make a book public."
         ),
     )
-    if not set_book_permission(learner_username, permission):
-        raise HTTPException(status_code=404, detail="User not found")
-    result = public_permission_dict(permission)
-    _log_supervisor_action(
-        "guardian_material_assign",
-        actor_user_id=actor_user_id,
-        learner_user_id=learner_user_id,
-        is_admin=is_admin,
-        summary={"book_ids": payload.book_ids, "read_only": True},
-    )
-    return {"book_permission": result}
 
 
 def _guardian_restrictions(grant: dict[str, Any]) -> dict[str, Any]:
@@ -834,29 +781,17 @@ async def put_user_book_permission(
     payload: BookPermissionPayload,
     _: object = Depends(require_admin),
 ) -> dict[str, Any]:
-    from deeptutor.multi_user.book_access import shared_book_exists
     from deeptutor.multi_user.book_permission import public_permission_dict
 
     username, _record = _require_assignable_user(user_id)
-    unknown = sorted(book_id for book_id in payload.books if not shared_book_exists(book_id))
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown book id: {unknown[0]}")
-    permission = BookPermission(
-        create=bool(payload.create),
-        default=payload.default,
-        books=tuple(payload.books.items()),
-    )
+    permission = BookPermission(create=bool(payload.create))
     if not set_book_permission(username, permission):
         raise HTTPException(status_code=404, detail="User not found")
     result = public_permission_dict(permission)
     log_admin_action(
         "book_permission_set",
         target_user_id=user_id,
-        summary={
-            "create": permission.create,
-            "default": permission.default,
-            "book_count": len(permission.books),
-        },
+        summary={"create": permission.create},
     )
     return {"permission": result}
 

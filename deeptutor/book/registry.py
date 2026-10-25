@@ -620,6 +620,14 @@ def unregister_book(book_id: str) -> None:
     unregister(book_id)
 
 
+def _relocate_book(conn: sqlite3.Connection, book_id: str, base_dir: Path | str) -> None:
+    """Relocate a checked identity inside the caller's metadata transaction."""
+    conn.execute(
+        "UPDATE book_registry SET base_dir = ?, updated_at = ? WHERE book_id = ?",
+        (_location(base_dir), _now(), book_id),
+    )
+
+
 def relocate_book_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int:
     """Update metadata after an explicitly requested move; never move book files."""
     try:
