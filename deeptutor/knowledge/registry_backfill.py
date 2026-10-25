@@ -41,6 +41,9 @@ def _startup_steps() -> list[tuple[str, Callable[[], Any]]]:
     ``api/main.py`` never changes again.
     """
     steps: list[tuple[str, Callable[[], Any]]] = [("knowledge_bases", backfill_registry)]
+    from deeptutor.book.registry_backfill import backfill_book_registry
+
+    steps.append(("books", backfill_book_registry))
     return steps
 
 
