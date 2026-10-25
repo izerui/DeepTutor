@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS migration_items (
 _write_lock = threading.RLock()
 _builtin_readers_loaded = False
 _reader_lock = threading.RLock()
-_loading_builtin_readers = False
+_builtin_reader_state = threading.local()
 
 
 class KbRegistryError(ValueError):
@@ -1101,42 +1101,49 @@ def list_references(kb_id: str) -> list[KbReference]:
 
 def register_reference_reader(referrer_kind: str, reader: Callable[[str, str], bool]) -> None:
     """``reader(referrer_id, user_id)`` is True when that user may read what the referrer cites."""
+    pending = getattr(_builtin_reader_state, "pending", None)
+    if pending is not None:
+        pending.setdefault(referrer_kind, reader)
+        return
     with _reader_lock:
-        if _loading_builtin_readers:
-            _readers.setdefault(referrer_kind, reader)
-        else:
-            _readers[referrer_kind] = reader
+        _readers[referrer_kind] = reader
 
 
 def _load_builtin_readers() -> None:
-    """Import reader modules once; readers registered before keep precedence.
+    """Import and invoke cached hooks without holding the reader-map lock.
 
-    ``setdefault`` semantics: a module may add new referrer kinds, but it never
-    replaces a reader that was already registered for the same kind (tests
-    register lambdas; an eager import may have registered the real reader).
+    Stage each module's registrations on this thread until its hook succeeds.
+    Concurrent explicit registrations retain precedence, even if a hook fails.
+    Concurrent loaders may repeat idempotent hooks; none waits for a module
+    while holding a lock needed by that module's eager registrar.
     """
-    global _builtin_readers_loaded, _loading_builtin_readers
+    global _builtin_readers_loaded
+    if getattr(_builtin_reader_state, "pending", None) is not None:
+        return
     with _reader_lock:
-        if _builtin_readers_loaded or _loading_builtin_readers:
+        if _builtin_readers_loaded:
             return
-        _loading_builtin_readers = True
-        complete = True
+    complete = True
+    for name in BUILTIN_READER_MODULES:
+        pending: dict[str, Callable[[str, str], bool]] = {}
+        _builtin_reader_state.pending = pending
         try:
-            for name in BUILTIN_READER_MODULES:
-                before = dict(_readers)
-                try:
-                    module = importlib.import_module(name)
-                    register = getattr(module, "register_kb_reader", None)
-                    if callable(register):
-                        register()
-                except Exception:
-                    _readers.clear()
-                    _readers.update(before)
-                    complete = False
-                    logger.exception("Could not load knowledge reference readers from %s", name)
-            _builtin_readers_loaded = complete
+            module = importlib.import_module(name)
+            register = getattr(module, "register_kb_reader", None)
+            if callable(register):
+                register()
+        except Exception:
+            complete = False
+            logger.exception("Could not load knowledge reference readers from %s", name)
+        else:
+            with _reader_lock:
+                for kind, reader in pending.items():
+                    _readers.setdefault(kind, reader)
         finally:
-            _loading_builtin_readers = False
+            _builtin_reader_state.pending = None
+    if complete:
+        with _reader_lock:
+            _builtin_readers_loaded = True
 
 
 def can_read(record: KbRecord, user: CurrentUser) -> bool:
