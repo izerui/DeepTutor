@@ -13,6 +13,8 @@ import { BookApiError } from "@/lib/book-api";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 const CODE_MESSAGES: Record<string, string> = {
+  book_referenced:
+    "This book is still referenced elsewhere. Remove those references before deleting it.",
   book_revision_conflict:
     "This book changed while you were working on it. The latest version is loaded — try again.",
   book_revision_required: "Refresh this shared book before editing it.",

@@ -45,6 +45,7 @@ import type {
 import { UnifiedTurnClient } from "@/features/chat/transport/UnifiedTurnClient";
 import type { MessageAttachment } from "@/features/chat/ChatStateAdapter";
 import type { Page, Book } from "@/lib/book-types";
+import { bookKnowledgeRefs, bookRequestRef } from "@/lib/book-sharing";
 import Tooltip from "@/shared/ui/Tooltip";
 
 interface ChatMessage {
@@ -65,6 +66,7 @@ interface PendingAttachment {
 
 export interface BookChatPanelProps {
   book: Book | null;
+  requestedRef?: string;
   page: Page | null;
   open: boolean;
   onClose: () => void;
@@ -102,6 +104,7 @@ function messageAttachment(attachment: PendingAttachment): MessageAttachment {
 
 export default function BookChatPanel({
   book,
+  requestedRef,
   page,
   open,
   onClose,
@@ -155,7 +158,7 @@ export default function BookChatPanel({
     // The first turn creates its session server-side. Persisting that same id
     // back onto the book rerenders this component, but it is not a session
     // switch: resetting here would disconnect the turn before its reply arrives.
-    if (initialSessionId && initialSessionId === sessionIdRef.current) return;
+    if (initialSessionId && initialSessionId === sessionIdRef.current && clientRef.current) return;
     retryTimersRef.current.forEach((timer) => clearTimeout(timer));
     retryTimersRef.current.clear();
     clientRef.current?.disconnect();
@@ -189,7 +192,7 @@ export default function BookChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [book?.id, page?.id, initialSessionId, open]);
+  }, [book?.id, requestedRef, page?.id, initialSessionId, open]);
 
   // Pin-to-bottom in layout phase (not in a post-paint effect): the
   // assignment lands before the browser commits the frame so the
@@ -405,11 +408,11 @@ export default function BookChatPanel({
       // including []) as a deliberate override), and `rag` mounts itself from
       // `knowledge_bases`. Pinning ["rag"] here disabled every other tool the
       // reader had switched on.
-      knowledge_bases: book.knowledge_bases || [],
+      knowledge_bases: bookKnowledgeRefs(book),
       attachments: attachments.map(outgoingAttachment),
       // The book, not the UI chrome, decides the language of this conversation.
       language: book.language || appLanguage,
-      book_references: [{ book_id: book.id, page_ids: [page.id] }],
+      book_references: [{ book_id: requestedRef || bookRequestRef(book), page_ids: [page.id] }],
     };
     sendWithRetry(client, payload);
   }

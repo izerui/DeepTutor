@@ -199,6 +199,38 @@ export interface GenerationSummary extends GenerationOverview {
   failure_categories: Record<string, number>;
 }
 
+export type BookVisibility = "public" | "private";
+export type BookKbChoice = "make_public" | "reference_only";
+
+export interface BookReference {
+  book_id: string;
+  referrer_kind: string;
+  referrer_id: string;
+  created_by: string;
+}
+
+export interface BookSharingPlan {
+  public_kbs: Array<{ kb_id: string; name: string }>;
+  private_kbs: Array<{ kb_id: string; name: string; default: BookKbChoice }>;
+  issues: Array<{
+    ref: string;
+    kb_id: string;
+    name: string;
+    code: "connector" | "foreign_private";
+    message: string;
+  }>;
+  missing: string[];
+}
+
+export interface BookSharing {
+  book_id: string;
+  ref: string;
+  visibility: BookVisibility;
+  can_set_visibility: boolean;
+  kbs: BookSharingPlan;
+  references: BookReference[];
+}
+
 export interface Book extends LearningOrigin {
   id: string;
   revision: number;
@@ -227,6 +259,12 @@ export interface Book extends LearningOrigin {
   permission?: "none" | "read" | "edit";
   can_edit?: boolean;
   can_delete?: boolean;
+  ref?: string;
+  visibility?: BookVisibility;
+  owner_id?: string;
+  group?: "mine" | "public";
+  can_set_visibility?: boolean;
+  kb_refs?: string[];
   generation?: GenerationOverview;
 }
 

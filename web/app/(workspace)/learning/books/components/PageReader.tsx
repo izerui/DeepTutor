@@ -205,12 +205,12 @@ export default function PageReader({
     const isNewPage = lastSeenPageIdRef.current !== page.id;
     lastSeenPageIdRef.current = page.id;
     const requestedPageId = pendingScrollPlacementPageIdRef.current;
-    const targetPath = bookRoute(page.book_id, page.id);
+    const targetPath = bookRoute(bookId || page.book_id, page.id);
     // State changes before App Router finishes updating the URL. Let the
     // destination route consume this cross-mount intent; the departing page
     // must not clear it during that short transition window.
     const persistedEnd =
-      pathname === targetPath && hasPendingChapterEnd(page.book_id, page.id);
+      pathname === targetPath && hasPendingChapterEnd(bookId || page.book_id, page.id);
     const pendingMatchesPage = requestedPageId === page.id || persistedEnd;
     const placement = requestedPageId === page.id
       ? pendingScrollPlacementRef.current
@@ -259,7 +259,7 @@ export default function PageReader({
         window.cancelAnimationFrame(frame);
       }
     };
-  }, [scrollContainer, page, loading, pathname, updateReadingProgress]);
+  }, [scrollContainer, page, loading, pathname, updateReadingProgress, bookId]);
 
   useEffect(() => {
     updateReadingProgress();
@@ -334,8 +334,8 @@ export default function PageReader({
 
     // Persistent content identity consumed by the book API, not a browser URL.
     const sourceLocator = blockId
-      ? `/books/${page.book_id}/pages/${page.id}/blocks/${blockId}`
-      : `/books/${page.book_id}/pages/${page.id}`;
+      ? `/books/${bookId || page.book_id}/pages/${page.id}/blocks/${blockId}`
+      : `/books/${bookId || page.book_id}/pages/${page.id}`;
 
     void onCaptureSelection({
       page_id: page.id,
@@ -346,7 +346,7 @@ export default function PageReader({
       source_locator: sourceLocator,
     });
     selection.removeAllRanges();
-  }, [onCaptureSelection, normalizeText, page, t]);
+  }, [onCaptureSelection, normalizeText, page, t, bookId]);
 
   const navigateSequentially = useCallback(
     (direction: SequentialReadDirection): boolean => {

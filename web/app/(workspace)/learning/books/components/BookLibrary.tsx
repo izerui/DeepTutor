@@ -3,6 +3,7 @@
 import { pageGridClass } from '@/components/layout/FeaturePage'
 import { useLibraryFilter, WorkspaceLabel } from '@/components/learning/LibraryWorkspace'
 import { libraryItemKey } from '@/lib/learning-library'
+import { bookRequestRef, groupBooks } from '@/lib/book-sharing'
 import { LearningCardContent } from '@/components/learning/LearningCard'
 
 import {
@@ -77,7 +78,8 @@ export interface BookLibraryProps {
   canCreate: boolean
   onNewBook: () => void
   onSelectBook: (id: string, workspaceId: string) => void
-  onDeleteBook: (id: string, workspaceId: string) => void
+  onDeleteBook: (book: Book) => void
+  onShareBook?: (book: Book) => void
 }
 
 export default function BookLibrary({
@@ -89,6 +91,7 @@ export default function BookLibrary({
   onNewBook,
   onSelectBook,
   onDeleteBook,
+  onShareBook,
 }: BookLibraryProps) {
   const { t, i18n } = useTranslation()
   const { rows: books, control } = useLibraryFilter(allBooks)
@@ -118,6 +121,12 @@ export default function BookLibrary({
     const chapters = books.reduce((acc, b) => acc + (b.chapter_count || 0), 0)
     return { total, ready, inProgress, chapters }
   }, [books])
+
+  const groups = groupBooks(filtered)
+  const sections = [
+    { key: 'mine', label: t('My books'), books: groups.mine },
+    { key: 'public', label: t('Public books'), books: groups.public },
+  ].filter(section => section.books.length > 0)
 
   return (
     <LearningShell
@@ -203,21 +212,25 @@ export default function BookLibrary({
             {t('No books match “{{query}}”.', { query })}
           </div>
         ) : (
-          <div className={pageGridClass(3)}>
-            {filtered.map(book => {
-              const isPendingDelete = pendingDeleteId === libraryItemKey(book, book.id)
+          <div className="space-y-8">
+            {sections.map(section => <section key={section.key}>
+              <h2 className="mb-3 text-sm font-semibold text-[var(--muted-foreground)]">{section.label} · {section.books.length}</h2>
+              <div className={pageGridClass(3)}>
+            {section.books.map(book => {
+              const isPendingDelete = pendingDeleteId === libraryItemKey(book, bookRequestRef(book))
               const status = STATUS_STYLES[book.status] || STATUS_STYLES.draft
 
               return (
                 <div
-                  key={libraryItemKey(book, book.id)}
+                  key={libraryItemKey(book, bookRequestRef(book))}
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelectBook(book.id, book.content_workspace_id ?? '')}
+                  onClick={() => onSelectBook(bookRequestRef(book), book.content_workspace_id ?? '')}
                   onKeyDown={event => {
+                    if (event.target !== event.currentTarget) return
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
-                      onSelectBook(book.id, book.content_workspace_id ?? '')
+                      onSelectBook(bookRequestRef(book), book.content_workspace_id ?? '')
                     }
                   }}
                   className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]/70 transition-all hover:-translate-y-0.5 hover:border-[var(--primary)]/40 hover:shadow-md"
@@ -257,10 +270,10 @@ export default function BookLibrary({
                           onClick={event => {
                             event.stopPropagation()
                             if (isPendingDelete) {
-                              onDeleteBook(book.id, book.content_workspace_id ?? '')
+                              onDeleteBook(book)
                               setPendingDeleteId(null)
                             } else {
-                              setPendingDeleteId(libraryItemKey(book, book.id))
+                              setPendingDeleteId(libraryItemKey(book, bookRequestRef(book)))
                             }
                           }}
                           aria-label={isPendingDelete ? t('Click again to confirm') : t('Delete book')}
@@ -309,11 +322,20 @@ export default function BookLibrary({
                             {t(status.label)}
                           </span>
                         )}
-                        {book.source === 'shared' && (
+                        {book.can_set_visibility && onShareBook ? (
+                          <Tooltip label={t('Change who can read this book')}>
+                            <button type="button" onClick={event => {
+                              event.stopPropagation()
+                              onShareBook(book)
+                            }} className="min-h-6 rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                              {book.visibility === 'public' ? t('Public') : t('Private')}
+                            </button>
+                          </Tooltip>
+                        ) : book.visibility === 'public' && book.group === 'mine' ? (
                           <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
-                            {book.can_edit ? t('Shared · edit') : t('Shared · read')}
+                            {t('Public')}
                           </span>
-                        )}
+                        ) : null}
                         <span className="inline-flex items-center gap-1">
                           <Layers size={11} />
                           {t('{{count}} ch', {
@@ -348,7 +370,7 @@ export default function BookLibrary({
                       type="button"
                       onClick={e => {
                         e.stopPropagation()
-                        onSelectBook(book.id, book.content_workspace_id ?? '')
+                        onSelectBook(bookRequestRef(book), book.content_workspace_id ?? '')
                       }}
                       className="mt-2 inline-flex items-center justify-center gap-1 rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
                     >
@@ -365,6 +387,8 @@ export default function BookLibrary({
                 </div>
               )
             })}
+              </div>
+            </section>)}
           </div>
         )}
       </div>

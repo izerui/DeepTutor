@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { bookApi } from "@/lib/book-api";
+import { bookRequestRef } from "@/lib/book-sharing";
 import { useTranslation } from "react-i18next";
 import { ActivityMark } from "@/components/activity";
 import type { ActivityState, MarkTone } from "@/components/activity";
@@ -54,6 +55,7 @@ const RESTING_MARK = { state: "done", tone: "muted" } as const;
 
 export interface BookSidebarProps {
   book: Book | null;
+  requestedRef?: string;
   onBackToLibrary: () => void;
   pages?: Page[];
   selectedPageId?: string | null;
@@ -66,6 +68,7 @@ export interface BookSidebarProps {
 
 export default function BookSidebar({
   book,
+  requestedRef,
   onBackToLibrary,
   pages = [],
   selectedPageId = null,
@@ -174,7 +177,7 @@ export default function BookSidebar({
 
       {book && (
         <a
-          href={bookApi.exportUrl(book.id)}
+          href={bookApi.exportUrl(requestedRef || bookRequestRef(book))}
           download
           className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
         >

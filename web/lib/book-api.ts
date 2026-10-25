@@ -17,6 +17,11 @@ import type {
   Spine,
   Block,
   GenerationSummary,
+  BookKbChoice,
+  BookReference,
+  BookSharing,
+  BookSharingPlan,
+  BookVisibility,
 } from "@/lib/book-types";
 
 const BASE = "/api";
@@ -132,17 +137,31 @@ export const bookApi = {
    * response runs to hundreds of kilobytes. Views that only need the chapter
    * list should ask for summaries.
    */
-  get: (book_id: string, options?: { includeBlocks?: boolean }) =>
+  get: (book_id: string, options?: { includeBlocks?: boolean; workspaceId?: string }) =>
     request<BookDetail>(
-      `/books/${encodeURIComponent(book_id)}` +
-        (options?.includeBlocks === false ? "?include_blocks=false" : ""),
+      scopedUrl(`/books/${encodeURIComponent(book_id)}` +
+        (options?.includeBlocks === false ? "?include_blocks=false" : ""), options?.workspaceId),
     ),
-  delete: (book_id: string, workspaceId = activeWorkspaceId()) =>
+  delete: (book_id: string, workspaceId = activeWorkspaceId(), options?: { force?: boolean }) =>
     request<{ deleted: boolean; book_id: string }>(
-      scopedUrl(`/books/${encodeURIComponent(book_id)}`, workspaceId),
+      scopedUrl(`/books/${encodeURIComponent(book_id)}${options?.force ? "?force=true" : ""}`, workspaceId),
       {
         method: "DELETE",
       },
+    ),
+  sharing: (book_id: string, workspaceId = activeWorkspaceId()) =>
+    request<BookSharing>(scopedUrl(`/books/${encodeURIComponent(book_id)}/sharing`, workspaceId)),
+  setVisibility: (
+    book_id: string,
+    body: { visibility: BookVisibility; force?: boolean; kb_choices?: Record<string, BookKbChoice> },
+    workspaceId = activeWorkspaceId(),
+  ) => request<{ book_id: string; ref: string; visibility: BookVisibility; kbs: BookSharingPlan }>(
+    scopedUrl(`/books/${encodeURIComponent(book_id)}/visibility`, workspaceId),
+    { method: "PUT", body: JSON.stringify(body) },
+  ),
+  references: (book_id: string, workspaceId = activeWorkspaceId()) =>
+    request<{ book_id: string; ref: string; references: BookReference[] }>(
+      scopedUrl(`/books/${encodeURIComponent(book_id)}/references`, workspaceId),
     ),
   getSpine: (book_id: string) =>
     request<{ spine: Spine }>(`/books/${encodeURIComponent(book_id)}/spine`),

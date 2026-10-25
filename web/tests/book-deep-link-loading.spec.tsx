@@ -1,8 +1,11 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
   params: {} as { bookId?: string; pageId?: string },
+  workspace: "",
+  references: vi.fn(),
+  delete: vi.fn(),
   get: vi.fn(),
   list: vi.fn(),
   getPage: vi.fn(),
@@ -11,6 +14,7 @@ const fixture = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   notify: vi.fn(),
+  reader: vi.fn(),
   t: (key: string, values?: Record<string, string>) =>
     key.replace(/{{(\w+)}}/g, (_match, name: string) => values?.[name] ?? ""),
 }));
@@ -18,7 +22,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   useParams: () => fixture.params,
   usePathname: () => "/learning/books",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams({ dt_workspace: fixture.workspace }),
   useRouter: () => ({
     push: fixture.push,
     replace: fixture.replace,
@@ -33,6 +37,10 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/lib/notifications", () => ({
   notify: fixture.notify,
+}));
+vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false }) }));
+vi.mock("@/lib/learning-library", () => ({
+  learningLibrary: () => Promise.resolve({ items: [], can_create: true, unavailable_workspaces: [] }),
 }));
 
 vi.mock("@/components/learning/LibraryWorkspace", () => ({
@@ -51,6 +59,8 @@ vi.mock("@/lib/book-api", () => ({
     getPage: fixture.getPage,
     listLearningCaptures: fixture.listLearningCaptures,
     markVisited: fixture.markVisited,
+    references: fixture.references,
+    delete: fixture.delete,
   },
 }));
 
@@ -61,7 +71,9 @@ vi.mock("@/lib/use-book-stream", () => ({
 }));
 
 vi.mock("@/app/(workspace)/learning/books/components/BookLibrary", () => ({
-  default: () => <div data-testid="book-library" />,
+  default: ({ onDeleteBook }: { onDeleteBook: (book: unknown) => void }) => <div data-testid="book-library">
+    <button onClick={() => onDeleteBook({ id: "same", ref: "", can_delete: true, content_workspace_id: "local" })}>Delete collision</button>
+  </div>,
 }));
 vi.mock("@/app/(workspace)/learning/books/components/BookCreator", () => ({
   default: () => <div data-testid="book-creator" />,
@@ -88,9 +100,10 @@ vi.mock("@/app/(workspace)/learning/books/components/LearningCapturePanel", () =
   default: () => null,
 }));
 vi.mock("@/app/(workspace)/learning/books/components/PageReader", () => ({
-  default: ({ page, bookId }: { page?: { id: string } | null; bookId?: string }) => (
-    <div data-testid="page-reader" data-book-id={bookId}>{page?.id || "no-page"}</div>
-  ),
+  default: (props: { page?: { id: string; title?: string } | null; bookId?: string; bookmarked?: boolean }) => {
+    fixture.reader(props);
+    return <div data-testid="page-reader" data-book-id={props.bookId} data-bookmarked={String(props.bookmarked)}>{props.page?.id || "no-page"} {props.page?.title}</div>;
+  },
 }));
 
 import BookPage from "@/app/(workspace)/learning/books/BooksRoute";
@@ -129,6 +142,10 @@ function readyDetail() {
 
 beforeEach(() => {
   fixture.params = {};
+  fixture.workspace = "";
+  fixture.reader.mockReset();
+  fixture.references.mockReset();
+  fixture.delete.mockReset().mockResolvedValue({ deleted: true });
   fixture.get.mockReset();
   fixture.list.mockReset().mockReturnValue(new Promise(() => undefined));
   fixture.getPage.mockReset();
@@ -146,6 +163,62 @@ beforeEach(() => {
 });
 
 describe("book deep-link loading", () => {
+  it("does not expose editing callbacks on a read-only public book", async () => {
+    fixture.params = { bookId: "book:book-1" };
+    const detail = readyDetail();
+    detail.book.can_edit = false;
+    fixture.get.mockResolvedValue(detail);
+    render(<BookPage />);
+    await screen.findByTestId("page-reader");
+    const props = fixture.reader.mock.lastCall?.[0];
+    for (const name of ["onMoveBlock", "onChangeBlockType", "onDeepDive", "onDeleteBlock", "onRegenerateBlock", "onInsertBlock", "onUpdateBody"]) {
+      expect(props[name]).toBeUndefined();
+    }
+    expect(props.onToggleBookmark).toBeTypeOf("function");
+  });
+  it("decodes the canonical dynamic segment once before fetching and subscribing", async () => {
+    fixture.params = { bookId: "book%3Abook-1" };
+    fixture.get.mockResolvedValue(readyDetail());
+    render(<BookPage />);
+    expect(await screen.findByTestId("page-reader")).toHaveAttribute("data-book-id", "book:book-1");
+    expect(fixture.get).toHaveBeenCalledWith("book:book-1", { includeBlocks: false, workspaceId: "" });
+    expect(fixture.markVisited).toHaveBeenCalledWith("book:book-1", "page-1");
+  });
+  it("deletes unregistered local collisions without querying foreign references", async () => {
+    render(<BookPage />);
+    fireEvent.click(screen.getByText("Delete collision"));
+    await waitFor(() => expect(fixture.delete).toHaveBeenCalledWith("same", "local", { force: false }));
+    expect(fixture.references).not.toHaveBeenCalled();
+  });
+
+  it.each(["reference", "workspace"])("discards delayed page and progress from an old %s with the same model ID", async change => {
+    fixture.params = { bookId: change === "reference" ? "book:book-1" : "book-1" };
+    fixture.workspace = "first";
+    const old = readyDetail();
+    old.pages[0].block_count = 1;
+    let resolvePage!: (value: unknown) => void;
+    let resolveProgress!: (value: unknown) => void;
+    fixture.getPage.mockReturnValue(new Promise(resolve => { resolvePage = resolve; }));
+    fixture.markVisited.mockReturnValueOnce(new Promise(resolve => { resolveProgress = resolve; }));
+    fixture.get.mockResolvedValueOnce(old).mockResolvedValue(readyDetail());
+    const { rerender } = render(<BookPage />);
+    await screen.findByTestId("page-reader");
+    await waitFor(() => expect(fixture.getPage).toHaveBeenCalled());
+    if (change === "reference") fixture.params = { bookId: "book-1" };
+    else fixture.workspace = "second";
+    rerender(<BookPage />);
+    await screen.findByTestId("page-reader");
+    await act(async () => {
+      resolvePage({ page: { ...old.pages[0], title: "Wrong old source" } });
+      resolveProgress({ progress: { ...old.progress, bookmarked_page_ids: ["page-1"] } });
+    });
+    expect(screen.getByTestId("page-reader")).not.toHaveTextContent("Wrong old source");
+    expect(screen.getByTestId("page-reader")).toHaveAttribute("data-bookmarked", "false");
+    expect(fixture.get).toHaveBeenLastCalledWith("book-1", {
+      includeBlocks: false, workspaceId: change === "workspace" ? "second" : "first",
+    });
+  });
+
   it("keeps a direct book URL in a book loading shell until details arrive", async () => {
     fixture.params = { bookId: "book-1" };
     let resolveDetails!: (value: ReturnType<typeof readyDetail>) => void;

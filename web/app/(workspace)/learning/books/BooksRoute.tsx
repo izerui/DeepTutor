@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2, MessageSquare } from 'lucide-react'
 import { notify } from '@/lib/notifications'
 import { randomUuid } from '@/lib/random-uuid'
@@ -13,6 +13,10 @@ import { useTranslation } from 'react-i18next'
 
 import { BookApiError, bookApi, type BookWsEvent } from '@/lib/book-api'
 import { bookErrorMessage } from '@/lib/book-errors'
+import { bookRequestRef, bookRouteParam, bookSelectionKey, describeBookReferences } from '@/lib/book-sharing'
+import { useAuthStatus } from '@/hooks/useAuthStatus'
+import { Dialog } from '@/shared/ui/Dialog'
+import BookShareDialog from './components/BookShareDialog'
 import type {
   Block,
   BlockType,
@@ -23,6 +27,7 @@ import type {
   Page,
   Spine,
   LearningCapture,
+  BookReference,
 } from '@/lib/book-types'
 import { RESET_BOOK_PROGRESS, emptyBookProgress, reduceBookEvent } from '@/lib/book-progress'
 import { bookEventKind, bookEventPageId, useBookStream } from '@/lib/use-book-stream'
@@ -91,9 +96,18 @@ export default function BookPage() {
         </div>
       }
     >
-      <BookPageInner />
+      <BookSelection />
     </Suspense>
   )
+}
+
+function BookSelection() {
+  const params = useParams<{ bookId?: string }>()
+  const query = useSearchParams()
+  const workspaceId = query.get('dt_workspace') ?? query.get('workspace') ?? ''
+  // Every asynchronous reader operation belongs to this exact source, even
+  // when another workspace/local import has the same bare model ID.
+  return <BookPageInner key={bookSelectionKey(workspaceId, bookRouteParam(params.bookId))} workspaceId={workspaceId} />
 }
 
 function BookLoadingText() {
@@ -101,16 +115,25 @@ function BookLoadingText() {
   return <>{t('Loading…')}</>
 }
 
-function BookPageInner() {
+function BookPageInner({ workspaceId }: { workspaceId: string }) {
   const { t } = useTranslation()
   const router = useRouter()
   const routeParams = useParams<{ bookId?: string; pageId?: string }>()
-  const requestedBookId = routeParams.bookId?.trim() || null
-  const requestedPageId = routeParams.pageId?.trim() || null
+  const requestedBookId = bookRouteParam(routeParams.bookId)
+  const requestedPageId = bookRouteParam(routeParams.pageId)
   const [books, setBooks] = useState<Book[]>([])
   const [canCreateBook, setCanCreateBook] = useState(true)
   const [loadingBooks, setLoadingBooks] = useState(true)
   const [booksError, setBooksError] = useState<string | null>(null)
+  const { isAdmin } = useAuthStatus()
+  const [sharingBook, setSharingBook] = useState<Book | null>(null)
+  const [referencedDelete, setReferencedDelete] = useState<{ book: Book; references: BookReference[] } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false }
+  }, [])
   const [view, setView] = useState<View>(requestedBookId ? 'opening' : requestedLearningCreation() ? 'creator' : 'list')
 
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
@@ -167,11 +190,14 @@ function BookPageInner() {
       try {
         await run()
       } catch (err) {
+        if (!alive.current) return
         if (err instanceof BookApiError && err.status === 409 && selectedBookId) {
           try {
             const latest = await bookApi.get(selectedBookId, {
               includeBlocks: false,
+              workspaceId,
             })
+            if (!alive.current) return
             revisionRef.current = latest.book.revision
             setDetail(latest)
           } catch {
@@ -186,7 +212,7 @@ function BookPageInner() {
         console.error(`${action} failed:`, err)
       }
     },
-    [selectedBookId, t]
+    [selectedBookId, workspaceId, t]
   )
 
   const refreshBooks = useCallback(async () => {
@@ -211,16 +237,17 @@ function BookPageInner() {
    * kilobytes per refresh. `hydratePage` fills in the one page that matters.
    */
   const loadBookDetail = useCallback(async (id: string, shouldApply: () => boolean = () => true) => {
-    const data = await bookApi.get(id, { includeBlocks: false })
-    if (shouldApply()) {
+    const data = await bookApi.get(id, { includeBlocks: false, workspaceId })
+    if (alive.current && shouldApply()) {
       revisionRef.current = data.book.revision
       setDetail(data)
     }
     return data
-  }, [])
+  }, [workspaceId])
 
   /** Replace one page in-place, leaving the rest of the book untouched. */
   const mergePage = useCallback((page: Page) => {
+    if (!alive.current) return
     setDetail(current => {
       if (!current || current.book.id !== page.book_id) return current
       const index = current.pages.findIndex(p => p.id === page.id)
@@ -232,13 +259,14 @@ function BookPageInner() {
   }, [])
 
   const applyBookRevision = useCallback((revision: number) => {
+    if (!alive.current) return
     revisionRef.current = revision
     setDetail(current => (current ? { ...current, book: { ...current.book, revision } } : current))
   }, [])
 
   const hydratePage = useCallback(
     async (pageId: string) => {
-      if (!selectedBookId) return
+      if (!selectedBookId || !alive.current) return
       try {
         const { page } = await bookApi.getPage(selectedBookId, pageId)
         mergePage(page)
@@ -254,6 +282,7 @@ function BookPageInner() {
       setLoadingLearningCaptures(true)
       try {
         const { captures } = await bookApi.listLearningCaptures(bookId)
+        if (!alive.current) return
         setLearningCaptures(captures)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -416,12 +445,13 @@ function BookPageInner() {
         return
       }
       const targetPath = bookRoute(id, openPageId)
-      if (requestedBookId !== id || (openPageId && requestedPageId !== openPageId)) {
+      if (requestedBookId !== id) {
         router.push(targetPath)
+        return
       }
       setSelectedBookId(id)
       const data = await loadBookDetail(id, () => selectionRequestRef.current === requestId)
-      if (selectionRequestRef.current !== requestId) return
+      if (!alive.current || selectionRequestRef.current !== requestId) return
       const hasReadableContent = data.pages.some(
         p => p.status !== 'pending' || (p.block_count ?? p.blocks.length) > 0
       )
@@ -450,7 +480,7 @@ function BookPageInner() {
         setView('reader')
       }
     },
-    [loadBookDetail, requestedBookId, requestedPageId, router]
+    [loadBookDetail, requestedBookId, router]
   )
 
   // Resource identity belongs in the path: /books/<book>[/pages/<page>].
@@ -488,10 +518,11 @@ function BookPageInner() {
     void refreshLearningCaptures(selectedBookId)
   }, [view, selectedBookId, refreshLearningCaptures])
 
-  const handleDeleteBook = async (id: string, workspaceId = activeWorkspaceId()) =>
+  const deleteBook = async (book: Book, force = false) =>
     guard('Delete book', async () => {
-      // The library card already requires a second click to confirm.
-      await bookApi.delete(id, workspaceId)
+      const id = bookRequestRef(book)
+      await bookApi.delete(id, book.content_workspace_id ?? '', { force })
+      if (!alive.current) return
       if (selectedBookId === id) {
         setSelectedBookId(null)
         setDetail(null)
@@ -501,12 +532,26 @@ function BookPageInner() {
       await refreshBooks()
     })
 
+  const handleDeleteBook = async (book: Book) => guard('Delete book', async () => {
+    // Empty ref is an unregistered local collision. Its management endpoints
+    // intentionally reject 409; DELETE still authorizes that local location.
+    if (book.ref) {
+      const { references } = await bookApi.references(book.ref, book.content_workspace_id ?? '')
+      if (!alive.current) return
+      if (references.length) {
+        setReferencedDelete({ book, references })
+        return
+      }
+    }
+    await deleteBook(book)
+  })
+
   const handleResumeBook = async () => {
     if (!detail || !canEditBook) return
     setResumingBook(true)
     try {
-      await bookApi.resume(detail.book.id, currentRevision())
-      await loadBookDetail(detail.book.id)
+      await bookApi.resume(selectedBookId!, currentRevision())
+      await loadBookDetail(selectedBookId!)
       await refreshBooks()
     } catch (err) {
       const msg = bookErrorMessage(err, t)
@@ -515,7 +560,7 @@ function BookPageInner() {
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(selectedBookId!)
       }
     } finally {
       setResumingBook(false)
@@ -526,9 +571,9 @@ function BookPageInner() {
     if (!detail || !canEditBook || detail.book.status !== 'compiling') return
     setPausingBook(true)
     try {
-      const result = await bookApi.pause(detail.book.id, currentRevision())
+      const result = await bookApi.pause(selectedBookId!, currentRevision())
       applyBookRevision(result.book_revision)
-      await loadBookDetail(detail.book.id)
+      await loadBookDetail(selectedBookId!)
       await refreshBooks()
     } catch (err) {
       const msg = bookErrorMessage(err, t)
@@ -537,7 +582,7 @@ function BookPageInner() {
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(selectedBookId!)
       }
     } finally {
       setPausingBook(false)
@@ -549,8 +594,8 @@ function BookPageInner() {
       if (!detail || !canEditBook) return
       setRebuildingBook(true)
       try {
-        await bookApi.rebuild(detail.book.id, true, currentRevision())
-        const refreshed = await loadBookDetail(detail.book.id)
+        await bookApi.rebuild(selectedBookId!, true, currentRevision())
+        const refreshed = await loadBookDetail(selectedBookId!)
         setSelectedPageId(refreshed.pages[0]?.id || null)
         setView('reader')
         await refreshBooks()
@@ -576,8 +621,7 @@ function BookPageInner() {
       const result = await bookApi.create(payload, handleCreationEvent)
       setPendingBook(result.book)
       setPendingProposal(result.proposal)
-      setSelectedBookId(result.book.id)
-      router.push(bookRoute(result.book.id))
+      router.push(bookRoute(bookRequestRef(result.book)))
       await refreshBooks()
     } finally {
       setCreating(false)
@@ -591,10 +635,10 @@ function BookPageInner() {
       // No per-action event callback: the book now has a stream of its own,
       // and `useBookStream` is already listening. Passing one too would feed
       // the timeline every event twice.
-      const result = await bookApi.confirmProposal(pendingBook.id, edited, pendingBook.revision)
+      const result = await bookApi.confirmProposal(selectedBookId || bookRequestRef(pendingBook), edited, pendingBook.revision)
       setPendingBook(result.book)
       setPendingProposal(null)
-      await loadBookDetail(result.book.id)
+      await loadBookDetail(selectedBookId || bookRequestRef(result.book))
       setView('spine')
       await refreshBooks()
     } finally {
@@ -611,7 +655,7 @@ function BookPageInner() {
     setConfirmingSpine(true)
     try {
       const confirmed = await bookApi.confirmSpine(
-        detail.book.id,
+        selectedBookId!,
         spine,
         autoCompile,
         currentRevision(),
@@ -621,7 +665,7 @@ function BookPageInner() {
       // The refresh below would also pick it up, but the compile that starts
       // in the same handler must not be able to read the old one.
       applyBookRevision(confirmed.book_revision)
-      const refreshed = await loadBookDetail(detail.book.id)
+      const refreshed = await loadBookDetail(selectedBookId!)
       const firstPage = refreshed.pages[0] || null
       setSelectedPageId(firstPage?.id || null)
       setView('reader')
@@ -636,7 +680,7 @@ function BookPageInner() {
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(selectedBookId!)
       }
     } finally {
       setConfirmingSpine(false)
@@ -737,7 +781,7 @@ function BookPageInner() {
       .markVisited(bookId, selectedPage.id)
       .then(({ progress }) =>
         setDetail(current =>
-          current && current.book.id === bookId ? { ...current, progress } : current
+          alive.current && current ? { ...current, progress } : current
         )
       )
       .catch(() => {
@@ -750,7 +794,7 @@ function BookPageInner() {
     const pageId = selectedPage.id
     try {
       const { book_revision } = await bookApi.updateBlock({
-        book_id: detail.book.id,
+        book_id: selectedBookId!,
         page_id: pageId,
         block_id: block.id,
         body,
@@ -765,7 +809,7 @@ function BookPageInner() {
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(selectedBookId!)
       }
       throw err
     }
@@ -774,16 +818,16 @@ function BookPageInner() {
   const handleToggleBookmark = async () =>
     guard('Bookmark', async () => {
       if (!detail || !selectedPage) return
-      const bookId = detail.book.id
+      const bookId = selectedBookId!
       const { progress } = await bookApi.toggleBookmark(bookId, selectedPage.id)
       setDetail(current =>
-        current && current.book.id === bookId ? { ...current, progress } : current
+        alive.current && current ? { ...current, progress } : current
       )
     })
 
   const handleRegenerateBlock = async (block: Block) => {
     if (!detail || !selectedPage || regeneratingBlockIdRef.current) return
-    const bookId = detail.book.id
+    const bookId = selectedBookId!
     const isSharedBook = detail.book.source === 'shared'
     const pageId = selectedPage.id
     regeneratingBlockIdRef.current = block.id
@@ -833,7 +877,7 @@ function BookPageInner() {
     guard('Delete block', async () => {
       if (!detail || !selectedPage) return
       const { book_revision } = await bookApi.deleteBlock(
-        detail.book.id,
+        selectedBookId!,
         selectedPage.id,
         block.id,
         currentRevision()
@@ -850,7 +894,7 @@ function BookPageInner() {
       const newPos = direction === 'up' ? idx - 1 : idx + 1
       if (newPos < 0 || newPos >= selectedPage.blocks.length) return
       const { book_revision } = await bookApi.moveBlock(
-        detail.book.id,
+        selectedBookId!,
         selectedPage.id,
         block.id,
         newPos,
@@ -864,7 +908,7 @@ function BookPageInner() {
     guard('Change block type', async () => {
       if (!detail || !selectedPage) return
       const { book_revision } = await bookApi.changeBlockType({
-        book_id: detail.book.id,
+        book_id: selectedBookId!,
         page_id: selectedPage.id,
         block_id: block.id,
         new_type: newType,
@@ -878,7 +922,7 @@ function BookPageInner() {
     guard('Insert block', async () => {
       if (!detail || !selectedPage) return
       const { book_revision } = await bookApi.insertBlock({
-        book_id: detail.book.id,
+        book_id: selectedBookId!,
         page_id: selectedPage.id,
         block_type,
         expected_revision: currentRevision(),
@@ -893,7 +937,7 @@ function BookPageInner() {
       setPendingDeepDiveTopic(topic)
       try {
         const result = await bookApi.deepDive({
-          book_id: detail.book.id,
+          book_id: selectedBookId!,
           parent_page_id: selectedPage.id,
           topic,
           block_id: blockId,
@@ -901,7 +945,7 @@ function BookPageInner() {
         })
         applyBookRevision(result.book_revision)
         // A deep dive adds a page, so the chapter list itself changed.
-        const refreshed = await loadBookDetail(detail.book.id)
+        const refreshed = await loadBookDetail(selectedBookId!)
         const newPage = refreshed.pages.find(p => p.id === result.page.id)
         if (newPage) {
           setSelectedPageId(newPage.id)
@@ -915,7 +959,7 @@ function BookPageInner() {
   const handleQuizAttempt = async (block: Block, args: QuizAttemptArgs) =>
     guard('Record answer', async () => {
       if (!detail || !selectedPage) return
-      const bookId = detail.book.id
+      const bookId = selectedBookId!
       const key = `${bookId}:${selectedPage.id}:${block.id}:${args.questionId || ''}`
       const answer = `${args.userAnswer || ''}:${String(args.isCorrect)}`
       const pending = pendingQuizSubmissions.current.get(key)
@@ -933,7 +977,7 @@ function BookPageInner() {
       if (pendingQuizSubmissions.current.get(key)?.id === submissionId) {
         pendingQuizSubmissions.current.delete(key)
         setDetail(current =>
-          current && current.book.id === bookId ? { ...current, progress } : current
+          alive.current && current ? { ...current, progress } : current
         )
       }
     })
@@ -953,7 +997,7 @@ function BookPageInner() {
     setSupplementingBlockId(block.id)
     try {
       const { book_revision } = await bookApi.supplement(
-        detail.book.id,
+        selectedBookId!,
         pageId,
         topic,
         currentRevision()
@@ -967,7 +1011,7 @@ function BookPageInner() {
         durationMs: 8000,
       })
       if (err instanceof BookApiError && err.status === 409 && detail) {
-        await loadBookDetail(detail.book.id)
+        await loadBookDetail(selectedBookId!)
       }
     } finally {
       setSupplementingBlockId(null)
@@ -980,6 +1024,7 @@ function BookPageInner() {
 
   const applyCapturePatch = useCallback(
     (capture: LearningCapture) => {
+      if (!alive.current) return
       setLearningCaptures(current =>
         refreshCapturesSorted(
           current.some(item => item.id === capture.id)
@@ -1000,7 +1045,7 @@ function BookPageInner() {
     source_locator?: string
   }) => {
     if (!detail) return
-    const result = await bookApi.createLearningCapture(detail.book.id, {
+    const result = await bookApi.createLearningCapture(selectedBookId!, {
       ...payload,
       book_title: detail.book.title,
       chapter_title: selectedPage?.title || '',
@@ -1010,7 +1055,7 @@ function BookPageInner() {
 
   const handleApproveCapture = async (capture: LearningCapture) => {
     if (!detail) return
-    const result = await bookApi.updateLearningCapture(detail.book.id, capture.id, {
+    const result = await bookApi.updateLearningCapture(selectedBookId!, capture.id, {
       status: 'approved',
     })
     applyCapturePatch(result.capture)
@@ -1022,7 +1067,7 @@ function BookPageInner() {
 
   const handleRejectCapture = async (capture: LearningCapture) => {
     if (!detail) return
-    const result = await bookApi.updateLearningCapture(detail.book.id, capture.id, {
+    const result = await bookApi.updateLearningCapture(selectedBookId!, capture.id, {
       status: 'rejected',
     })
     applyCapturePatch(result.capture)
@@ -1037,9 +1082,9 @@ function BookPageInner() {
       if (!detail || !selectedPage || !sessionId) return
       const existing = detail.book.metadata?.page_chat_sessions?.[selectedPage.id]
       if (existing === sessionId) return
-      const result = await bookApi.setPageChatSession(detail.book.id, selectedPage.id, sessionId)
+      const result = await bookApi.setPageChatSession(selectedBookId!, selectedPage.id, sessionId)
       setDetail(current =>
-        current && current.book.id === result.book.id ? { ...current, book: result.book } : current
+        alive.current && current && current.book.id === result.book.id ? { ...current, book: result.book } : current
       )
     })
 
@@ -1047,7 +1092,7 @@ function BookPageInner() {
 
   // A client-side route change may arrive before the next book's detail.
   // Keep the previous reader, sidebar, and activity out of the new URL.
-  const displayView = requestedBookId && (selectedBookId !== requestedBookId || detail?.book.id !== requestedBookId)
+  const displayView = requestedBookId && (selectedBookId !== requestedBookId || !detail)
     ? 'opening' : view
 
   return (
@@ -1055,6 +1100,7 @@ function BookPageInner() {
       {displayView !== 'list' && displayView !== 'creator' && displayView !== 'opening' && (
         <BookSidebar
           book={detail?.book || pendingBook || null}
+          requestedRef={selectedBookId ?? undefined}
           onBackToLibrary={() => void handleSelectBook(null)}
           pages={detail?.pages || []}
           selectedPageId={selectedPageId}
@@ -1113,9 +1159,33 @@ function BookPageInner() {
                 if (workspaceId !== activeWorkspaceId()) router.push(bookRoute(id, null, workspaceId))
                 else void handleSelectBook(id)
               }}
-              onDeleteBook={(id, workspaceId) => void handleDeleteBook(id, workspaceId)}
+              onDeleteBook={book => void handleDeleteBook(book)}
+              onShareBook={setSharingBook}
             />
           )}
+          <BookShareDialog book={sharingBook} isAdmin={isAdmin}
+            onClose={() => setSharingBook(null)} onChanged={() => void refreshBooks()} />
+          <Dialog open={!!referencedDelete} alert title={t('Delete book')} closeLabel={t('Close')}
+            onClose={() => setReferencedDelete(null)} busy={deleting}
+            footer={<>
+              <button type="button" data-autofocus disabled={deleting} onClick={() => setReferencedDelete(null)}
+                className="rounded-lg px-3 py-1.5 text-sm">{t('Cancel')}</button>
+              {isAdmin && <button type="button" disabled={deleting} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
+                onClick={() => {
+                  if (!referencedDelete || deleting) return
+                  setDeleting(true)
+                  void deleteBook(referencedDelete.book, true).finally(() => {
+                    if (!alive.current) return
+                    setDeleting(false)
+                    setReferencedDelete(null)
+                  })
+                }}>{t('Delete book')}</button>}
+            </>}>
+            {referencedDelete && <p className="break-words">{t(isAdmin
+              ? 'This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.'
+              : 'This book is still referenced by: {{items}}. Remove those references before deleting it.',
+            { items: describeBookReferences(referencedDelete.references, t) })}</p>}
+          </Dialog>
 
           {displayView === 'creator' && (
             <div className="h-full overflow-y-auto [scrollbar-gutter:stable]">
@@ -1194,23 +1264,17 @@ function BookPageInner() {
                 <div className="min-h-0 flex-1 overflow-hidden">
                   <PageReader
                     page={selectedPage}
-                    bookId={detail?.book.id}
+                    bookId={selectedBookId ?? undefined}
                     bookLanguage={detail?.book.language}
                     loading={!!compilingPageId && compilingPageId === selectedPage?.id}
                     onRegenerateBlock={
                       canEditBook ? block => handleRegenerateBlock(block) : undefined
                     }
                     onDeleteBlock={canEditBook ? block => void handleDeleteBlock(block) : undefined}
-                    onMoveBlock={(block, dir) =>
-                      canEditBook ? void handleMoveBlock(block, dir) : undefined
-                    }
-                    onChangeBlockType={(block, t) =>
-                      canEditBook ? void handleChangeBlockType(block, t) : undefined
-                    }
+                    onMoveBlock={canEditBook ? (block, dir) => void handleMoveBlock(block, dir) : undefined}
+                    onChangeBlockType={canEditBook ? (block, type) => void handleChangeBlockType(block, type) : undefined}
                     onInsertBlock={canEditBook ? t => handleInsertBlock(t) : undefined}
-                    onDeepDive={(topic, blockId) =>
-                      canEditBook ? handleDeepDive(topic, blockId) : undefined
-                    }
+                    onDeepDive={canEditBook ? (topic, blockId) => handleDeepDive(topic, blockId) : undefined}
                     onOpenPage={pageId => handleSelectPage(pageId)}
                     onQuizAttempt={(block, args) => void handleQuizAttempt(block, args)}
                     onRequestSupplement={
@@ -1279,7 +1343,9 @@ function BookPageInner() {
 
         {displayView === 'reader' && chatOpen && (
           <BookChatPanel
+            key={selectedPageId}
             book={detail?.book || null}
+            requestedRef={selectedBookId ?? undefined}
             page={selectedPage}
             open={chatOpen}
             onClose={() => setChatOpen(false)}

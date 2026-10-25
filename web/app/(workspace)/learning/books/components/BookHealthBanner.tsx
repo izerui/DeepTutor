@@ -328,7 +328,7 @@ export default function BookHealthBanner({
           )}
         </div>
         <div className="flex items-center gap-1">
-          {hasDrift && (
+          {hasDrift && onRecompile && (
             <Tooltip
               label={t(
                 "Available only after every stale page has been recompiled.",
