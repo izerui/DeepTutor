@@ -404,8 +404,10 @@ class BookEngine:
                     task.cancel()
         # The book's event stream is the one thing that outlives its requests,
         # so deletion is the only place allowed to close it.
-        close_book_bus(book_id)
-        return self.storage.delete_book(book_id)
+        deleted = self.storage.delete_book(book_id)
+        if deleted:
+            close_book_bus(book_id, storage=self.storage)
+        return deleted
 
     def set_page_chat_session(self, *, book_id: str, page_id: str, session_id: str) -> Book | None:
         """Persist the chat session associated with a specific book page."""
@@ -530,6 +532,9 @@ class BookEngine:
                     book.kb_fingerprints = fingerprint_kbs(book.knowledge_bases)
             except Exception as exc:  # noqa: BLE001
                 logger.debug(f"baseline fingerprint capture skipped: {exc}")
+            from deeptutor.multi_user.book_access import prepare_new_book
+
+            prepare_new_book(book, self.storage)
             self.storage.save_book(book)
             self.storage.save_inputs(book.id, book_inputs)
             self.storage.save_progress(Progress(book_id=book.id))
@@ -574,7 +579,7 @@ class BookEngine:
             book.title = edited_proposal.title or book.title
             book.description = edited_proposal.description or book.description
 
-        bus = stream or get_book_bus(book_id)
+        bus = stream or get_book_bus(book_id, storage=self.storage)
         bstream = BookStream(bus)
 
         proposal = book.proposal or BookProposal(title=book.title)
@@ -876,7 +881,7 @@ class BookEngine:
 
         # Publish to the book's own stream. Guarding on ``stream is not None``
         # silently dropped this event once callers stopped passing a bus.
-        await BookStream(stream or get_book_bus(book.id)).book_event(
+        await BookStream(stream or get_book_bus(book.id, storage=self.storage)).book_event(
             "overview_ready",
             {
                 "book_id": book.id,
@@ -1066,7 +1071,7 @@ class BookEngine:
                 self.storage.save_page(page)
 
         self.storage.append_log(book_id, "compilation paused by user", op="paused")
-        await BookStream(get_book_bus(book_id)).book_event(
+        await BookStream(get_book_bus(book_id, storage=self.storage)).book_event(
             "compilation_paused",
             {"book_id": book_id, "reason": reason, "manual": True},
             stage=STAGE_COMPILATION,
@@ -1317,7 +1322,7 @@ class BookEngine:
         if chapter is None:
             raise ValueError(f"Page {page_id} references unknown chapter {page.chapter_id}")
 
-        bus = stream or get_book_bus(book_id)
+        bus = stream or get_book_bus(book_id, storage=self.storage)
         bstream = BookStream(bus)
 
         try:
@@ -1557,7 +1562,7 @@ class BookEngine:
             f"compilation paused after {failure_count} consecutive provider failures: {reason}",
             op="paused",
         )
-        await BookStream(get_book_bus(book_id)).book_event(
+        await BookStream(get_book_bus(book_id, storage=self.storage)).book_event(
             "compilation_paused",
             {"book_id": book_id, "reason": reason},
             stage=STAGE_COMPILATION,
@@ -1584,7 +1589,7 @@ class BookEngine:
                 self.storage.append_log(book_id, "all pages ready → status=READY", op="finalize")
                 # Without this the reader never learns the book finished:
                 # the last page event fires while the book is still COMPILING.
-                await BookStream(get_book_bus(book_id)).book_event(
+                await BookStream(get_book_bus(book_id, storage=self.storage)).book_event(
                     "book_ready",
                     {"book_id": book_id, "page_count": len(pages)},
                     stage=STAGE_COMPILATION,
@@ -1618,7 +1623,7 @@ class BookEngine:
         if params_override:
             block.params = {**block.params, **params_override}
 
-        bus = stream or get_book_bus(book_id)
+        bus = stream or get_book_bus(book_id, storage=self.storage)
         bstream = BookStream(bus)
 
         from .blocks.base import BlockContext, get_block_registry
@@ -1637,6 +1642,7 @@ class BookEngine:
             block=block,
             language=book.language,
             knowledge_bases=book.knowledge_bases,
+            storage=self.storage,
         )
         # Resolve previous block by planning order so the bridge text can be
         # refreshed alongside the block itself.
@@ -1845,8 +1851,9 @@ class BookEngine:
                     block=block,
                     language=book.language,
                     knowledge_bases=book.knowledge_bases,
+                    storage=self.storage,
                 )
-                bus = stream or get_book_bus(book_id)
+                bus = stream or get_book_bus(book_id, storage=self.storage)
                 bstream = BookStream(bus)
                 async with bstream.stage(STAGE_COMPILATION):
                     await generator.generate(ctx)
@@ -2170,12 +2177,11 @@ class BookEngine:
 _engines: dict[str, BookEngine] = {}
 
 
-def get_book_engine() -> BookEngine:
-    from deeptutor.services.path_service import get_path_service
-
-    key = str(get_path_service().workspace_root.resolve())
+def get_book_engine(*, storage: BookStorage | None = None) -> BookEngine:
+    store = storage if storage is not None else get_book_storage()
+    key = str(store.path_service.workspace_root.resolve())
     if key not in _engines:
-        _engines[key] = BookEngine()
+        _engines[key] = BookEngine(storage=store)
     return _engines[key]
 
 

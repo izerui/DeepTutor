@@ -8,6 +8,7 @@ import pytest
 
 from deeptutor.api.routers import auth as auth_router
 from deeptutor.api.routers import book as book_router
+from deeptutor.book import registry as book_registry
 from deeptutor.book.models import Block, BlockStatus, BlockType, Book, Page, PageStatus
 from deeptutor.book.storage import BookStorage
 from deeptutor.multi_user.book_permission import BookPermission
@@ -25,7 +26,7 @@ def shared_env(tmp_path, monkeypatch):
     from deeptutor.multi_user import audit, grants, identity, paths
     from deeptutor.multi_user.grants import learner_grant, save_grant
     from deeptutor.multi_user.identity import save_user, set_book_permission
-    from deeptutor.multi_user.paths import get_admin_path_service
+    from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
     from deeptutor.services import auth as auth_service
 
     admin_root = (tmp_path / "data").resolve()
@@ -57,6 +58,7 @@ def shared_env(tmp_path, monkeypatch):
     alice = save_user("alice", "hash", role="user")
     bob = save_user("bob", "hash", role="user")
     editor = save_user("editor", "hash", role="user")
+    teacher = save_user("teacher", "hash", role="teacher")
     default_learner = save_user("default-learner", "hash", role="user", preset="learner")
     books_without_acl = save_user("books-without-acl", "hash", role="user", preset="learner")
     reader = save_user("reader", "hash", role="user", preset="learner")
@@ -76,6 +78,7 @@ def shared_env(tmp_path, monkeypatch):
         "alice": TokenPayload(username="alice", role="user", user_id=alice["id"]),
         "bob": TokenPayload(username="bob", role="user", user_id=bob["id"]),
         "editor": TokenPayload(username="editor", role="user", user_id=editor["id"]),
+        "teacher": TokenPayload(username="teacher", role="teacher", user_id=teacher["id"]),
         "default-learner": TokenPayload(
             username="default-learner", role="user", user_id=default_learner["id"]
         ),
@@ -86,7 +89,9 @@ def shared_env(tmp_path, monkeypatch):
     }
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
 
-    shared = BookStorage(path_service=get_admin_path_service())
+    shared = BookStorage(path_service=get_path_service_for_scope(
+        scope_for_user(teacher["id"], is_admin=False),
+    ))
     shared.save_book(Book(id="bk_shared", title="Shared", page_count=1))
     shared.save_page(
         Page(
@@ -104,6 +109,10 @@ def shared_env(tmp_path, monkeypatch):
             ],
         )
     )
+    book_registry.register_book(
+        base_dir=shared.path_service.get_book_dir(), dir_name="book_bk_shared",
+        title="Shared", created_by=teacher["id"], visibility="public",
+    )
 
     app = FastAPI()
     app.include_router(auth_router.router, prefix="/api/auth")
@@ -115,6 +124,7 @@ def shared_env(tmp_path, monkeypatch):
             Depends(auth_router.require_learning_surface),
         ],
     )
+    app.include_router(book_router.ws_router, prefix="/ws")
     return TestClient(app), shared
 
 
@@ -128,13 +138,14 @@ def test_learner_books_surface_requires_explicit_grant(shared_env) -> None:
     assert allowed.status_code == 200
 
 
-def test_learner_with_books_surface_still_requires_shared_acl(shared_env) -> None:
+def test_learner_with_books_surface_sees_public_books_without_legacy_acl(shared_env) -> None:
     client, _ = shared_env
 
     response = client.get("/api/books", headers=_headers("books-without-acl"))
 
     assert response.status_code == 200
-    assert response.json() == {"books": [], "can_create": False}
+    assert [book["id"] for book in response.json()["books"]] == ["bk_shared"]
+    assert response.json()["can_create"] is False
 
 
 def test_assigned_shared_book_is_read_only_for_learner(shared_env) -> None:
@@ -252,11 +263,11 @@ def test_shared_read_health_check_does_not_mutate_canonical_book(shared_env) -> 
     assert canonical.load_book("bk_shared").updated_at == updated_at
 
 
-def test_shared_editor_requires_current_revision(shared_env) -> None:
+def test_admin_editing_foreign_book_requires_current_revision(shared_env) -> None:
     client, canonical = shared_env
     missing = client.post(
         "/api/books/update-block",
-        headers=_headers("editor"),
+        headers=_headers("root"),
         json={
             "book_id": "bk_shared",
             "page_id": "pg_1",
@@ -269,7 +280,7 @@ def test_shared_editor_requires_current_revision(shared_env) -> None:
 
     success = client.post(
         "/api/books/update-block",
-        headers=_headers("editor"),
+        headers=_headers("root"),
         json={
             "book_id": "bk_shared",
             "page_id": "pg_1",
@@ -284,7 +295,7 @@ def test_shared_editor_requires_current_revision(shared_env) -> None:
 
     stale = client.post(
         "/api/books/update-block",
-        headers=_headers("editor"),
+        headers=_headers("root"),
         json={
             "book_id": "bk_shared",
             "page_id": "pg_1",
@@ -309,8 +320,106 @@ def test_shared_capabilities_are_returned_in_list_and_detail(shared_env) -> None
 
     detail = client.get("/api/books/bk_shared", headers=_headers("editor")).json()
     assert detail["book"]["revision"] == 1
-    assert detail["book"]["can_edit"] is True
+    assert detail["book"]["can_edit"] is False
     assert detail["book"]["can_delete"] is False
+    assert detail["book"]["ref"] == "book:bk_shared"
+    assert detail["book"]["visibility"] == "public"
+    assert detail["book"]["group"] == "public"
+    assert not detail["book"]["can_set_visibility"]
+    own = client.get("/api/books/book:bk_shared", headers=_headers("teacher")).json()["book"]
+    assert own["source"] == "own" and own["group"] == "mine"
+    assert own["can_edit"] and own["can_delete"] and own["can_set_visibility"]
+
+
+def test_retired_edit_grant_does_not_allow_writing(shared_env) -> None:
+    client, canonical = shared_env
+    response = client.post(
+        "/api/books/update-block", headers=_headers("editor"),
+        json={"book_id": "book:bk_shared", "page_id": "pg_1", "block_id": "blk_1",
+              "body": "Denied", "expected_revision": 1},
+    )
+    assert response.status_code == 404
+    assert canonical.load_page("bk_shared", "pg_1").blocks[0].payload["body"] == "Original"
+
+
+def test_rest_producer_and_canonical_ws_replay_ignore_local_id_collision(shared_env):
+    from deeptutor.book.models import Spine
+    from deeptutor.multi_user.identity import get_user
+    from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
+
+    client, canonical = shared_env
+    canonical.save_spine(Spine(book_id="bk_shared"))
+    alice = get_user("alice")
+    local = BookStorage(path_service=get_path_service_for_scope(
+        scope_for_user(alice["id"], is_admin=False),
+    ))
+    local.save_book(Book(id="bk_shared", title="Alice import"))
+    with client:
+        # A real REST engine producer runs under the editing admin's context.
+        paused = client.post(
+            "/api/books/pause", headers=_headers("root"), json={"book_id": "book:bk_shared"},
+        )
+        assert paused.status_code == 200
+        with client.websocket_connect("/ws/books?token=alice") as ws:
+            ws.send_json({"type": "subscribe", "book_id": "bk_shared"})
+            ack = ws.receive_json()
+            assert ack["type"] == "subscribed" and ack["latest_seq"] == 0
+            ws.send_json({"type": "subscribe", "book_id": "book:bk_shared"})
+            ack = ws.receive_json()
+            assert ack["type"] == "subscribed" and ack["latest_seq"] == 1
+            assert ack["book_id"] == "book:bk_shared"
+            assert ws.receive_json()["metadata"]["kind"] == "compilation_paused"
+            paused = client.post(
+                "/api/books/pause", headers=_headers("root"), json={"book_id": "book:bk_shared"},
+            )
+            assert paused.status_code == 200
+            assert ws.receive_json()["metadata"]["kind"] == "compilation_paused"
+        assert local.load_book("bk_shared").title == "Alice import"
+
+
+@pytest.mark.parametrize("transport", ["rest", "websocket"])
+def test_real_creation_transports_expose_registered_private_book(shared_env, monkeypatch, transport):
+    from deeptutor.book.engine import BookEngine
+    from deeptutor.book.models import BookProposal
+
+    client, _ = shared_env
+
+    async def proposal(*_args, **_kwargs):
+        return BookProposal(title="New")
+
+    monkeypatch.setattr(BookEngine, "_run_ideation", proposal)
+    payload = None
+    if transport == "rest":
+        response = client.post(
+            "/api/books", headers=_headers("teacher"), json={"user_intent": "Waves"},
+        )
+        assert response.status_code == 200
+        payload = response.json()["book"]
+    else:
+        with client.websocket_connect("/ws/books?token=teacher") as ws:
+            ws.send_json({"type": "create", "user_intent": "Waves"})
+            ready = False
+            payload = None
+            for _ in range(12):
+                frame = ws.receive_json()
+                if frame.get("metadata", {}).get("kind") == "proposal_ready":
+                    record = book_registry.get_book(frame["metadata"]["book_id"])
+                    assert record is not None and record.visibility == "private"
+                    assert book_registry.kb_links_initialized(record.book_id)
+                    ready = True
+                if frame.get("type") == "create_result":
+                    payload = frame["book"]
+                    break
+            # Fanout scheduling may deliver create_result before ready; registration
+            # must already be committed at either first observable success.
+            assert payload is not None
+            assert ready or book_registry.kb_links_initialized(payload["id"])
+    assert payload is not None
+    record = book_registry.get_book(payload["id"])
+    assert record.created_by == payload["owner_id"]
+    assert record.visibility == payload["visibility"] == "private"
+    assert record.ref == payload["ref"]
+    assert payload["group"] == "mine" and payload["can_set_visibility"]
 
 
 def test_admin_delete_cleans_explicit_book_permissions(shared_env) -> None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from deeptutor.book.engine import BookEngine, _is_auto_overview
+from deeptutor.book.storage import get_book_storage
 from deeptutor.book.models import (
     Block,
     BlockStatus,
@@ -92,6 +93,7 @@ async def test_duplicate_overviews_from_older_data_are_collapsed() -> None:
 
 class _Storage:
     def __init__(self) -> None:
+        self.path_service = get_book_storage().path_service
         self.saved: list[Page] = []
 
     def save_page(self, page: Page) -> None:

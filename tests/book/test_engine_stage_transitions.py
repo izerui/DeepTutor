@@ -25,6 +25,7 @@ from deeptutor.book.agents.source_explorer import SourceExplorer
 from deeptutor.book.agents.spine_synthesizer import SpineSynthesizer
 from deeptutor.book.engine import BookEngine
 from deeptutor.book.event_hub import close_book_bus
+from deeptutor.book.storage import get_book_storage
 from deeptutor.book.models import (
     Block,
     BlockStatus,
@@ -55,6 +56,7 @@ class FakeStorage:
     """In-memory BookStorage: deep-copies on save and load like real disk."""
 
     def __init__(self) -> None:
+        self.path_service = get_book_storage().path_service
         self.books: dict[str, Book] = {}
         self.inputs: dict[str, BookInputs] = {}
         self.progress: dict[str, Progress] = {}
@@ -63,6 +65,9 @@ class FakeStorage:
         self.explorations: dict[str, ExplorationReport] = {}
         self.logs: list[tuple[str, str, str]] = []
         self.save_book_calls: list[str] = []
+
+    def book_exists(self, book_id: str) -> bool:
+        return book_id in self.books
 
     # -- books -----------------------------------------------------------
 

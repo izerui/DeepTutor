@@ -60,7 +60,7 @@ class QuizGenerator(BlockGenerator):
                 num_questions=max(1, int(num_questions or 1)),
                 difficulty=difficulty,
                 question_types=question_types,
-                stream=get_book_bus(ctx.book_id),
+                stream=get_book_bus(ctx.book_id, storage=ctx.storage),
             )
             summary = dict(result.get("summary") or {})
         except Exception as exc:

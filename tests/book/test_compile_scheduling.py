@@ -11,6 +11,7 @@ import asyncio
 import pytest
 
 from deeptutor.book.compiler import systemic_failure_reason
+from deeptutor.book.storage import get_book_storage
 from deeptutor.book.engine import (
     CONSECUTIVE_PAGE_FAILURE_LIMIT,
     BookEngine,
@@ -181,6 +182,8 @@ async def test_breaker_pauses_the_book_after_repeated_provider_failures(tmp_path
     logged: list[str] = []
 
     class _Storage:
+        path_service = get_book_storage().path_service
+
         def load_book(self, book_id):
             return saved.get(book_id, Book(id="bk", status=BookStatus.COMPILING))
 
@@ -242,6 +245,8 @@ async def test_manual_pause_persists_before_cancelling_and_resets_transient_page
     log_ops: list[str] = []
 
     class _Storage:
+        path_service = get_book_storage().path_service
+
         def load_book(self, book_id):
             return book
 

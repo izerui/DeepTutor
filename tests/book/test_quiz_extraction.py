@@ -148,6 +148,6 @@ def test_progress_reaches_the_books_own_stream() -> None:
     import deeptutor.book.blocks.quiz as module
 
     source = inspect.getsource(module)
-    assert "get_book_bus(ctx.book_id)" in source, (
+    assert "get_book_bus(ctx.book_id, storage=ctx.storage)" in source, (
         "quiz must publish into the book's long-lived bus, not a throwaway one"
     )

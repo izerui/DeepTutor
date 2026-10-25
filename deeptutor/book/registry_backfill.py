@@ -27,6 +27,18 @@ _INVENTORY_KEY = "shared_shelf_inventory_v1"
 _PROGRESS_PREFIX = "shared_shelf_book_v1:"
 
 
+def ensure_shelf_creation_boundary() -> None:
+    """Persist D22's start fence before a new shelf directory can appear.
+
+    Creation must not enumerate or publish legacy content. Reuse the original
+    immutable fence, including when startup previously failed to persist it.
+    """
+    from deeptutor.multi_user.paths import get_admin_path_service
+
+    if registry.get_meta(SHELF_MIGRATED_KEY) is None:
+        _freeze_inventory(get_admin_path_service().get_book_dir())
+
+
 def _accounts() -> tuple[dict, dict]:
     from deeptutor.services.partners.kb_migration import identity_snapshot, _identity_store_paths
 

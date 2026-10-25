@@ -6,15 +6,20 @@ import pytest
 
 from deeptutor.book.engine import BookEngine
 from deeptutor.book.models import BookInputs, BookProposal
+from deeptutor.book.storage import get_book_storage
 
 
 class _RecordingStorage:
     def __init__(self) -> None:
+        self.path_service = get_book_storage().path_service
         self.books: list = []
         self.inputs: list[BookInputs] = []
 
     def save_book(self, book) -> None:
         self.books.append(book)
+
+    def book_exists(self, book_id) -> bool:
+        return any(book.id == book_id for book in self.books)
 
     def save_inputs(self, book_id: str, inputs: BookInputs) -> None:
         self.inputs.append(inputs)

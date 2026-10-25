@@ -112,11 +112,12 @@ class BookStorage:
     """
 
     def __init__(self, *, path_service: PathService | None = None) -> None:
-        self._path_service = path_service
+        # Engines and background jobs retain this physical store across callers.
+        self._path_service = path_service or get_path_service()
 
     @property
     def path_service(self) -> PathService:
-        return self._path_service or get_path_service()
+        return self._path_service
 
     # ── Path helpers ─────────────────────────────────────────────────────
 
@@ -386,9 +387,10 @@ _storages: dict[str, BookStorage] = {}
 
 
 def get_book_storage() -> BookStorage:
-    key = str(get_path_service().workspace_root.resolve())
+    paths = get_path_service()
+    key = str(paths.workspace_root.resolve())
     if key not in _storages:
-        _storages[key] = BookStorage()
+        _storages[key] = BookStorage(path_service=paths)
     return _storages[key]
 
 

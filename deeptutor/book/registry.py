@@ -377,8 +377,41 @@ def get_book(book_id: str) -> BookRecord | None:
 
 
 def resolve_book_ref(ref: str) -> BookRecord | None:
-    """Lookup only; callers must authorize the returned canonical record."""
-    return get_book(ref)
+    """Look up canonical refs; lazily register unknown bare IDs in this scope.
+
+    This does not authorize the returned record. In particular, a local
+    collision's edit permission never confers authority on this identity.
+    """
+    book_id = strip_ref(ref)
+    if not book_id:
+        return None
+    record = get_book(book_id)
+    if record is not None or str(ref).strip().startswith(REF_PREFIX):
+        return record
+    from deeptutor.multi_user.book_access import register_current_scope_book
+
+    return register_current_scope_book(book_id)
+
+
+def register_new_book(
+    *, base_dir: Path | str, dir_name: str, title: str, created_by: str,
+) -> BookRecord:
+    """Reserve a genuinely new private identity and its intent atomically.
+
+    Existing identities are never adopted, including at the same location.
+    Legacy registration and repairs must continue to use register_book.
+    """
+    from deeptutor.core.visibility_intent import record_choice
+
+    book_id = _book_id_of(dir_name)
+    with _write() as conn:
+        if _get_book(conn, book_id) is not None:
+            raise BookRegistryError(f"Book {book_id} already has a canonical identity.")
+        record = _register(
+            conn, base_dir=base_dir, dir_name=dir_name, title=title, created_by=created_by,
+        )
+        record_choice(conn, book_id, "private", schema="main")
+        return record
 
 
 def find_book_by_location(base_dir: Path | str, dir_name: str) -> BookRecord | None:

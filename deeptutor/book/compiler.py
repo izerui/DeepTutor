@@ -199,6 +199,7 @@ class BookCompiler:
             knowledge_bases=knowledge_bases or [],
             rag_enabled=self.options.rag_enabled,
             exploration=exploration,
+            storage=self.storage,
         )
 
         sem = asyncio.Semaphore(max(1, self.options.block_concurrency))

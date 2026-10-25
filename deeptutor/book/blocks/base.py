@@ -16,7 +16,10 @@ from abc import ABC, abstractmethod
 import asyncio
 from dataclasses import dataclass, field
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..storage import BookStorage
 
 from ..models import (
     Block,
@@ -100,6 +103,8 @@ class BlockContext:
     # BookEngine v2 — fed in by ``BookCompiler`` so generators can reuse the
     # exploration sweep instead of re-issuing RAG calls.
     exploration: ExplorationReport | None = None
+    # The compiler supplies the physical store even for a foreign reader.
+    storage: BookStorage | None = None
 
     @property
     def primary_kb(self) -> str | None:
