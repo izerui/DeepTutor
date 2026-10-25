@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from deeptutor.services.config.loader import (
-    PROJECT_ROOT,
     load_config_with_main,
     resolve_config_path,
 )
@@ -49,10 +48,16 @@ def test_load_config_with_main_raises_for_unknown_missing_config(tmp_path: Path)
         load_config_with_main("nonexistent_module.yaml", tmp_path)
 
 
-def test_load_config_with_main_uses_explicit_project_root() -> None:
-    config = load_config_with_main("main.yaml", PROJECT_ROOT)
+def test_load_config_with_main_uses_explicit_project_root(tmp_path: Path) -> None:
+    settings_dir = tmp_path / "data" / "user" / "settings"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "main.yaml").write_text(
+        "system:\n  language: synthetic-explicit-root\npaths:\n  solve_output_dir: ignored\n",
+        encoding="utf-8",
+    )
+    config = load_config_with_main("main.yaml", tmp_path)
 
-    assert "system" in config
+    assert config["system"] == {"language": "synthetic-explicit-root"}
     assert (
         Path(config["paths"]["solve_output_dir"])
         .as_posix()

@@ -11,8 +11,10 @@ def test_api_import_keeps_optional_heavy_dependencies_cold() -> None:
     probe = """
 import json
 import sys
+from contextlib import redirect_stdout
 
-import deeptutor.api.main  # noqa: F401
+with redirect_stdout(sys.stderr):
+    import deeptutor.api.main  # noqa: F401
 
 heavy_roots = {
     "anthropic",

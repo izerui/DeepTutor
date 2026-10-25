@@ -271,7 +271,10 @@ def test_empty_kb_bootstrap_hashes_only_files_confirmed_by_index(
 
     statuses: list[dict] = []
     manager = type(
-        "Manager", (), {"update_kb_status": lambda _self, **kwargs: statuses.append(kwargs)}
+        "Manager", (), {
+            "base_dir": tmp_path,
+            "update_kb_status": lambda _self, **kwargs: statuses.append(kwargs),
+        }
     )()
     monkeypatch.setattr(add_module, "RAGService", PartialIndexService)
 

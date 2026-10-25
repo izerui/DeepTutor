@@ -7,11 +7,11 @@ from pathlib import Path
 from deeptutor.partners.helpers import safe_filename
 
 
-def test_safe_filename_strips_embedded_null_byte() -> None:
+def test_safe_filename_strips_embedded_null_byte(tmp_path: Path) -> None:
     cleaned = safe_filename("photo\x00.png")
     assert "\x00" not in cleaned
     assert cleaned.endswith(".png")
-    path = Path("/tmp") / f"abc_{cleaned}"
+    path = tmp_path / f"abc_{cleaned}"
     path.write_bytes(b"x")
     assert path.read_bytes() == b"x"
     path.unlink()

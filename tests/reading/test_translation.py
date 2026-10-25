@@ -174,7 +174,9 @@ async def test_invalid_or_wrong_language_model_output_is_rejected(monkeypatch, r
 
 
 def test_translation_is_registered_as_a_packaged_extension():
-    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    )
     group = project["project"]["entry-points"]["deeptutor.reading_extensions"]
 
     assert group["translation"] == "deeptutor.reading.translation:TranslationExtension"

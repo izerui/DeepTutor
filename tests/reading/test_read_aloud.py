@@ -33,7 +33,9 @@ def test_read_aloud_returns_verified_visible_text_only():
 
 
 def test_read_aloud_is_registered_as_a_packaged_extension():
-    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    )
     group = project["project"]["entry-points"]["deeptutor.reading_extensions"]
 
     assert group["read_aloud"] == "deeptutor.reading.read_aloud:ReadAloudExtension"

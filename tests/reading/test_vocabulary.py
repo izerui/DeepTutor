@@ -204,7 +204,9 @@ async def test_invalid_or_ungrounded_model_output_is_rejected(monkeypatch, respo
 
 
 def test_vocabulary_is_registered_as_a_packaged_extension():
-    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    )
     group = project["project"]["entry-points"]["deeptutor.reading_extensions"]
 
     assert group["vocabulary"] == "deeptutor.reading.vocabulary:VocabularyExtension"
