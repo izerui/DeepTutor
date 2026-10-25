@@ -326,7 +326,7 @@ export default function AdminUsersPage() {
             <ArrowLeft size={16} />
             {t("Back")}
           </Link>
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="font-serif text-xl font-semibold text-[var(--foreground)]">
                 {t("User Management")}
@@ -434,7 +434,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-sm">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-x-auto shadow-sm [container-type:inline-size]">
           {loading ? (
             <div className="divide-y divide-[var(--border)]" aria-hidden>
               {[0, 1, 2].map((row) => (
@@ -705,25 +705,27 @@ export default function AdminUsersPage() {
                       {canManageAssignments && expandedUserId === user.id && (
                         <tr>
                           <td colSpan={5} className="p-0">
-                            <GrantEditor
-                              key={`${user.id}-${user.role}`}
-                              userId={user.id}
-                              lockLearningPolicy={user.preset === "learner"}
-                              isStudent={user.role === "student"}
-                            />
-                            <BookPermissionEditor userId={user.id} />
-                            {user.preset === "learner" && (
-                              <>
-                                <GuardianRelationshipsEditor
-                                  learnerId={user.id}
-                                  learnerUsername={user.username}
-                                  users={users}
-                                />
-                                <LearnerProfileEditor
-                                  username={user.username}
-                                />
-                              </>
-                            )}
+                            <div className="sticky left-0 w-[100cqw]">
+                              <GrantEditor
+                                key={`${user.id}-${user.role}`}
+                                userId={user.id}
+                                lockLearningPolicy={user.preset === "learner"}
+                                isStudent={user.role === "student"}
+                              />
+                              <BookPermissionEditor userId={user.id} />
+                              {user.preset === "learner" && (
+                                <>
+                                  <GuardianRelationshipsEditor
+                                    learnerId={user.id}
+                                    learnerUsername={user.username}
+                                    users={users}
+                                  />
+                                  <LearnerProfileEditor
+                                    username={user.username}
+                                  />
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )}

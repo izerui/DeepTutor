@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import GuardianSettingsPage from "@/features/settings/sections/GuardianSettingsSection";
 import { GuardianRelationshipsEditor } from "@/features/multi-user/components/GuardianRelationshipsEditor";
@@ -31,6 +31,7 @@ const report = {
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation(async (url, init) => {
     if (String(url).endsWith("/guardian-report")) return Response.json(report);
+    if (init?.method === "DELETE" || String(url).endsWith("/credentials/reset")) return Response.json({ ok: true });
     if (init?.method === "POST") return Response.json({ relationship: {
       ...relationship, id: "new", guardian_user_id: "new-guardian", guardian_username: "New guardian",
       permissions: JSON.parse(String(init.body)).permissions,
@@ -39,6 +40,33 @@ beforeEach(() => {
       return Response.json({ relationships: [structuredClone(relationship)] });
     throw new Error(`Unexpected request: ${url}`);
   });
+});
+
+it.each(["revoke", "reset"] as const)("preserves %s confirmation cancel and submit behavior", async kind => {
+  render(<GuardianRelationshipsEditor learnerId="learner" learnerUsername="Learner" users={[]} />);
+  await screen.findByText("Existing guardian");
+  const open = () => {
+    if (kind === "reset") {
+      fireEvent.change(screen.getByLabelText("New learner password"), { target: { value: "Synthetic-reset-2026!" } });
+      fireEvent.click(screen.getByRole("button", { name: "Reset learner credentials" }));
+    } else fireEvent.click(screen.getByRole("button", { name: "Revoke access" }));
+  };
+  open();
+  await screen.findByRole("alertdialog");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(vi.mocked(apiFetch).mock.calls.filter(([, init]) => init?.method)).toHaveLength(0);
+  open();
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", {
+    name: kind === "reset" ? "Reset credentials" : "Revoke access",
+  }));
+  await screen.findByText(kind === "reset" ? "Learner credentials were reset." : "Guardian access revoked.");
+  const writes = vi.mocked(apiFetch).mock.calls.filter(([, init]) => init?.method);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toEqual(kind === "reset" ? [
+    "/kaoyan/api/multi-user/learners/learner/credentials/reset",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"new_password":"Synthetic-reset-2026!"}' },
+  ] : ["/kaoyan/api/multi-user/guardians/legacy", { method: "DELETE" }]);
 });
 
 it("loads a legacy guardian relationship and public count without requesting materials", async () => {
