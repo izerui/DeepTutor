@@ -328,6 +328,15 @@ def _isolate_kb_registry(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_book_registry(monkeypatch, tmp_path):
+    """Isolate the deployment-wide database and process-global book readers."""
+    from deeptutor.book import registry
+
+    monkeypatch.setattr(registry, "DB_PATH_OVERRIDE", tmp_path / "book_registry.sqlite3")
+    monkeypatch.setattr(registry, "_readers", dict(registry._readers))
+
+
+@pytest.fixture(autouse=True)
 def _disable_startup_kb_backfill(monkeypatch):
     """Running the real app lifespan in a test must not walk the developer's data/.
 
