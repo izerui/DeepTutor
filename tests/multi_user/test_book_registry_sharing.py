@@ -279,11 +279,12 @@ def test_book_commit_failure_rolls_back_kb_publication(library, as_user):
     assert not protected(book)
 
 
-def test_no_nested_writer_and_unsupported_journal_fails_closed(library, as_user):
+@pytest.mark.parametrize("database", ["book", "kb"])
+def test_no_nested_writer_and_unsupported_journal_fails_closed(library, as_user, database):
     book, _, _ = library
     with books._write(), pytest.raises(books.BookRegistryError, match="active book writer"):
         books.share_book_kbs(book.ref)
-    conn = sqlite3.connect(kbs._db_path())
+    conn = sqlite3.connect(books._db_path() if database == "book" else kbs._db_path())
     try:
         conn.execute("PRAGMA journal_mode=WAL")
     finally:
@@ -291,6 +292,21 @@ def test_no_nested_writer_and_unsupported_journal_fails_closed(library, as_user)
     with as_user("t1", role="teacher"), pytest.raises(books.BookRegistryError, match="DELETE"):
         books.set_book_visibility(book.ref, "public")
     assert books.get_book(book.ref).visibility == "private" and not protected(book)
+
+
+def test_shared_transaction_uses_disk_main_and_full_delete_journals(library):
+    from deeptutor.book.sharing import shared_write
+
+    with shared_write() as conn:
+        databases = {row["name"]: row["file"] for row in conn.execute("PRAGMA database_list")}
+        assert databases == {
+            "main": str(kbs._db_path().resolve()),
+            "books": str(books._db_path().resolve()),
+        }
+        assert all(databases.values())
+        for schema in ("main", "books"):
+            assert conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0] == "delete"
+            assert conn.execute(f"PRAGMA {schema}.synchronous").fetchone()[0] == 2
 
 
 def test_resolution_exception_is_retryable_and_not_empty(library, monkeypatch):
