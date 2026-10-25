@@ -208,6 +208,218 @@ def test_interrupted_registry_migration_recovers_via_journal(
     assert migration.recover_operation(operation["id"]) == result
 
 
+@pytest.mark.parametrize("interruption", ["registry_restore", "destination_cleanup"])
+def test_written_marker_error_then_interrupted_compensation_resumes_consistently(
+    registered_stores, monkeypatch, tmp_path, interruption,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, other_book, other_kb = registered_stores
+    write = migration.atomic_write_json
+    restore = migration._restore_kb_registry
+    remove = migration._remove_installed
+    observed = []
+
+    def fail_after_marker(path, payload):
+        write(path, payload)
+        if payload.get("status") == "committed":
+            books.set_book_visibility(book.book_id, "private")
+            raise OSError("injected post-replace marker failure")
+
+    def interrupt_after_restore(result, source_paths, target_paths):
+        observed.append(json.loads(
+            (Path(result["recovery_path"]) / "operation.json").read_text()
+        )["status"])
+        restore(result, source_paths, target_paths)
+        assert books.get_book(book.book_id).base_dir == book.base_dir
+        assert kbs.get_kb(kb.kb_id).base_dir == kb.base_dir
+        if interruption == "registry_restore":
+            raise KeyboardInterrupt("interrupted after compensation commit")
+
+    def interrupt_after_cleanup(result, target_paths):
+        remove(result, target_paths)
+        raise KeyboardInterrupt("interrupted before failed marker")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", fail_after_marker)
+        patch.setattr(migration, "_restore_kb_registry", interrupt_after_restore)
+        if interruption == "destination_cleanup":
+            patch.setattr(migration, "_remove_installed", interrupt_after_cleanup)
+        with pytest.raises(KeyboardInterrupt):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    operation = migration.operations()[0]
+    with pytest.raises(WorkspaceError, match="recovery"):
+        migration.assert_no_pending_recovery()
+    # Recover itself may also be interrupted after committing compensation.
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "_restore_kb_registry", interrupt_after_restore)
+        if interruption == "destination_cleanup":
+            patch.setattr(migration, "_remove_installed", interrupt_after_cleanup)
+        with pytest.raises(KeyboardInterrupt):
+            migration.recover_operation(operation["id"])
+    assert migration.operations()[0]["status"] == "recovery_required"
+    result = migration.recover_operation(operation["id"])
+    evidence = {
+        "interrupted_status": operation["status"], "resumed_status": result["status"],
+        "book_location": books.get_book(book.book_id).base_dir,
+        "kb_location": kbs.get_kb(kb.kb_id).base_dir,
+        "source_book_exists": (source.get_book_dir() / book.dir_name).exists(),
+        "source_kb_exists": (source.get_knowledge_bases_root() / "atlas").exists(),
+        "target_book_exists": (target.get_book_dir() / book.dir_name).exists(),
+        "target_kb_exists": (target.get_knowledge_bases_root() / "atlas").exists(),
+    }
+    write(tmp_path / "marker-recovery-evidence.json", evidence)
+    assert evidence["source_book_exists"] and evidence["source_kb_exists"], evidence
+    assert evidence["book_location"] == book.base_dir
+    assert evidence["kb_location"] == kb.base_dir
+    assert not evidence["target_book_exists"] and not evidence["target_kb_exists"]
+    assert observed == ["recovery_required", "recovery_required"]
+    assert operation["status"] == "recovery_required"
+    assert result["status"] == "recovered"
+    assert books.get_book(other_book.book_id) == other_book
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+    assert books.get_book(book.book_id).visibility == "private"
+    assert books.get_meta(f"visibility_intent_v1:{book.book_id}") == "private"
+    assert kbs.list_references(kb.kb_id) == []
+    assert migration.recover_operation(operation["id"]) == result
+    migration.assert_no_pending_recovery()
+
+
+@pytest.mark.parametrize("marker_written", [False, True])
+@pytest.mark.parametrize("intent_written", [False, True])
+def test_failed_recovery_intent_does_not_start_compensation(
+    registered_stores, monkeypatch, marker_written, intent_written,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, other_book, other_kb = registered_stores
+    write = migration.atomic_write_json
+    restore_sessions = migration._restore_sessions
+    restore_registry = migration._restore_kb_registry
+    remove = migration._remove_installed
+    side_effects = []
+    intents = []
+
+    def fail_writes(path, payload):
+        if payload.get("status") == "committed":
+            if marker_written:
+                write(path, payload)
+            raise OSError("injected marker failure")
+        if payload.get("status") == "recovery_required":
+            intents.append(payload["status"])
+            if intent_written:
+                write(path, payload)
+            raise OSError("injected recovery intent persistence failure")
+        return write(path, payload)
+
+    def observe_sessions(*args):
+        side_effects.append("sessions")
+        return restore_sessions(*args)
+
+    def observe_registry(*args):
+        side_effects.append("registry")
+        return restore_registry(*args)
+
+    def observe_cleanup(*args):
+        side_effects.append("cleanup")
+        return remove(*args)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", fail_writes)
+        patch.setattr(migration, "_restore_sessions", observe_sessions)
+        patch.setattr(migration, "_restore_kb_registry", observe_registry)
+        patch.setattr(migration, "_remove_installed", observe_cleanup)
+        with pytest.raises((WorkspaceError, OSError)):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    assert side_effects == [], "No compensation may precede acknowledged recovery intent"
+    assert intents == ["recovery_required"]
+    assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+    assert kbs.get_kb(kb.kb_id).base_dir == str(target.get_knowledge_bases_root())
+    assert source.get_book_dir().exists() and target.get_book_dir().exists()
+    assert source.get_knowledge_bases_root().exists() and target.get_knowledge_bases_root().exists()
+    operation = migration.operations()[0]
+    expected_status = (
+        "recovery_required" if intent_written else "committed" if marker_written else "transferring"
+    )
+    assert operation["status"] == expected_status
+    with pytest.raises(WorkspaceError, match="recovery"):
+        migration.assert_no_pending_recovery()
+    result = migration.recover_operation(operation["id"])
+    committed = expected_status == "committed"
+    expected = target if committed else source
+    removed = source if committed else target
+    assert result["status"] == ("completed" if committed else "recovered")
+    assert books.get_book(book.book_id).base_dir == str(expected.get_book_dir())
+    assert kbs.get_kb(kb.kb_id).base_dir == str(expected.get_knowledge_bases_root())
+    assert (expected.get_book_dir() / book.dir_name).exists()
+    assert (expected.get_knowledge_bases_root() / "atlas/document.md").read_text() == "retained KB"
+    assert not (removed.get_book_dir() / book.dir_name).exists()
+    assert not (removed.get_knowledge_bases_root() / "atlas").exists()
+    assert books.get_book(other_book.book_id) == other_book
+    assert kbs.get_kb(other_kb.kb_id) == other_kb
+
+
+@pytest.mark.parametrize("intent_written", [False, True])
+def test_recover_waits_for_durable_intent_before_restoring(
+    registered_stores, monkeypatch, intent_written,
+):
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+    from deeptutor.services.workspace import data_migration as migration
+
+    source, target, target_id, book, kb, _, _ = registered_stores
+    write = migration.atomic_write_json
+
+    def stop_before_marker(path, payload):
+        if payload.get("status") == "committed":
+            raise KeyboardInterrupt("before committed marker")
+        return write(path, payload)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", stop_before_marker)
+        with pytest.raises(KeyboardInterrupt):
+            migrate_data("", target_id, ["book", "knowledge_bases"])
+    operation = migration.operations()[0]
+    assert operation["status"] == "transferring"
+
+    def fail_intent(path, payload):
+        assert payload["status"] == "recovery_required"
+        if intent_written:
+            write(path, payload)
+        raise OSError("recovery intent unavailable")
+
+    def forbidden_compensation(*_args):
+        pytest.fail("Recover performed compensation without persisting its intent")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(migration, "atomic_write_json", fail_intent)
+        patch.setattr(migration, "_restore_sessions", forbidden_compensation)
+        patch.setattr(migration, "_restore_kb_registry", forbidden_compensation)
+        patch.setattr(migration, "_remove_installed", forbidden_compensation)
+        with pytest.raises(WorkspaceError, match="recovery intent"):
+            migration.recover_operation(operation["id"])
+    assert books.get_book(book.book_id).base_dir == str(target.get_book_dir())
+    assert kbs.get_kb(kb.kb_id).base_dir == str(target.get_knowledge_bases_root())
+    assert source.get_book_dir().exists() and target.get_book_dir().exists()
+    assert source.get_knowledge_bases_root().exists() and target.get_knowledge_bases_root().exists()
+    assert migration.operations()[0]["status"] == (
+        "recovery_required" if intent_written else "transferring"
+    )
+    with pytest.raises(WorkspaceError, match="recovery"):
+        migration.assert_no_pending_recovery()
+    assert migration.recover_operation(operation["id"])["status"] == "recovered"
+    assert books.get_book(book.book_id).base_dir == book.base_dir
+    assert kbs.get_kb(kb.kb_id).base_dir == kb.base_dir
+    assert (source.get_book_dir() / book.dir_name).is_dir()
+    assert (source.get_knowledge_bases_root() / "atlas/document.md").read_text() == "retained KB"
+    assert not target.get_book_dir().exists()
+    assert not target.get_knowledge_bases_root().exists()
+
+
 @pytest.mark.parametrize("change", ["location", "replacement", "new_source"])
 def test_registry_change_during_copy_is_not_adopted_or_discarded(
     registered_stores, monkeypatch, change, tmp_path,

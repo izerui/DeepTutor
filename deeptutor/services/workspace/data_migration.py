@@ -638,7 +638,8 @@ def migrate_data(
                         target_id,
                     )
             _relocate_registries(result, source, target)
-            # A failed commit-marker write must still take the rollback path.
+            # A marker writer can raise after replacement. Rollback must first
+            # replace any durable committed marker with recovery intent.
             atomic_write_json(journal, {**result, "status": "committed"})
             result["status"] = "committed"
             # The verified snapshot remains available for recovery. Remove
@@ -667,6 +668,8 @@ def migrate_data(
         except Exception as exc:
             if result["status"] not in {"committed", "completed"}:
                 if result["status"] == "transferring":
+                    result["error"] = str(exc)
+                    _record_recovery_intent(result, journal)
                     try:
                         _restore_sessions(root, source, target)
                         _restore_kb_registry(result, source, target)
@@ -881,6 +884,22 @@ def _restore_sessions(root: Path, source, target) -> None:
         # lease prevents another writer from populating the new database.
         for suffix in ("", "-wal", "-shm"):
             Path(str(target.get_chat_history_db()) + suffix).unlink(missing_ok=True)
+
+
+def _record_recovery_intent(result: dict, journal: Path) -> None:
+    """Fence rollback before restoring sessions, metadata, or removing copies."""
+    if result["status"] == "recovery_required":
+        return
+    try:
+        atomic_write_json(journal, {**result, "status": "recovery_required"})
+    except Exception as exc:
+        # The write may or may not have reached disk. Without acknowledgment,
+        # retain both copies and leave the registries untouched for Recover.
+        raise WorkspaceError(
+            "Could not record recovery intent; copies were retained without compensation. "
+            "Use Recover after journal storage is available."
+        ) from exc
+    result["status"] = "recovery_required"
 
 
 def _restore_kb_registry(result: dict, source, target) -> None:
@@ -1193,6 +1212,7 @@ def recover_operation(operation_id: str) -> dict:
             result["status"] = "completed"
         else:
             if result["status"] in {"transferring", "recovery_required"}:
+                _record_recovery_intent(result, journal)
                 _restore_sessions(root, source, target)
                 _restore_kb_registry(result, source, target)
             _remove_installed(result, target)
