@@ -653,3 +653,100 @@ def test_already_frozen_v1_inventory_keeps_its_original_targets(seed_user):
     assert registry.get_book("bk_hidden").visibility == "public"
     assert ("book_auto_public", "bk_new") not in _items()
     assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+
+
+@pytest.mark.parametrize("entry", ["identity_failure", "persisted_start", "persisted_grants"])
+def test_attempts_zero_unknown_survives_absent_shelf_and_recovers_legacy(
+    seed_user, tmp_path, entry,
+):
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    root = shelf.path_service.get_book_dir()
+    original_users = identity.USERS_FILE.read_bytes()
+    if entry == "identity_failure":
+        identity.USERS_FILE.write_text("{")
+        backfill.backfill_book_registry()
+        identity.USERS_FILE.write_bytes(original_users)
+    else:
+        # This is the durable state left by an exit before the first resume.
+        backfill._freeze_inventory(root)
+        if entry == "persisted_grants":
+            users, raw = backfill._accounts()
+            backfill._freeze_grants(users, raw)
+    before = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert before["attempts"] == 0
+    assert before["inventory_complete"] is False
+    (tmp_path / "attempts-zero-before.json").write_text(json.dumps(before))
+
+    saved = tmp_path / "temporarily-unmounted-original-shelf"
+    root.rename(saved)
+    backfill.backfill_book_registry()
+    absent = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    (tmp_path / "attempts-zero-absent.json").write_text(json.dumps(absent))
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    assert absent["inventory_complete"] is False
+    assert absent["started_ns"] == before["started_ns"]
+    assert absent["grants"] is not None
+
+    _permission("alice", {"create": False})
+    _permission("bob", {"create": True})
+    saved.rename(root)
+    backfill.backfill_book_registry()
+    recovered = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    (tmp_path / "attempts-zero-recovered.json").write_text(json.dumps(recovered))
+    assert recovered["started_ns"] == before["started_ns"]
+    assert recovered["grants"] == absent["grants"]
+    assert registry.get_book("bk_read").visibility == "public"
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert _items()[("book_auto_public", "bk_edit")]["users"] == ["alice", "bob"]
+    assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+
+
+def test_fresh_confirmed_absent_shelf_can_complete(seed_user):
+    seed_user("boss", role="admin")
+    seed_user("alice")
+    _permission("alice", {"default": "read"})
+    shelf = BookStorage(path_service=get_admin_path_service())
+    assert not shelf.path_service.get_book_dir().exists()
+    assert backfill.backfill_book_registry()["promoted"] == 0
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert snapshot["initial_absence_confirmed"] is True
+    assert snapshot["inventory_complete"] is True
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    shelf.save_book(Book(id="bk_new", title="New private"))
+    backfill.backfill_book_registry()
+    assert registry.get_book("bk_new").visibility == "private"
+    assert ("book_auto_public", "bk_new") not in _items()
+
+
+def test_disappearance_during_fresh_initial_observation_is_not_initial_absence(
+    seed_user, monkeypatch, tmp_path,
+):
+    shelf, _, bob = _setup(seed_user)
+    root = shelf.path_service.get_book_dir()
+    saved = tmp_path / "disappeared-after-fence"
+    original = Path.lstat
+    moved = False
+
+    def disappear(path, *args, **kwargs):
+        nonlocal moved
+        if path == root and not moved:
+            state = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+            assert state["inventory_complete"] is False
+            moved = True
+            root.rename(saved)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", disappear)
+    backfill.backfill_book_registry()
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert moved
+    assert not snapshot.get("initial_absence_confirmed")
+    assert snapshot["inventory_complete"] is False
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    monkeypatch.setattr(Path, "lstat", original)
+    saved.rename(root)
+    backfill.backfill_book_registry()
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()

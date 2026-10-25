@@ -85,13 +85,50 @@ def _freeze_inventory(root: Path) -> dict:
     # Commit the original fence before any enumeration/stat can fail. An empty
     # target map with inventory_complete=False is an obligation, not success.
     with registry._write() as conn:
-        conn.execute(
+        inserted = conn.execute(
             "INSERT OR IGNORE INTO registry_meta (key, value) VALUES (?, ?)",
             (_INVENTORY_KEY, json.dumps(snapshot)),
-        )
-        return json.loads(conn.execute(
+        ).rowcount == 1
+        snapshot = json.loads(conn.execute(
             "SELECT value FROM registry_meta WHERE key = ?", (_INVENTORY_KEY,),
         ).fetchone()[0])
+    # Only this live initializer may establish initial absence. A restarted
+    # caller returning an existing unknown snapshot never receives this path.
+    if inserted and _initial_absence_proven(Path(snapshot["base_dir"]), snapshot["started_ns"]):
+        complete = {**snapshot, "initial_absence_confirmed": True, "inventory_complete": True}
+        with registry._write() as conn:
+            # Do not overwrite grants/progress from a concurrent startup.
+            conn.execute(
+                "UPDATE registry_meta SET value = ? WHERE key = ? AND value = ?",
+                (json.dumps(complete), _INVENTORY_KEY, json.dumps(snapshot)),
+            )
+            snapshot = json.loads(conn.execute(
+                "SELECT value FROM registry_meta WHERE key = ?", (_INVENTORY_KEY,),
+            ).fetchone()[0])
+    return snapshot
+
+
+def _initial_absence_proven(root: Path, started_ns: int) -> bool:
+    """Tie a fresh missing shelf to the fence using its unchanged ancestor."""
+    candidate = root
+    while True:
+        try:
+            info = candidate.lstat()
+        except FileNotFoundError:
+            if candidate == candidate.parent:
+                return False
+            candidate = candidate.parent
+        except OSError:
+            logger.warning("Initial shelf absence unconfirmed: %s", root, exc_info=True)
+            return False
+        else:
+            # If an original shelf disappeared after the fence, the ancestor
+            # whose child disappeared has newer ctime, even on the fresh path.
+            return (
+                candidate != root and stat.S_ISDIR(info.st_mode)
+                and 0 < info.st_ctime_ns < started_ns <= time.time_ns()
+                and info.st_mtime_ns < started_ns
+            )
 
 
 def _resume_inventory() -> dict:
@@ -127,10 +164,9 @@ def _resume_inventory() -> dict:
             try:
                 before = root.lstat()
             except FileNotFoundError:
-                # Only the first observation can establish an absent shelf.
-                # Absence after an interrupted/failed attempt cannot erase it.
-                if snapshot["attempts"] == 1 and not snapshot["observed"]:
-                    snapshot["inventory_complete"] = True
+                # Even attempts=0 may follow a preflight failure or process exit.
+                # Current absence provides no evidence about the original shelf.
+                logger.warning("Legacy shelf absent; retaining unknown inventory: %s", root)
             else:
                 if not stat.S_ISDIR(before.st_mode):
                     raise ValueError(f"Unsafe legacy shelf: {root}")
