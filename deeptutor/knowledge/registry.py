@@ -61,7 +61,7 @@ DB_PATH_OVERRIDE: Path | None = None
 #: Modules that call :func:`register_reference_reader` on import. Imported the
 #: first time a reference is checked, so the registry never imports a feature
 #: package eagerly. Plan C adds its mastery-template module here.
-BUILTIN_READER_MODULES: tuple[str, ...] = ()
+BUILTIN_READER_MODULES: tuple[str, ...] = ("deeptutor.book.registry",)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS kb_registry (
@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS migration_items (
 
 _write_lock = threading.RLock()
 _builtin_readers_loaded = False
+_reader_lock = threading.RLock()
+_loading_builtin_readers = False
 
 
 class KbRegistryError(ValueError):
@@ -619,8 +621,10 @@ def resolve_ref(ref: str) -> KbRecord | None:
 
     try:
         resource = resolve_kb(value)
-    except HTTPException:
-        return None
+    except HTTPException as exc:
+        if exc.status_code in {400, 403, 404}:
+            return None
+        raise
     owner = _owner_for_resource(resource, get_current_user().id)
     if owner is None:
         return find_by_location(resource.base_dir, resource.name)
@@ -1097,7 +1101,11 @@ def list_references(kb_id: str) -> list[KbReference]:
 
 def register_reference_reader(referrer_kind: str, reader: Callable[[str, str], bool]) -> None:
     """``reader(referrer_id, user_id)`` is True when that user may read what the referrer cites."""
-    _readers[referrer_kind] = reader
+    with _reader_lock:
+        if _loading_builtin_readers:
+            _readers.setdefault(referrer_kind, reader)
+        else:
+            _readers[referrer_kind] = reader
 
 
 def _load_builtin_readers() -> None:
@@ -1107,17 +1115,28 @@ def _load_builtin_readers() -> None:
     replaces a reader that was already registered for the same kind (tests
     register lambdas; an eager import may have registered the real reader).
     """
-    global _builtin_readers_loaded
-    if _builtin_readers_loaded:
-        return
-    _builtin_readers_loaded = True
-    registered_before = dict(_readers)
-    for module in BUILTIN_READER_MODULES:
+    global _builtin_readers_loaded, _loading_builtin_readers
+    with _reader_lock:
+        if _builtin_readers_loaded or _loading_builtin_readers:
+            return
+        _loading_builtin_readers = True
+        complete = True
         try:
-            importlib.import_module(module)
-        except Exception:
-            logger.exception("Could not load knowledge reference readers from %s", module)
-    _readers.update(registered_before)
+            for name in BUILTIN_READER_MODULES:
+                before = dict(_readers)
+                try:
+                    module = importlib.import_module(name)
+                    register = getattr(module, "register_kb_reader", None)
+                    if callable(register):
+                        register()
+                except Exception:
+                    _readers.clear()
+                    _readers.update(before)
+                    complete = False
+                    logger.exception("Could not load knowledge reference readers from %s", name)
+            _builtin_readers_loaded = complete
+        finally:
+            _loading_builtin_readers = False
 
 
 def can_read(record: KbRecord, user: CurrentUser) -> bool:

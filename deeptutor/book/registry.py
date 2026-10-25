@@ -1,16 +1,17 @@
 """Deployment-wide book identities, references and access.
 
 Books stay in their original directories; the identity is the existing Book.id.
-Mutation functions are trusted storage primitives: callers authorize the owner
-and canonical location. Connection-taking helpers compose within one immediate
-transaction. They do not coordinate the separate KB database; callers must
-coordinate/recover that work without opening nested registry writers.
+Storage primitives take trusted identities and locations; sharing entry points
+also check the current actor. Connection-taking helpers compose within one
+immediate transaction. Changes affecting sharing must use sharing.shared_write
+and sync_protection, never nested independent registry writers.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import importlib
@@ -18,9 +19,10 @@ import logging
 from pathlib import Path
 import sqlite3
 import threading
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from deeptutor.knowledge.registry import KbRecord
     from deeptutor.multi_user.models import CurrentUser
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,9 @@ REF_PREFIX = "book:"
 DIR_PREFIX = "book_"
 REGISTRY_FILENAME = "book_registry.sqlite3"
 DB_PATH_OVERRIDE: Path | None = None
+KB_REFERRER_KIND = "book"
+KbChoice = Literal["make_public", "reference_only"]
+KB_CHOICES: frozenset[str] = frozenset({"make_public", "reference_only"})
 
 # Cached modules may expose register_book_readers() to restore a reset reader
 # map. Hooks run with setdefault semantics, preserving explicit custom readers.
@@ -84,6 +89,15 @@ CREATE TABLE IF NOT EXISTS registry_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS book_kb_binding_state (
+    book_id TEXT PRIMARY KEY REFERENCES book_registry(book_id) ON DELETE CASCADE,
+    complete INTEGER NOT NULL CHECK (complete IN (0, 1))
+);
+CREATE TABLE IF NOT EXISTS book_kb_pending (
+    book_id TEXT NOT NULL REFERENCES book_registry(book_id) ON DELETE CASCADE,
+    ref TEXT NOT NULL,
+    PRIMARY KEY (book_id, ref)
+);
 """
 
 _write_lock = threading.RLock()
@@ -103,6 +117,10 @@ class BookVisibilityError(BookRegistryError):
 
 class BookReferenceError(BookRegistryError):
     """Invalid or unavailable reference target."""
+
+
+class BookKbResolutionError(BookRegistryError):
+    """Binding is incomplete; retry in the canonical owner's storage scope."""
 
 
 @dataclass(frozen=True)
@@ -130,6 +148,40 @@ class BookReference:
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class BookKbIssue:
+    ref: str
+    kb_id: str
+    name: str
+    code: Literal["connector", "foreign_private"]
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class BookKbPlan:
+    book_id: str
+    public_kbs: tuple[KbRecord, ...]
+    private_kbs: tuple[KbRecord, ...]
+    referenced_kb_ids: frozenset[str]
+    issues: tuple[BookKbIssue, ...]
+    missing: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "public_kbs": [{"kb_id": kb.kb_id, "name": kb.name} for kb in self.public_kbs],
+            "private_kbs": [
+                {"kb_id": kb.kb_id, "name": kb.name,
+                 "default": "reference_only" if kb.kb_id in self.referenced_kb_ids else "make_public"}
+                for kb in self.private_kbs
+            ],
+            "issues": [issue.to_dict() for issue in self.issues],
+            "missing": list(self.missing),
+        }
 
 
 @dataclass(frozen=True)
@@ -425,14 +477,16 @@ def _replace_references(
 def replace_book_references(
         referrer_kind: str, referrer_id: str, book_ids: Sequence[str], *, created_by: str,
 ) -> None:
-    """Trusted whole-set replacement; unknown targets leave all prior evidence intact."""
-    with _write() as conn:
-        _replace_references(conn, referrer_kind, referrer_id, book_ids, created_by=created_by)
+    """Replace book and KB protection together; failure retains the entire old set."""
+    from .sharing import replace_references
+
+    replace_references(referrer_kind, referrer_id, book_ids, created_by=created_by)
 
 
 def remove_book_references(referrer_kind: str, referrer_id: str) -> None:
-    with _write() as conn:
-        _clear_referrer(conn, referrer_kind, referrer_id)
+    from .sharing import remove_references
+
+    remove_references(referrer_kind, referrer_id)
 
 
 def list_book_references(book_id: str) -> list[BookReference]:
@@ -527,9 +581,10 @@ def _unregister(conn: sqlite3.Connection, book_id: str) -> None:
 
 
 def unregister_book(book_id: str) -> None:
-    """Revoke and delete atomically; physical deletion guards belong to the service."""
-    with _write() as conn:
-        _unregister(conn, book_id)
+    """Revoke, unregister and release KBs together; services guard physical deletion."""
+    from .sharing import unregister
+
+    unregister(book_id)
 
 
 def relocate_book_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int:
@@ -652,8 +707,15 @@ def _set_kb_links(conn: sqlite3.Connection, book_id: str, links: Mapping[str, st
 
 def set_book_kb_links(book_id: str, links: Mapping[str, str]) -> None:
     """Store fixed KB identities, including explicitly unavailable empty values."""
-    with _write() as conn:
+    from .sharing import shared_write, sync_protection
+
+    with shared_write() as conn:
         _set_kb_links(conn, book_id, links)
+        conn.execute("DELETE FROM book_kb_pending WHERE book_id = ?", (strip_ref(book_id),))
+        conn.execute(
+            "INSERT OR REPLACE INTO book_kb_binding_state VALUES (?, 1)", (strip_ref(book_id),)
+        )
+        sync_protection(conn, strip_ref(book_id))
 
 
 def book_kb_links(book_id: str) -> dict[str, str]:
@@ -691,3 +753,127 @@ def set_meta(key: str, value: str) -> None:
             "INSERT INTO registry_meta (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value),
         )
+
+
+def resolve_kb_links(refs: Sequence[str]) -> dict[str, str]:
+    """Resolve in the current scope; transient errors never become missing bindings."""
+    from deeptutor.knowledge import registry as kb_registry
+
+    links = {}
+    for ref in dict.fromkeys(str(value) for value in refs if value):
+        try:
+            kb = kb_registry.resolve_ref(ref)
+        except Exception as exc:
+            raise BookKbResolutionError(f"Knowledge base {ref!r} needs resolution retry.") from exc
+        links[ref] = kb.kb_id if kb is not None else ""
+    return links
+
+
+def initialize_book_kb_links(
+    book_id: str, refs: Sequence[str], *, confirmed_missing: Sequence[str] = (),
+) -> bool:
+    """Retry pending links in the canonical owner's scope, never rebind fixed IDs.
+
+    An unresolved legacy name may precede KB backfill; only the caller with
+    authoritative missing-material evidence may mark it confirmed_missing.
+    Returns completion, distinct from has_kb_links (which only checks rows).
+    """
+    from .sharing import initialize_links
+
+    return initialize_links(book_id, refs, confirmed_missing=confirmed_missing)
+
+
+def kb_links_initialized(book_id: str) -> bool:
+    with _read() as conn:
+        if conn is None:
+            return False
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'book_kb_binding_state' AND type = 'table'"
+        ).fetchone() is None:
+            return False
+        row = conn.execute(
+            "SELECT complete FROM book_kb_binding_state WHERE book_id = ?", (strip_ref(book_id),)
+        ).fetchone()
+        return row is not None and bool(row["complete"])
+
+
+def plan_book_kbs(book_id: str) -> BookKbPlan:
+    from .sharing import plan
+
+    return plan(book_id)
+
+
+def share_book_kbs(
+    book_id: str, kb_choices: Mapping[str, str] | None = None, *, force: bool = False,
+) -> BookKbPlan:
+    """Prepare choices; private unreferenced books never retain KB protection."""
+    from .sharing import share
+
+    return share(book_id, kb_choices, force=force)
+
+
+def set_book_visibility(
+    book_id: str, visibility: str, *, force: bool = False,
+    kb_choices: Mapping[str, str] | None = None,
+) -> BookRecord:
+    from .sharing import set_visibility
+
+    return set_visibility(book_id, visibility, force=force, kb_choices=kb_choices)
+
+
+active_books: ContextVar[frozenset[str]] = ContextVar("active_books", default=frozenset())
+_reading_bindings: ContextVar[tuple[tuple[str, BookRecord], ...]] = ContextVar(
+    "book_reading_bindings", default=(),
+)
+
+
+@contextmanager
+def reading_book(*book_ids: str) -> Iterator[None]:
+    """Authorize canonical registry identities, never a same-id local storage copy.
+
+    Consumers must load the registered location, not their current storage.
+    Bindings also pin actor and location so inherited or stale contexts cannot
+    activate another account's authorization or a relocated/recreated book.
+    """
+    from deeptutor.multi_user.context import get_current_user
+
+    user = get_current_user()
+    bindings = []
+    for value in book_ids:
+        record = get_book(value)
+        if record is not None and can_read_book(record, user):
+            bindings.append((user.id, record))
+    token = active_books.set(active_books.get() | frozenset(r.book_id for _, r in bindings))
+    bound_token = _reading_bindings.set(_reading_bindings.get() + tuple(bindings))
+    try:
+        yield
+    finally:
+        _reading_bindings.reset(bound_token)
+        active_books.reset(token)
+
+
+def book_kb_reader(book_id: str, user_id: str) -> bool:
+    from deeptutor.multi_user.context import get_current_user
+
+    user = get_current_user()
+    if user.id != user_id or book_id not in active_books.get():
+        return False
+    current = get_book(book_id)
+    if current is None:
+        return False
+    return any(
+        actor == user_id and record.book_id == book_id
+        and record.created_at == current.created_at and can_read_book(record, user)
+        for actor, record in _reading_bindings.get()
+    )
+
+
+def register_kb_reader() -> None:
+    from deeptutor.knowledge import registry as kb_registry
+
+    with kb_registry._reader_lock:
+        if KB_REFERRER_KIND not in kb_registry._readers:
+            kb_registry.register_reference_reader(KB_REFERRER_KIND, book_kb_reader)
+
+
+register_kb_reader()
