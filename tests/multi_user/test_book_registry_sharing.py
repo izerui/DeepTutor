@@ -492,3 +492,179 @@ def test_initial_resolution_holds_no_global_sqlite_writer(library, as_user, monk
     with as_user("t1", role="teacher"):
         assert books.initialize_book_kb_links(book.ref, ["new"])
     assert calls == [books._db_path(), kbs._db_path()]
+
+
+@pytest.mark.parametrize("actor,role", [("t1", "teacher"), ("root", "admin"), ("t1", "user")])
+@pytest.mark.parametrize("operation", ["prepare", "publish"])
+def test_explicit_reference_only_records_only_actual_private_targets(
+    library, as_user, tmp_path, actor, role, operation,
+):
+    book, public, private = library
+    unrelated = kbs.register_kb(
+        base_dir=tmp_path / "kbs", name="unrelated", kind="uploaded", created_by="t1",
+    )
+    choices = {kb.kb_id: "reference_only" for kb in (public, private, unrelated)}
+    with as_user(actor, role=role):
+        if operation == "publish" and role == "user":
+            with pytest.raises(books.BookVisibilityError, match="teachers"):
+                books.set_book_visibility(book.ref, "public", kb_choices=choices)
+            assert kbs.get_meta("visibility_intent_v1:" + private.kb_id) is None
+            assert not protected(book)
+            return
+        if operation == "publish":
+            books.set_book_visibility(book.ref, "public", kb_choices=choices)
+        else:
+            books.share_book_kbs(book.ref, choices)
+    assert kbs.get_meta("visibility_intent_v1:" + private.kb_id) == "private"
+    assert books.get_meta("visibility_intent_v1:" + private.kb_id) is None
+    assert kbs.get_kb(private.kb_id).visibility == "private"
+    assert kbs.get_kb(public.kb_id).visibility == "public"
+    for kb in (public, unrelated):
+        assert kbs.get_meta("visibility_intent_v1:" + kb.kb_id) is None
+    assert protected(book) == ({public.kb_id, private.kb_id} if operation == "publish" else set())
+
+
+def test_reference_only_same_id_uses_separate_registry_schemas(library, as_user, tmp_path):
+    _, _, private = library
+    book = books.register_book(
+        base_dir=tmp_path / "books", dir_name="book_" + private.kb_id,
+        title="Same ID", created_by="t1",
+    )
+    assert book.book_id == private.kb_id
+    books.set_book_kb_links(book.ref, {private.ref: private.kb_id})
+    with as_user("t1", role="teacher"):
+        books.set_book_visibility(book.ref, "public", kb_choices={private.kb_id: "reference_only"})
+    key = "visibility_intent_v1:" + private.kb_id
+    assert kbs.get_meta(key) == "private"
+    assert books.get_meta(key) == "public"
+    assert kbs.get_kb(private.kb_id).visibility == "private"
+    assert books.get_book(book.ref).visibility == "public"
+
+
+@pytest.mark.parametrize("boundary", ["intent", "protection", "commit"])
+@pytest.mark.parametrize("prior_intent", [None, "public"])
+def test_reference_only_actual_sql_failure_rolls_back_joint_state(
+    library, as_user, monkeypatch, boundary, prior_intent,
+):
+    from deeptutor.book import sharing
+
+    book, _, private = library
+    key = "visibility_intent_v1:" + private.kb_id
+    if prior_intent is not None:
+        kbs.set_meta(key, prior_intent)
+    # Preserve a pre-existing document-scoped reference through failed refresh.
+    kbs.add_reference(
+        private.kb_id, referrer_kind="book", referrer_id=book.book_id,
+        created_by="t1", doc_ids=["doc-one"],
+    )
+    before = kbs.list_references(private.kb_id)
+    if boundary == "intent":
+        with kbs._write() as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_intent BEFORE INSERT ON registry_meta "
+                "WHEN NEW.value = 'private' BEGIN SELECT RAISE(ABORT, 'intent failed'); END"
+            )
+    elif boundary == "protection":
+        with kbs._write() as conn:
+            conn.execute(
+                "CREATE TRIGGER fail_protection BEFORE INSERT ON kb_references "
+                "BEGIN SELECT RAISE(ABORT, 'protection failed'); END"
+            )
+    else:
+        with books._write() as conn:
+            conn.execute("CREATE TABLE commit_parent(id TEXT PRIMARY KEY)")
+            conn.execute(
+                "CREATE TABLE commit_child("
+                "id TEXT REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)"
+            )
+            conn.execute(
+                "CREATE TRIGGER fail_commit AFTER UPDATE OF visibility ON book_registry "
+                "BEGIN INSERT INTO commit_child VALUES ('missing'); END"
+            )
+    synced = []
+    original = sharing.sync_protection
+
+    def observe(conn, book_id, **kwargs):
+        assert conn.in_transaction
+        assert conn.execute(
+            "SELECT value FROM main.registry_meta WHERE key = ?", (key,),
+        ).fetchone()[0] == "private"
+        assert conn.execute(
+            "SELECT visibility FROM books.book_registry WHERE book_id = ?", (book_id,),
+        ).fetchone()[0] == "public"
+        original(conn, book_id, **kwargs)
+        synced.append(book_id)
+
+    with monkeypatch.context() as observation, as_user("t1", role="teacher"):
+        observation.setattr(sharing, "sync_protection", observe)
+        with pytest.raises(sqlite3.IntegrityError, match={
+            "intent": "intent failed", "protection": "protection failed",
+            "commit": "FOREIGN KEY constraint failed",
+        }[boundary]):
+            books.set_book_visibility(
+                book.ref, "public", kb_choices={private.kb_id: "reference_only"},
+            )
+    assert synced == ([book.book_id] if boundary == "commit" else [])
+    assert books.get_book(book.ref) == book
+    assert kbs.get_kb(private.kb_id) == private
+    assert kbs.get_meta(key) == prior_intent
+    assert books.get_meta("visibility_intent_v1:" + book.book_id) is None
+    assert books.get_meta(key) is None
+    assert kbs.list_references(private.kb_id) == before
+
+
+@pytest.mark.parametrize("failure", ["foreign_actor", "invalid", "force", "connector", "foreign_kb"])
+def test_rejected_reference_choice_records_no_intent(library, as_user, tmp_path, failure):
+    book, _, private = library
+    choices = {private.kb_id: "reference_only"}
+    if failure in {"connector", "foreign_kb"}:
+        blocked = kbs.register_kb(
+            base_dir=tmp_path / "kbs", name="blocked",
+            kind="obsidian" if failure == "connector" else "uploaded", created_by="t2",
+        )
+        books.set_book_kb_links(book.ref, {"answers": private.kb_id, "blocked": blocked.kb_id})
+        choices[blocked.kb_id] = "reference_only"
+    elif failure == "invalid":
+        choices["unrelated"] = "invalid"
+    with as_user("foreign" if failure == "foreign_actor" else "t1", role="teacher"):
+        with pytest.raises(books.BookVisibilityError):
+            books.set_book_visibility(
+                book.ref, "public", kb_choices=choices, force=failure == "force",
+            )
+    for kb_id in choices:
+        assert kbs.get_meta("visibility_intent_v1:" + kb_id) is None
+    assert books.get_book(book.ref) == book
+    assert not protected(book)
+
+
+def test_force_skipped_reference_target_has_no_intent_or_access(library, as_user, tmp_path):
+    book, _, private = library
+    connector = kbs.register_kb(
+        base_dir=tmp_path / "kbs", name="vault", kind="obsidian", created_by="t1",
+    )
+    books.set_book_kb_links(book.ref, {"answers": private.kb_id, "vault": connector.kb_id})
+    with as_user("root", role="admin"):
+        books.set_book_visibility(book.ref, "public", force=True, kb_choices={
+            private.kb_id: "reference_only", connector.kb_id: "reference_only",
+        })
+    assert protected(book) == {private.kb_id}
+    assert kbs.get_meta("visibility_intent_v1:" + private.kb_id) == "private"
+    assert kbs.get_meta("visibility_intent_v1:" + connector.kb_id) is None
+    with as_user("s1", role="student"), books.reading_book(book.ref):
+        assert not kbs.can_read(connector, get_current_user())
+        assert not kbs.can_write(private, get_current_user())
+
+
+def test_generic_reference_changes_preserve_absent_intent_and_other_doc_scope(library, as_user):
+    book, _, private = library
+    kbs.add_reference(
+        private.kb_id, referrer_kind="template", referrer_id="limited",
+        created_by="t1", doc_ids=["doc-one"],
+    )
+    limited = kbs.list_references(private.kb_id)
+    with as_user("t1", role="teacher"):
+        books.replace_book_references("template", "one", [book.ref], created_by="t1")
+        books.set_book_kb_links(book.ref, books.book_kb_links(book.ref))
+        assert kbs.get_meta("visibility_intent_v1:" + private.kb_id) is None
+        books.share_book_kbs(book.ref, {private.kb_id: "reference_only"})
+    assert [ref for ref in kbs.list_references(private.kb_id) if ref.referrer_kind == "template"] == limited

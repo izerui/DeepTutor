@@ -580,3 +580,99 @@ def test_book_make_public_records_kb_intent_in_main_database(legacy, make_kb):
     assert kb_backfill.backfill_registry()["promoted"] == 0
     assert kbs.get_kb(kb.kb_id).visibility == "private"
     assert _public_notices() == []
+
+
+@pytest.mark.parametrize("choice", ["explicit", "none", "empty", "unrelated", "ref"])
+def test_book_reference_choice_survives_pending_kb_migration(
+    legacy, make_kb, monkeypatch, tmp_path, choice,
+):
+    root, alice = legacy
+    kb = _kb(root, make_kb)
+    intent_key = "visibility_intent_v1:" + kb.kb_id
+    progress_key = kb_backfill._PROGRESS_PREFIX + kb.kb_id
+    original_grant = load_grant(alice["id"])
+    put_progress = kb_backfill._put_progress
+    hits = []
+
+    def rollback(conn, kb_id, progress):
+        put_progress(conn, kb_id, progress)
+        assert kb_id == kb.kb_id
+        assert conn.execute(
+            "SELECT visibility FROM kb_registry WHERE kb_id = ?", (kb_id,),
+        ).fetchone()[0] == "public"
+        hits.append(kb_id)
+        raise sqlite3.OperationalError("synthetic publication/outbox rollback")
+
+    with monkeypatch.context() as fault:
+        fault.setattr(kb_backfill, "_put_progress", rollback)
+        first = kb_backfill.backfill_registry()
+    assert first["promoted"] == 0 and hits == [kb.kb_id]
+    assert kbs.get_kb(kb.kb_id).visibility == "private"
+    assert kbs.get_meta(intent_key) is None
+    assert kbs.get_meta(progress_key) is None
+    assert kbs.get_meta(kb_backfill.GRANTS_PROMOTED_KEY) is None
+    assert _public_notices() == []
+    frozen = json.loads(kbs.get_meta(kb_backfill._INVENTORY_KEY))
+    assert frozen["identities"]["atlas"] == kb.kb_id
+    assert frozen["targets"][kb.kb_id]["owner"] == LOCAL_ADMIN_ID
+    assert frozen["grants"]["atlas"] == ["alice"]
+    book = books.register_book(
+        base_dir=get_admin_path_service().get_book_dir(),
+        dir_name="book_bk_reference_intent", title="Explicit reference choice",
+        created_by=LOCAL_ADMIN_ID,
+    )
+    books.set_book_kb_links(book.book_id, {kb.ref: kb.kb_id})
+    choices = {
+        "explicit": {kb.kb_id: "reference_only"},
+        "none": None,
+        "empty": {},
+        "unrelated": {"unrelated": "reference_only"},
+        "ref": {kb.ref: "reference_only"},
+    }[choice]
+    actor = local_admin_user()
+    assert actor.id == kb.created_by == book.created_by == LOCAL_ADMIN_ID
+    assert actor.is_admin and kbs.can_write(kb, actor) and books.can_write_book(book, actor)
+    with user_context(actor):
+        plan = books.plan_book_kbs(book.book_id)
+        assert plan.private_kbs == (kb,)
+        assert not plan.issues and not plan.missing
+        assert books.set_book_visibility(
+            book.book_id, "public", kb_choices=choices,
+        ).visibility == "public"
+    assert kbs.get_kb(kb.kb_id).visibility == "private"
+    refs = kbs.list_references(kb.kb_id)
+    assert len(refs) == 1
+    assert (refs[0].referrer_kind, refs[0].referrer_id) == ("book", book.book_id)
+    assert books.get_meta(intent_key) is None
+    assert books.get_meta("visibility_intent_v1:" + book.book_id) == "public"
+    assert kbs.get_meta("visibility_intent_v1:" + book.book_id) is None
+    immediate_intent = kbs.get_meta(intent_key)
+    retried = kb_backfill.backfill_registry()
+    current = kbs.get_kb(kb.kb_id)
+    assert (current.kb_id, current.base_dir, current.dir_name, current.created_by, current.kind) == (
+        kb.kb_id, kb.base_dir, kb.dir_name, kb.created_by, kb.kind,
+    )
+    assert json.loads(kbs.get_meta(kb_backfill._INVENTORY_KEY)) == frozen
+    assert load_grant(alice["id"]) == original_grant
+    notices = _public_notices()
+    (tmp_path / "reference-only-evidence.json").write_text(json.dumps({
+        "choice": choice, "kb_id": kb.kb_id, "book_id": book.book_id,
+        "actor": {"id": actor.id, "role": actor.role},
+        "frozen": frozen, "first_report": first, "immediate_intent": immediate_intent,
+        "retry_report": retried, "final_visibility": current.visibility,
+        "notices": [notice.to_dict() for notice in notices],
+    }, indent=2), encoding="utf-8")
+    explicit = choice == "explicit"
+    assert current.visibility == ("private" if explicit else "public")
+    assert immediate_intent == ("private" if explicit else None)
+    assert retried["promoted"] == int(not explicit)
+    assert [notice.key for notice in notices] == ([] if explicit else [kb.kb_id])
+    assert kbs.get_meta(kb_backfill.GRANTS_PROMOTED_KEY)
+    assert json.loads(kbs.get_meta(progress_key))["done"] is True
+    assert kbs.list_references(kb.kb_id) == refs
+    # A later authorized positive choice remains effective.
+    with user_context(actor):
+        books.share_book_kbs(book.book_id, {kb.kb_id: "make_public"})
+    assert kbs.get_kb(kb.kb_id).visibility == "public"
+    if explicit:
+        assert kbs.get_meta(intent_key) == "public"

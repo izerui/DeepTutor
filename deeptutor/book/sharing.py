@@ -208,6 +208,10 @@ def _apply_choices(
     publish = [kb for kb in planned.private_kbs if choices.get(kb.kb_id) == "make_public"]
     if publish and not is_teacher_or_admin():
         raise books.BookVisibilityError("Only teachers and admins can make knowledge bases public.")
+    for kb in planned.private_kbs:
+        if choices.get(kb.kb_id) == "reference_only":
+            # Only an explicit canonical choice supersedes pending legacy grants.
+            record_choice(conn, kb.kb_id, "private", schema="main")
     for kb in publish:
         # The plan was built from this locked connection and checked actor/kind.
         conn.execute(
