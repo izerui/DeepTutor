@@ -64,3 +64,26 @@ it("loads the stored persona on retry before enabling save", async () => {
   await waitFor(() => expect(soulSection().getByRole("textbox")).toHaveValue("Existing persona"));
   expect(soulSection().getByRole("button", { name: "Save" })).not.toBeDisabled();
 });
+
+it.each([
+  { name: "Adopted copy", ref: "kb:stable-id", adopted: true },
+  { name: "Legacy copy", legacy: true },
+])("removes $name by its reference or legacy name", async kb => {
+  vi.mocked(apiFetch).mockImplementation(async (url, options) => {
+    if (String(url).endsWith("/soul")) return Response.json({ content: "" });
+    if (String(url).endsWith("/tool-options")) return Response.json({ tools: [], builtin_tools: [], mcp_tools: [] });
+    if (options?.method === "DELETE") return Response.json({ assets: { knowledge_bases: [], skills: [], notebooks: [] } });
+    return Response.json({ knowledge_bases: [kb], skills: [], notebooks: [] });
+  });
+  render(<PartnerConfigure partner={partner} onToast={vi.fn()} onUpdated={vi.fn()} />);
+  const row = (await screen.findByText(kb.name)).closest("li")!;
+  const notice = "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.";
+  if ("adopted" in kb) expect(within(row).getByText(notice)).toBeVisible();
+  else expect(within(row).queryByText(notice)).not.toBeInTheDocument();
+  fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
+  await waitFor(() => expect(screen.queryByText(kb.name)).not.toBeInTheDocument());
+  expect(apiFetch).toHaveBeenCalledWith(
+    expect.stringContaining(encodeURIComponent(kb.ref ?? kb.name)),
+    expect.objectContaining({ method: "DELETE" }),
+  );
+});

@@ -1,4 +1,10 @@
 {
+  "Migration results": "Результати міграції",
+  "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.": "Ці зміни зроблено одноразово під час оновлення моделі доступу. Перевірте їх і за потреби змініть видимість.",
+  "Knowledge base “{{name}}” is now public because it was granted to: {{users}}": "Базу знань «{{name}}» зроблено публічною, бо її було надано: {{users}}",
+  "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}": "Конектор «{{name}}» залишається приватним, тому його надання вимкнено. Зачеплені облікові записи: {{users}}",
+  "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.": "Партнер {{partner}} мав власну копію «{{name}}» (джерела більше немає); тепер це приватна база знань його творця.",
+  "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.": "Початкової бази знань більше немає. Ця копія тепер ваша приватна база знань; перевірте її в центрі знань.",
   "Partially correct": "Частково правильно",
   "These answers could not be submitted. Please review or retry.": "Не вдалося надіслати ці відповіді. Перевірте їх або спробуйте ще раз.",
   "The edit could not be sent. Your draft is still here; please retry.": "Не вдалося надіслати зміни. Чернетку збережено; спробуйте ще раз.",

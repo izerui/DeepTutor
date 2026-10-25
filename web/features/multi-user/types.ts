@@ -4,6 +4,7 @@ export type GrantPayload = {
   models: {
     llm: Array<Record<string, unknown>>;
   };
+  /** Retired: knowledge bases are shared by making them public. Kept so stored grants round-trip. */
   knowledge_bases: Array<Record<string, unknown>>;
   skills: Array<Record<string, unknown>>;
   /** Admin-assigned partners the user may see & consult ([{ partner_id }]). */
@@ -62,11 +63,6 @@ export type MultiUserResources = {
       models?: Array<{ model_id: string; name: string; model?: string }>;
     }>;
   };
-  knowledge_bases: Array<{
-    resource_id: string;
-    name: string;
-    source: "admin";
-  }>;
   skills: Array<{ name: string; description?: string; tags?: string[] }>;
   partners: Array<{ partner_id: string; name: string; description?: string }>;
   reading_materials: Array<{
@@ -97,4 +93,12 @@ export type AdminBook = {
   title: string;
   status: string;
   updated_at: number;
+};
+
+/** One line of the admin migration results notice; rendered by kind. */
+export type MigrationItem = {
+  kind: string;
+  key: string;
+  data: Record<string, unknown>;
+  created_at: string;
 };

@@ -3,6 +3,7 @@ import type {
   AdminBook,
   BookPermission,
   GrantPayload,
+  MigrationItem,
   MultiUserResources,
 } from "./types";
 
@@ -13,6 +14,14 @@ async function readError(res: Response, fallback: string): Promise<string> {
   } catch {
     return fallback;
   }
+}
+
+export async function fetchMigrationResults(): Promise<MigrationItem[]> {
+  const res = await apiFetch(apiUrl("/api/multi-user/admin/migration-results"));
+  if (!res.ok)
+    throw new Error(await readError(res, "Failed to load migration results"));
+  const data = await res.json();
+  return Array.isArray(data?.items) ? (data.items as MigrationItem[]) : [];
 }
 
 export async function fetchAdminResources(): Promise<MultiUserResources> {

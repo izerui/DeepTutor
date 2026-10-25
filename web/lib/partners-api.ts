@@ -86,7 +86,17 @@ export interface ToolOptions {
 }
 
 export interface PartnerAssets {
-  knowledge_bases: { name: string; documents?: number }[];
+  knowledge_bases: {
+    name: string;
+    /** `kb:<id>` of the referenced knowledge base. */
+    ref?: string;
+    documents?: number;
+    type?: string;
+    /** The source was gone; this copy became the creator's private KB. */
+    adopted?: boolean;
+    /** A copy from before references, not migrated yet. */
+    legacy?: boolean;
+  }[];
   skills: { name: string }[];
   notebooks: { id: string; name: string; record_count?: number }[];
 }

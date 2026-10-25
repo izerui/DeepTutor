@@ -1,4 +1,10 @@
 {
+  "Migration results": "Résultats de la migration",
+  "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.": "Ces changements ont été effectués une seule fois lors de la mise à niveau du modèle de partage. Vérifiez-les et ajustez la visibilité si nécessaire.",
+  "Knowledge base “{{name}}” is now public because it was granted to: {{users}}": "La base de connaissances « {{name}} » est désormais publique car elle était attribuée à : {{users}}",
+  "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}": "Le connecteur « {{name}} » reste privé, son attribution a donc été désactivée. Comptes concernés : {{users}}",
+  "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.": "Le partenaire {{partner}} avait sa propre copie de « {{name}} » (la source n’existe plus) ; elle est désormais une base de connaissances privée de son créateur.",
+  "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.": "La base de connaissances d’origine n’existe plus. Cette copie est désormais votre base privée ; vérifiez-la dans le centre de connaissances.",
   "Partially correct": "Partiellement correct",
   "These answers could not be submitted. Please review or retry.": "Ces réponses n’ont pas pu être envoyées. Veuillez les vérifier ou réessayer.",
   "The edit could not be sent. Your draft is still here; please retry.": "La modification n’a pas pu être envoyée. Votre brouillon est conservé ; réessayez.",

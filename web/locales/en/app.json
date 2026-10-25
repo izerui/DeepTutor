@@ -1,4 +1,10 @@
 {
+  "Migration results": "Migration results",
+  "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.": "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.",
+  "Knowledge base “{{name}}” is now public because it was granted to: {{users}}": "Knowledge base “{{name}}” is now public because it was granted to: {{users}}",
+  "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}": "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}",
+  "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.": "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.",
+  "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.": "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.",
   "Partially correct": "Partially correct",
   "These answers could not be submitted. Please review or retry.": "These answers could not be submitted. Please review or retry.",
   "The edit could not be sent. Your draft is still here; please retry.": "The edit could not be sent. Your draft is still here; please retry.",

@@ -1,4 +1,10 @@
 {
+  "Migration results": "Wyniki migracji",
+  "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.": "Te zmiany wprowadzono jednorazowo podczas aktualizacji modelu udostępniania. Sprawdź je i w razie potrzeby dostosuj widoczność.",
+  "Knowledge base “{{name}}” is now public because it was granted to: {{users}}": "Baza wiedzy „{{name}}” jest teraz publiczna, ponieważ była przypisana do: {{users}}",
+  "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}": "Konektor „{{name}}” pozostaje prywatny, więc jego przydział wyłączono. Dotknięte konta: {{users}}",
+  "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.": "Partner {{partner}} miał własną kopię „{{name}}” (źródło już nie istnieje); jest ona teraz prywatną bazą wiedzy jego twórcy.",
+  "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.": "Oryginalna baza wiedzy już nie istnieje. Ta kopia jest teraz Twoją prywatną bazą wiedzy; sprawdź ją w centrum wiedzy.",
   "Partially correct": "Częściowo poprawna odpowiedź",
   "These answers could not be submitted. Please review or retry.": "Nie udało się przesłać tych odpowiedzi. Sprawdź je lub spróbuj ponownie.",
   "The edit could not be sent. Your draft is still here; please retry.": "Nie udało się wysłać zmiany. Szkic został zachowany; spróbuj ponownie.",

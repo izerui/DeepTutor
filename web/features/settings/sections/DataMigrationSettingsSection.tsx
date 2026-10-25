@@ -6,6 +6,7 @@ import { Download, FolderInput, RefreshCw } from 'lucide-react'
 import { apiFetch, apiUrl } from '@/lib/api'
 import { useChatWorkspaces } from '@/hooks/useChatWorkspaces'
 import { activeWorkspaceId } from '@/lib/workspace-scope'
+import { MigrationResultsNotice } from '@/features/multi-user/components/MigrationResultsNotice'
 
 type Feature = {
   feature: string
@@ -187,6 +188,7 @@ export default function DataMigrationSettingsSection() {
   return (
     <section className="space-y-5">
       <h2 className="text-lg font-semibold">{text('Data migration', '数据迁移')}</h2>
+      <MigrationResultsNotice />
       <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
         {text(
           'Discover stored learning data, move it with its related conversations, or download an archive. Verified recovery copies are retained after migration.',

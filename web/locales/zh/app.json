@@ -1,4 +1,10 @@
 {
+  "Migration results": "迁移结果",
+  "These changes were made once when the sharing model was upgraded. Review them and adjust visibility where needed.": "这些变更是在升级共享方式时一次性完成的。请检查，并按需调整访问方式。",
+  "Knowledge base “{{name}}” is now public because it was granted to: {{users}}": "知识库“{{name}}”曾授权给以下账号，现已自动公开：{{users}}",
+  "Connector “{{name}}” stays private, so its grant was disabled. Affected accounts: {{users}}": "连接器“{{name}}”始终私有，原授权已停用。受影响的账号：{{users}}",
+  "Partner {{partner}} kept its own copy of “{{name}}” (the source no longer exists); it is now a private knowledge base of its creator.": "学习伙伴 {{partner}} 的“{{name}}”副本找不到源库，已登记为伙伴创建者的私有库。",
+  "The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.": "原知识库已不存在，这份副本现在是你的私有知识库，请到知识中心检查。",
   "Partially correct": "部分正确",
   "These answers could not be submitted. Please review or retry.": "这些答案未能提交。请检查后重试。",
   "The edit could not be sent. Your draft is still here; please retry.": "修改未能发送。草稿仍保留在此，请重试。",

@@ -17,6 +17,7 @@ import {
   type UserImportResult,
 } from "@/lib/admin-api";
 import { GrantEditor } from "@/features/multi-user/components/GrantEditor";
+import { MigrationResultsNotice } from "@/features/multi-user/components/MigrationResultsNotice";
 import { BookPermissionEditor } from "@/features/multi-user/components/BookPermissionEditor";
 import { LearnerProfileEditor } from "@/features/multi-user/components/LearnerProfileEditor";
 import { GuardianRelationshipsEditor } from "@/features/multi-user/components/GuardianRelationshipsEditor";
@@ -370,6 +371,8 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </div>
+
+        <MigrationResultsNotice />
 
         {actionError && (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">

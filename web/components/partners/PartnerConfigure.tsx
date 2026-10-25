@@ -296,21 +296,27 @@ export default function PartnerConfigure({
     return [
       ...assets.knowledge_bases.map((kb) => ({
         type: "knowledge_base" as const,
-        id: kb.name,
+        // Remove by registry reference; legacy copies still go by name.
+        id: kb.ref ?? kb.name,
         label: kb.name,
         kind: t("Knowledge base"),
+        notice: kb.adopted
+          ? t("The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.")
+          : undefined,
       })),
       ...assets.skills.map((skill) => ({
         type: "skill" as const,
         id: skill.name,
         label: skill.name,
         kind: t("Skill"),
+        notice: undefined,
       })),
       ...assets.notebooks.map((nb) => ({
         type: "notebook" as const,
         id: nb.id,
         label: nb.name || nb.id,
         kind: t("Notebook"),
+        notice: undefined,
       })),
     ];
   }, [assets, t]);
@@ -555,18 +561,25 @@ export default function PartnerConfigure({
               {assetRows.map((row) => (
                 <li
                   key={`${row.type}:${row.id}`}
-                  className="flex items-center justify-between py-1.5"
+                  className="flex items-center justify-between gap-2 py-1.5"
                 >
-                  <span className="min-w-0 truncate text-[13px] text-[var(--foreground)]">
-                    {row.label}
-                    <span className="ml-2 text-[11px] text-[var(--muted-foreground)]">
-                      {row.kind}
+                  <span className="min-w-0 text-[13px] text-[var(--foreground)]">
+                    <span className="block truncate">
+                      {row.label}
+                      <span className="ml-2 text-[11px] text-[var(--muted-foreground)]">
+                        {row.kind}
+                      </span>
                     </span>
+                    {row.notice && (
+                      <span className="mt-0.5 block break-words text-[11px] text-amber-600 dark:text-amber-400">
+                        {row.notice}
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
                     onClick={() => void removeAsset(row.type, row.id)}
-                    className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-red-500"
+                    className="shrink-0 rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-red-500"
                     aria-label={t("Remove")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
