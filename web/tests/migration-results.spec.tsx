@@ -55,6 +55,20 @@ it("renders nothing for an empty deployment", async () => {
   expect(view.container).toBeEmptyDOMElement();
 });
 
+it("renders book migration data and fallback identities in the shared notice", async () => {
+  await show([
+    { kind: "book_auto_public", key: "bk1", data: { title: "<Physics>", users: ["alice", "bob"] }, created_at: "" },
+    { kind: "book_edit_grant_retired", key: "grant1", data: { username: "bob", book_id: "bk2" }, created_at: "" },
+    { kind: "book_kb_unavailable", key: "kb1", data: { title: "Chemistry", kb: "Private source" }, created_at: "" },
+    { kind: "book_auto_public", key: "fallback", data: { users: null }, created_at: "" },
+  ]);
+  expect(await screen.findByText("Book “<Physics>” is now public because it was shared with: alice, bob")).toBeVisible();
+  expect(screen.getByText("bob could edit “bk2”. Editing is now limited to the creator and admins; consider transferring the book.")).toBeVisible();
+  expect(screen.getByText("Public book “Chemistry” uses Private source, which its readers cannot use.")).toBeVisible();
+  expect(screen.getByText("Book “fallback” is now public because it was shared with:")).toBeVisible();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+});
+
 it.each([403, 500])("renders nothing when the endpoint returns %s", async status => {
   vi.mocked(apiFetch).mockResolvedValue(Response.json({ detail: "Denied" }, { status }));
   const view = render(<MigrationResultsNotice />);

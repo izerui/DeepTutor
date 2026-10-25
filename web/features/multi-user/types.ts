@@ -80,19 +80,9 @@ export type MultiUserResources = {
   mcp_tools: McpToolOption[];
 };
 
-export type BookPermissionLevel = "none" | "read" | "edit";
-
+/** Per-book levels are retired; creation remains an account permission. */
 export type BookPermission = {
   create: boolean;
-  default: "none" | "read";
-  books: Record<string, BookPermissionLevel>;
-};
-
-export type AdminBook = {
-  book_id: string;
-  title: string;
-  status: string;
-  updated_at: number;
 };
 
 /** One line of the admin migration results notice; rendered by kind. */

@@ -17,14 +17,12 @@ import {
 } from "@/lib/guardian-api";
 
 const PERMISSIONS = [
-  "assign_materials",
   "manage_restrictions",
   "view_reports",
   "reset_credentials",
 ] as const;
 
 const permissionLabels: Record<(typeof PERMISSIONS)[number], string> = {
-  assign_materials: "Manage materials",
   manage_restrictions: "Manage restrictions",
   view_reports: "View reports",
   reset_credentials: "Reset credentials",
@@ -187,6 +185,8 @@ export function GuardianRelationshipsEditor({
                     </div>
                     <div className="mt-0.5 truncate text-[11px] text-[var(--muted-foreground)]">
                       {relationship.permissions
+                        // Old relationships retain this retired permission in storage.
+                        .filter((permission) => permission !== "assign_materials")
                         .map((permission) =>
                           t(
                             permissionLabels[
@@ -262,7 +262,7 @@ export function GuardianRelationshipsEditor({
           {report && (
             <p className="mt-3 text-xs text-[var(--muted-foreground)]">
               {t(
-                "{{materials}} approved materials · {{resources}} enabled resources",
+                "{{materials}} public books · {{resources}} enabled resources",
                 {
                   materials: report.assigned_materials.length,
                   resources:

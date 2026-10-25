@@ -5582,5 +5582,11 @@
   "Resolve the items above first.": "Resolve the items above first.",
   "This book is still referenced by: {{items}}. Remove those references before deleting it.": "This book is still referenced by: {{items}}. Remove those references before deleting it.",
   "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "This book is still referenced elsewhere. Remove those references before deleting it."
+  "This book is still referenced elsewhere. Remove those references before deleting it.": "This book is still referenced elsewhere. Remove those references before deleting it.",
+  "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.",
+  "Book “{{title}}” is now public because it was shared with: {{users}}": "Book “{{title}}” is now public because it was shared with: {{users}}",
+  "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.",
+  "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Public book “{{title}}” uses {{kb}}, which its readers cannot use.",
+  "{{materials}} public books · {{resources}} enabled resources": "{{materials}} public books · {{resources}} enabled resources",
+  "Review authorized learners and their learning reports.": "Review authorized learners and their learning reports."
 }

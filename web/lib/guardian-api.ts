@@ -24,13 +24,6 @@ export interface GuardianReport {
   };
 }
 
-export interface GuardianMaterial {
-  book_id: string;
-  title?: string;
-  assigned: boolean;
-  permission: string;
-}
-
 export interface GuardianRestrictions {
   age_band: "6-8" | "9-12" | "13-15";
   allow_upload: boolean;
@@ -131,29 +124,6 @@ export async function resetLearnerCredentials(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ new_password: newPassword }),
-    },
-  );
-}
-
-export async function getGuardianMaterials(
-  learnerId: string,
-): Promise<GuardianMaterial[]> {
-  const data = await request<{ materials: GuardianMaterial[] }>(
-    `/api/multi-user/learners/${encodeURIComponent(learnerId)}/materials`,
-  );
-  return data.materials;
-}
-
-export async function saveGuardianMaterials(
-  learnerId: string,
-  bookIds: string[],
-): Promise<void> {
-  await request(
-    `/api/multi-user/learners/${encodeURIComponent(learnerId)}/materials`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book_ids: bookIds }),
     },
   );
 }

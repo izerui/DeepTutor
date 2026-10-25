@@ -46,11 +46,10 @@ test("guardian credential reset never returns or renders a plaintext credential"
 
 test("guardian actions follow each relationship permission", () => {
   assert.match(page, /can\("view_reports"\)/);
-  assert.match(page, /can\("assign_materials"\)/);
+  assert.doesNotMatch(page, /can\("assign_materials"\)/);
   assert.match(page, /can\("manage_restrictions"\)/);
   assert.match(page, /can\("reset_credentials"\)/);
   assert.match(page, /revokeMyGuardianRelationship/);
-  assert.match(page, /guardian:materials:/);
   assert.match(page, /guardian:restrictions:/);
   assert.match(page, /<ConfirmDialog/);
 });

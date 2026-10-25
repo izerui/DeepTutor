@@ -5951,5 +5951,11 @@
   "Resolve the items above first.": "Réglez d'abord les points ci-dessus.",
   "This book is still referenced by: {{items}}. Remove those references before deleting it.": "Ce livre est encore référencé par : {{items}}. Supprimez ces références avant de le supprimer.",
   "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "Ce livre est encore référencé par : {{items}}. Le supprimer quand même ? Ces éléments perdront ce livre.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "Ce livre est encore référencé ailleurs. Supprimez ces références avant de le supprimer."
+  "This book is still referenced elsewhere. Remove those references before deleting it.": "Ce livre est encore référencé ailleurs. Supprimez ces références avant de le supprimer.",
+  "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "L'accès livre par livre a été retiré. Les livres se partagent en les rendant publics ; seuls le créateur et les administrateurs peuvent les modifier.",
+  "Book “{{title}}” is now public because it was shared with: {{users}}": "Le livre « {{title}} » est maintenant public car il était partagé avec : {{users}}",
+  "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} pouvait modifier « {{title}} ». Seuls le créateur et les administrateurs peuvent désormais le modifier ; envisagez de transférer le livre.",
+  "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Le livre public « {{title}} » utilise {{kb}}, inaccessible à ses lecteurs.",
+  "{{materials}} public books · {{resources}} enabled resources": "{{materials}} livres publics · {{resources}} ressources activées",
+  "Review authorized learners and their learning reports.": "Consultez les apprenants autorisés et leurs rapports d'apprentissage."
 }

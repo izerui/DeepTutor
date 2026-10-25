@@ -1,6 +1,5 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 import type {
-  AdminBook,
   BookPermission,
   GrantPayload,
   MigrationItem,
@@ -61,14 +60,6 @@ export async function saveUserGrant(
   return data.grant as GrantPayload;
 }
 
-export async function fetchAdminBooks(): Promise<AdminBook[]> {
-  const res = await apiFetch(apiUrl("/api/multi-user/admin/books"));
-  if (!res.ok)
-    throw new Error(await readError(res, "Failed to load shared books"));
-  const data = await res.json();
-  return data.books as AdminBook[];
-}
-
 export async function fetchBookPermission(
   userId: string,
 ): Promise<BookPermission> {
@@ -94,7 +85,7 @@ export async function saveBookPermission(
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(permission),
+      body: JSON.stringify({ create: permission.create }),
     },
   );
   if (!res.ok)

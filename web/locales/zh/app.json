@@ -5582,5 +5582,11 @@
   "Resolve the items above first.": "请先处理上面的问题。",
   "This book is still referenced by: {{items}}. Remove those references before deleting it.": "这本书仍被以下内容引用：{{items}}。请先解除这些引用再删除。",
   "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "这本书仍被以下内容引用：{{items}}。仍然删除？这些内容将失去这本书。",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "这本书仍被其他内容引用，请先解除引用再删除。"
+  "This book is still referenced elsewhere. Remove those references before deleting it.": "这本书仍被其他内容引用，请先解除引用再删除。",
+  "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "逐本授权已停用。书籍改为通过“设为公开”共享，编辑仅限创建者和管理员。",
+  "Book “{{title}}” is now public because it was shared with: {{users}}": "书籍《{{title}}》已公开，因为它曾共享给：{{users}}",
+  "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} 曾可编辑《{{title}}》。现在只有创建者和管理员能编辑，可考虑把这本书转给该用户。",
+  "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "公开书籍《{{title}}》使用了 {{kb}}，读者无法使用该知识库。",
+  "{{materials}} public books · {{resources}} enabled resources": "{{materials}} 本公开书籍 · {{resources}} 个已启用资源",
+  "Review authorized learners and their learning reports.": "查看已授权的学习者及其学习报告。"
 }
