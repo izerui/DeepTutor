@@ -69,6 +69,29 @@ def shared_write(*, recovery: AbstractContextManager | None = None) -> Iterator[
             conn.close()
 
 
+def transfer_ownership(from_user_id: str, to_user_id: str) -> list[books.BookRecord]:
+    """Hand over books and active protection without renewing withdrawn access."""
+    with shared_write() as conn:
+        rows = conn.execute(
+            "SELECT * FROM books.book_registry WHERE created_by = ? ORDER BY title, book_id",
+            (from_user_id,),
+        ).fetchall()
+        if from_user_id != to_user_id:
+            conn.execute(
+                "UPDATE books.book_registry SET created_by = ?, transferred_from = ?, "
+                "updated_at = ? WHERE created_by = ?",
+                (to_user_id, from_user_id, books._now(), from_user_id),
+            )
+            # Do not rebuild protection: fixed targets, document limits and
+            # historical revocations must survive account deletion unchanged.
+            conn.executemany(
+                "UPDATE main.kb_references SET created_by = ? "
+                "WHERE referrer_kind = 'book' AND referrer_id = ?",
+                [(to_user_id, row["book_id"]) for row in rows],
+            )
+        return [books._target(conn, row["book_id"]) for row in rows]
+
+
 def _links(conn: sqlite3.Connection, book_id: str) -> dict[str, str]:
     return dict(conn.execute(
         "SELECT ref, kb_id FROM book_kb_links WHERE book_id = ? ORDER BY position", (book_id,),

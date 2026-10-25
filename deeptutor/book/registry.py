@@ -641,17 +641,10 @@ def relocate_book_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int
 
 
 def transfer_book_ownership(from_user_id: str, to_user_id: str) -> list[BookRecord]:
-    with _write() as conn:
-        rows = conn.execute(
-            "SELECT * FROM book_registry WHERE created_by = ? ORDER BY title, book_id",
-            (from_user_id,),
-        ).fetchall()
-        if from_user_id != to_user_id:
-            conn.execute(
-                "UPDATE book_registry SET created_by = ?, transferred_from = ?, updated_at = ? "
-                "WHERE created_by = ?", (to_user_id, from_user_id, _now(), from_user_id),
-            )
-        return [_target(conn, row["book_id"]) for row in rows]
+    """Transfer books together with their existing KB reference ownership."""
+    from .sharing import transfer_ownership
+
+    return transfer_ownership(from_user_id, to_user_id)
 
 
 def list_transferred_books(user_id: str) -> list[BookRecord]:

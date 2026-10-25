@@ -1908,6 +1908,20 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
                     len(transferred), username, successor,
                 )
 
+        from deeptutor.book import registry as book_registry
+
+        try:
+            moved_books = book_registry.transfer_book_ownership(user_id, successor)
+        except Exception:
+            # Keep the same nonfatal hand-over contract as knowledge bases.
+            logger.exception("Could not transfer books of deleted user '%s'", username)
+        else:
+            if moved_books:
+                logger.info(
+                    "Transferred %d book(s) of '%s' to %s",
+                    len(moved_books), username, successor,
+                )
+
     actor = current.username if current else "local"
     logger.info("Admin '%s' deleted user '%s'", actor, username)
     return 200, ""

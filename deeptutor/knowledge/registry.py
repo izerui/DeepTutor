@@ -836,8 +836,11 @@ def transfer_ownership(from_user_id: str, to_user_id: str) -> list[KbRecord]:
         )
         # Keep the old owner's own consumers same-owner after hand-over.
         # Foreign consumers retain their identity and visibility safeguards.
+        # Book refs follow actual book transfers in book.sharing's joint writer;
+        # updating them here would survive a failed book hand-over.
         conn.executemany(
-            "UPDATE kb_references SET created_by = ? WHERE kb_id = ? AND created_by = ?",
+            "UPDATE kb_references SET created_by = ? WHERE kb_id = ? AND created_by = ? "
+            "AND referrer_kind != 'book'",
             [(to_user_id, row["kb_id"], from_user_id) for row in rows],
         )
     return [record for row in rows if (record := get_kb(row["kb_id"])) is not None]
