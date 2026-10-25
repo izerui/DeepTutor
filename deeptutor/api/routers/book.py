@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import ExitStack
 import hashlib
 import logging
+from pathlib import Path
+import sqlite3
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -21,6 +24,7 @@ from pydantic import BaseModel, Field
 from deeptutor.api.utils.http_headers import content_disposition
 from deeptutor.book import progress as progress_ops
 from deeptutor.book import registry as book_registry
+from deeptutor.book import sharing as book_sharing
 from deeptutor.book.errors import BookPausedError
 from deeptutor.book.export import export_filename, render_book_markdown
 from deeptutor.book.models import (
@@ -815,20 +819,156 @@ async def get_page(book_id: str, page_id: str) -> dict[str, Any]:
 
 
 @router.delete("/books/{book_id}")
-async def delete_book(book_id: str) -> dict[str, Any]:
+async def delete_book(book_id: str, force: bool = False) -> dict[str, Any]:
     resolved = _resolve_book_or_404(book_id, delete=True)
     book_id = book_registry.strip_ref(book_id)
-    engine = resolved.engine
-    ok = engine.delete_book(book_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Book not found")
-    if get_current_user().is_admin:
+    user = get_current_user()
+    references = []
+    # Recovery stays inside the writer: failures restore before ROLLBACK;
+    # success finalizes runtimes/buses only after COMMIT.
+    recovery = ExitStack()
+    with book_sharing.shared_write(recovery=recovery) as conn:
+        current = book_registry._get_book(conn, book_id)
+        record = None
+        if resolved.record is not None:
+            record = _locked_writable(conn, resolved, resolved.record)
+        elif current is not None and _record_matches_storage(resolved, current):
+            record = _locked_writable(conn, resolved, current)
+        if record is not None:
+            references = book_registry._references_of(conn, record.book_id)
+            if references and not (force and user.is_admin):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "book_referenced",
+                        "message": "This book is still referenced. Remove those references first.",
+                        "references": [ref.to_dict() for ref in references],
+                    },
+                )
+        if force and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
+        deleted = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Book not found")
+        if record is not None:
+            book_registry._unregister(conn, book_id)
+            book_sharing.sync_protection(conn, book_id)
+        # A foreign same-ID record must retain its legacy ACLs too.
+        clean_overrides = record is not None or current is None
+    if user.is_admin and clean_overrides:
         affected = remove_book_permission_overrides(book_id)
         log_admin_action(
             "book_delete",
-            summary={"book_id": book_id, "acl_users_cleaned": len(affected)},
+            summary={
+                "book_id": book_id, "acl_users_cleaned": len(affected),
+                "forced_references": len(references),
+            },
         )
     return {"deleted": True, "book_id": book_id}
+
+
+class BookVisibilityRequest(BaseModel):
+    visibility: Literal["public", "private"]
+    force: bool = False
+    kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
+
+
+def _record_matches_storage(resolved: ResolvedBook, record: book_registry.BookRecord) -> bool:
+    return resolved.engine.storage.book_root(record.book_id).resolve() == (
+        Path(record.base_dir) / record.dir_name
+    ).resolve()
+
+
+def _registered_writable(book_id: str) -> tuple[ResolvedBook, book_registry.BookRecord]:
+    resolved = _resolve_book_or_404(book_id)
+    record = resolved.record
+    if record is None or not _record_matches_storage(resolved, record):
+        raise HTTPException(
+            status_code=409, detail="This location has no registered book identity. Reload and retry.",
+        )
+    if not resolved.can_edit or not book_registry.can_write_book(record, get_current_user()):
+        raise HTTPException(
+            status_code=403, detail="Only the book's creator or an admin can manage its sharing.",
+        )
+    return resolved, record
+
+
+def _locked_writable(
+    conn: sqlite3.Connection, resolved: ResolvedBook, record: book_registry.BookRecord,
+) -> book_registry.BookRecord:
+    current = book_registry._get_book(conn, record.book_id)
+    if current is None or not _record_matches_storage(resolved, current) or (
+        current.base_dir, current.dir_name, current.created_at
+    ) != (record.base_dir, record.dir_name, record.created_at):
+        raise HTTPException(status_code=409, detail="Book location or identity changed; reload and retry.")
+    if not book_registry._can_write(conn, current, get_current_user()):
+        raise HTTPException(status_code=403, detail="Only the book's creator or an admin may manage it.")
+    return current
+
+
+@router.get("/books/{book_id}/sharing")
+async def get_book_sharing(book_id: str) -> dict[str, Any]:
+    resolved, expected = _registered_writable(book_id)
+    try:
+        with book_sharing.shared_write() as conn:
+            record = _locked_writable(conn, resolved, expected)
+            return {
+                "book_id": record.book_id,
+                "ref": record.ref,
+                "visibility": record.visibility,
+                "can_set_visibility": resolved.capabilities()["can_set_visibility"],
+                "kbs": book_sharing._plan(conn, record).to_dict(),
+                "references": [
+                    ref.to_dict() for ref in book_registry._references_of(conn, record.book_id)
+                ],
+            }
+    except book_registry.BookRegistryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.put("/books/{book_id}/visibility")
+async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[str, Any]:
+    from deeptutor.multi_user.roles import is_teacher_or_admin
+
+    resolved, record = _registered_writable(book_id)
+    user = get_current_user()
+    if req.force and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
+    if req.visibility == "public" and not is_teacher_or_admin():
+        raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
+    try:
+        with book_sharing.shared_write() as conn:
+            current = _locked_writable(conn, resolved, record)
+            updated = book_sharing.change_visibility(
+                conn, current, req.visibility, force=req.force, kb_choices=req.kb_choices,
+            )
+            plan = book_sharing._plan(conn, updated).to_dict()
+    except book_registry.BookRegistryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if user.is_admin and record.created_by != user.id:
+        log_admin_action(
+            "book_visibility",
+            summary={"book_id": record.book_id, "visibility": updated.visibility, "force": req.force},
+        )
+    return {
+        "book_id": updated.book_id,
+        "ref": updated.ref,
+        "visibility": updated.visibility,
+        "kbs": plan,
+    }
+
+
+@router.get("/books/{book_id}/references")
+async def get_book_references(book_id: str) -> dict[str, Any]:
+    resolved, expected = _registered_writable(book_id)
+    with book_sharing.shared_write() as conn:
+        record = _locked_writable(conn, resolved, expected)
+        return {
+            "book_id": record.book_id, "ref": record.ref,
+            "references": [
+                ref.to_dict() for ref in book_registry._references_of(conn, record.book_id)
+            ],
+        }
 
 
 @router.post("/books")

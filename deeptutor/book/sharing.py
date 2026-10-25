@@ -13,7 +13,7 @@ entry. Never call independent registry writers from the yielded connection.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 import sqlite3
 
 from deeptutor.book import registry as books
@@ -24,7 +24,7 @@ from deeptutor.multi_user.roles import is_teacher_or_admin
 
 
 @contextmanager
-def shared_write() -> Iterator[sqlite3.Connection]:
+def shared_write(*, recovery: AbstractContextManager | None = None) -> Iterator[sqlite3.Connection]:
     """A bounded, process-safe, crash-atomic transaction over both registries."""
     if getattr(books._writer_state, "active", False):
         raise books.BookRegistryError("Cannot enter sharing from an active book writer.")
@@ -47,16 +47,19 @@ def shared_write() -> Iterator[sqlite3.Connection]:
                 conn.execute(f"PRAGMA {schema}.synchronous = FULL")
             conn.execute("BEGIN IMMEDIATE")
             try:
-                # Check after locking: another connection cannot change journal
-                # mode between validation and the writes.
-                for schema in ("main", "books"):
-                    mode = conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0]
-                    if mode.lower() != "delete":
-                        raise books.BookRegistryError(
-                            f"Atomic book sharing requires DELETE journals ({schema}: {mode})."
-                        )
-                yield conn
-                conn.execute("COMMIT")
+                # Restore staged files before ROLLBACK releases the SQLite
+                # writers; another process must not see an unrestored live row.
+                with recovery if recovery is not None else nullcontext():
+                    # Check after locking: another connection cannot change
+                    # journal mode between validation and the writes.
+                    for schema in ("main", "books"):
+                        mode = conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0]
+                        if mode.lower() != "delete":
+                            raise books.BookRegistryError(
+                                f"Atomic book sharing requires DELETE journals ({schema}: {mode})."
+                            )
+                    yield conn
+                    conn.execute("COMMIT")
             except BaseException:
                 if conn.in_transaction:
                     conn.execute("ROLLBACK")
@@ -263,31 +266,40 @@ def share(
 def set_visibility(
     book_id: str, visibility: str, *, force: bool, kb_choices: Mapping[str, str] | None,
 ) -> books.BookRecord:
+    with shared_write() as conn:
+        return change_visibility(conn, books._target(conn, book_id), visibility,
+                                 force=force, kb_choices=kb_choices)
+
+
+def change_visibility(
+    conn: sqlite3.Connection, record: books.BookRecord, visibility: str, *,
+    force: bool, kb_choices: Mapping[str, str] | None,
+) -> books.BookRecord:
+    """Connection-taking transition for callers retaining a bound target."""
     if visibility not in books.VISIBILITIES:
         raise books.BookVisibilityError("Visibility must be 'public' or 'private'.")
     choices = _choices(kb_choices)
-    with shared_write() as conn:
-        record = books._target(conn, book_id)
-        _authorize(conn, record, force=force)
-        if visibility == "public":
-            if not is_teacher_or_admin():
-                raise books.BookVisibilityError("Only teachers and admins can publish books.")
-            _apply_choices(conn, record, choices, force=force)
-        else:
-            foreign = [
-                ref for ref in books._references_of(conn, record.book_id)
-                if ref.created_by != record.created_by
-            ]
-            if foreign and not force:
-                raise books.BookVisibilityError("Still referenced by other accounts.")
-            books._revoke(conn, record, foreign, reason="made_private")
-        conn.execute(
-            "UPDATE book_registry SET visibility = ?, updated_at = ? WHERE book_id = ?",
-            (visibility, books._now(), record.book_id),
-        )
-        record_choice(conn, record.book_id, visibility, schema="books")
-        sync_protection(conn, record.book_id, force=force, refresh=visibility == "public")
-        return books._target(conn, record.book_id)
+    _authorize(conn, record, force=force)
+    record = books._target(conn, record.book_id)
+    if visibility == "public":
+        if not is_teacher_or_admin():
+            raise books.BookVisibilityError("Only teachers and admins can publish books.")
+        _apply_choices(conn, record, choices, force=force)
+    else:
+        foreign = [
+            ref for ref in books._references_of(conn, record.book_id)
+            if ref.created_by != record.created_by
+        ]
+        if foreign and not force:
+            raise books.BookVisibilityError("Still referenced by other accounts.")
+        books._revoke(conn, record, foreign, reason="made_private")
+    conn.execute(
+        "UPDATE book_registry SET visibility = ?, updated_at = ? WHERE book_id = ?",
+        (visibility, books._now(), record.book_id),
+    )
+    record_choice(conn, record.book_id, visibility, schema="books")
+    sync_protection(conn, record.book_id, force=force, refresh=visibility == "public")
+    return books._target(conn, record.book_id)
 
 
 def _previous(conn: sqlite3.Connection, kind: str, referrer: str) -> set[str]:

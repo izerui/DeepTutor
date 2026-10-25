@@ -21,12 +21,15 @@ Layout (relative to ``data/user/workspace/book/``)::
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
 import re
 import shutil
+import tempfile
 from typing import Any
 
 from deeptutor.services.file_io import atomic_write_text as _atomic_write_text
@@ -374,6 +377,52 @@ class BookStorage:
             f.write(line)
 
     # ── Delete ───────────────────────────────────────────────────────────
+
+    @contextmanager
+    def recoverable_deletion(self, book_id: str) -> Iterator[bool]:
+        """Retain original bytes until the caller's database COMMIT succeeds.
+
+        The normal delete operates on a disposable copy. Even partial rmtree
+        failure cannot damage the original, which is restored by rename on
+        any exception (including one from the caller's COMMIT). No awaits may
+        occur in this scope: the engine's local writers share the event loop.
+        """
+        root = self.book_root(book_id)
+        if not root.exists():
+            yield False
+            return
+        if root.is_symlink():
+            raise OSError("Cannot stage deletion of a symlinked book directory.")
+        staging = Path(tempfile.mkdtemp(prefix=".book-delete-", dir=root.parent))
+        backup = staging / "original"
+        committed = False
+        try:
+            root.rename(backup)
+            try:
+                shutil.copytree(backup, root, symlinks=True)
+                deleted = self.delete_book(book_id)
+                if not deleted:
+                    if root.exists():
+                        root.rename(staging / "partial")
+                    backup.rename(root)
+                yield deleted
+                committed = True
+            except BaseException:
+                if backup.exists():
+                    if root.exists():
+                        root.rename(staging / "partial")
+                    backup.rename(root)
+                raise
+        finally:
+            # Never destroy the only recoverable original if restoration failed.
+            # On successful COMMIT the backup is garbage, not a live book.
+            if backup.exists() and not committed:
+                logger.error("Book deletion recovery retained at %s", staging)
+            else:
+                try:
+                    shutil.rmtree(staging)
+                except OSError:
+                    logger.warning("Book deletion staging cleanup deferred: %s", staging, exc_info=True)
 
     def delete_book(self, book_id: str) -> bool:
         root = self.book_root(book_id)

@@ -41,6 +41,8 @@ after the call that queued it has returned.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 import logging
@@ -395,6 +397,21 @@ class BookEngine:
         return progress
 
     def delete_book(self, book_id: str) -> bool:
+        deleted = self.storage.delete_book(book_id)
+        if deleted:
+            self.finish_book_deletion(book_id)
+        return deleted
+
+    @contextmanager
+    def recoverable_deletion(self, book_id: str) -> Iterator[bool]:
+        """Finalize runtime effects only after the enclosing registry commit."""
+        with self.storage.recoverable_deletion(book_id) as deleted:
+            yield deleted
+        if deleted:
+            self.finish_book_deletion(book_id)
+
+    def finish_book_deletion(self, book_id: str) -> None:
+        """Release only this physical book's runtime after successful deletion."""
         runtime = self._runtimes.pop(book_id, None)
         if runtime is not None:
             if runtime.worker and not runtime.worker.done():
@@ -404,10 +421,7 @@ class BookEngine:
                     task.cancel()
         # The book's event stream is the one thing that outlives its requests,
         # so deletion is the only place allowed to close it.
-        deleted = self.storage.delete_book(book_id)
-        if deleted:
-            close_book_bus(book_id, storage=self.storage)
-        return deleted
+        close_book_bus(book_id, storage=self.storage)
 
     def set_page_chat_session(self, *, book_id: str, page_id: str, session_id: str) -> Book | None:
         """Persist the chat session associated with a specific book page."""
