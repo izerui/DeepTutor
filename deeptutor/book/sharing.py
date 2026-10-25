@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import sqlite3
 
 from deeptutor.book import registry as books
+from deeptutor.core.visibility_intent import record_choice
 from deeptutor.knowledge import registry as kbs
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.roles import is_teacher_or_admin
@@ -187,6 +188,7 @@ def _apply_choices(
             "UPDATE kb_registry SET visibility = 'public', updated_at = ? WHERE kb_id = ?",
             (kbs._now(), kb.kb_id),
         )
+        record_choice(conn, kb.kb_id, "public", schema="main")
 
 
 def sync_protection(
@@ -283,6 +285,7 @@ def set_visibility(
             "UPDATE book_registry SET visibility = ?, updated_at = ? WHERE book_id = ?",
             (visibility, books._now(), record.book_id),
         )
+        record_choice(conn, record.book_id, visibility, schema="books")
         sync_protection(conn, record.book_id, force=force, refresh=visibility == "public")
         return books._target(conn, record.book_id)
 

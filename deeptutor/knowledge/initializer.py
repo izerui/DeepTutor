@@ -135,6 +135,12 @@ class KnowledgeBaseInitializer:
         logger.info(f"Creating directory structure for knowledge base: {self.kb_name}")
         ensure_data_volume_writable(self.base_dir)
 
+        from deeptutor.knowledge import registry
+        from deeptutor.multi_user.context import get_current_user
+
+        registry._prepare_initialized_kb(
+            self.base_dir, self.kb_name, created_by=(self.owner or get_current_user()).id,
+        )
         for dir_path in [
             self.raw_dir,
         ]:

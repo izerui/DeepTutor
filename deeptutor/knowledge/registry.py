@@ -446,8 +446,37 @@ def register_new_kb(
             "visibility, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (kb_id, name, location, name, UPLOADED_KIND, visibility, created_by, now, now),
         )
+        from deeptutor.core.visibility_intent import record_choice
+
+        record_choice(conn, kb_id, visibility, schema="main")
         row = conn.execute("SELECT * FROM kb_registry WHERE kb_id = ?", (kb_id,)).fetchone()
     return _record(row)
+
+
+def _prepare_initialized_kb(base_dir: Path, name: str, *, created_by: str) -> None:
+    """Reserve CLI creation authority before the directory/catalog is visible.
+
+    Existing registrations (including API reservations) keep their owner,
+    visibility and intent. Repairing a missing directory is not new consent.
+    """
+    from deeptutor.core.visibility_intent import record_choice
+
+    with _write() as conn:
+        if (base_dir / name).exists():
+            return
+        location = _location(base_dir)
+        row = conn.execute(
+            "SELECT * FROM kb_registry WHERE base_dir = ? AND dir_name = ?", (location, name),
+        ).fetchone()
+        if row is None:
+            kb_id, now = uuid.uuid4().hex, _now()
+            conn.execute(
+                "INSERT INTO kb_registry (kb_id, name, base_dir, dir_name, kind, "
+                "visibility, created_by, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 'private', ?, ?, ?)",
+                (kb_id, name, location, name, UPLOADED_KIND, created_by, now, now),
+            )
+            record_choice(conn, kb_id, "private", schema="main")
 
 
 def get_kb(kb_id: str) -> KbRecord | None:
@@ -766,6 +795,9 @@ def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRec
             "UPDATE kb_registry SET visibility = ?, updated_at = ? WHERE kb_id = ?",
             (visibility, _now(), record.kb_id),
         )
+        from deeptutor.core.visibility_intent import record_choice
+
+        record_choice(conn, record.kb_id, visibility, schema="main")
     updated = get_kb(record.kb_id)
     if updated is None:
         raise KbRegistryError(f"Knowledge base {kb_id} disappeared after visibility update.")

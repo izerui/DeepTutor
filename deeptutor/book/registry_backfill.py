@@ -18,6 +18,7 @@ import time
 
 from deeptutor.book import registry, sharing
 from deeptutor.book.storage import BookStorage
+from deeptutor.core.visibility_intent import explicit_choice
 from deeptutor.knowledge import registry as kbs
 
 logger = logging.getLogger(__name__)
@@ -355,7 +356,15 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
     """Commit the transition and its durable outbox together, once per target."""
     book_id = registry._book_id_of(dirname)
     key = _PROGRESS_PREFIX + book_id
+    expected_root = snapshot["base_dir"]
     with sharing.shared_write() as conn:
+        # Re-read durable authorization under the publication writer, rather
+        # than trusting the caller's pre-transaction inventory.
+        snapshot = json.loads(conn.execute(
+            "SELECT value FROM books.registry_meta WHERE key = ?", (_INVENTORY_KEY,),
+        ).fetchone()[0])
+        if snapshot["base_dir"] != expected_root:
+            raise ValueError("Legacy shelf authorization changed during migration")
         previous = conn.execute(
             "SELECT value FROM books.registry_meta WHERE key = ?", (key,),
         ).fetchone()
@@ -377,7 +386,12 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
         if book is None or book.id != book_id:
             raise ValueError(f"Mismatched legacy manifest: {manifest}")
         record = registry._target(conn, book_id)
-        if record.base_dir != snapshot["base_dir"] or record.dir_name != dirname:
+        from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+        if (
+            record.base_dir != snapshot["base_dir"] or record.dir_name != dirname
+            or record.created_by != LOCAL_ADMIN_ID
+        ):
             raise ValueError(f"Legacy book location conflict: {book_id}")
         state = conn.execute(
             "SELECT complete FROM books.book_kb_binding_state WHERE book_id = ?", (book_id,),
@@ -397,7 +411,7 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
                 })
         notices = []
         promoted = False
-        if visible:
+        if visible and not explicit_choice(conn, book_id, schema="books"):
             sharing._authorize(conn, record, force=True)
             plan = sharing._plan(conn, record)
             for issue in plan.issues:
