@@ -85,19 +85,25 @@ def _prefixed_model(prefix: str, model: str) -> str:
 
 
 def resolve_oss_sdk_config() -> tuple[str, dict[str, Any]]:
-    """Translate DeepTutor's active LLM into PageIndex's indexing lane."""
-    from deeptutor.services.config import resolve_llm_runtime_config
+    """Translate DeepTutor's indexing model into PageIndex's indexing lane.
 
-    cfg = resolve_llm_runtime_config()
+    Indexing is background work, so it runs on the Task model when one is
+    configured and otherwise on the active chat LLM.
+    """
+    from deeptutor.services.config import resolve_llm_runtime_config
+    from deeptutor.services.model_selection.tasks import TASK_SERVICE, task_service_configured
+
+    if task_service_configured():
+        cfg = resolve_llm_runtime_config(service_name=TASK_SERVICE)
+    else:
+        cfg = resolve_llm_runtime_config()
     model = str(getattr(cfg, "model", "") or "").strip()
     binding = str(
         getattr(cfg, "binding", None) or getattr(cfg, "provider_name", None) or "openai"
     ).strip()
     spec = find_by_name(binding)
     if not model:
-        raise RuntimeError(
-            "PageIndex OSS needs an active LLM. Configure one under Settings → Catalog."
-        )
+        raise RuntimeError("PageIndex OSS needs an LLM. Configure one under Settings → Catalog.")
     if (
         spec is None
         or spec.is_oauth
@@ -110,7 +116,7 @@ def resolve_oss_sdk_config() -> tuple[str, dict[str, Any]]:
     ):
         raise RuntimeError(
             "PageIndex OSS indexing needs an API-key or local LLM profile; "
-            "the active OAuth-only provider cannot be used."
+            "an OAuth-only provider cannot be used."
         )
 
     resolved_model = strip_provider_prefix(model, spec)
