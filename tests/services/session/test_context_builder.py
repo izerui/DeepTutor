@@ -597,7 +597,12 @@ def _small_window_cfg() -> MagicMock:
 
 class TestContextBuilderSummarizePaths:
     @pytest.mark.asyncio
-    async def test_rebuilds_from_raw_when_prefix_fits(self) -> None:
+    async def test_rebuilds_from_raw_when_prefix_fits(self, monkeypatch) -> None:
+        # Exercise budget routing independently of optional tokenizer caches.
+        monkeypatch.setattr(
+            "deeptutor.services.session.context_builder.count_tokens",
+            lambda text: len(text.split()),
+        )
         messages = [
             {"id": 1, "role": "user", "content": "RAW_OLDEST_MARKER " + "alpha " * 90},
             {"id": 2, "role": "assistant", "content": "beta " * 90},
@@ -626,7 +631,11 @@ class TestContextBuilderSummarizePaths:
         }
 
     @pytest.mark.asyncio
-    async def test_folds_in_when_prefix_exceeds_rebuild_budget(self) -> None:
+    async def test_folds_in_when_prefix_exceeds_rebuild_budget(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "deeptutor.services.session.context_builder.count_tokens",
+            lambda text: len(text.split()),
+        )
         messages = [
             {"id": 1, "role": "user", "content": "RAW_OLDEST_MARKER " + "w1 " * 600},
             {"id": 2, "role": "assistant", "content": "w2 " * 600},

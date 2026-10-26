@@ -321,12 +321,13 @@ async def test_learner_preparer_executor_composition_and_rag(
                 "book_references": references, "attachments": [], "config": {},
                 "llm_selection": {"profile_id": "synthetic", "model_id": "synthetic"},
             })
-            events = [
-                event async for event in runtime.subscribe_turn(turn["id"], after_seq=0)
-            ]
-            execution = runtime._executions.get(turn["id"])
-            if execution and execution.task:
-                await asyncio.wait_for(asyncio.shield(execution.task), timeout=10)
+            async with asyncio.timeout(10):
+                events = [
+                    event async for event in runtime.subscribe_turn(turn["id"], after_seq=0)
+                ]
+                execution = runtime._executions.get(turn["id"])
+                if execution and execution.task:
+                    await asyncio.shield(execution.task)
             assert captured["filtered"] == []
             assert "context" in captured
             assert captured["context"].enabled_tools == []

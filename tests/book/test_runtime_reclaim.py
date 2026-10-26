@@ -13,7 +13,8 @@ async def test_idle_background_runtime_is_released(monkeypatch) -> None:
     runtime = _BookRuntime()
     engine._runtimes = {"book-1": runtime}
 
-    async def _timeout(*args, **kwargs):
+    async def _timeout(awaitable, **kwargs):
+        awaitable.close()
         raise asyncio.TimeoutError
 
     monkeypatch.setattr(engine_module.asyncio, "wait_for", _timeout)

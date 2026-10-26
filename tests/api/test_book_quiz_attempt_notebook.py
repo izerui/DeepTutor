@@ -8,7 +8,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from deeptutor.api.routers import book as book_router
-from deeptutor.book.models import Progress
+from deeptutor.book.models import Book, BookInputs, Progress
 import deeptutor.services.session as session_package
 from deeptutor.services.session.sqlite_store import SQLiteSessionStore
 
@@ -47,14 +47,17 @@ class _FakeResolvedBook:
             chapter_id="",
             block_by_id=lambda _: block,
         )
-        self.book = SimpleNamespace(
+        self.book = Book(
+            id="book-1",
             title="Compiled Book",
-            chat_session_id="",
             metadata={"page_chat_sessions": {"page-1": "page-chat-1"}},
         )
+        self.inputs = BookInputs()
+        self.is_shared = False
         self.engine = SimpleNamespace(
             load_book=lambda _: self.book,
             list_pages=lambda _: [self.page],
+            storage=SimpleNamespace(load_inputs=lambda _: self.inputs),
         )
         self.learning = _FakeLearningStore()
 
@@ -192,3 +195,23 @@ def test_book_submission_retry_is_idempotent_but_new_submission_is_evidence(
     attempts = asyncio.run(store.list_assessment_attempts("page-chat-1", question_id="q1"))
     assert len(attempts) == 2
     assert [item["attempt_count"] for item in attempts] == [1, 2]
+
+
+def test_quiz_uses_own_legacy_input_session_when_no_page_chat(tmp_path, monkeypatch):
+    store = SQLiteSessionStore(db_path=tmp_path / "sessions.db")
+    asyncio.run(store.create_session(session_id="legacy-chat", title="Original source"))
+    resolved = _FakeResolvedBook()
+    resolved.book.metadata = {}
+    resolved.inputs.chat_session_id = "legacy-chat"
+    monkeypatch.setattr(book_router, "_resolve_book_or_404", lambda _: resolved)
+    monkeypatch.setattr(session_package, "get_sqlite_session_store", lambda: store)
+    app = FastAPI()
+    app.include_router(book_router.router, prefix="/api")
+    with TestClient(app) as client:
+        response = client.post("/api/books/quiz-attempt", json={
+            "book_id": "book-1", "page_id": "page-1", "block_id": "block-1",
+            "question_id": "q1", "user_answer": "B", "is_correct": True,
+        })
+    assert response.status_code == 200, response.text
+    entry = asyncio.run(store.list_notebook_entries(source="book"))["items"][0]
+    assert entry["session_id"] == "legacy-chat"

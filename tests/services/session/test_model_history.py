@@ -224,6 +224,7 @@ async def test_summary_instruction_is_appended_after_original_messages_and_tools
 
 @pytest.mark.asyncio
 async def test_summary_replay_projects_duplicate_images_without_losing_provider_state(monkeypatch):
+    monkeypatch.setattr("deeptutor.agents.base_agent.get_agent_params", lambda _module: {})
     captured = {}
 
     async def stream(_self, **kwargs):

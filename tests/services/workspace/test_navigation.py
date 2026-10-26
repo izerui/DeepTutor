@@ -144,6 +144,7 @@ def test_learning_index_includes_each_workspace_and_keeps_feature_lists_scoped(
 
 def test_learning_library_keeps_equal_ids_distinct_and_mutations_bound(account, scoped_client):
     from deeptutor.api.routers.dashboard import router
+    from deeptutor.book import registry
     from deeptutor.book.models import Book
     from deeptutor.book.storage import get_book_storage
 
@@ -151,7 +152,16 @@ def test_learning_library_keeps_equal_ids_distinct_and_mutations_bound(account, 
     custom = account.create_workspace("Custom")["workspace_id"]
     for origin, title in (("", "Original book"), (custom, "Custom book")):
         with workspace_context(origin):
-            get_book_storage().save_book(Book(id="same-id", title=title))
+            storage = get_book_storage()
+            storage.save_book(Book(
+                id="same-id", title=title, metadata={"origin": origin, "note": title},
+            ))
+            if not origin:
+                canonical_root = storage.book_root("same-id")
+                canonical_files = {
+                    path.relative_to(canonical_root): path.read_bytes()
+                    for path in canonical_root.rglob("*") if path.is_file()
+                }
     result = scoped_client.get(
         "/api/dashboard/learning-library/books", params={"dt_workspace": custom}
     )
@@ -173,6 +183,7 @@ def test_learning_library_keeps_equal_ids_distinct_and_mutations_bound(account, 
         ]["title"]
         == "Custom book"
     )
+    canonical_record = registry.get_book("same-id")
     assert (
         scoped_client.delete("/api/book/books/same-id", params={"dt_workspace": custom}).status_code
         == 200
@@ -180,6 +191,13 @@ def test_learning_library_keeps_equal_ids_distinct_and_mutations_bound(account, 
     assert (
         scoped_client.get("/api/book/books/same-id", params={"dt_workspace": ""}).status_code == 200
     )
+    assert registry.get_book("same-id") == canonical_record
+    assert {
+        path.relative_to(canonical_root): path.read_bytes()
+        for path in canonical_root.rglob("*") if path.is_file()
+    } == canonical_files
+    with workspace_context(custom):
+        assert not get_book_storage().book_exists("same-id")
 
 
 def test_learning_library_mastery_and_reading_are_visible_from_other_workspaces(

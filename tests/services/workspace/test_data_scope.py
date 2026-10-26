@@ -15,7 +15,11 @@ from deeptutor.services.workspace.context import workspace_context
 
 @pytest.fixture
 def account(tmp_path, monkeypatch):
+    from deeptutor.multi_user import paths
+
     monkeypatch.delenv("DEEPTUTOR_WORKSPACE_ROOT", raising=False)
+    # Physical-source guards discover workspace catalogs through account roots.
+    monkeypatch.setattr(paths, "ADMIN_WORKSPACE_ROOT", tmp_path)
     user = CurrentUser("scope-test", "test", "admin", UserScope("admin", "scope-test", tmp_path))
     with user_context(user):
         get_account_path_service().ensure_all_directories()

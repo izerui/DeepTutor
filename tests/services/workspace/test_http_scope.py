@@ -66,7 +66,6 @@ def test_http_lists_direct_access_and_uploads_are_isolated(account, scoped_clien
     for endpoint in (
         f"/api/mastery-paths/topics/{topic_id}",
         f"/api/reading/materials/{material_id}",
-        "/api/book/books/bk_scope",
         "/api/video-learning/materials/0123456789abcdef",
         f"/api/sessions/{session['id']}",
     ):
@@ -75,12 +74,48 @@ def test_http_lists_direct_access_and_uploads_are_isolated(account, scoped_clien
         for wid in ("", b):
             response = client.get(endpoint, headers={"X-DeepTutor-Workspace": wid})
             assert response.status_code == 404, (endpoint, response.text)
+    # Registered books have account-independent identities. Their owner/admin
+    # can follow either reference from another workspace; files stay at source.
+    assert client.get("/api/book/books/bk_scope", headers=headers).status_code == 200
+    for wid in ("", b):
+        for ref in ("bk_scope", "book:bk_scope"):
+            response = client.get(
+                f"/api/book/books/{ref}", headers={"X-DeepTutor-Workspace": wid},
+            )
+            assert response.status_code == 200, response.text
+            assert response.json()["book"]["title"] == "Private Book"
+            assert response.json()["book"]["ref"] == "book:bk_scope"
+        with workspace_context(wid):
+            assert get_book_storage().load_book("bk_scope") is None
     assert client.get("/api/reading/materials", headers={"X-DeepTutor-Workspace": b}).json() == []
     assert client.get("/api/book/books", headers={"X-DeepTutor-Workspace": b}).json()["books"] == []
     conflict = client.get(
         "/api/reading/materials?dt_workspace=" + a, headers={"X-DeepTutor-Workspace": b}
     )
     assert conflict.status_code == 400
+
+
+def test_registered_private_book_is_not_readable_by_another_account(
+    account, scoped_client, tmp_path,
+):
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+    from deeptutor.multi_user.paths import user_context
+
+    source = account.create_workspace("Private source")["workspace_id"]
+    with workspace_context(source):
+        get_book_storage().save_book(Book(id="bk_private_scope", title="Private Book"))
+    assert scoped_client.get(
+        "/api/book/books/bk_private_scope", params={"dt_workspace": source},
+    ).status_code == 200
+    reader = CurrentUser(
+        "foreign-reader", "reader", "user",
+        UserScope("user", "foreign-reader", tmp_path / "foreign-reader"),
+    )
+    with user_context(reader):
+        for ref in ("bk_private_scope", "book:bk_private_scope"):
+            response = scoped_client.get(f"/api/book/books/{ref}")
+            assert response.status_code == 404, response.text
+        assert scoped_client.get("/api/book/books").json()["books"] == []
 
 
 def test_recovery_settings_remain_available_with_invalid_active_workspace(account, scoped_client):

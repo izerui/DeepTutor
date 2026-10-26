@@ -1319,12 +1319,17 @@ async def quiz_attempt(req: QuizAttemptRequest) -> dict[str, Any]:
 
             store = get_sqlite_session_store()
             metadata = book.metadata if isinstance(book.metadata, dict) else {}
-            page_sessions = metadata.get("page_chat_sessions")
+            page_sessions = (
+                resolved.learning.load_page_chat_sessions(book.id)
+                if resolved.is_shared else metadata.get("page_chat_sessions")
+            )
             session_id = str(
                 (page_sessions.get(req.page_id) if isinstance(page_sessions, dict) else "")
-                or book.chat_session_id
                 or ""
             ).strip()
+            if not session_id and not resolved.is_shared:
+                inputs = resolved.engine.storage.load_inputs(book.id)
+                session_id = str(inputs.chat_session_id if inputs is not None else "").strip()
             has_session = bool(session_id and await store.get_session(session_id) is not None)
             from deeptutor.learning.assessment import (
                 AssessmentRecord,
