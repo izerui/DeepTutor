@@ -20,6 +20,7 @@ from deeptutor.learning.models import (
     LearningModule,
     LearningProgress,
     PathOrigin,
+    TemplateUpdateNotice,
     TopicMetadata,
     TopicSource,
 )
@@ -328,3 +329,143 @@ def describe_instance(path_id: str, store: LearningStore) -> dict[str, Any] | No
     if template is None:
         return None
     return origin_payload(progress, template)
+
+
+# ---- teacher updates (spec 5.3) ---------------------------------------------
+
+
+def _record_applied(teaching: TeachingStore, template_id: str, user_id: str, path_id: str, store) -> None:
+    """Record the revision the copy is on now, then release what nobody needs.
+
+    Read back from the copy rather than taken from the migration, so a slower
+    concurrent caller cannot move the record backwards. The material resync
+    runs after the teaching write committed and outside ``material_lock`` (it
+    takes that lock itself); it only ever releases references. A failure
+    leaves the earlier, larger set in place and is retried by the next resync.
+    """
+    from deeptutor.teaching.service import sync_material_references
+
+    origin = store.load_origin(path_id)
+    if origin is None or origin.template_id != template_id:
+        return
+    teaching.record_instance(
+        template_id, user_id, instance_path_id=path_id, applied_revision=origin.revision
+    )
+    try:
+        sync_material_references(template_id, store=teaching)
+    except Exception:
+        logger.warning(
+            "Could not release the material references of teacher path %s after %s "
+            "moved to revision %s; the earlier references stay until the next resync",
+            template_id,
+            path_id,
+            origin.revision,
+            exc_info=True,
+        )
+
+
+def _lease_blocks(store: LearningStore, path_id: str, lease_turn_id: str) -> bool:
+    lease = store.get_path_lease(path_id)
+    return lease is not None and (not lease_turn_id or lease.turn_id != lease_turn_id)
+
+
+def apply_pending_revision(
+    path_id: str,
+    store: LearningStore,
+    *,
+    respect_lease: bool,
+    lease_turn_id: str = "",
+) -> TemplateUpdateNotice | None:
+    """Bring the student's copy to the teacher's current revision, if it may move now.
+
+    Never while a question is open: the copy stays on its applied revision —
+    and keeps that revision's materials — until the question is answered or
+    skipped. With ``respect_lease`` it never moves under a live turn's lease,
+    except the lease of ``lease_turn_id`` (the turn being admitted applies the
+    update itself). Never for a revoked assignment or a closed template.
+    Returns the (possibly accumulated) update notice when the copy moved.
+    """
+    from deeptutor.teaching.progress_migration import apply_revision
+
+    origin = store.load_origin(path_id)
+    if origin is None:
+        return None
+    teaching = TeachingStore()
+    template = teaching.get_template(origin.template_id)
+    if template is None or template.status != "published":
+        return None
+    user_id = get_current_user().id
+    assignment = teaching.get_assignment(template.id, user_id)
+    if assignment is None or assignment.status != "active":
+        return None
+    if template.current_revision <= origin.revision:
+        if assignment.applied_revision < origin.revision:
+            # A migration committed but its record did not: repair it.
+            _record_applied(teaching, template.id, user_id, path_id, store)
+        return None
+    if respect_lease and _lease_blocks(store, path_id, lease_turn_id):
+        return None
+    revisions = teaching.revisions_between(
+        template.id, after=origin.revision, upto=template.current_revision
+    )
+    if not revisions or revisions[-1].revision != template.current_revision:
+        return None
+    latest = revisions[-1]
+
+    def migrate(tx) -> TemplateUpdateNotice | None:
+        current = tx.progress.origin
+        if current is None or current.template_id != template.id:
+            return None
+        if current.revision >= latest.revision:
+            return None
+        if tx.progress.pending_question is not None or tx.active_interaction() is not None:
+            return None
+        earlier = current.update_notice
+        totals = {
+            "added": earlier.added if earlier else 0,
+            "removed": earlier.removed if earlier else 0,
+            "redefined": earlier.redefined if earlier else 0,
+        }
+        from_revision = earlier.from_revision if earlier else current.revision
+        for revision in revisions:
+            if revision.revision <= current.revision:
+                continue
+            for key, value in apply_revision(tx.progress, revision).items():
+                totals[key] += value
+            current.revision = revision.revision
+        sources, _modules = instance_outline(path_id, latest)
+        tx.put_topic(_metadata(path_id, latest), sources)
+        tx.progress.name = latest.outline.name[:200]
+        applied = TemplateUpdateNotice(
+            from_revision=from_revision, to_revision=current.revision, **totals
+        )
+        current.update_notice = applied
+        tx.touch()
+        tx.emit(
+            "path.teacher_revision_applied",
+            {"template_id": template.id, **applied.model_dump(mode="json")},
+        )
+        return applied
+
+    _progress, notice = store.mutate(path_id, migrate)
+    if notice is not None:
+        _record_applied(teaching, template.id, user_id, path_id, store)
+    return notice
+
+
+def acknowledge_update(path_id: str, store: LearningStore) -> bool:
+    """The student has seen "your teacher updated this course"; stop showing it."""
+    if store.load_origin(path_id) is None:
+        return False
+
+    def clear(tx) -> bool:
+        origin = tx.progress.origin
+        if origin is None or origin.update_notice is None:
+            return False
+        origin.update_notice = None
+        tx.touch()
+        tx.emit("path.teacher_update_acknowledged", {"template_id": origin.template_id})
+        return True
+
+    _progress, cleared = store.mutate(path_id, clear)
+    return cleared

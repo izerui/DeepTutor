@@ -811,6 +811,7 @@ class TurnExecutor:
                     resource_scope,
                     path_id=_mastery_path_id(payload.get("mastery_path_id")),
                     stream=refusals,
+                    turn_id=turn_id,
                 )
                 if mastery_turn is None:
                     raise refusals.unavailable()

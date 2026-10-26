@@ -58,7 +58,11 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
     origin = await asyncio.to_thread(store.load_origin, path_id)
     if origin is None:
         return ""
-    from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, instance_access
+    from deeptutor.teaching.instances import (
+        INSTANCE_UNAVAILABLE,
+        apply_pending_revision,
+        instance_access,
+    )
 
     access = await asyncio.to_thread(instance_access, path_id, store)
     if not access.allowed:
@@ -68,6 +72,18 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
             metadata={"code": TEACHER_PATH_UNAVAILABLE_CODE},
         )
         return None
+    # Revision admission: a newer teacher revision is applied before the turn
+    # reads the path, unless a question is still open (the copy then stays on
+    # its applied revision and that revision's materials) or another turn
+    # holds the path's lease. The admitted turn's own lease does not block it.
+    turn = current_mastery_turn()
+    await asyncio.to_thread(
+        apply_pending_revision,
+        path_id,
+        store,
+        respect_lease=True,
+        lease_turn_id=turn.turn_id if turn is not None else "",
+    )
     return origin.template_id
 
 
@@ -146,9 +162,11 @@ class MasteryTurn:
     commits at the end, so a refused or failed admission changes nothing.
     """
 
-    def __init__(self, scope: Any, store: Any) -> None:
+    def __init__(self, scope: Any, store: Any, *, turn_id: str = "") -> None:
         self.scope = scope
         self.store = store
+        #: The turn's id, the one its path lease (if any) is held under.
+        self.turn_id = turn_id
         self.context: Any = None
         self.selected: list[str] = []
         #: The tutor attaches the path's own sources to a learner-owned path;
@@ -240,13 +258,14 @@ def _activate(turn: MasteryTurn) -> Iterator[None]:
 
 
 async def open_mastery_turn(
-    stack: contextlib.ExitStack, *, path_id: str, stream: Any
+    stack: contextlib.ExitStack, *, path_id: str, stream: Any, turn_id: str = ""
 ) -> MasteryTurn | None:
     """Admit a turn onto ``path_id`` and open its scope on ``stack``.
 
     Returns ``None`` when the path may not be entered (the error went to
     ``stream``); the caller ends the turn. Everything opened here closes with
-    ``stack``, i.e. with the turn.
+    ``stack``, i.e. with the turn. ``turn_id`` names the turn's path lease:
+    admission may update the path under that lease, never under another.
     """
     from deeptutor.capabilities.mastery.binding import turn_path_gate
     from deeptutor.learning.storage import LearningStore
@@ -254,7 +273,7 @@ async def open_mastery_turn(
 
     # Only a turn on a path opens the store (cross-check 2.6).
     store = await asyncio.to_thread(LearningStore) if path_id else None
-    turn = MasteryTurn(stack.enter_context(turn_retrieval_scope()), store)
+    turn = MasteryTurn(stack.enter_context(turn_retrieval_scope()), store, turn_id=turn_id)
     stack.enter_context(_activate(turn))
     admission = await turn.admit(stream, store, path_id)
     if admission is None:

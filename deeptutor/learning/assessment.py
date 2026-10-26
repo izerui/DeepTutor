@@ -314,7 +314,7 @@ def _apply_linked_retention(
         return False
 
     from deeptutor.learning.models import LearningEvidence
-    from deeptutor.learning.policy import find_knowledge_point
+    from deeptutor.learning.policy import clear_reassessment, find_knowledge_point
     from deeptutor.learning.scheduler import SpacedRepetitionScheduler
 
     scheduler = SpacedRepetitionScheduler()
@@ -350,6 +350,8 @@ def _apply_linked_retention(
             item for item in progress.learning_evidence if item.knowledge_point_id == kp.id
         ]
         progress.learning_evidence.append(evidence)
+        # A linked assessment after a teacher redefined the objective (R11).
+        clear_reassessment(progress, kp.id, assessed_at=evidence.timestamp)
         if any(item.timestamp > evidence.timestamp for item in prior_evidence):
             # A saved event may be retried after a newer assessment. Rebuild
             # this objective in evidence order instead of scheduling the old

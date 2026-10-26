@@ -417,6 +417,9 @@ class LearningService:
         for key in list(progress.explained_objectives):
             if key not in new_kp_ids:
                 del progress.explained_objectives[key]
+        for key in list(progress.reassessment_required):
+            if key not in new_kp_ids:
+                del progress.reassessment_required[key]
         progress.error_records = [
             r for r in progress.error_records if r.knowledge_point_id in new_kp_ids
         ]
@@ -518,6 +521,11 @@ class LearningService:
                     break
 
         progress.quiz_attempts.append(attempt)
+        if not attempt.voided:
+            from deeptutor.learning.policy import clear_reassessment
+
+            # A graded answer is a new assessment of a redefined objective (R11).
+            clear_reassessment(progress, attempt.knowledge_point_id, assessed_at=attempt.timestamp)
         progress.updated_at = time.time()
 
     def calculate_mastery(self, progress: LearningProgress, kp_id: str) -> float:
@@ -2250,6 +2258,7 @@ class LearningService:
             progress.learner_mastery_overrides = {}
             progress.deferred_objectives = {}
             progress.explained_objectives = {}
+            progress.reassessment_required = {}
             progress.pending_question = None
             progress.feynman_retries = {}
             progress.feynman_explanations = {}
@@ -2983,6 +2992,9 @@ class LearningService:
                 return False
         progress.qualitative_mastery[kp_id] = bool(passed)
         progress.deferred_objectives.pop(kp_id, None)
+        from deeptutor.learning.policy import clear_reassessment
+
+        clear_reassessment(progress, kp_id)
         current = progress.mastery_levels.get(kp_id, 0.0)
         progress.mastery_levels[kp_id] = max(current, 1.0) if passed else min(current, 0.4)
         if evidence:

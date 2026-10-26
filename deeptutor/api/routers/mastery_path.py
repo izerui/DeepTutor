@@ -670,10 +670,13 @@ async def create_topic(body: ConfirmTopicRequest):
 @router.get("/topics/{path_id}")
 async def get_topic(path_id: str):
     _validate_book_id(path_id)
-    from deeptutor.teaching.instances import describe_instance
+    from deeptutor.teaching.instances import apply_pending_revision, describe_instance
 
     def read() -> dict:
         store = LearningStore()
+        # Opening a teacher path is a study start: a newer revision is applied
+        # here unless a question is open or a tutoring turn is running.
+        apply_pending_revision(path_id, store, respect_lease=True)
         payload = _topic_payload(store, path_id)
         described = describe_instance(path_id, store)
         if described is not None:
@@ -681,6 +684,20 @@ async def get_topic(path_id: str):
         return payload
 
     return await asyncio.to_thread(read)
+
+
+@router.post("/topics/{path_id}/teacher-update/ack")
+async def acknowledge_teacher_update(path_id: str):
+    """Hide the one-time "your teacher updated this course" notice."""
+    _validate_book_id(path_id)
+    from deeptutor.teaching.instances import acknowledge_update
+
+    def acknowledge() -> bool:
+        # The store is opened in the worker: opening it may migrate the database.
+        return acknowledge_update(path_id, LearningStore())
+
+    acknowledged = await asyncio.to_thread(acknowledge)
+    return {"status": "ok", "acknowledged": acknowledged}
 
 
 @router.get("/topics/{path_id}/review-settings")

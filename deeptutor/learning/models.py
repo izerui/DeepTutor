@@ -699,6 +699,11 @@ class LearningProgress(BaseModel):
     # just prefers any other eligible waypoint until only deferred ones remain.
     deferred_objectives: dict[str, DeferredObjective] = Field(default_factory=dict)
     explained_objectives: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Objectives a teacher redefined under this learner (kp id -> when), shown
+    # as "needs re-assessment" until the objective is assessed again (R11).
+    # Recorded from the revision change itself, never derived from attempts.
+    # Absent on every path before teacher updates existed: nothing to migrate.
+    reassessment_required: dict[str, float] = Field(default_factory=dict)
     # A single outstanding question; grading reads its expected answer so the
     # model never has to recall it across turns.
     pending_question: PendingQuestion | None = None

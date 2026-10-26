@@ -176,6 +176,42 @@ def objective_status(progress: LearningProgress, kp: KnowledgePoint) -> str:
     return "learning" if seen else "new"
 
 
+#: ``QuizAttempt.void_reason`` of answers to an objective a teacher redefined.
+REDEFINED_VOID_REASON = "objective_redefined"
+
+
+def needs_reassessment(progress: LearningProgress, kp: KnowledgePoint) -> bool:
+    """The objective changed under the learner and has not been assessed since.
+
+    Persisted when a teacher's revision redefines the objective (spec 5.3,
+    R11), so it holds whatever the objective's history was — never attempted,
+    assessed qualitatively, or with answers voided for other reasons. Only
+    :func:`clear_reassessment` (a new assessment) removes it. It is shown next
+    to :func:`objective_status`, which keeps its three values.
+    """
+    return kp.id in progress.reassessment_required
+
+
+def clear_reassessment(
+    progress: LearningProgress, kp_id: str, *, assessed_at: float | None = None
+) -> bool:
+    """A new assessment of *kp_id* happened at *assessed_at* (default: now).
+
+    Called where an assessment is recorded: a graded answer, a qualitative
+    verdict, a linked assessment event. An assessment older than the
+    redefinition (a replayed event) does not count. Returns whether the flag
+    was cleared.
+    """
+    flagged_at = progress.reassessment_required.get(kp_id)
+    if flagged_at is None:
+        return False
+    moment = time.time() if assessed_at is None else assessed_at
+    if moment < flagged_at:
+        return False
+    del progress.reassessment_required[kp_id]
+    return True
+
+
 def due_reviews(progress: LearningProgress, *, now: float | None = None) -> list[ReviewTask]:
     """Spaced-repetition tasks whose ``due_at`` has passed, highest forgetting
     risk first. Pure read over ``progress.review_queue`` (built by the scheduler)."""
@@ -403,6 +439,7 @@ def map_summary(progress: LearningProgress, *, now: float | None = None) -> dict
                         else ""
                     ),
                     "deferred": kp.id in progress.deferred_objectives,
+                    "needs_reassessment": needs_reassessment(progress, kp),
                 }
             )
         modules_out.append(
@@ -515,6 +552,7 @@ def objective_report(
         "gate": gate_kind(kp),
         "mastered": is_mastered(progress, kp),
         "assessed_mastered": is_assessed_mastered(progress, kp),
+        "needs_reassessment": needs_reassessment(progress, kp),
         "mastery_source": mastery_source(progress, kp),
         "override_note": (
             progress.learner_mastery_overrides[kp_id].note
@@ -550,7 +588,9 @@ def objective_report(
 __all__ = [
     "QUANTITATIVE_GATE",
     "QUALITATIVE_TYPES",
+    "REDEFINED_VOID_REASON",
     "NextStep",
+    "clear_reassessment",
     "gate_kind",
     "gate_threshold",
     "is_assessed_mastered",
@@ -563,5 +603,6 @@ __all__ = [
     "find_knowledge_point",
     "next_objective",
     "map_summary",
+    "needs_reassessment",
     "path_display_name",
 ]

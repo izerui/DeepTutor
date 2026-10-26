@@ -338,7 +338,12 @@ class MasteryLoopPipeline(AgenticLoopPipeline):
             # bypass it, so the tutor opens the same gate and scope itself.
             turn = current_mastery_turn()
             if turn is None or turn.path_id != path_id:
-                turn = await open_mastery_turn(stack, path_id=path_id, stream=stream)
+                turn = await open_mastery_turn(
+                    stack,
+                    path_id=path_id,
+                    stream=stream,
+                    turn_id=str(context.metadata.get("turn_id") or ""),
+                )
                 if turn is None:
                     return {}
             # A learner's own path is tutored from their selection plus the
