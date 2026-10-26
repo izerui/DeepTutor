@@ -643,3 +643,165 @@ def test_perplexity_client_sends_integration_header() -> None:
     )
     assert request.url.host == "api.perplexity.ai"
     assert request.headers["X-Pplx-Integration"] == "deeptutor"
+
+
+# --------------------------------------------------------------------------
+# google-browser-scraper: a self-hosted `serve` endpoint answering SerpApi-shaped
+# JSON. A blocked page arrives as HTTP 200 with an error status, and has to
+# raise so web_search can fall through to the next provider.
+# --------------------------------------------------------------------------
+
+
+def _gbs_page(status: str = "Success", verdict: str = "results", rows=None) -> dict[str, Any]:
+    return {
+        "search_metadata": {"status": status, "page_verdict": verdict},
+        "search_parameters": {"engine": "google", "q": "q", "page": 1},
+        "organic_results": rows or [],
+    }
+
+
+@pytest.fixture
+def gbs(monkeypatch):
+    """Capture GETs to the scraper and answer with whatever `gbs.body` holds."""
+
+    class _State:
+        body: Any = _gbs_page()
+        status_code = 200
+        calls: list[dict[str, Any]] = []
+
+    state = _State()
+
+    def _get(url: str, **kwargs: Any) -> _FakeResponse:
+        state.calls.append({"url": url, **kwargs})
+        response = _FakeResponse(state.body)
+        response.status_code = state.status_code
+        return response
+
+    class _FakeRequests:
+        get = staticmethod(_get)
+        HTTPError = __import__("requests").HTTPError
+        exceptions = __import__("requests").exceptions
+
+    monkeypatch.setattr(
+        "deeptutor.services.search.providers.google_browser_scraper.requests", _FakeRequests
+    )
+    return state
+
+
+def test_gbs_queries_search_json_with_key_proxy_and_cap(gbs) -> None:
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    gbs.body = _gbs_page(
+        rows=[
+            {"position": i, "title": f"T{i}", "link": f"https://e.example/{i}", "snippet": "s"}
+            for i in range(1, 9)
+        ]
+    )
+    provider = GoogleBrowserScraperProvider(api_key="k", proxy=PROXY)
+    response = provider.search("q", base_url="http://127.0.0.1:8000/", max_results=3)
+
+    call = gbs.calls[-1]
+    assert call["url"] == "http://127.0.0.1:8000/search.json"
+    assert call["params"] == {"q": "q"}
+    assert call["headers"]["Authorization"] == "Bearer k"
+    assert call["proxies"] == {"http": PROXY, "https": PROXY}
+    assert call["timeout"] >= 60
+    assert [r.url for r in response.search_results] == [
+        "https://e.example/1",
+        "https://e.example/2",
+        "https://e.example/3",
+    ]
+    assert [c.reference for c in response.citations] == ["[1]", "[2]", "[3]"]
+    assert response.provider == "google_browser_scraper"
+
+
+def test_gbs_sends_no_key_when_none_is_set(gbs) -> None:
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    GoogleBrowserScraperProvider(api_key="").search("q", base_url="localhost:8000")
+    call = gbs.calls[-1]
+    assert call["url"] == "http://localhost:8000/search.json"
+    assert "Authorization" not in call["headers"]
+    assert "proxies" not in call
+
+
+def test_gbs_skips_rows_without_a_web_link(gbs) -> None:
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    gbs.body = _gbs_page(
+        rows=[
+            {
+                "title": "Unresolved",
+                "link": None,
+                "redirect_link": "https://www.google.com/url?q=x",
+            },
+            {"title": "Kept", "link": "https://kept.example", "snippet": "s", "date": "2 days ago"},
+            {"title": "Local", "link": "file:///etc/passwd"},
+        ]
+    )
+    response = GoogleBrowserScraperProvider(api_key="").search("q", base_url="http://h:8000")
+    assert [(r.title, r.url, r.date) for r in response.search_results] == [
+        ("Kept", "https://kept.example", "2 days ago")
+    ]
+    assert response.citations[0].id == 1
+
+
+def test_gbs_reports_a_blocked_page_instead_of_no_results(gbs) -> None:
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperError,
+        GoogleBrowserScraperProvider,
+    )
+
+    gbs.body = _gbs_page(status="Error", verdict="captcha")
+    with pytest.raises(GoogleBrowserScraperError, match="captcha"):
+        GoogleBrowserScraperProvider(api_key="").search("q", base_url="http://h:8000")
+
+
+def test_gbs_http_errors_keep_the_status_without_the_body(gbs) -> None:
+    import requests
+
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    gbs.status_code = 401
+    gbs.body = {"error": "missing or wrong api_key"}
+    with pytest.raises(requests.HTTPError) as excinfo:
+        GoogleBrowserScraperProvider(api_key="k").search("q", base_url="http://h:8000")
+    assert "401" in str(excinfo.value)
+    assert "missing or wrong" not in str(excinfo.value)
+
+
+def test_gbs_requires_a_valid_base_url() -> None:
+    import requests
+
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    provider = GoogleBrowserScraperProvider(api_key="")
+    with pytest.raises(ValueError, match="base_url"):
+        provider.search("q")
+    with pytest.raises(requests.exceptions.InvalidURL):
+        provider.search("q", base_url="ftp://h:8000")
+
+
+def test_gbs_metadata_comes_from_the_spec_table() -> None:
+    from deeptutor.services.config import SEARCH_PROVIDERS, search_missing_credential
+    from deeptutor.services.search.providers import list_providers
+    from deeptutor.services.search.providers.google_browser_scraper import (
+        GoogleBrowserScraperProvider,
+    )
+
+    spec = SEARCH_PROVIDERS["google_browser_scraper"]
+    assert "google_browser_scraper" in list_providers()
+    assert GoogleBrowserScraperProvider.display_name == spec.label
+    assert GoogleBrowserScraperProvider.requires_api_key is False
+    assert GoogleBrowserScraperProvider.supports_answer is False
+    assert search_missing_credential("google_browser_scraper", "", "") == "base_url"

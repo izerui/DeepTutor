@@ -249,6 +249,14 @@ SEARCH_PROVIDERS: tuple[SearchProviderSpec, ...] = (
         hint="self-hosted · provide your instance URL",
     ),
     SearchProviderSpec(
+        name="google_browser_scraper",
+        label="Google Browser Scraper",
+        requires_api_key=False,
+        requires_base_url=True,
+        default_base_url="http://127.0.0.1:8000",
+        hint="self-hosted Google in a real browser · your own proxy",
+    ),
+    SearchProviderSpec(
         name="none",
         label="Disable web search",
         requires_api_key=False,
