@@ -566,3 +566,31 @@ def publish_template(as_account, teaching_users, quiet_change_model):
             )
 
     return _publish
+
+
+@pytest.fixture
+def teaching_http(teaching_users, monkeypatch):
+    """The mastery routers behind real auth; the bearer token is the username."""
+    from types import SimpleNamespace
+
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+
+    import deeptutor.api.routers.auth as auth_router
+    from deeptutor.api.routers import knowledge, mastery_path, mastery_teaching
+    from deeptutor.services.auth import TokenPayload
+
+    tokens = {
+        name: TokenPayload(username=name, role=record["role"], user_id=record["id"])
+        for name, record in teaching_users.items()
+    }
+    monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
+    monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
+    app = FastAPI()
+    auth = [Depends(auth_router.require_auth)]
+    app.include_router(
+        mastery_teaching.router, prefix="/api/mastery-paths/teaching", dependencies=auth
+    )
+    app.include_router(mastery_path.router, prefix="/api/mastery-paths", dependencies=auth)
+    app.include_router(knowledge.router, prefix="/api", dependencies=auth)
+    return SimpleNamespace(client=TestClient(app), users=teaching_users)

@@ -560,6 +560,7 @@ from deeptutor.api.routers import (
     learning_journal,
     marginnote4,
     mastery_path,
+    mastery_teaching,
     mcp_settings,
     memory,
     notebook,
@@ -634,6 +635,14 @@ app.include_router(
 app.include_router(imports.router, prefix="/api/imports", tags=["imports"], dependencies=_auth)
 app.include_router(
     dashboard.router, prefix="/api/dashboard", tags=["dashboard"], dependencies=_auth
+)
+# Teacher templates live under the mastery prefix, so learning accounts reach
+# them through the same surface check; the router itself requires a teacher.
+app.include_router(
+    mastery_teaching.router,
+    prefix="/api/mastery-paths/teaching",
+    tags=["mastery-teaching"],
+    dependencies=_auth,
 )
 app.include_router(
     mastery_path.router,
