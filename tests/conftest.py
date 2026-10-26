@@ -341,6 +341,19 @@ def _isolate_book_registry(monkeypatch, tmp_path, _isolate_kb_registry):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_teaching_db(monkeypatch, tmp_path, _isolate_kb_registry, _isolate_book_registry):
+    """Teacher templates live in one deployment-wide SQLite file; every test gets its own.
+
+    Without this, any test that deletes an account (``handle_account_deleted``)
+    or lists a student's mastery paths would create ``data/system/teaching.sqlite3``
+    in the developer's real tree.
+    """
+    from deeptutor.teaching import store as teaching_store
+
+    monkeypatch.setattr(teaching_store, "DB_PATH_OVERRIDE", tmp_path / "teaching.sqlite3")
+
+
+@pytest.fixture(autouse=True)
 def _disable_startup_kb_backfill(monkeypatch):
     """Running the real app lifespan in a test must not walk the developer's data/.
 
