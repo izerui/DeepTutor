@@ -96,8 +96,13 @@ def topic_cards(*, query: str = "", store: LearningStore | None = None) -> dict[
     inside a chat (keyed by session id, no name, no map) is a scratchpad, not
     somewhere to send a learner back to.
     """
+    from deeptutor.teaching.instances import closed_instance_ids
+
     store = store or LearningStore()
     snapshots = store.list_topic_snapshots(status="active")
+    # A revoked or archived teacher path is no longer the learner's to open.
+    closed = closed_instance_ids(snapshot[0] for snapshot in snapshots)
+    snapshots = [snapshot for snapshot in snapshots if snapshot[0].book_id not in closed]
     needle = " ".join(str(query or "").split()).casefold()
 
     cards: list[dict[str, Any]] = []
@@ -163,6 +168,11 @@ def find_topic(path_id: str, *, store: LearningStore | None = None) -> dict[str,
         return None
     if progress is None:
         return None
+    if progress.origin is not None:
+        from deeptutor.teaching.instances import closed_instance_ids
+
+        if closed_instance_ids([progress]):
+            return None  # a revoked or archived teacher path
     summary = policy.map_summary(progress)
     if summary["counts"]["total"] <= 0:
         return None

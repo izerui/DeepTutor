@@ -594,3 +594,18 @@ def teaching_http(teaching_users, monkeypatch):
     app.include_router(mastery_path.router, prefix="/api/mastery-paths", dependencies=auth)
     app.include_router(knowledge.router, prefix="/api", dependencies=auth)
     return SimpleNamespace(client=TestClient(app), users=teaching_users)
+
+
+@pytest.fixture
+def sara_instance(teacher_draft, publish_template, as_account):
+    """Tina's calculus path published to Sara, with Sara's own copy created."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from deeptutor.api.routers import mastery_path
+
+    teacher_draft()
+    result = publish_template(students=("sara",))
+    with as_account("sara"):
+        topics = asyncio.run(mastery_path.list_topics())["topics"]
+    return SimpleNamespace(path_id=topics[0]["path_id"], template_id=result["template"]["id"])

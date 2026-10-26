@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
 
@@ -40,7 +40,33 @@ from deeptutor.learning.topic_generation import MAX_MODULE_LIMIT
 from deeptutor.services.settings.interface_settings import get_response_language
 from deeptutor.utils.json_parser import parse_json_response
 
-router = APIRouter()
+
+def _check_instance_access(path_id: str) -> None:
+    from deeptutor.teaching.instances import ensure_instance_access
+
+    ensure_instance_access(path_id, LearningStore())
+
+
+async def require_instance_access(request: Request) -> None:
+    """A revoked or archived teacher path is closed on every route that names it.
+
+    Installed on the whole router: any ``{path_id}`` / ``{book_id}`` route sees
+    it. Ordinary paths pay one indexed JSON read and never touch the system
+    teaching database. The store is opened in the worker thread too: opening
+    it may migrate and create the account's database.
+    """
+    path_id = str(request.path_params.get("path_id") or request.path_params.get("book_id") or "")
+    if not path_id or ".." in path_id or "/" in path_id or "\\" in path_id or ":" in path_id:
+        return  # the handler's own validation answers with its usual 400
+    from deeptutor.teaching.instances import InstanceUnavailableError
+
+    try:
+        await asyncio.to_thread(_check_instance_access, path_id)
+    except InstanceUnavailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+router = APIRouter(dependencies=[Depends(require_instance_access)])
 ws_router = APIRouter()
 
 
@@ -468,14 +494,27 @@ def _topic_payload(store: LearningStore, path_id: str) -> dict:
 
 @router.get("/topics")
 async def list_topics():
-    store = LearningStore()
-    topics = await asyncio.to_thread(
-        lambda: [
-            _topic_payload_from_snapshot(*snapshot)
-            for snapshot in store.list_topic_snapshots(status="active")
-        ]
-    )
-    return {"topics": topics}
+    from deeptutor.teaching.instances import describe_instances, sync_assigned_instances
+
+    def read() -> list[dict]:
+        store = LearningStore()
+        # A student's teacher paths are created here, from the student's own
+        # request, the first time their list is read.
+        sync_assigned_instances(store)
+        snapshots = store.list_topic_snapshots(status="active")
+        origins = describe_instances(snapshot[0] for snapshot in snapshots)
+        topics: list[dict] = []
+        for snapshot in snapshots:
+            progress = snapshot[0]
+            if progress.origin is not None and progress.book_id not in origins:
+                continue  # revoked or archived: no longer the student's to open
+            payload = _topic_payload_from_snapshot(*snapshot)
+            if progress.book_id in origins:
+                payload["origin"] = origins[progress.book_id]
+            topics.append(payload)
+        return topics
+
+    return {"topics": await asyncio.to_thread(read)}
 
 
 @router.get("/topics/index")
@@ -491,21 +530,22 @@ async def list_topic_index():
     Declared above ``/topics/{path_id}``: that route matches any single
     segment, so a literal path below it would never be reached.
     """
-    store = LearningStore()
-    return {
-        "topics": await asyncio.to_thread(
-            lambda: [
-                {
-                    "path_id": progress.book_id,
-                    "name": learning_policy.path_display_name(progress),
-                    "emoji": topic.metadata.emoji,
-                }
-                for progress, topic, _session_count, _interaction in store.list_topic_snapshots(
-                    status="active"
-                )
-            ]
-        )
-    }
+    from deeptutor.teaching.instances import closed_instance_ids
+
+    def read() -> list[dict]:
+        snapshots = LearningStore().list_topic_snapshots(status="active")
+        closed = closed_instance_ids(snapshot[0] for snapshot in snapshots)
+        return [
+            {
+                "path_id": progress.book_id,
+                "name": learning_policy.path_display_name(progress),
+                "emoji": topic.metadata.emoji,
+            }
+            for progress, topic, _session_count, _interaction in snapshots
+            if progress.book_id not in closed
+        ]
+
+    return {"topics": await asyncio.to_thread(read)}
 
 
 @router.get("/reading/records", response_model=ReadingLearningRecords)
@@ -615,7 +655,17 @@ async def create_topic(body: ConfirmTopicRequest):
 @router.get("/topics/{path_id}")
 async def get_topic(path_id: str):
     _validate_book_id(path_id)
-    return await asyncio.to_thread(_topic_payload, LearningStore(), path_id)
+    from deeptutor.teaching.instances import describe_instance
+
+    def read() -> dict:
+        store = LearningStore()
+        payload = _topic_payload(store, path_id)
+        described = describe_instance(path_id, store)
+        if described is not None:
+            payload["origin"] = described
+        return payload
+
+    return await asyncio.to_thread(read)
 
 
 @router.get("/topics/{path_id}/review-settings")
@@ -878,6 +928,11 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
             store = LearningStore()
             if not await asyncio.to_thread(store.exists, path_id):
                 await send({"type": "error", "content": "Mastery topic not found"})
+                continue
+            from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, instance_access
+
+            if not (await asyncio.to_thread(instance_access, path_id, store)).allowed:
+                await send({"type": "error", "content": INSTANCE_UNAVAILABLE})
                 continue
 
             await stop_forwarding()

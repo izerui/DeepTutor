@@ -3033,8 +3033,9 @@ class LearningService:
         This reports the counts the gate itself produces.
         """
         from deeptutor.learning import policy
+        from deeptutor.teaching.instances import closed_instance_ids
 
-        overviews: list[dict] = []
+        loaded: list[LearningProgress] = []
         for path_id in self._store.list_all():
             try:
                 progress = self._store.load(path_id)
@@ -3043,7 +3044,13 @@ class LearningService:
                     "Failed to load mastery path %s for overview", path_id, exc_info=True
                 )
                 continue
-            if progress is None:
+            if progress is not None:
+                loaded.append(progress)
+        # A revoked or archived teacher path is no longer the learner's to open.
+        closed = closed_instance_ids(loaded)
+        overviews: list[dict] = []
+        for progress in loaded:
+            if progress.book_id in closed:
                 continue
             summary = policy.map_summary(progress)
             counts = summary["counts"]
@@ -3067,17 +3074,30 @@ class LearningService:
     def list_progress(self) -> dict:
         """Return summary of all book progress with per-book error info."""
         from deeptutor.learning import policy
+        from deeptutor.teaching.instances import closed_instance_ids
 
         logger = logging.getLogger(__name__)
 
         book_ids = self._store.list_all()
         summaries = []
         errors = []
+        loaded: list[LearningProgress] = []
         for bid in book_ids:
             try:
                 progress = self._store.load(bid)
-                if progress is None:
-                    continue
+            except Exception:
+                logger.warning("Failed to load progress for book %s, skipping", bid, exc_info=True)
+                errors.append({"book_id": bid, "error": "Failed to load"})
+                continue
+            if progress is not None:
+                loaded.append(progress)
+        # A revoked or archived teacher path is no longer the learner's to open.
+        closed = closed_instance_ids(loaded)
+        for progress in loaded:
+            bid = progress.book_id
+            if bid in closed:
+                continue
+            try:
                 # Only count KPs from current modules (exclude stale IDs)
                 current_kp_ids = {kp.id for m in progress.modules for kp in m.knowledge_points}
                 total_kps = len(current_kp_ids)
