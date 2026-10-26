@@ -353,8 +353,19 @@ def _plan_book(
             )
         )
         return
+    except book_access.BookRegistryError as exc:
+        # E.g. the local book could not be registered: report it, keep planning.
+        plan.issues.append(_issue(source, "not_shareable", f"{source.label}: {exc}"))
+        return
     if record is None:
         plan.issues.append(_issue(source, "missing_book", f"{source.label}: the book no longer exists."))
+        return
+    if record.book_id in plan.books:
+        # Several sources may cite one book; it is planned (and offered) once.
+        rewritten = source.model_copy(deep=True)
+        rewritten.metadata.pop("content_workspace_id", None)
+        rewritten.source_id = record.ref
+        plan.sources.append(rewritten)
         return
     if record.visibility != "public":
         if not (book_access.can_read(record, user) and book_access.can_write(record, user)):

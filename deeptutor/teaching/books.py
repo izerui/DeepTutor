@@ -173,6 +173,14 @@ def remove_template_references(template_id: str) -> None:
     book_registry.remove_book_references(REFERRER_KIND, template_id)
 
 
+def referenced_book_ids(template_id: str) -> set[str]:
+    """The books the template's live references hold now (revoked ones excluded)."""
+    return {
+        record.book_id
+        for record in book_registry.list_referenced_books(REFERRER_KIND, template_id)
+    }
+
+
 def unavailable_references(template_id: str) -> list[Any]:
     """Book references an admin revoked (forced private or deleted the book)."""
     return list(book_registry.list_unavailable_book_references(REFERRER_KIND, template_id))

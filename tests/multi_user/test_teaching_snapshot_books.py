@@ -234,3 +234,23 @@ def test_explicit_reference_only_book_records_private_intent(teaching_books, as_
     assert book_registry.get_book("bk_pub").visibility == "public"
     assert _book_intent("bk_tom") is None
     assert {r.referrer_id for r in book_registry.list_book_references("bk_own")} == {"tpl"}
+
+
+def test_a_book_registry_failure_is_an_issue_not_an_aborted_plan(
+    teaching_books, as_account, monkeypatch
+):
+    def locked(_ref):
+        raise book_registry.BookRegistryError("the book registry is locked")
+
+    monkeypatch.setattr(teaching_books_access, "resolve", locked)
+    with as_account("tina"):
+        plan = plan_sources(
+            [_book_source(0, "bk_own", "Waves"), _book_source(1, "bk_pub", "Optics")],
+            get_current_user(),
+        )
+
+    assert [(issue.source_id, issue.code) for issue in plan.issues] == [
+        ("b0", "not_shareable"),
+        ("b1", "not_shareable"),
+    ]
+    assert "locked" in plan.issues[0].message

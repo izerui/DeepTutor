@@ -213,6 +213,11 @@ def remove_template_references(template_id: str) -> None:
     registry.remove_references(REFERRER_KIND, template_id)
 
 
+def referenced_kb_ids(template_id: str) -> set[str]:
+    """The KBs the template's live references hold now (revoked ones excluded)."""
+    return {record.kb_id for record in registry.list_referenced(REFERRER_KIND, template_id)}
+
+
 def unavailable_references(template_id: str) -> list[Any]:
     """References an admin revoked (forced private or deleted the KB); spec 7.4.
 

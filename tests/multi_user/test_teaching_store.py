@@ -212,3 +212,15 @@ def test_delete_cascades_to_revisions_and_assignments(store):
     assert store.get_template(template.id) is None
     assert store.get_revision(template.id, 1) is None
     assert store.list_assignments(template.id) == []
+
+
+def test_an_archived_template_rejects_a_late_revision(store):
+    template = _template(store)
+    store.update_template(template.id, status="archived")
+
+    with pytest.raises(ValueError):
+        store.add_revision(_revision(template.id, 1), aliases={}, title="Calculus I")
+
+    archived = store.get_template(template.id)
+    assert (archived.status, archived.current_revision) == ("archived", 0)
+    assert store.get_revision(template.id, 1) is None

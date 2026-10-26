@@ -251,8 +251,19 @@ def fake_kb_registry(monkeypatch, tmp_path):
         records[_strip(kb_id)].visibility = visibility
         return records[_strip(kb_id)]
 
-    def replace_references(kind, referrer_id, refs, *, created_by, **_options):
+    #: (referrer_kind, referrer_id) -> the keyword options of the last replace.
+    reference_options: dict[tuple[str, str], dict] = {}
+
+    def replace_references(kind, referrer_id, refs, *, created_by, **options):
         references[(kind, referrer_id)] = list(refs)
+        reference_options[(kind, referrer_id)] = dict(options)
+
+    def list_referenced(kind, referrer_id):
+        return [
+            records[kb_id]
+            for kb_id, _docs in references.get((kind, referrer_id), [])
+            if kb_id in records
+        ]
 
     def find_document(kb_id, rel_path):
         return documents.get((_strip(kb_id), rel_path))
@@ -299,6 +310,7 @@ def fake_kb_registry(monkeypatch, tmp_path):
     monkeypatch.setattr(registry, "can_read", can_read)
     monkeypatch.setattr(registry, "set_visibility", set_visibility)
     monkeypatch.setattr(registry, "replace_references", replace_references)
+    monkeypatch.setattr(registry, "list_referenced", list_referenced)
     monkeypatch.setattr(
         registry,
         "remove_references",
@@ -338,6 +350,7 @@ def fake_kb_registry(monkeypatch, tmp_path):
         force_private=force_private,
         records=records,
         references=references,
+        reference_options=reference_options,
         documents=documents,
         revoked=revoked,
     )
@@ -404,3 +417,152 @@ def teaching_books(teaching_users, tmp_path):
         base_dir=tmp_path / "books", dir_name="book_bk_tom", title="Tom's notes", created_by=tom
     )
     return SimpleNamespace(answers=answers, own=own, public=public, foreign=foreign)
+
+
+@pytest.fixture
+def quiet_change_model(monkeypatch):
+    """Publishing never reaches a real model in tests."""
+
+    async def _no_answer(_diff, _language):
+        return None
+
+    monkeypatch.setattr("deeptutor.teaching.changes._ask_model", _no_answer)
+
+
+@pytest.fixture
+def teacher_draft(as_account):
+    """Create a teacher's own mastery path, the draft a template publishes."""
+    from deeptutor.learning.models import (
+        KnowledgePoint,
+        KnowledgeType,
+        LearningModule,
+        TopicMetadata,
+    )
+    from deeptutor.learning.service import LearningService
+    from deeptutor.learning.storage import LearningStore
+
+    def _make(
+        name: str = "tina",
+        *,
+        path_id: str = "topic_calculus",
+        points: tuple[tuple[str, str], ...] = (
+            ("Limits", "concept"),
+            ("Derivatives", "procedure"),
+            ("Chain rule", "procedure"),
+        ),
+        sources: tuple = (),
+    ) -> str:
+        module_id = f"{path_id}_m0"
+        module = LearningModule(
+            id=module_id,
+            name="Calculus",
+            order=0,
+            objective="Differentiate simple functions",
+            knowledge_points=[
+                KnowledgePoint(
+                    id=f"{module_id}_kp{index}",
+                    name=point_name,
+                    type=KnowledgeType(kind),
+                    module_id=module_id,
+                )
+                for index, (point_name, kind) in enumerate(points)
+            ],
+        )
+        with as_account(name):
+            LearningService(LearningStore()).create_topic(
+                path_id,
+                name="Calculus I",
+                modules=[module],
+                metadata=TopicMetadata(path_id=path_id, goal="Differentiate simple functions"),
+                sources=list(sources),
+            )
+        return path_id
+
+    return _make
+
+
+@pytest.fixture
+def edit_calculus_draft(as_account):
+    """Tina renames "Derivatives", drops "Chain rule" and adds "Integrals".
+
+    Returns the ids involved. The rename goes through the real outline editor,
+    which mints a new draft id for a renamed point.
+    """
+    from types import SimpleNamespace
+
+    from deeptutor.learning.models import KnowledgePoint, KnowledgeType
+    from deeptutor.learning.service import LearningService
+    from deeptutor.learning.storage import LearningStore
+
+    def _edit(path_id: str = "topic_calculus"):
+        with as_account("tina"):
+            store = LearningStore()
+            progress = store.load(path_id)
+            limits, derivatives, chain = progress.modules[0].knowledge_points
+            module = progress.modules[0].model_copy(deep=True)
+            module.knowledge_points = [
+                limits.model_copy(deep=True),
+                derivatives.model_copy(update={"name": "Derivative rules"}, deep=True),
+                KnowledgePoint(
+                    id=f"{module.id}_integrals",
+                    name="Integrals",
+                    type=KnowledgeType.CONCEPT,
+                    module_id=module.id,
+                ),
+            ]
+            LearningService(store).replace_modules_for_path(
+                path_id, [module], identity_mode="explicit"
+            )
+            edited = store.load(path_id).modules[0].knowledge_points
+        renamed = next(point for point in edited if point.name == "Derivative rules")
+        integrals = next(point for point in edited if point.name == "Integrals")
+        return SimpleNamespace(
+            limits=limits.id,
+            derivatives=derivatives.id,
+            chain=chain.id,
+            renamed=renamed.id,
+            integrals=integrals.id,
+        )
+
+    return _edit
+
+
+@pytest.fixture
+def publish_template(as_account, teaching_users, quiet_change_model):
+    """Register (or reuse) the template for a draft, preview it, publish it.
+
+    Uses whatever KB registry the test set up: plan B's real one (isolated per
+    test by its autouse fixture), or ``fake_kb_registry`` when requested.
+    """
+    import asyncio
+
+    from deeptutor.teaching.models import PublishRequest
+    from deeptutor.teaching.service import TeachingService
+
+    def _publish(
+        name: str = "tina",
+        *,
+        path_id: str = "topic_calculus",
+        students: tuple[str, ...] = (),
+        kp_decisions: dict | None = None,
+        kb_choices: dict | None = None,
+        book_choices: dict | None = None,
+    ) -> dict:
+        with as_account(name):
+            service = TeachingService()
+            template = service.register(path_id, "")
+            preview = asyncio.run(service.preview_publish(template.id))
+            return asyncio.run(
+                service.publish(
+                    template.id,
+                    PublishRequest(
+                        draft_revision=preview["draft_revision"],
+                        student_ids=[teaching_users[s]["id"] for s in students],
+                        kp_decisions=kp_decisions or {},
+                        kb_choices=kb_choices or {},
+                        book_choices=book_choices or {},
+                    ),
+                )
+            )
+
+    return _publish

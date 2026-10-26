@@ -339,11 +339,14 @@ class TeachingStore:
         """Append the next immutable revision and make it current, atomically."""
         with _write(self.db_path) as conn:
             row = conn.execute(
-                "SELECT current_revision FROM mastery_templates WHERE id = ?",
+                "SELECT current_revision, status FROM mastery_templates WHERE id = ?",
                 (revision.template_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(revision.template_id)
+            if row["status"] == "archived":
+                # An archive that won the race stays archived (spec 5.3).
+                raise ValueError(f"{revision.template_id} is archived")
             if revision.revision != int(row["current_revision"]) + 1:
                 raise ValueError(
                     f"Revision {revision.revision} does not follow "
