@@ -795,6 +795,26 @@ class TurnExecutor:
             #
             # Guarded on an empty chat-path index so materials the learner
             # attached to *this turn* (which took the chat path above) always win.
+            # Every action on a mastery path — the tutor, chat, ask/solve,
+            # standalone pipelines — passes the same admission gate and runs in
+            # the same retrieval scope, opened before any of the path's
+            # materials are read. A closed teacher path ends the turn here.
+            mastery_turn = None
+            if workspace_mode == WORKSPACE_MODE_MASTERY:
+                from deeptutor.capabilities.mastery.turn_scope import (
+                    RefusalRecorder,
+                    open_mastery_turn,
+                )
+
+                refusals = RefusalRecorder()
+                mastery_turn = await open_mastery_turn(
+                    resource_scope,
+                    path_id=_mastery_path_id(payload.get("mastery_path_id")),
+                    stream=refusals,
+                )
+                if mastery_turn is None:
+                    raise refusals.unavailable()
+
             mastery_topic_source_index: dict[str, str] = {}
             if workspace_mode == WORKSPACE_MODE_MASTERY and not source_index:
                 topic_path_id = _mastery_path_id(payload.get("mastery_path_id"))
@@ -1026,6 +1046,10 @@ class TurnExecutor:
                     },
                 },
             )
+
+            if mastery_turn is not None:
+                # R8: a teacher path's turn reads its own libraries only.
+                mastery_turn.attach(context)
 
             pending_done_event: StreamEvent | None = None
             async for event in self.turn_engine.execute(context):

@@ -323,162 +323,29 @@ class MasteryLoopPipeline(AgenticLoopPipeline):
         # Tells MasteryLoopCapability that the playbook is already the
         # foundation of this prompt, so it does not contribute a second copy.
         context.metadata[NATIVE_LOOP_FLAG] = True
-        import asyncio
+        import contextlib
 
-        from deeptutor.capabilities.mastery.binding import turn_path_gate
-        from deeptutor.learning.storage import LearningStore
-        from deeptutor.multi_user.retrieval_scope import turn_retrieval_scope
+        from deeptutor.capabilities.mastery.turn_scope import (
+            current_mastery_turn,
+            open_mastery_turn,
+        )
         from deeptutor.services.workspace.knowledge import learning_source_access
 
         path_id = str(context.metadata.get("mastery_path_id") or "")
-        # Only a turn on a path opens the store (cross-check 2.6).
-        store = await asyncio.to_thread(LearningStore) if path_id else None
-        # What the learner attached, before any path narrows or extends it: a
-        # switch back onto a path of their own restores it.
-        selected = list(context.knowledge_bases)
-        with turn_retrieval_scope() as scope:
-            template_id = await self._teacher_instance_gate(context, stream, store, path_id)
-            if template_id is None:
-                return {}
-            refs = await self._bind_path_scope(context, store, path_id, template_id, selected, scope)
-            with (
-                turn_path_gate(self._switch_gate(context, selected, scope)),
-                learning_source_access(refs),
-            ):
-                return await super().run(context, stream)
-
-    async def _teacher_instance_gate(
-        self, context: UnifiedContext, stream: Any, store: Any, path_id: str
-    ) -> str | None:
-        """Admit a turn onto a teacher's path, or close it.
-
-        Returns ``""`` for a path the learner owns, the template id for an open
-        teacher path, and ``None`` when the turn must end here (an error has
-        already been streamed). A teacher path is studied or reviewed, never
-        redesigned, so a conversation that opened in 'outline' runs in 'study'.
-
-        The same gate admits every mid-turn path switch (see
-        :meth:`_switch_gate`), with a stand-in stream that turns the error
-        into the switch tool's refusal. Every admission step belongs here.
-        """
-        import asyncio
-
-        if not path_id or store is None:
-            return ""
-        origin = await asyncio.to_thread(store.load_origin, path_id)
-        if origin is None:
-            return ""
-        from deeptutor.capabilities.mastery.mode import OUTLINE, STUDY
-        from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, instance_access
-
-        access = await asyncio.to_thread(instance_access, path_id, store)
-        if not access.allowed:
-            await stream.error(
-                INSTANCE_UNAVAILABLE,
-                source="mastery_path",
-                metadata={"code": "teacher_path_unavailable"},
-            )
-            return None
-        if normalize_mode(context.metadata.get("mastery_session_mode")) == OUTLINE:
-            context.metadata["mastery_session_mode"] = STUDY
-        return origin.template_id
-
-    async def _bind_path_scope(
-        self,
-        context: UnifiedContext,
-        store: Any,
-        path_id: str,
-        template_id: str,
-        selected: list[str],
-        scope: Any,
-    ) -> list[str]:
-        """Point the turn's materials at an admitted path; returns its KB refs.
-
-        Runs when the turn starts and again on every admitted switch, so what
-        the previous path allowed or restricted never outlives leaving it.
-
-        R8: a teacher path is tutored from the path's own libraries only. The
-        attached list is *replaced* by them, and the turn's retrieval scope is
-        restricted to their registry identities — an explicit ``rag`` call
-        naming any other library is refused where retrieval resolves it, and a
-        path citing none retrieves nothing. A learner's own path keeps what
-        they selected plus the path's sources, unrestricted.
-        """
-        import asyncio
-
-        topic = (
-            await asyncio.to_thread(store.get_topic, path_id)
-            if store is not None and path_id
-            else None
-        )
-        refs = _path_kb_refs(topic)
-        if template_id:
-            from deeptutor.multi_user.retrieval_scope import canonical_kb_ids
-
-            allowed = await asyncio.to_thread(canonical_kb_ids, refs)
-            context.knowledge_bases = list(dict.fromkeys(refs))
-            scope.restrict(allowed, template_id=template_id)
-        else:
-            context.knowledge_bases = list(dict.fromkeys([*selected, *refs]))
-            scope.clear()
-        return refs
-
-    def _switch_gate(self, context: UnifiedContext, selected: list[str], scope: Any):
-        """The admission a mid-turn ``mastery_switch`` / ``mastery_leave`` goes through."""
-        from deeptutor.capabilities.mastery.binding import PathRefusal
-
-        async def admit(path_id: str, store: Any) -> PathRefusal | None:
-            refusals = _RefusalRecorder()
-            template_id = await self._teacher_instance_gate(context, refusals, store, path_id)
-            if template_id is None:
-                return refusals.refusal()
-            await self._bind_path_scope(context, store, path_id, template_id, selected, scope)
-            return None
-
-        return admit
-
-
-def _path_kb_refs(topic: Any) -> list[str]:
-    """The knowledge bases a path's sources read from, in source order."""
-    refs: list[str] = []
-    for source in topic.sources if topic else []:
-        if source.kind.value == "knowledge_base":
-            refs.append(source.source_id)
-        elif source.kind.value == "file" and source.metadata.get("kb_name"):
-            refs.append(source.metadata["kb_name"])
-    return refs
-
-
-class _RefusalRecorder:
-    """The turn's stream, as the admission gate sees it during a path switch.
-
-    A switch the gate refuses is the switch tool's failure to report — the
-    turn itself goes on, on the path it was on — so the error is kept rather
-    than streamed.
-    """
-
-    def __init__(self) -> None:
-        self.message = ""
-        self.code = ""
-
-    async def error(
-        self,
-        message: str,
-        source: str = "",
-        stage: str = "",
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if not self.message:
-            self.message = str(message)
-            self.code = str((metadata or {}).get("code") or "")
-
-    def refusal(self):
-        from deeptutor.capabilities.mastery.binding import PathRefusal
-
-        return PathRefusal(
-            self.message or "This path cannot be entered right now.",
-            code=self.code,
-        )
+        with contextlib.ExitStack() as stack:
+            # The turn runtime has normally admitted this turn already (every
+            # mastery-workspace action goes through it); CLI and SDK callers
+            # bypass it, so the tutor opens the same gate and scope itself.
+            turn = current_mastery_turn()
+            if turn is None or turn.path_id != path_id:
+                turn = await open_mastery_turn(stack, path_id=path_id, stream=stream)
+                if turn is None:
+                    return {}
+            # A learner's own path is tutored from their selection plus the
+            # path's sources; a teacher's path from its own libraries only (R8).
+            turn.attach(context, merge_path_sources=True)
+            stack.enter_context(learning_source_access(turn.refs))
+            return await super().run(context, stream)
 
 
 __all__ = ["MasteryLoopPipeline", "MasteryPromptAssembler"]

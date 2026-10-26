@@ -502,9 +502,11 @@ async def test_a_switch_re_runs_the_turn_gate_and_rolls_back_its_lease(
     """Later admission steps (revision, materials) live in the same gate; a
     refusal after the lease handoff hands the lease back."""
     seen: dict = {}
-    original = MasteryLoopPipeline._teacher_instance_gate
+    from deeptutor.capabilities.mastery import turn_scope
 
-    async def gate(self, context, stream, learning_store, path_id):
+    original = turn_scope.teacher_instance_gate
+
+    async def gate(stream, learning_store, path_id):
         seen.setdefault("gated", []).append(path_id)
         if path_id == courses.b:
             await stream.error(
@@ -513,7 +515,7 @@ async def test_a_switch_re_runs_the_turn_gate_and_rolls_back_its_lease(
                 metadata={"code": "teacher_materials_unavailable"},
             )
             return None
-        return await original(self, context, stream, learning_store, path_id)
+        return await original(stream, learning_store, path_id)
 
     async def body(context):
         seen["switched"] = await _switch(context, courses.b)
@@ -521,7 +523,7 @@ async def test_a_switch_re_runs_the_turn_gate_and_rolls_back_its_lease(
         seen["a"] = await _rag(libraries.calculus.ref)
 
     _turn(monkeypatch, body)
-    monkeypatch.setattr(MasteryLoopPipeline, "_teacher_instance_gate", gate)
+    monkeypatch.setattr(turn_scope, "teacher_instance_gate", gate)
     with as_account("sara"):
         store = LearningStore()
         await asyncio.to_thread(store.acquire_path_lease, courses.a, "s1", "t1")
@@ -641,3 +643,209 @@ def test_the_allowlist_only_narrows(libraries, as_account):
                 resolve_for_rag(libraries.history.ref)
         assert current_retrieval_scope() is outer
     assert current_retrieval_scope() is None
+
+
+# ---------------------------------------------------------------------------
+# The turn runtime: every mastery-workspace action, not only the tutor
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def chat_runtime(libraries, tmp_path, monkeypatch):
+    """The real turn runtime (request preparer + executor) with a stand-in
+    turn engine; ``run(account, path_id, body)`` starts a chat action in the
+    mastery workspace and returns its events plus what the executor did."""
+    from deeptutor.core.stream import StreamEvent, StreamEventType
+    from deeptutor.services.session import _turn_runtime_shared
+    from deeptutor.services.session.sqlite_store import SQLiteSessionStore
+    from deeptutor.services.session.turn_runtime import TurnRuntimeManager
+    from deeptutor.services.session.turns import executor as executor_module
+    from deeptutor.services.skill.service import SkillService
+
+    class History:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def build(self, **_kwargs):
+            return SimpleNamespace(
+                conversation_history=[], conversation_summary="", context_text="",
+                token_count=0, budget=0,
+            )
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    async def forget(_session_id, _path_id):
+        return None
+
+    loaded: list[str] = []
+    real_manifest = _turn_runtime_shared._topic_material_manifest
+
+    def manifest(path_id):
+        loaded.append(path_id)
+        return real_manifest(path_id)
+
+    monkeypatch.setattr(executor_module, "_topic_material_manifest", manifest)
+    monkeypatch.setattr("deeptutor.services.config.runtime_settings.load_system_settings", lambda: {})
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr("deeptutor.agents.loop.pipeline.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.multi_user.model_access.apply_allowed_llm_selection", lambda _selection: {},
+    )
+    monkeypatch.setattr("deeptutor.services.session.context_builder.ContextBuilder", History)
+    monkeypatch.setattr(
+        "deeptutor.services.memory.get_memory_store",
+        lambda: SimpleNamespace(read_l3_concat=lambda: "", emit=noop),
+    )
+    monkeypatch.setattr(
+        "deeptutor.services.skill.get_skill_service",
+        lambda: SkillService(root=tmp_path / "skills", builtin_root=None),
+    )
+    monkeypatch.setattr("deeptutor.capabilities.mastery.binding._remember_on_session", forget)
+
+    async def run(path_id: str, body, *, knowledge_bases=()):
+        seen: dict = {}
+
+        class Execution:
+            async def execute(self, context):
+                seen["context"] = context
+                await body(context, seen)
+                yield StreamEvent(type=StreamEventType.CONTENT, content="ok")
+                yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+        runtime = TurnRuntimeManager(
+            SQLiteSessionStore(tmp_path / f"turns-{path_id}.sqlite3"), turn_engine=Execution(),
+        )
+        try:
+            _session, turn = await runtime.start_turn({
+                "content": "Explain limits", "capability": "chat",
+                "workspace_mode": "mastery_path", "mastery_path_id": path_id,
+                "language": "en", "tools": [], "knowledge_bases": list(knowledge_bases),
+                "attachments": [], "config": {},
+                "llm_selection": {"profile_id": "synthetic", "model_id": "synthetic"},
+            })
+            async with asyncio.timeout(20):
+                events = [e async for e in runtime.subscribe_turn(turn["id"], after_seq=0)]
+                execution = runtime._executions.get(turn["id"])
+                if execution and execution.task:
+                    await asyncio.shield(execution.task)
+        finally:
+            await runtime.close()
+        seen["events"] = events
+        seen["loaded"] = list(loaded)
+        seen["scope_after"] = current_retrieval_scope()
+        loaded.clear()
+        return seen
+
+    return run
+
+
+@pytest.mark.asyncio
+async def test_a_chat_action_on_a_revoked_teacher_path_is_refused(
+    courses, chat_runtime, as_account, teaching_users
+):
+    with as_account("tina"):
+        TeachingService().revoke(courses.template_a, teaching_users["sara"]["id"])
+
+    async def body(_context, out):
+        out["ran"] = True
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body)
+
+    assert "ran" not in seen
+    # The instance's materials were never read into the turn.
+    assert seen["loaded"] == []
+    errors = [e for e in seen["events"] if e["type"] == "error"]
+    assert errors and errors[0]["content"] == INSTANCE_UNAVAILABLE
+    assert errors[0]["metadata"]["error_code"] == "teacher_path_unavailable"
+    done = [e for e in seen["events"] if e["type"] == "done"]
+    assert done[-1]["metadata"]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_chat_action_on_a_teacher_path_retrieves_only_its_libraries(
+    courses, libraries, chat_runtime, as_account
+):
+    async def body(context, out):
+        out["kbs"] = list(context.knowledge_bases)
+        out["unrelated"] = await _rag(libraries.history.ref)
+        out["own"] = await _rag(libraries.calculus.ref)
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body, knowledge_bases=(libraries.history.ref,))
+
+    assert seen["loaded"] == [courses.a]
+    assert seen["kbs"] == [libraries.calculus.ref]
+    assert seen["unrelated"].success is False
+    assert seen["unrelated"].content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["own"].success
+    assert libraries.searched == ["calculus"]
+    assert seen["scope_after"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_chat_action_on_a_personal_path_is_unchanged(
+    courses, libraries, chat_runtime, as_account, monkeypatch
+):
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("a personal path must not open the teaching store")
+
+    monkeypatch.setattr("deeptutor.teaching.instances.TeachingStore", _forbidden)
+
+    async def body(context, out):
+        out["kbs"] = list(context.knowledge_bases)
+        out["history"] = await _rag(libraries.history.ref)
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.personal, body, knowledge_bases=(libraries.history.ref,))
+
+    assert seen["kbs"] == [libraries.history.ref]
+    assert seen["history"].success
+    assert not [e for e in seen["events"] if e["type"] == "error"]
+
+
+@pytest.mark.asyncio
+async def test_a_switch_inside_a_chat_action_re_runs_the_gate(
+    courses, libraries, chat_runtime, as_account, teaching_users
+):
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+
+    async def switch(context, path_id):
+        kwargs = MasteryLoopCapability().augment_kwargs(
+            "mastery_switch", {"path_id": path_id}, context
+        )
+        return await MasterySwitchTool().execute(**kwargs)
+
+    async def body(context, out):
+        context.metadata["mastery_session_mode"] = "outline"
+        context.metadata["mastery_topic_source_index"] = {"src_a": "Path A full text"}
+        out["to_b"] = await switch(context, courses.b)
+        out["kbs_b"] = list(context.knowledge_bases)
+        out["mode_b"] = context.metadata["mastery_session_mode"]
+        out["index_b"] = dict(context.metadata["mastery_topic_source_index"])
+        out["b"] = await _rag(libraries.algebra.ref)
+        out["a"] = await _rag(libraries.calculus.ref)
+        out["to_personal"] = await switch(context, courses.personal)
+        out["kbs_p"] = list(context.knowledge_bases)
+        out["history"] = await _rag(libraries.history.ref)
+        with as_account("tina"):
+            TeachingService().revoke(courses.template_a, teaching_users["sara"]["id"])
+        out["to_revoked"] = await switch(context, courses.a)
+        out["path"] = context.metadata["mastery_path_id"]
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body, knowledge_bases=(libraries.history.ref,))
+
+    assert seen["to_b"].success, seen["to_b"].content
+    assert seen["kbs_b"] == [libraries.algebra.ref] and seen["mode_b"] == "study"
+    # read_source follows the path: A's material is gone from the index.
+    assert "src_a" not in seen["index_b"]
+    assert seen["b"].success
+    assert seen["a"].success is False and seen["a"].content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["to_personal"].success
+    assert seen["kbs_p"] == [libraries.history.ref]
+    assert seen["history"].success
+    assert seen["to_revoked"].success is False
+    assert seen["to_revoked"].content == INSTANCE_UNAVAILABLE
+    assert seen["path"] == courses.personal
