@@ -52,12 +52,55 @@ def test_database_lives_in_the_system_root(mu_isolated_root, monkeypatch):
 
     monkeypatch.setattr(teaching_store, "DB_PATH_OVERRIDE", None)
     assert teaching_db_path() == paths.SYSTEM_ROOT / "teaching.sqlite3"
-    assert TeachingStore().db_path.exists()
+    # DB is created lazily on first write, not on construction.
+    s = TeachingStore()
+    assert not s.db_path.exists()
+    _template(s)  # first write triggers schema creation
+    assert s.db_path.exists()
     assert "users" not in teaching_db_path().parts
 
 
 def test_tests_never_touch_the_system_root(store, tmp_path):
     assert store.db_path == tmp_path / "teaching.sqlite3"
+
+
+def test_reads_on_missing_db_return_empty_without_creating_file(tmp_path):
+    """Every read method must return empty/None when the DB does not exist,
+    and must not create the file as a side effect."""
+    db = tmp_path / "nonexistent" / "teaching.sqlite3"
+    s = TeachingStore(db_path=db)
+
+    assert not db.exists()
+    assert s.get_template("tpl_missing") is None
+    assert s.find_by_draft("u", "p", "w") is None
+    assert s.list_templates() == []
+    assert s.list_templates(owner_user_id="u") == []
+    assert s.get_revision("tpl_missing", 1) is None
+    assert s.revisions_between("tpl_missing", after=0, upto=5) == []
+    assert s.get_assignment("tpl_missing", "u") is None
+    assert s.list_assignments("tpl_missing") == []
+    assert s.assignments_for_student("u") == []
+    assert s.has_assignments("tpl_missing") is False
+    assert s.count_active("tpl_missing") == 0
+
+    # The DB file must still not exist after all those reads.
+    assert not db.exists()
+    assert not db.parent.exists()
+
+
+def test_existing_db_reads_use_readonly_connection(store):
+    """After a write creates the DB, reads open it in read-only mode.
+
+    Verify by checking the DB file exists and that a read does not acquire
+    a write lock (no journal file is left behind).
+    """
+    _template(store)
+    assert store.db_path.exists()
+
+    journal = store.db_path.parent / (store.db_path.name + "-journal")
+    # A read should not create or leave a journal file.
+    _ = store.list_templates()
+    assert not journal.exists(), "Read path left a journal file; it should use mode=ro"
 
 
 def test_journal_mode_is_delete(store):
@@ -67,6 +110,7 @@ def test_journal_mode_is_delete(store):
     FULL synchronous for multi-database atomicity.  This matches the
     existing KB and book registries.
     """
+    _template(store)  # ensure DB exists
     conn = sqlite3.connect(store.db_path, timeout=5)
     try:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]

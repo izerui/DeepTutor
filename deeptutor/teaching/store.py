@@ -8,6 +8,10 @@ A student's learning state never comes here — it stays in their own
 Journal mode: DELETE with FULL synchronous, matching the existing KB and book
 registries. The illustrative brief set WAL, but the accepted D2 shared
 transitions require on-disk DELETE journals for multi-database atomicity.
+
+Read path: a read on a missing DB returns empty/None without creating the
+file. Existing-DB reads use a read-only connection (``mode=ro``). Schema
+creation is deferred to the first write, mirroring the book and KB registries.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import time
 import uuid
 
 from deeptutor.teaching.models import (
+    ChangeEntry,
     MasteryAssignment,
     MasteryTemplate,
     TemplateOutline,
@@ -29,7 +34,7 @@ from deeptutor.teaching.models import (
     TemplateSources,
 )
 
-_schema_lock = threading.Lock()
+_write_lock = threading.Lock()
 _DB_FILENAME = "teaching.sqlite3"
 
 # No journal_mode PRAGMA here: SQLite defaults to DELETE, matching the
@@ -98,34 +103,59 @@ def teaching_db_path() -> Path:
     return paths.SYSTEM_ROOT / _DB_FILENAME
 
 
-class TeachingStore:
-    def __init__(self, db_path: Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else teaching_db_path()
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with _schema_lock, self._connect() as conn:
-            conn.executescript(_SCHEMA)
-
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path, timeout=30.0, isolation_level=None)
+def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+    """Open a connection; run schema creation only on writable opens."""
+    conn = sqlite3.connect(
+        f"{path.resolve().as_uri()}?mode=ro" if readonly else path,
+        uri=readonly, timeout=30, isolation_level=None,
+    )
+    try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 30000")
-        try:
-            yield conn
-        finally:
-            conn.close()
+        if not readonly:
+            conn.executescript(_SCHEMA)
+        return conn
+    except BaseException:
+        conn.close()
+        raise
 
-    @contextmanager
-    def _write(self) -> Iterator[sqlite3.Connection]:
-        with self._connect() as conn:
+
+@contextmanager
+def _read(path: Path) -> Iterator[sqlite3.Connection | None]:
+    """Read-only access; yields ``None`` when the DB file does not exist."""
+    if not path.exists():
+        yield None
+        return
+    conn = _open(path, readonly=True)
+    try:
+        conn.execute("BEGIN")
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def _write(path: Path) -> Iterator[sqlite3.Connection]:
+    """Exclusive writer: creates the DB and runs schema on first use."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _write_lock:
+        conn = _open(path)
+        try:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn
-                conn.commit()
+                conn.execute("COMMIT")
             except BaseException:
-                conn.rollback()
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
                 raise
+        finally:
+            conn.close()
+
+
+class TeachingStore:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = Path(db_path) if db_path is not None else teaching_db_path()
 
     # ---- rows -------------------------------------------------------------
 
@@ -160,12 +190,16 @@ class TeachingStore:
 
     @staticmethod
     def _revision(row: sqlite3.Row) -> TemplateRevision:
+        raw_log = json.loads(row["change_log_json"] or "{}")
+        change_log = {
+            kp_id: ChangeEntry.model_validate(entry) for kp_id, entry in raw_log.items()
+        }
         return TemplateRevision(
             template_id=row["template_id"],
             revision=int(row["revision"]),
             outline=TemplateOutline.model_validate_json(row["outline_json"]),
             sources=TemplateSources.model_validate_json(row["sources_json"]),
-            change_log=json.loads(row["change_log_json"] or "{}"),
+            change_log=change_log,
             published_by=row["published_by"],
             published_at=float(row["published_at"]),
         )
@@ -183,7 +217,7 @@ class TeachingStore:
     ) -> MasteryTemplate:
         template_id = f"tpl_{uuid.uuid4().hex[:16]}"
         now = time.time()
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             conn.execute(
                 """
                 INSERT INTO mastery_templates (
@@ -208,7 +242,9 @@ class TeachingStore:
         return created
 
     def get_template(self, template_id: str) -> MasteryTemplate | None:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return None
             row = conn.execute(
                 "SELECT * FROM mastery_templates WHERE id = ?", (template_id,)
             ).fetchone()
@@ -217,7 +253,9 @@ class TeachingStore:
     def find_by_draft(
         self, owner_user_id: str, draft_path_id: str, draft_workspace_id: str
     ) -> MasteryTemplate | None:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return None
             row = conn.execute(
                 """
                 SELECT * FROM mastery_templates
@@ -229,7 +267,9 @@ class TeachingStore:
         return self._template(row) if row is not None else None
 
     def list_templates(self, *, owner_user_id: str | None = None) -> list[MasteryTemplate]:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return []
             if owner_user_id is None:
                 rows = conn.execute(
                     "SELECT * FROM mastery_templates ORDER BY updated_at DESC"
@@ -250,17 +290,17 @@ class TeachingStore:
         description: str | None = None,
         status: str | None = None,
     ) -> MasteryTemplate:
-        assignments: list[str] = []
+        set_clauses: list[str] = []
         params: list[object] = []
         for column, value in (("title", title), ("description", description), ("status", status)):
             if value is not None:
-                assignments.append(f"{column} = ?")
+                set_clauses.append(f"{column} = ?")
                 params.append(value)
-        assignments.append("updated_at = ?")
+        set_clauses.append("updated_at = ?")
         params.append(time.time())
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             conn.execute(
-                f"UPDATE mastery_templates SET {', '.join(assignments)} WHERE id = ?",  # nosec B608 - fixed column names
+                f"UPDATE mastery_templates SET {', '.join(set_clauses)} WHERE id = ?",  # nosec B608 - fixed column names
                 (*params, template_id),
             )
         updated = self.get_template(template_id)
@@ -269,7 +309,7 @@ class TeachingStore:
         return updated
 
     def delete_template(self, template_id: str) -> None:
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             conn.execute("DELETE FROM mastery_templates WHERE id = ?", (template_id,))
 
     def transfer_owner(self, from_user_id: str, to_user_id: str) -> int:
@@ -279,7 +319,7 @@ class TeachingStore:
         the successor can keep assigning, revoking and archiving, but a new
         revision needs a new draft.
         """
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             cursor = conn.execute(
                 """
                 UPDATE mastery_templates
@@ -297,7 +337,7 @@ class TeachingStore:
         self, revision: TemplateRevision, *, aliases: dict[str, str], title: str
     ) -> MasteryTemplate:
         """Append the next immutable revision and make it current, atomically."""
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             row = conn.execute(
                 "SELECT current_revision FROM mastery_templates WHERE id = ?",
                 (revision.template_id,),
@@ -349,7 +389,9 @@ class TeachingStore:
         return updated
 
     def get_revision(self, template_id: str, revision: int) -> TemplateRevision | None:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return None
             row = conn.execute(
                 "SELECT * FROM mastery_template_revisions WHERE template_id = ? AND revision = ?",
                 (template_id, revision),
@@ -359,12 +401,14 @@ class TeachingStore:
     def revisions_between(
         self, template_id: str, *, after: int, upto: int
     ) -> list[TemplateRevision]:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return []
             rows = conn.execute(
                 """
                 SELECT * FROM mastery_template_revisions
                 WHERE template_id = ? AND revision > ? AND revision <= ?
-                ORDER BY revision ASC
+                ORDER BY revision
                 """,
                 (template_id, after, upto),
             ).fetchall()
@@ -377,7 +421,7 @@ class TeachingStore:
     ) -> list[MasteryAssignment]:
         """Activate each student; a revoked row comes back with its instance."""
         now = time.time()
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             for student_id in dict.fromkeys(student_ids):
                 conn.execute(
                     """
@@ -394,7 +438,7 @@ class TeachingStore:
         return self.list_assignments(template_id)
 
     def revoke(self, template_id: str, student_id: str) -> MasteryAssignment | None:
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             conn.execute(
                 """
                 UPDATE mastery_assignments SET status = 'revoked', revoked_at = ?
@@ -405,7 +449,9 @@ class TeachingStore:
         return self.get_assignment(template_id, student_id)
 
     def get_assignment(self, template_id: str, student_id: str) -> MasteryAssignment | None:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return None
             row = conn.execute(
                 "SELECT * FROM mastery_assignments WHERE template_id = ? AND student_user_id = ?",
                 (template_id, student_id),
@@ -413,7 +459,9 @@ class TeachingStore:
         return self._assignment(row) if row is not None else None
 
     def list_assignments(self, template_id: str) -> list[MasteryAssignment]:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return []
             rows = conn.execute(
                 "SELECT * FROM mastery_assignments WHERE template_id = ? ORDER BY assigned_at",
                 (template_id,),
@@ -421,7 +469,9 @@ class TeachingStore:
         return [self._assignment(row) for row in rows]
 
     def assignments_for_student(self, student_id: str) -> list[MasteryAssignment]:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return []
             rows = conn.execute(
                 "SELECT * FROM mastery_assignments WHERE student_user_id = ? ORDER BY assigned_at",
                 (student_id,),
@@ -436,7 +486,7 @@ class TeachingStore:
         instance_path_id: str,
         applied_revision: int,
     ) -> None:
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             conn.execute(
                 """
                 UPDATE mastery_assignments
@@ -447,7 +497,9 @@ class TeachingStore:
             )
 
     def has_assignments(self, template_id: str) -> bool:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return False
             row = conn.execute(
                 "SELECT 1 FROM mastery_assignments WHERE template_id = ? LIMIT 1",
                 (template_id,),
@@ -455,7 +507,9 @@ class TeachingStore:
         return row is not None
 
     def count_active(self, template_id: str) -> int:
-        with self._connect() as conn:
+        with _read(self.db_path) as conn:
+            if conn is None:
+                return 0
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM mastery_assignments "
                 "WHERE template_id = ? AND status = 'active'",
@@ -464,7 +518,7 @@ class TeachingStore:
         return int(row["n"])
 
     def revoke_all_for_student(self, student_id: str) -> int:
-        with self._write() as conn:
+        with _write(self.db_path) as conn:
             cursor = conn.execute(
                 """
                 UPDATE mastery_assignments SET status = 'revoked', revoked_at = ?
