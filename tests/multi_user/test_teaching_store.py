@@ -224,3 +224,20 @@ def test_an_archived_template_rejects_a_late_revision(store):
     archived = store.get_template(template.id)
     assert (archived.status, archived.current_revision) == ("archived", 0)
     assert store.get_revision(template.id, 1) is None
+
+
+def test_material_lock_excludes_writers_and_refuses_nested_writes(store):
+    template = _template(store)
+
+    with store.material_lock():
+        assert store.get_template(template.id) is not None  # reads still work
+        with pytest.raises(RuntimeError):
+            store.update_template(template.id, status="archived")
+        conn = sqlite3.connect(store.db_path, timeout=0, isolation_level=None)
+        try:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                conn.execute("BEGIN IMMEDIATE")
+        finally:
+            conn.close()
+
+    assert store.update_template(template.id, status="archived").status == "archived"

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Any
 
 import pytest
 
@@ -654,3 +656,146 @@ def test_an_old_revision_never_regains_a_revoked_material(
     assert _referenced(two_libraries, template_id) == ["kb_b"]
     # The withdrawal stays visible to the instance still on revision 1.
     assert two_libraries.reference_options[key]["retain_revoked_kb_ids"] == ["kb_a"]
+
+
+# ---- reference writes are serialized with publishes and archives -----------
+
+
+def _in_thread(as_account, name: str, action: Callable[[], object]) -> tuple[Any, list]:
+    """Run *action* as *name* on another thread; return (thread, errors)."""
+    import threading
+
+    errors: list[BaseException] = []
+
+    def run():
+        try:
+            with as_account(name):
+                action()
+        except BaseException as exc:  # surfaced by the test
+            errors.append(exc)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, errors
+
+
+def _hook_first_reference_write(monkeypatch, before_write: Callable[[], None]) -> None:
+    """Call ``before_write()`` once, just before the first KB reference write."""
+    from deeptutor.teaching import kb as kb_access
+
+    real = kb_access.replace_template_references
+    fired: list[bool] = []
+
+    def hooked(*args, **kwargs):
+        if not fired:
+            fired.append(True)
+            before_write()
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(kb_access, "replace_template_references", hooked)
+
+
+def _entered(monkeypatch, method: str):
+    """An event set when another caller reaches ``TeachingStore.<method>``."""
+    import threading
+
+    event = threading.Event()
+    real = getattr(TeachingStore, method)
+
+    def spy(self, *args, **kwargs):
+        event.set()
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(TeachingStore, method, spy)
+    return event
+
+
+def test_a_resync_racing_a_publish_keeps_the_new_revisions_materials(
+    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry, monkeypatch
+):
+    sara = teaching_users["sara"]["id"]
+    for kb_id, ref in (("kb_a", "lib_a"), ("kb_b", "lib_b"), ("kb_c", "lib_c")):
+        fake_kb_registry.add(kb_id, visibility="public", legacy_refs=(ref,))
+    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(students=("sara",))["template"]["id"]
+    instance = f"assigned_{template_id}"
+    TeachingStore().record_instance(template_id, sara, instance_path_id=instance, applied_revision=1)
+    _swap_sources(as_account, (_kb_source(0, "lib_b", "B"),))
+    publish_template()
+    assert _referenced(fake_kb_registry, template_id) == ["kb_a", "kb_b"]
+    # Sara migrates to revision 2; the teacher meanwhile prepares revision 3.
+    TeachingStore().record_instance(template_id, sara, instance_path_id=instance, applied_revision=2)
+    _swap_sources(as_account, (_kb_source(0, "lib_b", "B"), _kb_source(1, "lib_c", "C")))
+    add_revision = _entered(monkeypatch, "add_revision")
+    racing: dict = {}
+
+    def publish_revision_3_now():
+        # The resync has computed its references from revision 2; publish 3.
+        racing["thread"], racing["errors"] = _in_thread(as_account, "tina", publish_template)
+        assert add_revision.wait(10)
+        racing["thread"].join(1.0)  # without the lock this publish would finish here
+
+    _hook_first_reference_write(monkeypatch, publish_revision_3_now)
+
+    service_module.sync_material_references(template_id)
+    thread, errors = racing["thread"], racing["errors"]
+    thread.join(30)
+
+    assert not thread.is_alive() and errors == []
+    assert TeachingStore().get_template(template_id).current_revision == 3
+    # Revision 3's new material survived the resync computed from revision 2.
+    assert _referenced(fake_kb_registry, template_id) == ["kb_b", "kb_c"]
+
+
+def test_an_archive_racing_the_reference_write_leaves_nothing_shared(
+    as_account, teacher_draft, publish_template, fake_kb_registry, monkeypatch
+):
+    fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
+    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    with as_account("tina"):
+        template_id = TeachingService().register("topic_calculus", "").id
+    update = _entered(monkeypatch, "update_template")
+    racing: dict = {}
+
+    def archive_now():
+        racing["thread"], racing["errors"] = _in_thread(
+            as_account, "adam", lambda: TeachingService().archive(template_id)
+        )
+        assert update.wait(10)
+        racing["thread"].join(1.0)  # without the lock the archive would finish here
+
+    _hook_first_reference_write(monkeypatch, archive_now)
+
+    result = publish_template()
+    thread, errors = racing["thread"], racing["errors"]
+    thread.join(30)
+
+    assert not thread.is_alive() and errors == []
+    assert result["warnings"] == []
+    assert TeachingStore().get_template(template_id).status == "archived"
+    assert ("mastery_template", template_id) not in fake_kb_registry.references
+
+
+def test_a_publish_that_finds_its_path_archived_shares_nothing(
+    teacher_draft, publish_template, fake_kb_registry, monkeypatch
+):
+    fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
+    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    real_add = TeachingStore.add_revision
+
+    def add_then_archive(self, revision, **kwargs):
+        updated = real_add(self, revision, **kwargs)
+        TeachingStore().update_template(revision.template_id, status="archived")
+        return updated
+
+    monkeypatch.setattr(TeachingStore, "add_revision", add_then_archive)
+
+    result = publish_template(students=("sara",))
+
+    assert [w["step"] for w in result["warnings"]] == [
+        "knowledge_base_references",
+        "book_references",
+        "assignments",
+    ]
+    assert fake_kb_registry.references == {}
+    assert TeachingStore().list_assignments(result["template"]["id"]) == []

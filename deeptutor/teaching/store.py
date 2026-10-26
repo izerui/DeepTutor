@@ -35,6 +35,8 @@ from deeptutor.teaching.models import (
 )
 
 _write_lock = threading.Lock()
+#: Set while this thread holds :meth:`TeachingStore.material_lock`.
+_held = threading.local()
 _DB_FILENAME = "teaching.sqlite3"
 
 # No journal_mode PRAGMA here: SQLite defaults to DELETE, matching the
@@ -137,6 +139,9 @@ def _read(path: Path) -> Iterator[sqlite3.Connection | None]:
 @contextmanager
 def _write(path: Path) -> Iterator[sqlite3.Connection]:
     """Exclusive writer: creates the DB and runs schema on first use."""
+    if getattr(_held, "material_lock", False):
+        # The lock is this very writer; a nested write would wait on itself.
+        raise RuntimeError("Teaching store writes are not allowed inside material_lock().")
     path.parent.mkdir(parents=True, exist_ok=True)
     with _write_lock:
         conn = _open(path)
@@ -330,6 +335,23 @@ class TeachingStore:
                 (to_user_id, time.time(), from_user_id),
             )
         return int(cursor.rowcount)
+
+    @contextmanager
+    def material_lock(self) -> Iterator[None]:
+        """Serialize "read template state, then rewrite its material references".
+
+        Holds this store's ``BEGIN IMMEDIATE`` writer, so it excludes every
+        other teaching write (``add_revision``, ``update_template``,
+        ``record_instance``, ``revoke``...) in every worker process until the
+        references are written. Reads stay possible; writing to this store
+        inside the block raises instead of deadlocking.
+        """
+        with _write(self.db_path):
+            _held.material_lock = True
+            try:
+                yield
+            finally:
+                _held.material_lock = False
 
     # ---- revisions --------------------------------------------------------
 

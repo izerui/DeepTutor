@@ -218,25 +218,28 @@ def sync_material_references(template_id: str, *, store: TeachingStore | None = 
     can read each kept book.
     """
     store = store or TeachingStore()
-    template = store.get_template(template_id)
-    if template is None or template.status != "published":
-        return
-    current = store.get_revision(template_id, template.current_revision)
-    if current is None:
-        return
-    refs = _references(
-        store, template_id, current.sources, latest=current.revision, reduce_only=True
-    )
-    kb_access.replace_template_references(
-        template_id,
-        refs.kb_refs,
-        created_by=template.owner_user_id,
-        retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
-    )
-    if set(refs.book_ids) != book_access.referenced_book_ids(template_id):
-        book_access.replace_template_references(
-            template_id, refs.book_ids, created_by=template.owner_user_id
+    # Read and rewrite under one cross-process lock, so a publish (or an
+    # archive) cannot land between them and lose what its revision needs.
+    with store.material_lock():
+        template = store.get_template(template_id)
+        if template is None or template.status != "published":
+            return
+        current = store.get_revision(template_id, template.current_revision)
+        if current is None:
+            return
+        refs = _references(
+            store, template_id, current.sources, latest=current.revision, reduce_only=True
         )
+        kb_access.replace_template_references(
+            template_id,
+            refs.kb_refs,
+            created_by=template.owner_user_id,
+            retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
+        )
+        if set(refs.book_ids) != book_access.referenced_book_ids(template_id):
+            book_access.replace_template_references(
+                template_id, refs.book_ids, created_by=template.owner_user_id
+            )
 
 
 class TeachingService:
@@ -525,65 +528,92 @@ class TeachingService:
         explicit_kbs: list[str],
         explicit_books: list[str],
     ) -> list[dict[str, str]]:
-        """References and assignments; each failure becomes a warning."""
+        """References and assignments; each failure becomes a warning.
+
+        The references are computed and written under the store's material
+        lock, against the template state read inside it: an archive, a newer
+        publish or a concurrent :func:`sync_material_references` cannot
+        interleave with them, in this process or another one.
+        """
+        warnings: list[dict[str, str]] = []
+
+        def warn(step: str, error: BaseException) -> None:
+            logger.error(
+                "Teacher path %s published, but %s failed", template.id, step, exc_info=error
+            )
+            warnings.append({"step": step, "message": str(error)})
+
+        archived = False
+        try:
+            with self.store.material_lock():
+                archived = not self._write_references(
+                    template, revision, user, explicit_kbs, explicit_books, warn
+                )
+        except Exception as exc:  # the lock itself (e.g. the store is unwritable)
+            warn("knowledge_base_references", exc)
+            warn("book_references", exc)
+        if students and archived:
+            warn("assignments", TemplateConflict("The path was archived while publishing."))
+        elif students:
+            try:
+                self.store.assign(template.id, students, assigned_by=user.id)
+            except Exception as exc:
+                warn("assignments", exc)
+        return warnings
+
+    def _write_references(
+        self,
+        template: MasteryTemplate,
+        revision: TemplateRevision,
+        user: Any,
+        explicit_kbs: list[str],
+        explicit_books: list[str],
+        warn: Callable[[str, BaseException], None],
+    ) -> bool:
+        """Write the references; ``False`` when the path was archived meanwhile."""
         current = self.store.get_template(template.id)
         if current is None or current.status == "archived":
             # Archived (or deleted) meanwhile: its materials stay released.
-            return [
-                {
-                    "step": "references",
-                    "message": "The path was archived while publishing; nothing was shared.",
-                }
-            ]
-        refs: _References | None = None
-
-        def references() -> _References:
-            nonlocal refs
-            if refs is None:
-                refs = _references(
-                    self.store,
-                    template.id,
-                    revision.sources,
-                    latest=revision.revision,
-                    reduce_only=False,
-                )
-            return refs
-
-        def kb_step() -> None:
-            planned = references()
+            archived = TemplateConflict("The path was archived while publishing; nothing was shared.")
+            warn("knowledge_base_references", archived)
+            warn("book_references", archived)
+            return False
+        if current.current_revision != revision.revision:
+            # A newer publish owns the references now; never write stale ones.
+            return True
+        try:
+            refs = _references(
+                self.store,
+                template.id,
+                revision.sources,
+                latest=revision.revision,
+                reduce_only=False,
+            )
+        except Exception as exc:
+            warn("knowledge_base_references", exc)
+            warn("book_references", exc)
+            return True
+        try:
             kb_access.replace_template_references(
                 template.id,
-                planned.kb_refs,
+                refs.kb_refs,
                 created_by=user.id,
                 explicit_reference_only=explicit_kbs,
                 readable_by=user,
-                retain_revoked_kb_ids=planned.retain_revoked_kb_ids,
+                retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
             )
-
-        def book_step() -> None:
+        except Exception as exc:
+            warn("knowledge_base_references", exc)
+        try:
             book_access.replace_template_references(
                 template.id,
-                references().book_ids,
+                refs.book_ids,
                 created_by=user.id,
                 explicit_reference_only=explicit_books,
             )
-
-        steps: list[tuple[str, Callable[[], Any]]] = [
-            ("knowledge_base_references", kb_step),
-            ("book_references", book_step),
-        ]
-        if students:
-            steps.append(
-                ("assignments", partial(self.store.assign, template.id, students, assigned_by=user.id))
-            )
-        warnings: list[dict[str, str]] = []
-        for step, run in steps:
-            try:
-                run()
-            except Exception as exc:
-                logger.exception("Teacher path %s published, but %s failed", template.id, step)
-                warnings.append({"step": step, "message": str(exc)})
-        return warnings
+        except Exception as exc:
+            warn("book_references", exc)
+        return True
 
     async def publish(self, template_id: str, request: PublishRequest) -> dict:
         # 1. Validate everything; nothing below writes until this block passes.
