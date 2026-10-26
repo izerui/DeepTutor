@@ -89,3 +89,19 @@ def test_inherited_task_model_uses_the_api_key_chat_model(catalog) -> None:
     model, _backend = resolve_oss_sdk_config()
 
     assert model == "anthropic/claude-sonnet"
+
+
+def test_anthropic_base_url_drops_the_version_segment_litellm_appends(catalog) -> None:
+    profile = _anthropic_profile("claude-haiku")
+    profile["base_url"] = "https://api.anthropic.com/v1"
+    catalog(
+        llm={
+            "active_profile_id": "claude",
+            "active_model_id": "claude-model",
+            "profiles": [profile],
+        }
+    )
+
+    _model, backend = resolve_oss_sdk_config()
+
+    assert backend["api_base"] == "https://api.anthropic.com"

@@ -142,6 +142,9 @@ def resolve_oss_sdk_config() -> tuple[str, dict[str, Any]]:
     elif api_key:
         backend["api_key"] = api_key
 
+    if spec.backend == "anthropic":
+        # litellm appends /v1/messages itself; a base ending in /v1 would 404.
+        base_url = base_url.rstrip("/").removesuffix("/v1")
     if base_url:
         backend["api_base"] = base_url
     if api_version and spec.backend != "openai_compat":
