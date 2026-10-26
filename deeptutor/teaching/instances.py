@@ -300,6 +300,24 @@ def closed_instance_ids(progresses: Iterable[LearningProgress]) -> set[str]:
     }
 
 
+OUTLINE_LOCKED = (
+    "This outline is set by your teacher and cannot be changed here. You can "
+    "still study, review or reset your own progress; send outline feedback to "
+    "your teacher."
+)
+
+
+class OutlineLockedError(PermissionError):
+    """The path's outline belongs to a teacher."""
+
+
+def ensure_outline_mutable(path_id: str, store: LearningStore) -> None:
+    """The one check every outline-changing entry point calls (spec §6)."""
+    origin = store.load_origin(path_id)
+    if origin is not None and origin.kind == "teacher_template":
+        raise OutlineLockedError(OUTLINE_LOCKED)
+
+
 def describe_instance(path_id: str, store: LearningStore) -> dict[str, Any] | None:
     if store.load_origin(path_id) is None:
         return None

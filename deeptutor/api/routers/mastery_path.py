@@ -83,6 +83,21 @@ def require_personal_mastery_creation() -> None:
 
 _PERSONAL_PATH_CREATION = [Depends(require_personal_mastery_creation)]
 
+
+async def require_outline_mutable(request: Request) -> None:
+    """Refuse every outline change on a path whose outline is a teacher's."""
+    path_id = str(request.path_params.get("path_id") or request.path_params.get("book_id") or "")
+    _validate_book_id(path_id)
+    from deeptutor.teaching.instances import OutlineLockedError, ensure_outline_mutable
+
+    try:
+        await asyncio.to_thread(ensure_outline_mutable, path_id, LearningStore())
+    except OutlineLockedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+_OUTLINE_WRITE = [Depends(require_outline_mutable)]
+
 #: Signals that change what a topic screen shows without advancing the path's
 #: revision, so they are forwarded even when the durable event tail is empty.
 #: A conversation joining or leaving the topic changes its session list; a
@@ -707,7 +722,7 @@ async def update_review_settings(path_id: str, body: ReviewSettingsRequest):
     return await asyncio.to_thread(_topic_payload, LearningStore(), path_id)
 
 
-@router.put("/topics/{path_id}/map")
+@router.put("/topics/{path_id}/map", dependencies=_OUTLINE_WRITE)
 async def edit_topic_map(path_id: str, body: EditTopicMapRequest):
     _validate_book_id(path_id)
     from deeptutor.learning.topic_generation import (
@@ -751,7 +766,7 @@ async def edit_topic_map(path_id: str, body: EditTopicMapRequest):
     return await asyncio.to_thread(_topic_payload, LearningStore(), path_id)
 
 
-@router.post("/topics/{path_id}/objectives/{kp_id}/override")
+@router.post("/topics/{path_id}/objectives/{kp_id}/override", dependencies=_OUTLINE_WRITE)
 async def set_learner_override(
     path_id: str,
     kp_id: str,
@@ -822,6 +837,12 @@ async def set_session_mode(path_id: str, session_id: str, body: SetSessionModeRe
 
     store = LearningStore()
     progress = await asyncio.to_thread(store.load, path_id)
+
+    if requested == "outline" and progress is not None and progress.origin is not None:
+        from deeptutor.teaching.instances import OUTLINE_LOCKED
+
+        raise HTTPException(status_code=403, detail=OUTLINE_LOCKED)
+
     has_outline = progress is not None and any(
         module.knowledge_points for module in progress.modules
     )
@@ -1129,7 +1150,10 @@ async def get_progress_sessions(book_id: str):
     return {"book_id": book_id, "session_ids": session_ids}
 
 
-@router.post("/progress/{book_id}/init-modules", dependencies=_PERSONAL_PATH_CREATION)
+@router.post(
+    "/progress/{book_id}/init-modules",
+    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+)
 async def init_modules(book_id: str, body: InitModulesRequest):
     _validate_book_id(book_id)
     modules = _parse_modules(_module_payloads(body.modules))
@@ -1144,7 +1168,10 @@ async def init_modules(book_id: str, body: InitModulesRequest):
     }
 
 
-@router.post("/progress/{book_id}/import-from-book", dependencies=_PERSONAL_PATH_CREATION)
+@router.post(
+    "/progress/{book_id}/import-from-book",
+    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+)
 async def import_from_book(book_id: str, body: ImportFromBookRequest):
     _validate_book_id(book_id)
     modules = []
@@ -1178,7 +1205,7 @@ async def import_from_book(book_id: str, body: ImportFromBookRequest):
     }
 
 
-@router.patch("/progress/{book_id}")
+@router.patch("/progress/{book_id}", dependencies=_OUTLINE_WRITE)
 async def rename_progress(book_id: str, body: RenamePathRequest):
     """Rename a path — the only edit that is the learner's rather than the tutor's.
 
@@ -1199,7 +1226,7 @@ async def rename_progress(book_id: str, body: RenamePathRequest):
     }
 
 
-@router.delete("/progress/{book_id}")
+@router.delete("/progress/{book_id}", dependencies=_OUTLINE_WRITE)
 async def delete_progress(book_id: str):
     _validate_book_id(book_id)
     store = LearningStore()
@@ -1256,7 +1283,10 @@ class GenerateFromReadingRequest(BaseModel):
     material_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
-@router.post("/progress/{book_id}/generate-from-notebook", dependencies=_PERSONAL_PATH_CREATION)
+@router.post(
+    "/progress/{book_id}/generate-from-notebook",
+    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+)
 async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest):
     _validate_book_id(book_id)
     if not body.records:
@@ -1333,7 +1363,10 @@ async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest
     }
 
 
-@router.post("/progress/{book_id}/generate-from-reading", dependencies=_PERSONAL_PATH_CREATION)
+@router.post(
+    "/progress/{book_id}/generate-from-reading",
+    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+)
 async def generate_from_reading(book_id: str, body: GenerateFromReadingRequest):
     """Create a mastery curriculum from a private reading workspace."""
     from deeptutor.reading.knowledge_capture import mastery_source_records
