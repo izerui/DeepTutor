@@ -177,7 +177,11 @@ async def suggest_changes(diff: OutlineDiff, *, language: str = "en") -> list[Kp
     base = default_suggestions(diff)
     if not diff.added and not diff.objective_changes:
         return base
-    answer = await _ask_model(diff, language)
+    try:
+        answer = await _ask_model(diff, language)
+    except Exception:
+        logger.debug("_ask_model raised; falling back to defaults", exc_info=True)
+        return base
     if not isinstance(answer, dict):
         return base
     return _merge_answer(base, diff, answer)

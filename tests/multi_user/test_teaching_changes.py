@@ -132,6 +132,53 @@ def test_kept_points_cannot_be_marked_added_and_unknown_ids_are_rejected():
         build_change_log(diff_outlines(OLD, NEW), {"ghost": KpDecision(kind="unchanged")})
 
 
+def test_objective_changes_reported_when_module_objective_differs():
+    """Kept kp whose module objective changed appears in objective_changes."""
+    old = [_module(_kp("a", "Limits"), _kp("b", "Derivatives"), objective="Differentiate")]
+    new = [_module(_kp("a", "Limits"), _kp("b", "Derivatives"), objective="Integrate")]
+
+    diff = diff_outlines(old, new)
+
+    assert diff.objective_changes == {
+        "a": ("Differentiate", "Integrate"),
+        "b": ("Differentiate", "Integrate"),
+    }
+    assert diff.added == []
+    assert diff.removed == []
+
+
+def test_objective_change_without_added_points_still_calls_model(monkeypatch):
+    """suggest_changes takes the model path when only objective_changes exist."""
+    old = [_module(_kp("a", "Limits"), objective="Differentiate")]
+    new = [_module(_kp("a", "Limits"), objective="Integrate")]
+
+    called = []
+
+    async def spy(diff, language):
+        called.append(language)
+        return {"pairs": [], "kept": [{"id": "a", "kind": "redefined", "reason": "new goal"}]}
+
+    monkeypatch.setattr(changes, "_ask_model", spy)
+
+    result = {s.kp_id: s for s in asyncio.run(suggest_changes(diff_outlines(old, new)))}
+
+    assert called == ["en"]
+    assert result["a"].suggested == "redefined"
+    assert result["a"].reason == "new goal"
+
+
+def test_model_exception_falls_back_to_defaults(monkeypatch):
+    """An exception inside _ask_model (not just None) still falls back safely."""
+    async def exploding(_diff, _language):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(changes, "_ask_model", exploding)
+
+    result = asyncio.run(suggest_changes(diff_outlines(OLD, NEW)))
+
+    assert [s.suggested for s in result] == ["unchanged", "added", "added"]
+
+
 def test_first_revision_marks_everything_added():
     assert {k: v.kind for k, v in first_revision_log(OLD).items()} == {
         "a": "added",
