@@ -9,6 +9,11 @@ import type {
   TeacherTemplate,
 } from "../lib/teaching-api";
 import {
+  TeachingApiError,
+  isTeachingApiError,
+  type PublishBlockedDetail,
+} from "../lib/teaching-api";
+import {
   canSubmitPublish,
   decisionValue,
   defaultKpDecisions,
@@ -130,4 +135,43 @@ test("Study-page source links carry the teacher path (R9)", () => {
     withMasteryTemplate("/api/knowledge-bases/kb%3Aabc/files/a.md", "tpl 2"),
     "/api/knowledge-bases/kb%3Aabc/files/a.md?mastery_template=tpl%202",
   );
+});
+
+// ── TeachingApiError structured detail tests ─────────────────────────────
+
+test("TeachingApiError preserves structured PublishBlocked detail", () => {
+  const detail: PublishBlockedDetail = {
+    outline_issues: ["Module A has no knowledge points"],
+    source_issues: [
+      { source_id: "s1", label: "notes.pdf", code: "publish_step_failed", message: "gone" },
+    ],
+    failed_step: "documents",
+    completed_steps: ["make_public:kb:kb1"],
+  };
+  const err = new TeachingApiError("Publish blocked", 422, detail as unknown as Record<string, unknown>);
+  assert.equal(err.status, 422);
+  assert.equal(err.message, "Publish blocked");
+  assert.equal(err.name, "TeachingApiError");
+  assert.deepEqual(err.detail, detail);
+  assert.equal(isTeachingApiError(err), true);
+  // Structured detail fields accessible type-safely
+  const typed = err.detail as PublishBlockedDetail;
+  assert.deepEqual(typed.outline_issues, ["Module A has no knowledge points"]);
+  assert.equal(typed.source_issues[0].code, "publish_step_failed");
+  assert.equal(typed.failed_step, "documents");
+  assert.deepEqual(typed.completed_steps, ["make_public:kb:kb1"]);
+});
+
+test("TeachingApiError with string detail yields a readable message", () => {
+  const err = new TeachingApiError("Draft changed after the preview", 409, "Draft changed after the preview");
+  assert.equal(err.status, 409);
+  assert.equal(err.message, "Draft changed after the preview");
+  assert.equal(err.detail, "Draft changed after the preview");
+  assert.equal(isTeachingApiError(err), true);
+});
+
+test("TeachingApiError is not confused with plain Error", () => {
+  assert.equal(isTeachingApiError(new Error("oops")), false);
+  assert.equal(isTeachingApiError(null), false);
+  assert.equal(isTeachingApiError(undefined), false);
 });

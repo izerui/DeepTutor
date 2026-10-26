@@ -30,6 +30,36 @@ export interface SourceIssue {
   message: string;
 }
 
+/** The structured detail body of a 422 PublishBlocked response. */
+export interface PublishBlockedDetail {
+  outline_issues: string[];
+  source_issues: SourceIssue[];
+  failed_step?: string;
+  completed_steps?: string[];
+}
+
+/**
+ * Typed error thrown by teaching API calls. Preserves the HTTP status and
+ * the parsed `detail` payload so callers (C14/C15) can extract structured
+ * fields (outline issues, source issues, failed step) for localization.
+ *
+ * Follows the BookApiError pattern used elsewhere in the codebase.
+ */
+export class TeachingApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly detail: string | Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "TeachingApiError";
+  }
+}
+
+export function isTeachingApiError(error: unknown): error is TeachingApiError {
+  return error instanceof TeachingApiError;
+}
+
 export type KbChoice = "make_public" | "reference_only";
 
 export type ChangeKind = "unchanged" | "reworded" | "redefined" | "added";
@@ -117,15 +147,21 @@ export interface TemplateAssignment {
 async function teachingJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(apiUrl(`${BASE}${path}`), init);
   if (!res.ok) {
-    let detail = `${res.status}`;
+    let message = `${res.status}`;
+    let detail: string | Record<string, unknown> = message;
     try {
       const payload = (await res.json()) as { detail?: unknown };
-      if (typeof payload.detail === "string") detail = payload.detail;
-      else if (payload.detail) detail = JSON.stringify(payload.detail);
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+        detail = payload.detail;
+      } else if (payload.detail && typeof payload.detail === "object") {
+        detail = payload.detail as Record<string, unknown>;
+        message = JSON.stringify(detail);
+      }
     } catch {
       // Keep the status when a proxy answers with HTML.
     }
-    throw new Error(detail);
+    throw new TeachingApiError(message, res.status, detail);
   }
   return res.json() as Promise<T>;
 }
