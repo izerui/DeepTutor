@@ -984,6 +984,7 @@ def replace_references(
     created_by: str,
     readable_by: CurrentUser | None = None,
     retain_revoked_kb_ids: Sequence[str] = (),
+    private_intent_kb_ids: Sequence[str] = (),
 ) -> None:
     """Atomically replace live references and settle earlier revocations.
 
@@ -992,6 +993,13 @@ def replace_references(
     ``retain_revoked_kb_ids`` preserves unavailable resources still held by the
     referrer, unless they are successfully restored in ``refs``. Defaults keep
     the existing whole-set restatement contract.
+
+    ``private_intent_kb_ids`` are the caller's explicit "share by reference
+    only" choices. In this same transaction, each one that is also a target,
+    still private, not a connector and writable by the actor (``readable_by``,
+    else the current user) records durable private intent, so a pending legacy
+    migration cannot publish it later. Other keys are ignored; nothing is
+    withdrawn. Defaults and generic restatements record nothing.
     """
     with _write() as conn:
         targets = [(_reference_target(conn, kb_id, referrer_kind), doc_ids) for kb_id, doc_ids in refs]
@@ -1026,6 +1034,20 @@ def replace_references(
                 for record, doc_ids in targets
             ],
         )
+        explicit = {_strip_ref(kb_id) for kb_id in private_intent_kb_ids}
+        if explicit:
+            from deeptutor.core.visibility_intent import record_choice
+            from deeptutor.multi_user.context import get_current_user
+
+            actor = readable_by or get_current_user()
+            for record, _docs in targets:
+                if (
+                    record.kb_id in explicit
+                    and record.visibility == "private"
+                    and not is_connector(record)
+                    and can_write(record, actor)
+                ):
+                    record_choice(conn, record.kb_id, "private", schema="main")
 
 
 def remove_references(referrer_kind: str, referrer_id: str) -> None:

@@ -509,11 +509,19 @@ def _replace_references(
 
 def replace_book_references(
         referrer_kind: str, referrer_id: str, book_ids: Sequence[str], *, created_by: str,
+        private_intent_book_ids: Sequence[str] = (),
 ) -> None:
-    """Replace book and KB protection together; failure retains the entire old set."""
+    """Replace book and KB protection together; failure retains the entire old set.
+
+    ``private_intent_book_ids`` records explicit share-by-reference choices for
+    writable private targets in the same transaction (see sharing).
+    """
     from .sharing import replace_references
 
-    replace_references(referrer_kind, referrer_id, book_ids, created_by=created_by)
+    replace_references(
+        referrer_kind, referrer_id, book_ids, created_by=created_by,
+        private_intent_book_ids=private_intent_book_ids,
+    )
 
 
 def remove_book_references(referrer_kind: str, referrer_id: str) -> None:

@@ -338,7 +338,15 @@ def _previous(conn: sqlite3.Connection, kind: str, referrer: str) -> set[str]:
 
 def replace_references(
     kind: str, referrer: str, book_ids: Sequence[str], *, created_by: str,
+    private_intent_book_ids: Sequence[str] = (),
 ) -> None:
+    """``private_intent_book_ids``: explicit share-by-reference choices.
+
+    Each one that is also a target, still private and writable by the actor
+    records durable Book private intent in this same transaction. Other keys,
+    public books and defaults record nothing.
+    """
+    explicit = {books.strip_ref(value) for value in private_intent_book_ids}
     with shared_write() as conn:
         targets = {books._target(conn, value).book_id for value in book_ids}
         user = get_current_user()
@@ -351,6 +359,10 @@ def replace_references(
                 newly_shared.add(book_id)
         previous = _previous(conn, kind, referrer)
         books._replace_references(conn, kind, referrer, sorted(targets), created_by=created_by)
+        for book_id in sorted(targets & explicit):
+            record = books._target(conn, book_id)
+            if record.visibility == "private" and books._can_write(conn, record, user):
+                record_choice(conn, book_id, "private", schema="books")
         for book_id in sorted(previous | targets):
             sync_protection(conn, book_id, refresh=book_id in newly_shared)
 
