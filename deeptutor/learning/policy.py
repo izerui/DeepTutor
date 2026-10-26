@@ -532,6 +532,9 @@ def objective_report(
             "answer": str(attempt.user_answer or ""),
             "error_type": attempt.error_type.value if attempt.error_type else "",
             "at": attempt.timestamp,
+            # Kept for the audit trail; a voided answer is not evidence.
+            "voided": attempt.voided,
+            "void_reason": attempt.void_reason,
         }
         for attempt in progress.quiz_attempts
         if attempt.knowledge_point_id == kp_id
@@ -562,7 +565,9 @@ def objective_report(
         "mastery": round(display_mastery(progress, kp), 3),
         "threshold": round(gate_threshold(kp.type), 3),
         "attempts": attempts,
-        "correct_count": sum(1 for attempt in attempts if attempt["is_correct"]),
+        "correct_count": sum(
+            1 for attempt in attempts if attempt["is_correct"] and not attempt["voided"]
+        ),
         # The learner's own words, kept as the evidence behind a qualitative pass.
         "explanation": progress.feynman_explanations.get(kp_id, ""),
         "explained": progress.explained_objectives.get(kp_id),

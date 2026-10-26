@@ -37,11 +37,25 @@ def _forget_schedule(progress: LearningProgress, kp_id: str) -> None:
 
 
 def _reset_objective(progress: LearningProgress, kp_id: str, moment: float) -> None:
-    """A redefined point goes back to "needs re-assessment"; nothing else moves."""
+    """A redefined point goes back to "needs re-assessment"; nothing else moves.
+
+    Same invariant as voiding a question (``LearningService.repair_question``):
+    a voided answer keeps no live evidence or error record. Here every live
+    trace of the old objective goes — its quiz/review evidence and also the
+    qualitative and linked evidence no answer is attached to — because review
+    replay, the learning stage, visual attainment and the mastery gate all
+    read ``learning_evidence``. The voided answers stay as the audit trail.
+    """
     for attempt in progress.quiz_attempts:
         if attempt.knowledge_point_id == kp_id and not attempt.voided:
             attempt.voided = True
             attempt.void_reason = REDEFINED_VOID_REASON
+    progress.learning_evidence = [
+        event for event in progress.learning_evidence if event.knowledge_point_id != kp_id
+    ]
+    progress.error_records = [
+        record for record in progress.error_records if record.knowledge_point_id != kp_id
+    ]
     progress.mastery_levels.pop(kp_id, None)
     progress.qualitative_mastery.pop(kp_id, None)
     progress.lesson_evidence.pop(kp_id, None)

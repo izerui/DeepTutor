@@ -458,7 +458,11 @@ def cited_course(as_account, fake_kb_registry, publish_template):
                 topic_source_ids=["s0"],
             ),
             KnowledgePoint(
-                id="kp_rules", name="Rules", type=KnowledgeType.PROCEDURE, module_id="m0"
+                id="kp_rules",
+                name="Rules",
+                type=KnowledgeType.PROCEDURE,
+                module_id="m0",
+                required_visual_tasks=["identification"],
             ),
         ],
     )
@@ -745,3 +749,150 @@ async def test_switching_onto_a_teacher_path_applies_its_update(
     assert seen["switched"].success, seen["switched"].content
     assert origin.revision == 2
     assert seen["kbs"] == ["kb:kb_b"]
+
+
+# ---------------------------------------------------------------------------
+# A redefined objective starts again: no pre-redefinition evidence stays live
+# ---------------------------------------------------------------------------
+
+_VISUAL = {"task": "identification", "key_status": "verified"}
+
+
+def _answer(
+    store: LearningStore, path_id: str, question_id: str, *, visual: dict | None = None
+) -> None:
+    scheduler = SpacedRepetitionScheduler()
+
+    def grade(tx):
+        LearningService(store)._apply_grade(
+            tx.progress,
+            question_id=question_id,
+            knowledge_point_id="kp_rules",
+            module_id="m0",
+            user_answer="2x",
+            expected_answer="2x",
+            question_type="short",
+            scheduler=scheduler,
+            visual_context=dict(visual) if visual else None,
+        )
+        tx.touch()
+
+    store.mutate(path_id, grade)
+
+
+def _practise_rules_then_redefine(cited_course, as_account, publish_template) -> None:
+    with as_account("sara"):
+        store = LearningStore()
+        for index in range(3):
+            _answer(store, cited_course.path_id, f"q-old-{index}", visual=_VISUAL)
+        before = store.load(cited_course.path_id)
+    assert learning_policy.visual_achievements(before, "kp_rules") == ["identification"]
+    assert before.repetition_states["kp_rules"].review_count >= 1
+    publish_template(kp_decisions={"kp_rules": KpDecision(kind="redefined")})
+    with as_account("sara"):
+        assert apply_pending_revision(cited_course.path_id, LearningStore(), respect_lease=True)
+
+
+def test_a_repair_after_redefinition_does_not_resurrect_the_old_schedule(
+    cited_course, as_account, publish_template
+):
+    _practise_rules_then_redefine(cited_course, as_account, publish_template)
+    with as_account("sara"):
+        store = LearningStore()
+        _answer(store, cited_course.path_id, "q-new")
+        LearningService(store).repair_question(
+            cited_course.path_id,
+            "q-new",
+            action="void",
+            reason="wrong answer key",
+            scheduler=SpacedRepetitionScheduler(),
+        )
+        progress = store.load(cited_course.path_id)
+
+    # Nothing live is left for the new objective, so nothing is scheduled.
+    assert "kp_rules" not in progress.repetition_states
+    assert all(task.knowledge_point_id != "kp_rules" for task in progress.review_queue)
+    assert [e for e in progress.learning_evidence if e.knowledge_point_id == "kp_rules"] == []
+    # The old answers remain, voided, as the audit trail.
+    reasons = {a.question_id: a.void_reason for a in progress.quiz_attempts}
+    assert reasons["q-old-0"] == learning_policy.REDEFINED_VOID_REASON
+
+
+def test_a_replayed_older_linked_assessment_does_not_resurrect_the_old_schedule(
+    cited_course, as_account, publish_template
+):
+    from deeptutor.learning import assessment
+
+    _practise_rules_then_redefine(cited_course, as_account, publish_template)
+
+    def linked(created_at: float, attempt_id: str) -> bool:
+        record = assessment.AssessmentRecord(
+            session_id="s-linked",
+            question_id=attempt_id,
+            question="Differentiate x^2",
+            source="deep_question",
+            assessment_type="quiz",
+            result="correct",
+            mastery_path_id=cited_course.path_id,
+            knowledge_point_id="kp_rules",
+            created_at=created_at,
+        )
+        return assessment._apply_linked_retention(
+            record, result="correct", attempt_id=attempt_id
+        )
+
+    with as_account("sara"):
+        flagged_at = LearningStore().load(cited_course.path_id).reassessment_required["kp_rules"]
+        # An event from before the redefinition assessed the old objective.
+        assert linked(flagged_at - 5, "linked-old") is False
+        progress = LearningStore().load(cited_course.path_id)
+        assert "kp_rules" not in progress.repetition_states
+        assert "kp_rules" in progress.reassessment_required
+        # A later one is a first assessment of the new objective.
+        assert linked(flagged_at + 5, "linked-new") is True
+        progress = LearningStore().load(cited_course.path_id)
+
+    events = [e for e in progress.learning_evidence if e.knowledge_point_id == "kp_rules"]
+    assert [e.evidence_id for e in events] == ["linked-new"]
+    assert progress.repetition_states["kp_rules"].review_count <= 1
+    assert "kp_rules" not in progress.reassessment_required
+
+
+def test_the_tutor_sees_a_redefined_objective_as_not_yet_covered(
+    cited_course, as_account, publish_template
+):
+    _practise_rules_then_redefine(cited_course, as_account, publish_template)
+    with as_account("sara"):
+        progress = LearningStore().load(cited_course.path_id)
+
+    # What mastery_status reports to the tutor every turn.
+    assert learning_policy.learning_stage(progress, "kp_rules") == "not_yet_covered"
+    assert learning_policy.visual_achievements(progress, "kp_rules") == []
+    report = learning_policy.objective_report(progress, "kp_rules")
+    assert report["correct_count"] == 0
+    assert {a["voided"] for a in report["attempts"]} == {True}
+    assert {a["void_reason"] for a in report["attempts"]} == {
+        learning_policy.REDEFINED_VOID_REASON
+    }
+    assert report["errors"] == []
+
+
+def test_old_visual_evidence_does_not_pass_the_new_objectives_gate(
+    cited_course, as_account, publish_template
+):
+    _practise_rules_then_redefine(cited_course, as_account, publish_template)
+    with as_account("sara"):
+        store = LearningStore()
+        for index in range(3):
+            _answer(store, cited_course.path_id, f"q-text-{index}")  # no visual task
+        progress = store.load(cited_course.path_id)
+
+    rules = progress.modules[0].knowledge_points[1]
+    assert progress.mastery_levels["kp_rules"] >= learning_policy.gate_threshold(rules.type)
+    assert learning_policy.visual_achievements(progress, "kp_rules") == []
+    assert learning_policy.is_assessed_mastered(progress, rules) is False
+
+    with as_account("sara"):
+        _answer(store, cited_course.path_id, "q-visual-new", visual=_VISUAL)
+        progress = store.load(cited_course.path_id)
+    assert learning_policy.is_assessed_mastered(progress, rules) is True
