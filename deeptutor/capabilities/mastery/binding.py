@@ -25,7 +25,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterator
 import contextlib
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any
 
@@ -41,10 +41,14 @@ PathBinder = Callable[[str], None]
 class PathBindingError(RuntimeError):
     """The requested path cannot be entered."""
 
-    def __init__(self, message: str, *, code: str = "") -> None:
+    def __init__(
+        self, message: str, *, code: str = "", details: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(message)
         #: Stable machine-readable reason (``teacher_path_unavailable``, ...).
         self.code = code
+        #: Extra machine-readable fields (``materials`` for missing materials).
+        self.details = dict(details or {})
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,7 @@ class PathRefusal:
 
     message: str
     code: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 #: Admits the running turn onto another path and, when it may enter, points
@@ -140,7 +145,9 @@ async def rebind_active_path(
             raise
         if refusal is not None:
             await _hand_back(store, released, session_id, turn_id)
-            raise PathBindingError(refusal.message, code=refusal.code)
+            raise PathBindingError(
+                refusal.message, code=refusal.code, details=refusal.details
+            )
 
     _apply(bind_turn, target)
     await _remember_on_session(session_id, target)

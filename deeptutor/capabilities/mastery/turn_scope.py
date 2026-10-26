@@ -40,9 +40,17 @@ class MasteryPathUnavailable(RuntimeError):
 
     retryable = False
 
-    def __init__(self, message: str, *, error_code: str = TEACHER_PATH_UNAVAILABLE_CODE) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = TEACHER_PATH_UNAVAILABLE_CODE,
+        details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.error_code = error_code or TEACHER_PATH_UNAVAILABLE_CODE
+        #: Extra fields of the terminal error event (``materials``, ...).
+        self.error_details = dict(details or {})
 
 
 async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | None:
@@ -60,6 +68,8 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
         return ""
     from deeptutor.teaching.instances import (
         INSTANCE_UNAVAILABLE,
+        MATERIALS_UNAVAILABLE,
+        MATERIALS_UNAVAILABLE_CODE,
         apply_pending_revision,
         instance_access,
     )
@@ -84,7 +94,25 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
         respect_lease=True,
         lease_turn_id=turn.turn_id if turn is not None else "",
     )
+    # Material availability, for the revision the copy is on now: never teach
+    # a teacher's course from the model's own knowledge (spec 7.4).
+    missing = await asyncio.to_thread(_unavailable_materials, origin.template_id, path_id, store)
+    if missing:
+        await stream.error(
+            MATERIALS_UNAVAILABLE,
+            source="mastery_path",
+            metadata={"code": MATERIALS_UNAVAILABLE_CODE, "materials": missing},
+        )
+        return None
     return origin.template_id
+
+
+def _unavailable_materials(template_id: str, path_id: str, store: Any) -> list[str]:
+    from deeptutor.teaching.access import studying_template
+    from deeptutor.teaching.instances import unavailable_materials
+
+    with studying_template(template_id):
+        return unavailable_materials(path_id, store)
 
 
 class RefusalRecorder:
@@ -97,6 +125,7 @@ class RefusalRecorder:
     def __init__(self) -> None:
         self.message = ""
         self.code = ""
+        self.details: dict[str, Any] = {}
 
     async def error(
         self,
@@ -108,16 +137,24 @@ class RefusalRecorder:
         del source, stage
         if not self.message:
             self.message = str(message)
-            self.code = str((metadata or {}).get("code") or "")
+            fields = dict(metadata or {})
+            self.code = str(fields.pop("code", "") or "")
+            self.details = fields
 
     def refusal(self):
         from deeptutor.capabilities.mastery.binding import PathRefusal
 
-        return PathRefusal(self.message or "This path cannot be entered right now.", code=self.code)
+        return PathRefusal(
+            self.message or "This path cannot be entered right now.",
+            code=self.code,
+            details=dict(self.details),
+        )
 
     def unavailable(self) -> MasteryPathUnavailable:
         return MasteryPathUnavailable(
-            self.message or "This path cannot be entered right now.", error_code=self.code
+            self.message or "This path cannot be entered right now.",
+            error_code=self.code,
+            details=self.details,
         )
 
 
@@ -132,19 +169,32 @@ def path_kb_refs(topic: Any) -> list[str]:
     return refs
 
 
-def _material_index(path_id: str) -> dict[str, str]:
-    """The ``read_source`` index of a path's materials (storage-bound)."""
+def _material_manifest(path_id: str) -> tuple[str, dict[str, str]]:
+    """A path's materials manifest and ``read_source`` index (storage-bound).
+
+    Runs inside the turn's (already re-pointed) scope, so a reference-only
+    book of the path being entered is readable here.
+    """
     try:
         from deeptutor.learning.storage import LearningStore
         from deeptutor.learning.topic_materials import build_topic_materials, render_topic_manifest
 
         topic = LearningStore().get_topic(path_id)
         if topic is None or not topic.sources:
-            return {}
-        return render_topic_manifest(build_topic_materials(topic.sources))[1]
+            return "", {}
+        return render_topic_manifest(build_topic_materials(topic.sources))
     except Exception:
         logger.exception("Failed to build topic materials for mastery path %s", path_id)
-        return {}
+        return "", {}
+
+
+def _book_bindings(template_id: str, book_ids: list[str]) -> tuple:
+    """Plan D reading bindings of a teacher path's books, as its student."""
+    from deeptutor.book.registry import reading_bindings
+    from deeptutor.teaching.access import studying_template
+
+    with studying_template(template_id):
+        return reading_bindings(*book_ids)
 
 
 @dataclass(frozen=True)
@@ -153,17 +203,24 @@ class _Admission:
     template_id: str
     refs: list[str]
     allowed: frozenset[str] | None
+    #: Plan D reading bindings of the path's books (teacher paths only).
+    books: tuple = ()
 
 
 class MasteryTurn:
     """What one turn may read while on its current mastery path.
 
-    Owns the turn's retrieval scope. Admission computes everything first and
-    commits at the end, so a refused or failed admission changes nothing.
+    Owns the turn's retrieval scope (R8 allowlist and the template being
+    studied, which opens reference-only libraries and books) and its book
+    reading scope (which opens the KBs of the path's books). Both are shared
+    mutable objects, so a path switch re-points them for the whole turn and
+    the previous path's materials close. Admission computes everything first
+    and commits at the end, so a refused or failed admission changes nothing.
     """
 
-    def __init__(self, scope: Any, store: Any, *, turn_id: str = "") -> None:
+    def __init__(self, scope: Any, store: Any, *, turn_id: str = "", books: Any = None) -> None:
         self.scope = scope
+        self.books = books
         self.store = store
         #: The turn's id, the one its path lease (if any) is held under.
         self.turn_id = turn_id
@@ -175,6 +232,9 @@ class MasteryTurn:
         self.path_id = ""
         self.template_id = ""
         self.refs: list[str] = []
+        #: The topic-materials manifest the runtime put at the head of the
+        #: turn's ``source_manifest`` (``None``: this turn carries none).
+        self.manifest: str | None = None
 
     async def admit(self, stream: Any, store: Any, path_id: str) -> _Admission | None:
         # Module global on purpose: one gate, also for tests that stand it in.
@@ -188,21 +248,33 @@ class MasteryTurn:
         )
         refs = path_kb_refs(topic)
         allowed = None
+        books: tuple = ()
         if template_id:
             from deeptutor.multi_user.retrieval_scope import canonical_kb_ids
+            from deeptutor.teaching.instances import path_book_ids, path_book_kb_refs
 
+            # R8: a teacher path is taught from its own materials only — the
+            # KBs it cites and the KBs its books are bound to.
+            book_ids = path_book_ids(topic)
+            refs = list(
+                dict.fromkeys([*refs, *await asyncio.to_thread(path_book_kb_refs, book_ids)])
+            )
             allowed = await asyncio.to_thread(canonical_kb_ids, refs)
-        return _Admission(path_id, template_id, refs, allowed)
+            books = await asyncio.to_thread(_book_bindings, template_id, book_ids)
+        return _Admission(path_id, template_id, refs, allowed, books)
 
     def commit(self, admission: _Admission) -> None:
         self.path_id = admission.path_id
         self.template_id = admission.template_id
         self.refs = list(admission.refs)
         if admission.allowed is not None:
-            # R8: a teacher path is taught from its own libraries only.
+            # R8: a teacher path is taught from its own libraries only; the
+            # scope also names the template the turn studies now.
             self.scope.restrict(admission.allowed, template_id=admission.template_id)
         else:
             self.scope.clear()
+        if self.books is not None:
+            self.books.bind(admission.books)
         if self.context is not None:
             self._apply(self.context)
 
@@ -225,19 +297,37 @@ class MasteryTurn:
         self.merge_path_sources = self.merge_path_sources or merge_path_sources
         self._apply(context)
 
+    def _replace_manifest(self, manifest: str) -> None:
+        current = str(getattr(self.context, "source_manifest", "") or "")
+        old = self.manifest or ""
+        if old and old in current:
+            current = current.replace(old, manifest, 1)
+        elif not old:
+            current = f"{manifest}{current}"
+        else:
+            logger.warning("Mastery turn manifest changed shape; replacing it whole")
+            current = manifest
+        self.context.source_manifest = current
+        self.manifest = manifest
+
     async def switch(self, path_id: str, store: Any):
         """The :data:`~deeptutor.capabilities.mastery.binding.PathGate` of this turn."""
         refusals = RefusalRecorder()
         admission = await self.admit(refusals, store, path_id)
         if admission is None:
             return refusals.refusal()
-        index = None
-        if self.context is not None and "mastery_topic_source_index" in self.context.metadata:
-            index = await asyncio.to_thread(_material_index, path_id)
         self.commit(admission)
-        if index is not None:
-            # The tutor's read_source follows the path, not the turn's start.
-            self.context.metadata["mastery_topic_source_index"] = index
+        if self.context is None:
+            return None
+        has_index = "mastery_topic_source_index" in self.context.metadata
+        if has_index or self.manifest is not None:
+            # The materials follow the path, not the turn's start: loaded in
+            # the re-pointed scope, so the previous path's never linger.
+            manifest, index = await asyncio.to_thread(_material_manifest, path_id)
+            if has_index:
+                self.context.metadata["mastery_topic_source_index"] = index
+            if self.manifest is not None:
+                self._replace_manifest(manifest)
         return None
 
 
@@ -272,8 +362,15 @@ async def open_mastery_turn(
     from deeptutor.multi_user.retrieval_scope import turn_retrieval_scope
 
     # Only a turn on a path opens the store (cross-check 2.6).
+    from deeptutor.book.registry import turn_reading_scope
+
     store = await asyncio.to_thread(LearningStore) if path_id else None
-    turn = MasteryTurn(stack.enter_context(turn_retrieval_scope()), store, turn_id=turn_id)
+    turn = MasteryTurn(
+        stack.enter_context(turn_retrieval_scope()),
+        store,
+        turn_id=turn_id,
+        books=stack.enter_context(turn_reading_scope()),
+    )
     stack.enter_context(_activate(turn))
     admission = await turn.admit(stream, store, path_id)
     if admission is None:

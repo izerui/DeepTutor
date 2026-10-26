@@ -40,7 +40,7 @@ KB_CHOICES: frozenset[str] = frozenset({"make_public", "reference_only"})
 
 # Cached modules may expose register_book_readers() to restore a reset reader
 # map. Hooks run with setdefault semantics, preserving explicit custom readers.
-BUILTIN_BOOK_READER_MODULES: tuple[str, ...] = ()
+BUILTIN_BOOK_READER_MODULES: tuple[str, ...] = ("deeptutor.teaching.access",)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS book_registry (
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS book_kb_pending (
 _write_lock = threading.RLock()
 _writer_state = threading.local()
 _reader_lock = threading.RLock()
-_loading_builtin = False
+_builtin_reader_state = threading.local()
 _readers: dict[str, Callable[[str, str], bool]] = {}
 
 
@@ -667,34 +667,47 @@ def list_transferred_books(user_id: str) -> list[BookRecord]:
 
 
 def register_book_reference_reader(referrer_kind: str, reader: Callable[[str, str], bool]) -> None:
-    """Register reader(referrer_id, user_id); explicit registrations take precedence."""
+    """Register reader(referrer_id, user_id); explicit registrations take precedence.
+
+    While this thread runs a builtin hook (see :func:`_load_builtin_readers`)
+    the registration is staged and later merged with ``setdefault`` semantics.
+    """
+    pending = getattr(_builtin_reader_state, "pending", None)
+    if pending is not None:
+        pending.setdefault(referrer_kind, reader)
+        return
     with _reader_lock:
-        if _loading_builtin:
-            _readers.setdefault(referrer_kind, reader)
-        else:
-            _readers[referrer_kind] = reader
+        _readers[referrer_kind] = reader
 
 
 def _load_builtin_readers() -> None:
-    global _loading_builtin
-    with _reader_lock:
-        if _loading_builtin:
-            return
-        _loading_builtin = True
+    """Import cached builtin modules and run their hooks on every load.
+
+    Mirrors plan B's loader contract (D2): no reader-map lock is held across
+    an import or a hook, so a module whose import registers eagerly can never
+    deadlock against a concurrent loader. Each hook's registrations are staged
+    on this thread and merged with ``setdefault`` only after it succeeds, so a
+    failing hook grants nothing and a concurrent explicit registration always
+    keeps precedence. Re-entrant calls (a hook that reads books) return at once.
+    """
+    if getattr(_builtin_reader_state, "pending", None) is not None:
+        return
+    for name in BUILTIN_BOOK_READER_MODULES:
+        pending: dict[str, Callable[[str, str], bool]] = {}
+        _builtin_reader_state.pending = pending
         try:
-            for name in BUILTIN_BOOK_READER_MODULES:
-                before = dict(_readers)
-                try:
-                    module = importlib.import_module(name)
-                    register = getattr(module, "register_book_readers", None)
-                    if callable(register):
-                        register()
-                except Exception:
-                    _readers.clear()
-                    _readers.update(before)
-                    logger.exception("Could not load book reference readers from %s", name)
+            module = importlib.import_module(name)
+            register = getattr(module, "register_book_readers", None)
+            if callable(register):
+                register()
+        except Exception:
+            logger.exception("Could not load book reference readers from %s", name)
+        else:
+            with _reader_lock:
+                for kind, reader in pending.items():
+                    _readers.setdefault(kind, reader)
         finally:
-            _loading_builtin = False
+            _builtin_reader_state.pending = None
 
 
 def _bound_record(conn: sqlite3.Connection, record: BookRecord) -> BookRecord | None:
@@ -869,13 +882,11 @@ _reading_bindings: ContextVar[tuple[tuple[str, BookRecord], ...]] = ContextVar(
 )
 
 
-@contextmanager
-def reading_book(*book_ids: str) -> Iterator[None]:
-    """Authorize canonical registry identities, never a same-id local storage copy.
+def reading_bindings(*book_ids: str) -> tuple[tuple[str, BookRecord], ...]:
+    """The (actor, record) bindings ``reading_book`` would open for *book_ids*.
 
-    Consumers must load the registered location, not their current storage.
-    Bindings also pin actor and location so inherited or stale contexts cannot
-    activate another account's authorization or a relocated/recreated book.
+    Canonical registry identities the current user can read right now, never
+    a same-id local storage copy. Storage-bound.
     """
     from deeptutor.multi_user.context import get_current_user
 
@@ -885,8 +896,20 @@ def reading_book(*book_ids: str) -> Iterator[None]:
         record = get_book(value)
         if record is not None and can_read_book(record, user):
             bindings.append((user.id, record))
+    return tuple(bindings)
+
+
+@contextmanager
+def reading_book(*book_ids: str) -> Iterator[None]:
+    """Authorize canonical registry identities, never a same-id local storage copy.
+
+    Consumers must load the registered location, not their current storage.
+    Bindings also pin actor and location so inherited or stale contexts cannot
+    activate another account's authorization or a relocated/recreated book.
+    """
+    bindings = reading_bindings(*book_ids)
     token = active_books.set(active_books.get() | frozenset(r.book_id for _, r in bindings))
-    bound_token = _reading_bindings.set(_reading_bindings.get() + tuple(bindings))
+    bound_token = _reading_bindings.set(_reading_bindings.get() + bindings)
     try:
         yield
     finally:
@@ -894,11 +917,77 @@ def reading_book(*book_ids: str) -> Iterator[None]:
         active_books.reset(token)
 
 
+def bind_reading(*book_ids: str) -> tuple[str, ...]:
+    """Open *book_ids* for the rest of the current context (one HTTP request).
+
+    For a request-scoped dependency that cannot wrap its endpoint in
+    :func:`reading_book`: the values live in the request task's own context
+    and end with it. Same bindings and checks as :func:`reading_book`.
+    """
+    bindings = reading_bindings(*book_ids)
+    active_books.set(active_books.get() | frozenset(r.book_id for _, r in bindings))
+    _reading_bindings.set(_reading_bindings.get() + bindings)
+    return tuple(record.book_id for _, record in bindings)
+
+
+class BookReadingScope:
+    """A turn's mutable set of open books.
+
+    A mastery turn may switch paths in a task or worker thread running a
+    copied context, where re-setting a context variable would not reach the
+    rest of the turn. Every task of the turn shares this object instead, and
+    a switch re-points it. Nested scopes add to their parent's books.
+    """
+
+    def __init__(self, parent: BookReadingScope | None = None) -> None:
+        self.parent = parent
+        self.bindings: tuple[tuple[str, BookRecord], ...] = ()
+
+    def bind(self, bindings: tuple[tuple[str, BookRecord], ...]) -> None:
+        """Replace the open books with precomputed :func:`reading_bindings`."""
+        self.bindings = tuple(bindings)
+
+    def clear(self) -> None:
+        self.bindings = ()
+
+    def all_bindings(self) -> tuple[tuple[str, BookRecord], ...]:
+        scope: BookReadingScope | None = self
+        found: tuple[tuple[str, BookRecord], ...] = ()
+        while scope is not None:
+            found += scope.bindings
+            scope = scope.parent
+        return found
+
+
+_turn_reading: ContextVar[BookReadingScope | None] = ContextVar("book_turn_reading", default=None)
+
+
+@contextmanager
+def turn_reading_scope() -> Iterator[BookReadingScope]:
+    """Open an (initially empty) mutable reading scope for the rest of a turn."""
+    scope = BookReadingScope(parent=_turn_reading.get())
+    token = _turn_reading.set(scope)
+    try:
+        yield scope
+    finally:
+        _turn_reading.reset(token)
+
+
+def _open_bindings() -> tuple[tuple[str, BookRecord], ...]:
+    scope = _turn_reading.get()
+    return _reading_bindings.get() + (scope.all_bindings() if scope is not None else ())
+
+
 def book_kb_reader(book_id: str, user_id: str) -> bool:
     from deeptutor.multi_user.context import get_current_user
 
     user = get_current_user()
-    if user.id != user_id or book_id not in active_books.get():
+    if user.id != user_id:
+        return False
+    bindings = _open_bindings()
+    scope = _turn_reading.get()
+    turn_books = {r.book_id for _, r in scope.all_bindings()} if scope is not None else set()
+    if book_id not in active_books.get() and book_id not in turn_books:
         return False
     current = get_book(book_id)
     if current is None:
@@ -906,7 +995,7 @@ def book_kb_reader(book_id: str, user_id: str) -> bool:
     return any(
         actor == user_id and record.book_id == book_id
         and record.created_at == current.created_at and can_read_book(record, user)
-        for actor, record in _reading_bindings.get()
+        for actor, record in bindings
     )
 
 

@@ -328,7 +328,111 @@ def describe_instance(path_id: str, store: LearningStore) -> dict[str, Any] | No
     template = TeachingStore().get_template(progress.origin.template_id)
     if template is None:
         return None
-    return origin_payload(progress, template)
+    from deeptutor.teaching.access import studying_template
+
+    with studying_template(template.id):
+        missing = unavailable_materials(path_id, store)
+    return origin_payload(progress, template, materials_available=not missing)
+
+
+# ---- the path's materials (spec 7.4, R8) -------------------------------------
+
+MATERIALS_UNAVAILABLE = (
+    "The course materials for this path are temporarily unavailable. Ask your "
+    "teacher to restore them; the tutor will not continue without them."
+)
+#: Stable code of a turn or switch refused because the materials are gone.
+MATERIALS_UNAVAILABLE_CODE = "teacher_materials_unavailable"
+
+
+def _book_id(source: TopicSource) -> str:
+    value = str(source.source_id or "").strip()
+    return value[len("book:") :] if value.startswith("book:") else value
+
+
+def path_book_ids(topic: Any) -> list[str]:
+    """The registered books a path cites, in source order."""
+    from deeptutor.learning.models import TopicSourceKind
+
+    ids = [
+        _book_id(source)
+        for source in getattr(topic, "sources", []) or []
+        if source.kind == TopicSourceKind.BOOK and source.source_id
+    ]
+    return list(dict.fromkeys(book_id for book_id in ids if book_id))
+
+
+def path_book_kb_refs(book_ids: list[str]) -> list[str]:
+    """``kb:<id>`` refs of the KBs the path's books are bound to (R8).
+
+    Read from the books' fixed bindings, so a binding whose reference an
+    admin revoked still counts (and is reported unavailable) instead of
+    silently disappearing. Storage-bound.
+    """
+    from deeptutor.teaching import books as book_access
+
+    return list(
+        dict.fromkeys(
+            f"kb:{kb_id}" for book_id in book_ids for kb_id in book_access.book_kb_ids(book_id)
+        )
+    )
+
+
+def _kb_source_available(source: TopicSource, user: Any) -> bool:
+    from deeptutor.teaching import kb as kb_access
+
+    record = kb_access.resolve(kb_access.source_kb_ref(source))
+    if record is None or not kb_access.can_read(record, user):
+        return False
+    doc_id = kb_access.source_doc_id(source)
+    # A cited document is followed by its fixed id; gone means unavailable.
+    return not doc_id or kb_access.document_file(record, doc_id) is not None
+
+
+def _book_source_available(source: TopicSource, user: Any) -> bool:
+    from deeptutor.teaching import books as book_access
+
+    book_id = _book_id(source)
+    record = book_access.get(book_id) if book_id else None
+    if record is None or not book_access.can_read(record, user):
+        return False
+    # Missing, unresolved, revoked or unshared bindings of the book (preflight
+    # item 5): never tutor from a reduced set of its materials.
+    return not book_access.unavailable_dependencies(book_id)
+
+
+def unavailable_materials(path_id: str, store: LearningStore) -> list[str]:
+    """Labels of the path's libraries and books the current user cannot use now.
+
+    Reads the copy's own sources, i.e. the revision it is on (an instance
+    waiting on an old-revision question keeps that revision's materials).
+    Call inside ``studying_template(<template id>)``: reference-only materials
+    are readable only there. A material whose check fails counts as
+    unavailable. Storage-bound.
+    """
+    from deeptutor.learning.models import TopicSourceKind
+    from deeptutor.teaching import kb as kb_access
+
+    topic = store.get_topic(path_id)
+    if topic is None:
+        return []
+    user = get_current_user()
+    missing: list[str] = []
+    for source in topic.sources:
+        if source.kind == TopicSourceKind.BOOK:
+            check = _book_source_available
+        elif kb_access.source_kb_ref(source):
+            check = _kb_source_available
+        else:
+            continue
+        try:
+            available = check(source, user)
+        except Exception:
+            logger.warning("Could not check material %r of %s", source.label, path_id, exc_info=True)
+            available = False
+        if not available:
+            missing.append(source.label)
+    return list(dict.fromkeys(missing))
 
 
 # ---- teacher updates (spec 5.3) ---------------------------------------------
@@ -343,6 +447,7 @@ def _record_applied(teaching: TeachingStore, template_id: str, user_id: str, pat
     takes that lock itself); it only ever releases references. A failure
     leaves the earlier, larger set in place and is retried by the next resync.
     """
+    from deeptutor.teaching.access import studying_template
     from deeptutor.teaching.service import sync_material_references
 
     origin = store.load_origin(path_id)
@@ -352,7 +457,11 @@ def _record_applied(teaching: TeachingStore, template_id: str, user_id: str, pat
         template_id, user_id, instance_path_id=path_id, applied_revision=origin.revision
     )
     try:
-        sync_material_references(template_id, store=teaching)
+        # Plan D re-checks that the actor (this student) can read every book
+        # the rewrite keeps; a reference-only book is readable to them only
+        # while studying this path. It only ever releases references.
+        with studying_template(template_id):
+            sync_material_references(template_id, store=teaching)
     except Exception:
         logger.warning(
             "Could not release the material references of teacher path %s after %s "

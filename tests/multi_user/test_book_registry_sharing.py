@@ -183,6 +183,8 @@ def test_failed_builtin_hook_rolls_back_and_retries(library, as_user, monkeypatc
         if len(attempts) == 1:
             raise RuntimeError("broken hook")
 
+    # One builtin module: the stand-in import answers every name with this hook.
+    monkeypatch.setattr(kbs, "BUILTIN_READER_MODULES", ("deeptutor.book.registry",))
     monkeypatch.setattr(kbs.importlib, "import_module", lambda _: SimpleNamespace(register_kb_reader=hook))
     with as_user("s1", role="student"), books.reading_book(book.ref):
         assert not kbs.can_read(private, get_current_user())

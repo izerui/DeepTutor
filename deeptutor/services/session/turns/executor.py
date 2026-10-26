@@ -64,6 +64,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _error_details(exc: BaseException) -> dict[str, Any]:
+    """Extra fields an admission refusal carries (never overriding the core ones)."""
+    details = getattr(exc, "error_details", None)
+    return dict(details) if isinstance(details, dict) else {}
+
+
 class TurnExecutor:
     if TYPE_CHECKING:
         store: SessionStoreProtocol
@@ -823,6 +829,10 @@ class TurnExecutor:
                     source_manifest_text, mastery_topic_source_index = await asyncio.to_thread(
                         _topic_material_manifest, topic_path_id
                     )
+                    if mastery_turn is not None:
+                        # A path switch replaces exactly this part of the
+                        # manifest with the new path's materials.
+                        mastery_turn.manifest = source_manifest_text
 
             # A card answer rides in on this turn's message, because posing a
             # question ends its turn. Rule on it before the tutor starts: the
@@ -1408,6 +1418,9 @@ class TurnExecutor:
                         source=capability_name,
                         content=str(exc),
                         metadata={
+                            # Machine-readable details of a refused turn,
+                            # e.g. the unavailable teacher materials.
+                            **_error_details(exc),
                             "turn_terminal": True,
                             "status": "failed",
                             "error_code": resolved_failure_code,

@@ -347,10 +347,19 @@ def _isolate_teaching_db(monkeypatch, tmp_path, _isolate_kb_registry, _isolate_b
     Without this, any test that deletes an account (``handle_account_deleted``)
     or lists a student's mastery paths would create ``data/system/teaching.sqlite3``
     in the developer's real tree.
+
+    Plans B and D copy their reader tables per test, and a module registers on
+    import only once per process, so the "mastery_template" readers are put
+    back into each test's copies here — as the real process has them. (The
+    real loaders also restore them on their own; ``test_teaching_reader_loading``
+    proves that without this preregistration.)
     """
+    from deeptutor.teaching import access
     from deeptutor.teaching import store as teaching_store
 
     monkeypatch.setattr(teaching_store, "DB_PATH_OVERRIDE", tmp_path / "teaching.sqlite3")
+    access.register_kb_readers()
+    access.register_book_readers()
 
 
 @pytest.fixture(autouse=True)

@@ -3283,6 +3283,14 @@ class MasteryPathsTool(BaseTool):
         )
 
 
+def _refusal_metadata(exc: Any) -> dict[str, Any]:
+    """The stable code (and details, e.g. unavailable materials) of a refused switch."""
+    code = str(getattr(exc, "code", "") or "")
+    if not code:
+        return {}
+    return {"error_type": code, **dict(getattr(exc, "details", {}) or {})}
+
+
 class MasterySwitchTool(BaseTool):
     """Point this conversation at a different mastery path."""
 
@@ -3330,7 +3338,7 @@ class MasterySwitchTool(BaseTool):
                 bind_turn=kwargs.get("_bind_active_path"),
             )
         except PathBindingError as exc:
-            return ToolResult(content=str(exc), success=False)
+            return ToolResult(content=str(exc), success=False, metadata=_refusal_metadata(exc))
         return _json_result(
             {
                 "status": "switched",
@@ -3377,7 +3385,7 @@ class MasteryLeaveTool(BaseTool):
                 bind_turn=kwargs.get("_bind_active_path"),
             )
         except PathBindingError as exc:
-            return ToolResult(content=str(exc), success=False)
+            return ToolResult(content=str(exc), success=False, metadata=_refusal_metadata(exc))
         return _json_result(
             {
                 "status": "left",

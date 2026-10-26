@@ -61,7 +61,7 @@ DB_PATH_OVERRIDE: Path | None = None
 #: Modules that call :func:`register_reference_reader` on import. Imported the
 #: first time a reference is checked, so the registry never imports a feature
 #: package eagerly. Plan C adds its mastery-template module here.
-BUILTIN_READER_MODULES: tuple[str, ...] = ("deeptutor.book.registry",)
+BUILTIN_READER_MODULES: tuple[str, ...] = ("deeptutor.book.registry", "deeptutor.teaching.access")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS kb_registry (

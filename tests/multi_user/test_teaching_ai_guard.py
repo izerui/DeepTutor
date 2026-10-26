@@ -34,7 +34,7 @@ from deeptutor.multi_user.retrieval_scope import (
     TEACHER_PATH_RETRIEVAL_DENIED,
     current_retrieval_scope,
 )
-from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE
+from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, MATERIALS_UNAVAILABLE
 from deeptutor.teaching.service import TeachingService
 from deeptutor.tools.builtin import RAGTool
 from deeptutor.tools.mastery_tool import MasteryLeaveTool, MasterySwitchTool
@@ -849,3 +849,68 @@ async def test_a_switch_inside_a_chat_action_re_runs_the_gate(
     assert seen["to_revoked"].success is False
     assert seen["to_revoked"].content == INSTANCE_UNAVAILABLE
     assert seen["path"] == courses.personal
+
+
+# ---------------------------------------------------------------------------
+# Task 11: missing materials end the turn; a switch carries the materials over
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_chat_action_with_missing_course_materials_is_refused_with_the_list(
+    courses, libraries, chat_runtime, as_account
+):
+    kbs.unregister_kb(libraries.calculus.kb_id)  # an admin deleted the course library
+
+    async def body(_context, out):
+        out["ran"] = True
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body)
+
+    assert "ran" not in seen
+    assert seen["loaded"] == []
+    errors = [e for e in seen["events"] if e["type"] == "error"]
+    assert errors and errors[0]["content"] == MATERIALS_UNAVAILABLE
+    assert errors[0]["metadata"]["error_code"] == "teacher_materials_unavailable"
+    assert errors[0]["metadata"]["materials"] == ["calculus"]
+    assert [e for e in seen["events"] if e["type"] == "done"][-1]["metadata"]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_switch_replaces_the_turns_materials_manifest(
+    courses, libraries, chat_runtime, as_account
+):
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+
+    async def switch(context, path_id):
+        kwargs = MasteryLoopCapability().augment_kwargs(
+            "mastery_switch", {"path_id": path_id}, context
+        )
+        return await MasterySwitchTool().execute(**kwargs)
+
+    async def body(context, out):
+        out["manifest_a"] = context.source_manifest
+        out["to_b"] = await switch(context, courses.b)
+        out["manifest_b"] = context.source_manifest
+        kbs.unregister_kb(libraries.calculus.kb_id)
+        out["back_to_a"] = await switch(context, courses.a)
+        out["path"] = context.metadata["mastery_path_id"]
+        out["manifest_after"] = context.source_manifest
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body)
+
+    assert "name='calculus'" in seen["manifest_a"]
+    assert seen["to_b"].success, seen["to_b"].content
+    # The previous path's materials never linger in the turn's prompt.
+    assert "name='algebra'" in seen["manifest_b"]
+    assert "calculus" not in seen["manifest_b"]
+    refused = seen["back_to_a"]
+    assert refused.success is False and refused.content == MATERIALS_UNAVAILABLE
+    assert refused.metadata == {
+        "error_type": "teacher_materials_unavailable",
+        "materials": ["calculus"],
+    }
+    assert seen["path"] == courses.b
+    assert seen["manifest_after"] == seen["manifest_b"]

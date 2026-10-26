@@ -337,6 +337,17 @@ class TeachingService:
         gone_books |= {
             revoked.book_id for revoked in book_access.unavailable_references(template.id)
         }
+        # A cited book whose own KB bindings are missing, revoked or unshared
+        # (preflight item 5): its students' tutor stops too.
+        for ref in sources.book_refs:
+            if ref.book_id in gone_books:
+                continue
+            try:
+                if book_access.unavailable_dependencies(ref.book_id):
+                    gone_books.add(ref.book_id)
+            except Exception:
+                logger.warning("Could not check the bindings of book %s", ref.book_id, exc_info=True)
+                gone_books.add(ref.book_id)
         labels = []
         for source in sources.sources:
             ref = kb_access.source_kb_ref(source) or str(source.source_id or "")
