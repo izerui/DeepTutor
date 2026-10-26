@@ -370,3 +370,97 @@ def test_two_copies_with_shared_source_ids_coexist(as_account, teacher_draft, pu
         }
     assert len(ids["assigned_a"]) == len(ids["assigned_b"]) == 1
     assert ids["assigned_a"] != ids["assigned_b"]
+
+
+def test_objectives_citing_materials_stay_teachable_in_the_copy(
+    as_account, publish_template, fake_kb_registry, monkeypatch
+):
+    from deeptutor.learning import lesson_evidence
+    from deeptutor.learning.models import (
+        KnowledgePoint,
+        KnowledgeType,
+        LearningModule,
+        TopicMetadata,
+        TopicSource,
+        TopicSourceKind,
+    )
+    from deeptutor.learning.objective_relations import validate_objective_relations
+    from deeptutor.learning.service import LearningService
+
+    fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
+    fake_kb_registry.write_file("kb_lib", "ch1.md")
+    sources = [
+        TopicSource(
+            id="f0",
+            kind=TopicSourceKind.FILE,
+            source_id="ch1.md",
+            label="Chapter 1",
+            position=0,
+            metadata={"kb_name": "library"},
+        ),
+        TopicSource(
+            id="k0",
+            kind=TopicSourceKind.KNOWLEDGE_BASE,
+            source_id="library",
+            label="Library",
+            position=1,
+        ),
+    ]
+    module = LearningModule(
+        id="m0",
+        name="Calculus",
+        order=0,
+        knowledge_points=[
+            KnowledgePoint(
+                id="kp_file", name="Limits", type=KnowledgeType.CONCEPT, module_id="m0",
+                topic_source_ids=["f0"],
+            ),
+            KnowledgePoint(
+                id="kp_both", name="Derivatives", type=KnowledgeType.PROCEDURE, module_id="m0",
+                topic_source_ids=["f0", "k0"],
+            ),
+        ],
+    )
+    with as_account("tina"):
+        LearningService(LearningStore()).create_topic(
+            "topic_calculus",
+            name="Calculus I",
+            modules=[module],
+            metadata=TopicMetadata(path_id="topic_calculus", goal="Differentiate"),
+            sources=sources,
+        )
+    template_id = publish_template(students=("sara",))["template"]["id"]
+    path_id = _topics(as_account, "sara")[0]["path_id"]
+
+    resolved = SimpleNamespace(base_dir="/nonexistent", name="library")
+    monkeypatch.setattr(
+        "deeptutor.multi_user.knowledge_access.resolve_for_rag", lambda _ref: resolved
+    )
+    with as_account("sara"):
+        store = LearningStore()
+        progress = store.load(path_id)
+        topic = store.get_topic(path_id, progress=progress)
+        validate_objective_relations(progress.modules, topic.sources)
+        by_kind = {source.kind: source.id for source in topic.sources}
+        points = {kp.id: kp for kp in progress.modules[0].knowledge_points}
+        assert points["kp_file"].topic_source_ids == [by_kind[TopicSourceKind.FILE]]
+        assert set(points["kp_both"].topic_source_ids) == set(by_kind.values())
+        for kp_id in points:
+            assert lesson_evidence.selected_scope(topic, progress, kp_id) == {}
+
+    # The template's own revision keeps the teacher's ids untouched.
+    revision = TeachingStore().get_revision(template_id, 1)
+    assert [s.id for s in revision.sources.sources] == ["f0", "k0"]
+    assert revision.outline.modules[0].knowledge_points[1].topic_source_ids == ["f0", "k0"]
+
+
+def test_a_student_path_squatting_the_instance_id_is_logged(
+    as_account, teacher_draft, publish_template, caplog
+):
+    teacher_draft()
+    template_id = publish_template(students=("sara",))["template"]["id"]
+    _personal_path(teacher_draft, "sara", f"assigned_{template_id}")
+
+    with caplog.at_level("WARNING", logger="deeptutor.teaching.instances"):
+        _topics(as_account, "sara")
+    assert any(template_id in record.getMessage() for record in caplog.records)

@@ -16,7 +16,13 @@ import logging
 from typing import Any
 import uuid
 
-from deeptutor.learning.models import LearningProgress, PathOrigin, TopicMetadata, TopicSource
+from deeptutor.learning.models import (
+    LearningModule,
+    LearningProgress,
+    PathOrigin,
+    TopicMetadata,
+    TopicSource,
+)
 from deeptutor.learning.storage import LearningStore
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.teaching.models import MasteryAssignment, MasteryTemplate, TemplateRevision
@@ -81,19 +87,36 @@ def ensure_instance_access(path_id: str, store: LearningStore) -> InstanceAccess
     return access
 
 
-def instance_sources(path_id: str, revision: TemplateRevision) -> list[TopicSource]:
-    """The revision's sources with ids unique to this copy.
+def instance_source_id(path_id: str, source_id: str) -> str:
+    """The id a template source carries inside the copy *path_id*."""
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"deeptutor:{path_id}:{source_id}").hex
+
+
+def instance_outline(
+    path_id: str, revision: TemplateRevision
+) -> tuple[list[TopicSource], list[LearningModule]]:
+    """The revision's sources and modules as the copy *path_id* stores them.
 
     Source ids are primary keys of the student's whole store, and two
-    templates published from one draft carry the same ones; deriving them from
-    the copy keeps every copy insertable, and stable across rewrites.
+    templates published from one draft carry the same ones (an archived
+    template's copy is retained). Every source id is therefore derived from
+    the copy, and every reference to one (``KnowledgePoint.topic_source_ids``)
+    is rewritten with the same mapping, so objectives keep citing their
+    materials. Deterministic: rebuilding a copy from a later revision (the
+    revision migration) must go through this function too.
     """
     sources: list[TopicSource] = []
     for source in revision.sources.sources:
         copied = source.model_copy(deep=True)
-        copied.id = uuid.uuid5(uuid.NAMESPACE_URL, f"deeptutor:{path_id}:{source.id}").hex
+        copied.id = instance_source_id(path_id, source.id)
         sources.append(copied)
-    return sources
+    modules = [module.model_copy(deep=True) for module in revision.outline.modules]
+    for module in modules:
+        for point in module.knowledge_points:
+            point.topic_source_ids = [
+                instance_source_id(path_id, source_id) for source_id in point.topic_source_ids
+            ]
+    return sources, modules
 
 
 def _metadata(path_id: str, revision: TemplateRevision) -> TopicMetadata:
@@ -123,10 +146,10 @@ def materialize_instance(
             # Every stored path has revision >= 1: a concurrent list request
             # (or the student's own path under this id) got here first.
             return
-        modules = [module.model_copy(deep=True) for module in revision.outline.modules]
+        sources, modules = instance_outline(path_id, revision)
         tx.progress.name = revision.outline.name[:200]
         tx.progress.origin = PathOrigin(template_id=template.id, revision=revision.revision)
-        tx.put_topic(metadata, instance_sources(path_id, revision))
+        tx.put_topic(metadata, sources)
         LearningService(store).replace_modules(tx.progress, modules)
         tx.progress.current_module_id = modules[0].id if modules else ""
         tx.progress.current_kp_index = 0
@@ -143,6 +166,18 @@ def materialize_instance(
 
     progress, _ = store.mutate(path_id, create, create=True)
     return progress
+
+
+def _report_squatted(template_id: str, user_id: str, path_id: str) -> None:
+    # The student's own path already uses this id. It is never taken over,
+    # so the assignment cannot be delivered until that path is renamed away.
+    logger.warning(
+        "Teacher path %s is assigned to %s but %s is the student's own path; "
+        "the copy is not created",
+        template_id,
+        user_id,
+        path_id,
+    )
 
 
 def sync_assigned_instances(store: LearningStore) -> list[str]:
@@ -174,7 +209,8 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
                     continue  # recorded: keep its applied revision as it is
                 origin = store.load_origin(path_id)
                 if origin is None or origin.template_id != template.id:
-                    continue  # the student's own path happens to use this id
+                    _report_squatted(template.id, user_id, path_id)
+                    continue
                 applied = origin.revision  # committed earlier, never recorded
             else:
                 revision = teaching.get_revision(template.id, template.current_revision)
@@ -182,6 +218,7 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
                     continue
                 origin = materialize_instance(store, path_id, template, revision).origin
                 if origin is None or origin.template_id != template.id:
+                    _report_squatted(template.id, user_id, path_id)
                     continue
                 applied = origin.revision
                 created.append(path_id)
