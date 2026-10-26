@@ -69,6 +69,21 @@ def _knowledge_points(modules: Iterable[LearningModule]) -> Iterable[KnowledgePo
         yield from module.knowledge_points
 
 
+def runnable_module_issues(modules: list[LearningModule]) -> list[str]:
+    """Why an outline cannot be studied yet; empty when it can.
+
+    Shared by the outline routes (which answer with the first issue) and
+    teacher publishing (which lists all of them before anything is written).
+    """
+    if not modules:
+        return ["At least one learning module is required"]
+    return [
+        f"Module {module.id!r} must contain at least one knowledge point"
+        for module in modules
+        if not module.knowledge_points
+    ]
+
+
 def validate_objective_relations(
     modules: Iterable[LearningModule], sources: Iterable[TopicSource]
 ) -> None:

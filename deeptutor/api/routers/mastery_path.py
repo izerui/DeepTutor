@@ -32,6 +32,7 @@ from deeptutor.learning.objective_relations import (
     ObjectiveRelationError,
     RelationRefs,
     normalize_refs,
+    runnable_module_issues,
 )
 from deeptutor.learning.service import LearningService
 from deeptutor.learning.storage import LearningStore
@@ -106,16 +107,9 @@ def _parse_modules(body_modules: list[dict]) -> list[LearningModule]:
 
 
 def _validate_runnable_modules(modules: list[LearningModule], *, status_code: int = 400) -> None:
-    if not modules:
-        raise HTTPException(
-            status_code=status_code, detail="At least one learning module is required"
-        )
-    for mod in modules:
-        if not mod.knowledge_points:
-            raise HTTPException(
-                status_code=status_code,
-                detail=f"Module {mod.id!r} must contain at least one knowledge point",
-            )
+    issues = runnable_module_issues(modules)
+    if issues:
+        raise HTTPException(status_code=status_code, detail=issues[0])
 
 
 async def _cancel_active_learning_turn(book_id: str) -> None:
