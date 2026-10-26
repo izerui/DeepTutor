@@ -18,6 +18,8 @@ export interface AuthStatusState {
   isAdmin: boolean;
   isTeacher: boolean;
   allowPrivateKb: boolean;
+  /** False only for a student whose policy forbids personal mastery paths (R12). */
+  allowPersonalMastery: boolean;
   /** Stable account id for account-scoped browser state. */
   userId: string | null;
   /** False when the runtime status endpoint could not be reached. */
@@ -38,6 +40,7 @@ const INITIAL: AuthStatusState = {
   isAdmin: false,
   isTeacher: false,
   allowPrivateKb: false,
+  allowPersonalMastery: false,
   userId: null,
   statusAvailable: false,
   loading: true,
@@ -72,6 +75,8 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     isAdmin: status?.role === "admin",
     isTeacher: Boolean(status?.is_teacher) || status?.role === "admin",
     allowPrivateKb: status?.role !== "student" || canCreateKnowledgeBases(status?.student_policy),
+    // A failed status read (null) hides nothing; the backend gate decides.
+    allowPersonalMastery: status?.student_policy?.allow_personal_mastery !== false,
     userId:
       typeof status?.user_id === "string" && status.user_id.trim()
         ? status.user_id

@@ -78,6 +78,8 @@ export interface MapKnowledgePoint {
   mastery_source: "system" | "learner" | "";
   override_note: string;
   deferred?: boolean;
+  /** A teacher redefined this objective; the learner has not answered since (R11). */
+  needs_reassessment?: boolean;
 }
 
 export interface MapModule {
@@ -487,6 +489,28 @@ export interface MasteryReviewSettings {
   scope: "path";
 }
 
+/** "Your teacher updated this course", until the learner acknowledges it. */
+export interface TeacherUpdateNoticeData {
+  from_revision: number;
+  to_revision: number;
+  added: number;
+  removed: number;
+  redefined: number;
+  applied_at: number;
+}
+
+/** Present only on a learner's copy of a teacher path. */
+export interface MasteryTopicOrigin {
+  kind: "teacher_template";
+  template_id: string;
+  revision: number;
+  /** Empty when the teacher's account no longer exists. */
+  teacher_name: string;
+  update_notice: TeacherUpdateNoticeData | null;
+  /** Null when not checked (lists); false means the tutor will not continue. */
+  materials_available: boolean | null;
+}
+
 export interface MasteryTopic extends LearningOrigin {
   path_id: string;
   name: string;
@@ -501,6 +525,8 @@ export interface MasteryTopic extends LearningOrigin {
   learner_profile: LearnerProfile | null;
   session_count: number;
   updated_at: number;
+  /** Null for every path the learner built themselves. */
+  origin?: MasteryTopicOrigin | null;
 }
 
 /** One selected document the generated outline did not account for. */
@@ -776,4 +802,15 @@ export async function fetchMasteryTopicSessions(
     );
   }
   return result.sessions;
+}
+
+/** Hide the one-time "your teacher updated this course" notice. */
+export function acknowledgeTeacherUpdate(
+  pathId: string,
+): Promise<{ status: string; acknowledged: boolean }> {
+  return masteryJson(
+    `/api/mastery-paths/topics/${encodeURIComponent(pathId)}/teacher-update/ack`,
+    { method: "POST" },
+    "acknowledge course update",
+  );
 }
