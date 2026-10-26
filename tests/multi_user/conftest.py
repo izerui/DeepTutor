@@ -593,6 +593,9 @@ def teaching_http(teaching_users, monkeypatch):
     )
     app.include_router(mastery_path.router, prefix="/api/mastery-paths", dependencies=auth)
     app.include_router(knowledge.router, prefix="/api", dependencies=auth)
+    from deeptutor.api.routers import book
+
+    app.include_router(book.router, prefix="/api", dependencies=auth)
     return SimpleNamespace(client=TestClient(app), users=teaching_users)
 
 

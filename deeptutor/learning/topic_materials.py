@@ -412,6 +412,26 @@ def _load_partner_group_material(source_id: str, label: str, budget: int) -> Top
     )
 
 
+def _file_document(metadata: dict[str, Any], kb_name: str) -> tuple[str, bool]:
+    """(the FILE source's document path now, whether it is gone).
+
+    A source carrying a fixed document id (a teacher path's snapshot) follows
+    it to wherever the document lives now; the captured path may since hold
+    an unrelated file.
+    """
+    doc_id = str(metadata.get("doc_id") or "").strip()
+    if doc_id and kb_name:
+        from deeptutor.multi_user.knowledge_access import live_document_path
+
+        try:
+            live = live_document_path(kb_name, doc_id)
+        except Exception:
+            logger.warning("Could not locate document %s of %s", doc_id, kb_name, exc_info=True)
+            live = None
+        return live or "", live is None
+    return str(metadata.get("path") or "").strip(), False
+
+
 def _clean_name(value: str) -> str:
     return " ".join(str(value or "").split())
 
@@ -461,14 +481,28 @@ def build_topic_materials(sources: Iterable[Any]) -> TopicMaterials:
             # searched, not read. Saying which base and which document is the
             # point: before this row existed, hand-picking a file produced a
             # material the tutor was told it could never read.
-            kb_name = str((getattr(source, "metadata", None) or {}).get("kb_name") or "").strip()
+            metadata = getattr(source, "metadata", None) or {}
+            kb_name = str(metadata.get("kb_name") or "").strip()
             where = f"kb_name={kb_name!r}" if kb_name else "the attached knowledge base"
+            document, gone = _file_document(metadata, kb_name)
+            if gone:
+                result.materials.append(
+                    TopicMaterial(
+                        sid="",
+                        kind=kind,
+                        name=label,
+                        available=False,
+                        note="the document is no longer in its knowledge base",
+                    )
+                )
+                continue
+            located = f", document {document!r}" if document else ""
             result.materials.append(
                 TopicMaterial(
                     sid="",
                     kind=kind,
                     name=label,
-                    note=f"search with rag ({where}); this goal uses only this document",
+                    note=f"search with rag ({where}{located}); this goal uses only this document",
                 )
             )
             continue

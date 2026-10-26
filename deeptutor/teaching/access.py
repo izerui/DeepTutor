@@ -48,6 +48,11 @@ REFERRER_KIND = "mastery_template"
 
 #: The teacher template an explicit block or one original-content request studies.
 active_mastery_template: ContextVar[str] = ContextVar("active_mastery_template", default="")
+#: One original-content request of a path material (R9): the live path of
+#: the cited document it names, and the canonical book it reads. Set by the
+#: request's dependency for that request's own context only.
+original_document: ContextVar[str] = ContextVar("mastery_original_document", default="")
+original_book: ContextVar[str] = ContextVar("mastery_original_book", default="")
 
 
 @contextmanager
@@ -278,6 +283,125 @@ def original_document_path(
     if live is not None and not live.deleted and live.doc_id in scope:
         return rel
     return None
+
+
+def document_entitled(materials: EntitledMaterials, kb_id: str, rel_path: str) -> bool:
+    """Whether the live document now at *rel_path* is one the revision cites.
+
+    For originals addressed by something stable other than a path (a visual
+    asset follows its source when it moves), so no captured-path mapping.
+    """
+    from deeptutor.teaching import kb as kb_access
+
+    scope = materials.document_scope(kb_id)
+    if scope is None:
+        return True
+    rel = _clean_rel_path(rel_path)
+    live = kb_access.find_document(kb_id, rel) if rel else None
+    return live is not None and not live.deleted and live.doc_id in scope
+
+
+# ---- one Study-page original-content request (R9) ---------------------------
+
+
+@dataclass(frozen=True)
+class OriginalGrant:
+    """What one original-content request of a path material may do.
+
+    ``rel_path``: the live path to serve (``""`` when not path-addressed);
+    ``studying``: the request needs the template's reference access (the
+    caller cannot read the material on its own); ``books``: precomputed plan
+    D reading bindings of the path's books the material belongs to.
+    """
+
+    rel_path: str = ""
+    studying: bool = False
+    books: tuple = ()
+    book_id: str = ""
+
+
+class OriginalDenied(PermissionError):
+    """The path names this library, but not the requested document of it."""
+
+
+def _asset_source(record: Any, asset_id: str) -> str:
+    from pathlib import Path
+
+    from deeptutor.services.rag.visual_assets import VisualAssetStore
+
+    entry = VisualAssetStore(Path(record.base_dir) / record.dir_name).records().get(asset_id)
+    return str(entry.get("source_path") or "") if isinstance(entry, dict) else ""
+
+
+def _path_book_bindings(template_id: str, book_ids: tuple[str, ...]) -> tuple:
+    from deeptutor.book.registry import reading_bindings
+
+    with studying_template(template_id):
+        return reading_bindings(*book_ids)
+
+
+def kb_original_grant(
+    materials: EntitledMaterials,
+    kb_ref: str,
+    *,
+    document: str = "",
+    doc_id: str = "",
+    asset_id: str = "",
+) -> OriginalGrant | None:
+    """Authorize one original of a path library, document by document.
+
+    ``None``: the library is not one of the path's materials (or unknown);
+    the request keeps its ordinary rules. A cited document is served at its
+    live path, followed by fixed id. A document the revision does not cite
+    is served only to a caller who can read the library independently
+    (owner, public, another reference) — library-level retrieval access never
+    widens downloads. Book-derived libraries authorize path -> canonical book
+    -> library server-side and carry that book's reading scope. Storage-bound.
+    """
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.context import get_current_user
+
+    try:
+        record = registry.resolve_ref(str(kb_ref or ""))
+    except Exception:
+        return None
+    if record is None or not materials.cites_kb(record.kb_id):
+        return None
+    independent = registry.can_read(record, get_current_user())
+    if asset_id:
+        source = _asset_source(record, asset_id)
+        entitled = bool(source) and document_entitled(materials, record.kb_id, source)
+        live = ""
+    else:
+        live = original_document_path(materials, record.kb_id, document, doc_id=doc_id) or ""
+        entitled = bool(live)
+    if not entitled:
+        if independent:
+            return None
+        raise OriginalDenied(record.kb_id)
+    books: tuple = ()
+    if not independent:
+        book_ids = materials.book_kbs.get(record.kb_id, ())
+        if book_ids:
+            books = _path_book_bindings(materials.template_id, book_ids)
+    return OriginalGrant(rel_path=live, studying=not independent, books=books)
+
+
+def book_original_grant(materials: EntitledMaterials, book_ref: str) -> OriginalGrant | None:
+    """Authorize a path book's own originals (book, spine, pages); ``None`` otherwise.
+
+    Only a book the entitled revision cites, bound to its registered
+    identity (never a same-id local copy). Storage-bound.
+    """
+    from deeptutor.book import registry as book_registry
+
+    book_id = book_registry.strip_ref(str(book_ref or ""))
+    if not book_id or book_id not in materials.books:
+        return None
+    bindings = _path_book_bindings(materials.template_id, (book_id,))
+    if not bindings:
+        return None
+    return OriginalGrant(studying=True, books=bindings, book_id=book_id)
 
 
 _register_defaults()

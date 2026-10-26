@@ -917,16 +917,16 @@ def reading_book(*book_ids: str) -> Iterator[None]:
         active_books.reset(token)
 
 
-def bind_reading(*book_ids: str) -> tuple[str, ...]:
-    """Open *book_ids* for the rest of the current context (one HTTP request).
+def bind_reading(bindings: tuple[tuple[str, BookRecord], ...]) -> tuple[str, ...]:
+    """Open precomputed :func:`reading_bindings` for the rest of the current context.
 
     For a request-scoped dependency that cannot wrap its endpoint in
-    :func:`reading_book`: the values live in the request task's own context
-    and end with it. Same bindings and checks as :func:`reading_book`.
+    :func:`reading_book` (one HTTP request): the values live in the request
+    task's own context and end with it. ``book_kb_reader`` re-checks every
+    binding (actor, identity, readability) on each use.
     """
-    bindings = reading_bindings(*book_ids)
     active_books.set(active_books.get() | frozenset(r.book_id for _, r in bindings))
-    _reading_bindings.set(_reading_bindings.get() + bindings)
+    _reading_bindings.set(_reading_bindings.get() + tuple(bindings))
     return tuple(record.book_id for _, record in bindings)
 
 

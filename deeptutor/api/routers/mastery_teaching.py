@@ -10,13 +10,102 @@ import asyncio
 import inspect
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_teacher_or_admin
 import deeptutor.teaching.access  # noqa: F401  (registers the "mastery_template" reader)
 from deeptutor.teaching.models import PublishRequest
 from deeptutor.teaching.service import TeachingError, TeachingService
+
+#: The only routes a teacher-path context opens (R9): original content of a
+#: KB (file, extracted text, verified visual asset, rendered source page) and
+#: of a book (the book, its chapters, its pages). Config, progress, linked
+#: folders, sync sources and every write keep their normal rules. Matched by
+#: suffix of the resolved route template, so the include prefix does not matter.
+ORIGINAL_CONTENT_ROUTES: frozenset[str] = frozenset(
+    {
+        "/knowledge-bases/{kb_name}/files/{filename:path}",
+        "/knowledge-bases/{kb_name}/file-preview-text/{filename:path}",
+        "/knowledge-bases/{kb_name}/visual-assets/{asset_id}",
+        "/knowledge-bases/{kb_name}/source-page",
+        "/books/{book_id}",
+        "/books/{book_id}/spine",
+        "/books/{book_id}/pages/{page_id}",
+    }
+)
+MASTERY_TEMPLATE_PARAM = "mastery_template"
+MASTERY_TEMPLATE_HEADER = "x-deeptutor-mastery-template"
+#: Optional query parameter naming a cited document by its fixed id.
+DOCUMENT_ID_PARAM = "doc_id"
+COURSE_UNAVAILABLE = "This course is no longer available to you."
+
+
+async def enter_mastery_template_scope(request: Request) -> None:
+    """R9: a student opens a teacher path's originals from the Study page.
+
+    A GET on an original-content route that names the path
+    (``?mastery_template=<id>`` or the ``X-DeepTutor-Mastery-Template``
+    header) is authorized against the revision the caller's copy is on:
+    a library document must be one that revision cites (followed by its fixed
+    id to wherever it lives now; ``access.original_document`` carries the
+    live path to the endpoint), a book must be one of its books. Only
+    then is the request served inside the template's reference access — and,
+    for a book or a book's library, inside plan D's reading scope of the
+    server-resolved canonical book. On any other route the parameter is
+    ignored. Declared ``async`` so the context variables are set in the
+    endpoint's own context, like ``require_auth`` sets the user.
+    """
+    template_id = str(
+        request.query_params.get(MASTERY_TEMPLATE_PARAM)
+        or request.headers.get(MASTERY_TEMPLATE_HEADER)
+        or ""
+    ).strip()
+    if not template_id or request.method.upper() != "GET":
+        return
+    from deeptutor.api.routers.auth import _resolved_route_path
+
+    route = _resolved_route_path(request) or ""
+    if not any(route.endswith(template) for template in ORIGINAL_CONTENT_ROUTES):
+        return
+    from deeptutor.teaching import access
+
+    materials = await asyncio.to_thread(access.entitled_materials, template_id)
+    if materials is None:
+        raise HTTPException(status_code=403, detail=COURSE_UNAVAILABLE)
+    params = request.path_params
+    try:
+        if "book_id" in params:
+            grant = await asyncio.to_thread(
+                access.book_original_grant, materials, str(params["book_id"])
+            )
+        else:
+            grant = await asyncio.to_thread(
+                access.kb_original_grant,
+                materials,
+                str(params.get("kb_name") or ""),
+                document=str(
+                    params.get("filename") or request.query_params.get("source_path") or ""
+                ),
+                doc_id=str(request.query_params.get(DOCUMENT_ID_PARAM) or "").strip(),
+                asset_id=str(params.get("asset_id") or ""),
+            )
+    except access.OriginalDenied as exc:
+        # Same answer as an unreadable library: nothing to probe.
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    if grant is None:
+        return
+    if grant.studying:
+        access.active_mastery_template.set(template_id)
+    if grant.books:
+        from deeptutor.book import registry as book_registry
+
+        book_registry.bind_reading(grant.books)
+    if grant.rel_path:
+        access.original_document.set(grant.rel_path)
+    if grant.book_id:
+        access.original_book.set(grant.book_id)
+
 
 router = APIRouter(dependencies=[Depends(require_teacher_or_admin)])
 

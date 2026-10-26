@@ -18,9 +18,18 @@ import sqlite3
 import time
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, Field
 
+from deeptutor.api.routers.mastery_teaching import enter_mastery_template_scope
 from deeptutor.api.utils.http_headers import content_disposition
 from deeptutor.book import progress as progress_ops
 from deeptutor.book import registry as book_registry
@@ -48,7 +57,7 @@ from deeptutor.multi_user.book_access import (
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.runtime.stream_bus import StreamBus
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enter_mastery_template_scope)])
 ws_router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -766,9 +775,23 @@ def _page_summary(page) -> dict[str, Any]:
     return data
 
 
+def _path_book_ref(book_id: str) -> str:
+    """A teacher path's book (R9) is always read at its registered identity.
+
+    ``enter_mastery_template_scope`` resolved the path's canonical book for
+    this request; a same-id local copy of the reader's never stands in for it.
+    """
+    from deeptutor.teaching.access import original_book
+
+    bound = original_book.get()
+    if bound and book_registry.strip_ref(book_id) == bound:
+        return f"{book_registry.REF_PREFIX}{bound}"
+    return book_id
+
+
 @router.get("/books/{book_id}")
 async def get_book(book_id: str, include_blocks: bool = True) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(book_id))
     book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
     book = engine.load_book(book_id)
@@ -803,7 +826,7 @@ async def get_book(book_id: str, include_blocks: bool = True) -> dict[str, Any]:
 
 @router.get("/books/{book_id}/spine")
 async def get_spine(book_id: str) -> dict[str, Any]:
-    engine = _resolve_book_or_404(book_id).engine
+    engine = _resolve_book_or_404(_path_book_ref(book_id)).engine
     book_id = book_registry.strip_ref(book_id)
     spine = engine.load_spine(book_id)
     if spine is None:
@@ -813,7 +836,7 @@ async def get_spine(book_id: str) -> dict[str, Any]:
 
 @router.get("/books/{book_id}/pages/{page_id}")
 async def get_page(book_id: str, page_id: str) -> dict[str, Any]:
-    engine = _resolve_book_or_404(book_id).engine
+    engine = _resolve_book_or_404(_path_book_ref(book_id)).engine
     book_id = book_registry.strip_ref(book_id)
     page = engine.load_page(book_id, page_id)
     if page is None:

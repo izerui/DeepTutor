@@ -215,6 +215,28 @@ def objective_fingerprint(progress: Any, kp_id: str) -> str:
     )
 
 
+def _document_key(source: Any, kb: str) -> str:
+    """The document a FILE source names, at the path it lives at now.
+
+    A source that carries a fixed document id (a teacher path's published
+    snapshot) follows it: the captured path may since hold an unrelated file.
+    """
+    captured = str(source.metadata.get("path") or source.source_id or "").replace("\\", "/")
+    doc_id = str(source.metadata.get("doc_id") or "").strip()
+    if not doc_id or not kb:
+        return captured
+    from deeptutor.multi_user.knowledge_access import live_document_path
+
+    live = live_document_path(kb, doc_id)
+    if live is not None:
+        return live
+    if Path(captured).suffix.lower() != ".pdf":
+        return captured  # never a visual-PDF claim; the text route reports it
+    raise LessonUnavailable(
+        "A selected document is no longer available. Ask your teacher to restore it."
+    )
+
+
 def selected_scope(topic: Any, progress: Any, kp_id: str) -> dict[str, list[str] | None]:
     kp, _, _ = find_knowledge_point(progress, kp_id)
     if kp is None:
@@ -254,7 +276,7 @@ def selected_scope(topic: Any, progress: Any, kp_id: str) -> dict[str, list[str]
             scope[source.source_id] = None
         else:
             kb = str(source.metadata.get("kb_name") or source.metadata.get("knowledge_base") or "")
-            key = str(source.metadata.get("path") or source.source_id or "").replace("\\", "/")
+            key = _document_key(source, kb)
             if Path(key).suffix.lower() != ".pdf":
                 continue  # Keep the existing text/Office route; no visual-PDF claim.
             if not kb or not key:

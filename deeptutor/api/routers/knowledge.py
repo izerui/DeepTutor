@@ -40,6 +40,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response, Streami
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_admin
+from deeptutor.api.routers.mastery_teaching import enter_mastery_template_scope
 from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
 from deeptutor.api.utils.task_id_manager import TaskIDManager
 from deeptutor.api.utils.task_log_stream import capture_task_logs, get_task_stream_manager
@@ -145,7 +146,9 @@ async def deny_student_kb_writes(request: Request) -> None:
         )
 
 
-router = APIRouter(dependencies=[Depends(deny_student_kb_writes)])
+router = APIRouter(
+    dependencies=[Depends(deny_student_kb_writes), Depends(enter_mastery_template_scope)]
+)
 ws_router = APIRouter()
 
 _DEFAULT_EXTRACT_TEXT_FROM_PATH = extract_text_from_path
@@ -3439,10 +3442,22 @@ def _move_kb_file(kb_name: str, payload: MoveFilePayload):
     return {"status": "ok", "path": dest_rel}
 
 
+def _original_path(requested: str) -> str:
+    """The live path of a teacher path's cited document (R9), else the request's.
+
+    ``enter_mastery_template_scope`` follows the document's fixed id for this
+    request; a path captured when the course was published may since hold
+    another file.
+    """
+    from deeptutor.teaching.access import original_document
+
+    return original_document.get() or requested
+
+
 @router.get("/knowledge-bases/{kb_name}/file-preview-text/{filename:path}")
 async def serve_kb_raw_file_text_preview(kb_name: str, filename: str):
     """Serve extracted plain text for a raw KB document preview."""
-    target = _resolve_kb_raw_file_or_404(kb_name, filename)
+    target = _resolve_kb_raw_file_or_404(kb_name, _original_path(filename))
     try:
         extraction_kwargs = {
             "max_bytes": DocumentValidator.MAX_FILE_SIZE,
@@ -3468,7 +3483,7 @@ async def serve_kb_raw_file(kb_name: str, filename: str):
     Resolution is sandboxed to the KB's raw/ directory; any path that
     escapes via traversal yields 403.
     """
-    target = _resolve_kb_raw_file_or_404(kb_name, filename)
+    target = _resolve_kb_raw_file_or_404(kb_name, _original_path(filename))
     media_type, _ = mimetypes.guess_type(target.name)
     return FileResponse(
         target,
@@ -3533,6 +3548,7 @@ async def kb_source_page(
 ):
     from deeptutor.services.rag.source_visuals import page_image
 
+    source_path = _original_path(source_path)
     raw_dir = _resolve_kb_raw_dir(kb_name)
     assert raw_dir is not None
     try:

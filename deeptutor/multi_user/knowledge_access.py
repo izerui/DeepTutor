@@ -612,6 +612,28 @@ def resolve_kb_manifest(
     )
 
 
+def live_document_path(kb_ref: str | None, doc_id: str) -> str | None:
+    """Where document *doc_id* of the library *kb_ref* lives now, or ``None``.
+
+    Documents keep a fixed id when they move (plan B), so a material that
+    captured a path at some point — a teacher path's published snapshot —
+    follows the id instead: the captured path may since hold an unrelated
+    file. ``None`` when the library or the live document is gone. A lookup,
+    not an access check: callers still read through the access-checked seams.
+    """
+    if not kb_ref or not doc_id:
+        return None
+    from deeptutor.knowledge import registry
+
+    record = registry.resolve_ref(str(kb_ref))
+    if record is None:
+        return None
+    for document in registry.list_documents(record.kb_id):
+        if document.doc_id == doc_id and not document.deleted:
+            return document.rel_path
+    return None
+
+
 def resolve_kb_document_path(kb_ref: str | None, rel_path: str) -> Path | None:
     """Access-checked path to one document inside ``kb_ref``.
 

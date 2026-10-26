@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from fastapi import HTTPException
 import pytest
@@ -256,8 +257,9 @@ def test_admin_force_private_makes_the_path_materials_unavailable(
                 resolve_kb(record.ref)
 
 
+@pytest.mark.usefixtures("teaching_books")
 def test_admin_force_private_of_a_cited_book_is_reported(
-    teaching_books, teacher_draft, publish_template, as_account
+    teacher_draft, publish_template, as_account
 ):
     """Spec 7.4 for books, with plan D's ``list_unavailable_book_references``."""
     teacher_draft(sources=(_book_source("bk_pub", "Optics"),))
@@ -504,35 +506,35 @@ async def test_a_switch_moves_the_template_and_book_scopes_with_it(
     from deeptutor.teaching.access import studied_template
 
     def setup():
-        written = _write_real_book(as_account, make_kb, teaching_users)
+        book = _write_real_book(as_account, make_kb, teaching_users)
         with as_account("tina"):
             root = get_account_path_service().get_knowledge_bases_root()
             make_kb(KnowledgeBaseManager(base_dir=str(root)), "answer-keys", text="2x")
-            keys = kb_registry.ensure_registered(
+            library = kb_registry.ensure_registered(
                 root, "answer-keys", created_by=teaching_users["tina"]["id"]
             )
         teacher_draft(
             path_id="topic_a",
             sources=(
                 TopicSource(
-                    id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=keys.ref,
+                    id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=library.ref,
                     label="Answer keys", position=0,
                 ),
             ),
         )
         teacher_draft(path_id="topic_b", sources=(_book_source("bk_real", "Waves"),))
         a = publish_template(
-            path_id="topic_a", students=("sara",), kb_choices={keys.kb_id: "reference_only"}
+            path_id="topic_a", students=("sara",), kb_choices={library.kb_id: "reference_only"}
         )["template"]["id"]
         b = publish_template(
             path_id="topic_b",
             students=("sara",),
             book_choices={"bk_real": "reference_only"},
-            kb_choices={written.kb.kb_id: "reference_only"},
+            kb_choices={book.kb.kb_id: "reference_only"},
         )["template"]["id"]
         with as_account("sara"):
             asyncio.run(mastery_path.list_topics())
-        return written, keys, a, b
+        return book, library, a, b
 
     written, keys, template_a, template_b = await asyncio.to_thread(setup)
     path_a, path_b = f"assigned_{template_a}", f"assigned_{template_b}"
@@ -570,3 +572,359 @@ async def test_a_switch_moves_the_template_and_book_scopes_with_it(
         assert studied_template() == ""
         assert not book_registry.can_read_book(written.record, user)
         assert not kb_registry.can_read(written.kb, user)
+
+
+# ---- Study-page originals (R9, preflight items 3 and 4) -----------------------
+
+
+def _files_url(ref: str, rel_path: str) -> str:
+    return f"/api/knowledge-bases/{quote(ref, safe='')}/files/{rel_path}"
+
+
+def test_study_page_opens_the_original_with_the_path_context(real_path, teaching_http):
+    url = _files_url(real_path.record.ref, "doc.md")
+
+    assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 404
+    opened = teaching_http.client.get(
+        f"{url}?mastery_template={real_path.template_id}", headers=_auth("sara")
+    )
+    assert opened.status_code == 200
+    assert "2x" in opened.text
+    by_header = teaching_http.client.get(
+        url, headers={**_auth("sara"), "X-DeepTutor-Mastery-Template": real_path.template_id}
+    )
+    assert by_header.status_code == 200
+    # Sam has no assignment: naming the path does not open it.
+    assert (
+        teaching_http.client.get(
+            f"{url}?mastery_template={real_path.template_id}", headers=_auth("sam")
+        ).status_code
+        == 403
+    )
+
+
+def test_the_path_context_opens_only_original_content_routes(real_path, teaching_http):
+    ref = quote(real_path.record.ref, safe="")
+    config = teaching_http.client.get(
+        f"/api/knowledge-bases/{ref}/config?mastery_template={real_path.template_id}",
+        headers=_auth("sara"),
+    )
+    assert config.status_code == 404
+    text = teaching_http.client.get(
+        f"/api/knowledge-bases/{ref}/file-preview-text/doc.md?mastery_template={real_path.template_id}",
+        headers=_auth("sara"),
+    )
+    assert text.status_code == 200
+    listing = teaching_http.client.get(
+        f"/api/knowledge-bases/{ref}/files?mastery_template={real_path.template_id}",
+        headers=_auth("sara"),
+    )
+    assert listing.status_code == 404
+
+
+def test_revoking_closes_the_originals(real_path, teaching_http, as_account, teaching_users):
+    url = f"{_files_url(real_path.record.ref, 'doc.md')}?mastery_template={real_path.template_id}"
+    assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 200
+    with as_account("tina"):
+        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+    assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 403
+
+
+def _png() -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (2, 2), "white").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _add_asset(kb_dir, source_path: str) -> str:
+    from hashlib import sha256
+
+    from deeptutor.services.rag.visual_assets import VisualAssetCandidate, VisualAssetStore
+
+    image = kb_dir / f"{source_path.replace('/', '_')}.png"
+    image.write_bytes(_png())
+    asset_id = sha256(source_path.encode()).hexdigest()
+    record = {
+        "asset_id": asset_id,
+        "source_document_id": "0" * 64,
+        "source_path": source_path,
+        "managed_source": False,
+        "image_sha256": sha256(_png()).hexdigest(),
+        "mime_type": "image/png",
+        "size": len(_png()),
+    }
+    VisualAssetStore(kb_dir).publish([VisualAssetCandidate(path=image, record=record)])
+    return asset_id
+
+
+@pytest.fixture
+def lesson_path(teaching_users, as_account, make_kb, teacher_draft, publish_template):
+    """Tina's private KB with two documents; the path cites only ``notes/lesson.md``."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+
+    with as_account("tina"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        folder = make_kb(KnowledgeBaseManager(base_dir=str(root)), "physics", text="intro")
+        (folder / "raw" / "notes").mkdir()
+        (folder / "raw" / "notes" / "lesson.md").write_text("Lesson: F = m a", encoding="utf-8")
+        (folder / "raw" / "secret.md").write_text("Exam answers", encoding="utf-8")
+        record = kb_registry.ensure_registered(
+            root, "physics", created_by=teaching_users["tina"]["id"]
+        )
+        kb_registry.refresh_documents(root, "physics")
+        assets = {
+            "lesson": _add_asset(folder, "notes/lesson.md"),
+            "secret": _add_asset(folder, "secret.md"),
+        }
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="f0",
+                kind=TopicSourceKind.FILE,
+                source_id="notes/lesson.md",
+                label="Lesson",
+                position=0,
+                metadata={"kb_name": record.ref, "path": "notes/lesson.md"},
+            ),
+        )
+    )
+    template_id = publish_template(
+        students=("sara",), kb_choices={record.kb_id: "reference_only"}
+    )["template"]["id"]
+    with as_account("sara"):
+        path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
+    lesson = kb_registry.find_document(record.kb_id, "notes/lesson.md")
+    return SimpleNamespace(
+        record=record, folder=folder, root=root, template_id=template_id, path_id=path_id,
+        assets=assets, lesson=lesson,
+    )
+
+
+def test_reference_only_originals_are_document_scoped(lesson_path, teaching_http):
+    """Preflight item 3: the path's KB reference never opens its other documents."""
+    ctx = f"mastery_template={lesson_path.template_id}"
+    ref = quote(lesson_path.record.ref, safe="")
+    get = teaching_http.client.get
+
+    lesson = get(f"{_files_url(lesson_path.record.ref, 'notes/lesson.md')}?{ctx}", headers=_auth("sara"))
+    assert lesson.status_code == 200 and "F = m a" in lesson.text
+    for denied in (
+        f"{_files_url(lesson_path.record.ref, 'secret.md')}?{ctx}",
+        f"/api/knowledge-bases/{ref}/file-preview-text/secret.md?{ctx}",
+        f"{_files_url(lesson_path.record.ref, 'notes/../secret.md')}?{ctx}",
+        f"/api/knowledge-bases/{ref}/visual-assets/{lesson_path.assets['secret']}?{ctx}",
+        f"/api/knowledge-bases/{ref}/source-page?source_path=secret.md&page=1&{ctx}",
+    ):
+        assert get(denied, headers=_auth("sara")).status_code == 404, denied
+    asset = get(
+        f"/api/knowledge-bases/{ref}/visual-assets/{lesson_path.assets['lesson']}?{ctx}",
+        headers=_auth("sara"),
+    )
+    assert asset.status_code == 200 and asset.content == _png()
+    # The owner's own access is unchanged (no path context needed).
+    assert get(_files_url(lesson_path.record.ref, "secret.md"), headers=_auth("tina")).status_code == 200
+
+
+def test_a_partially_cited_public_kb_keeps_its_public_documents(
+    teaching_users, as_account, make_kb, teacher_draft, publish_template, teaching_http
+):
+    """Independent (public) access is not narrowed by the path's document scope."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+
+    with as_account("adam"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        folder = make_kb(KnowledgeBaseManager(base_dir=str(root)), "library", text="first")
+        (folder / "raw" / "other.md").write_text("Public other", encoding="utf-8")
+        record = kb_registry.ensure_registered(root, "library", created_by=teaching_users["adam"]["id"])
+        kb_registry.set_visibility(record.kb_id, "public")
+        kb_registry.refresh_documents(root, "library")
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="f0", kind=TopicSourceKind.FILE, source_id="doc.md", label="First",
+                position=0, metadata={"kb_name": record.ref, "path": "doc.md"},
+            ),
+        )
+    )
+    template_id = publish_template(students=("sara",))["template"]["id"]
+    with as_account("sara"):
+        asyncio.run(mastery_path.list_topics())
+    other = teaching_http.client.get(
+        f"{_files_url(record.ref, 'other.md')}?mastery_template={template_id}", headers=_auth("sara")
+    )
+    assert other.status_code == 200 and "Public other" in other.text
+
+
+def test_a_cited_file_that_moved_is_followed_by_its_id(
+    lesson_path, teaching_http, as_account, monkeypatch
+):
+    """Root acceptance: loaders and originals follow doc_id, never the stale path."""
+    from deeptutor.learning.lesson_evidence import selected_scope
+    from deeptutor.learning.topic_materials import build_topic_materials
+    from deeptutor.teaching.store import TeachingStore
+
+    raw = lesson_path.folder / "raw"
+    (raw / "archive").mkdir()
+    (raw / "notes" / "lesson.md").replace(raw / "archive" / "lesson.md")
+    kb_registry.move_document_paths(lesson_path.record.kb_id, "notes/lesson.md", "archive/lesson.md")
+    # An unrelated file now occupies the captured path.
+    (raw / "notes" / "lesson.md").write_text("Unrelated draft", encoding="utf-8")
+    kb_registry.refresh_documents(lesson_path.root, "physics")
+    impostor = kb_registry.find_document(lesson_path.record.kb_id, "notes/lesson.md")
+    assert impostor.doc_id != lesson_path.lesson.doc_id
+
+    ctx = f"mastery_template={lesson_path.template_id}"
+    ref = quote(lesson_path.record.ref, safe="")
+    for url in (
+        f"{_files_url(lesson_path.record.ref, 'notes/lesson.md')}?{ctx}",
+        f"{_files_url(lesson_path.record.ref, 'notes/lesson.md')}?{ctx}&doc_id={lesson_path.lesson.doc_id}",
+        f"{_files_url(lesson_path.record.ref, 'archive/lesson.md')}?{ctx}",
+        f"/api/knowledge-bases/{ref}/file-preview-text/notes/lesson.md?{ctx}",
+    ):
+        opened = teaching_http.client.get(url, headers=_auth("sara"))
+        assert opened.status_code == 200, url
+        assert "F = m a" in opened.text and "Unrelated" not in opened.text, url
+
+    with as_account("sara"):
+        store = LearningStore()
+        progress = store.load(lesson_path.path_id)
+        topic = store.get_topic(lesson_path.path_id, progress=progress)
+        (source,) = topic.sources
+        # The tutor's materials name the document where it lives now.
+        (row,) = build_topic_materials(topic.sources).materials
+        assert "archive/lesson.md" in row.note and row.available
+        # Lesson evidence scopes the live document (PDF-only path checked by key).
+        source.metadata["path"] = "notes/lesson.pdf"
+        monkeypatch.setattr(
+            "deeptutor.multi_user.knowledge_access.live_document_path",
+            lambda kb, doc_id: "archive/lesson.pdf" if doc_id == lesson_path.lesson.doc_id else None,
+        )
+        point = progress.modules[0].knowledge_points[0]
+        point.topic_source_ids = [source.id]
+        scope = selected_scope(topic, progress, point.id)
+        assert scope == {lesson_path.record.ref: ["archive/lesson.pdf"]}
+        payload = asyncio.run(mastery_path.get_topic(lesson_path.path_id))
+    assert payload["origin"]["materials_available"] is True
+    # Provenance stays as published.
+    revision = TeachingStore().get_revision(lesson_path.template_id, 1)
+    (doc,) = revision.sources.kb_refs[0].documents
+    assert (doc.rel_path, doc.version) == ("notes/lesson.md", lesson_path.lesson.version)
+    assert revision.sources.sources[0].metadata["path"] == "notes/lesson.md"
+
+
+@pytest.fixture
+def real_path_kb_only(teacher_draft, publish_template, as_account):
+    """A second course of Sara's that cites no book."""
+    teacher_draft(path_id="topic_other")
+    template_id = publish_template(path_id="topic_other", students=("sara",))["template"]["id"]
+    with as_account("sara"):
+        asyncio.run(mastery_path.list_topics())
+    return template_id
+
+
+def test_a_book_derived_kb_original_needs_the_paths_book(
+    real_book_path, real_path_kb_only, teaching_http
+):
+    """Preflight item 4: path -> canonical book -> KB, resolved by the server."""
+    url = _files_url(real_book_path.kb.ref, "doc.md")
+    assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 404
+    opened = teaching_http.client.get(
+        f"{url}?mastery_template={real_book_path.template_id}", headers=_auth("sara")
+    )
+    assert opened.status_code == 200 and "lambda" in opened.text
+    # Another course of Sara's does not cite that book: no reading scope.
+    assert (
+        teaching_http.client.get(
+            f"{url}?mastery_template={real_path_kb_only}", headers=_auth("sara")
+        ).status_code
+        == 404
+    )
+
+
+def test_study_page_opens_a_reference_only_book_with_the_path_context(
+    real_book_path, teaching_http
+):
+    assert book_registry.get_book("bk_real").visibility == "private"
+    assert teaching_http.client.get("/api/books/bk_real", headers=_auth("sara")).status_code != 200
+    scoped = {**_auth("sara"), "X-DeepTutor-Mastery-Template": real_book_path.template_id}
+    assert teaching_http.client.get("/api/books/bk_real", headers=scoped).status_code == 200
+    assert teaching_http.client.get("/api/books/bk_real/spine", headers=scoped).status_code == 200
+    page = teaching_http.client.get("/api/books/bk_real/pages/pg_1", headers=scoped)
+    assert page.status_code == 200
+    assert "Nodes stay still." in page.text
+    assert (
+        teaching_http.client.get(
+            "/api/books/bk_real",
+            headers={**_auth("sam"), "X-DeepTutor-Mastery-Template": real_book_path.template_id},
+        ).status_code
+        == 403
+    )
+    # Writes and non-original routes keep their normal rules.
+    assert (
+        teaching_http.client.get("/api/books/bk_real/sharing", headers=scoped).status_code != 200
+    )
+
+
+def test_originals_follow_the_revision_the_copy_is_on(
+    real_path, teaching_users, as_account, make_kb, publish_template, teaching_http
+):
+    """Preflight item 6 for originals: a waiting copy opens only its own revision's."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.learning.models import PendingQuestion
+
+    with as_account("tina"):
+        make_kb(KnowledgeBaseManager(base_dir=str(real_path.root)), "new-keys", text="new keys")
+        k2 = kb_registry.ensure_registered(
+            real_path.root, "new-keys", created_by=teaching_users["tina"]["id"]
+        )
+    with as_account("sara"):
+        store = LearningStore()
+        point = store.load(real_path.path_id).modules[0].knowledge_points[0].id
+
+        def ask(tx):
+            tx.progress.pending_question = PendingQuestion(
+                question_id="q-open", knowledge_point_id=point, expected_answer="x"
+            )
+            tx.touch()
+
+        store.mutate(real_path.path_id, ask)
+    with as_account("tina"):
+        store = LearningStore()
+        topic = store.get_topic("topic_calculus")
+        store.put_topic(
+            topic.metadata,
+            [
+                TopicSource(
+                    id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k2.ref,
+                    label="New keys", position=0,
+                )
+            ],
+        )
+    publish_template(kb_choices={k2.kb_id: "reference_only"})
+    ctx = f"mastery_template={real_path.template_id}"
+    old = f"{_files_url(real_path.record.ref, 'doc.md')}?{ctx}"
+    new = f"{_files_url(k2.ref, 'doc.md')}?{ctx}"
+    get = teaching_http.client.get
+
+    assert get(old, headers=_auth("sara")).status_code == 200
+    assert get(new, headers=_auth("sara")).status_code == 404
+
+    skipped = teaching_http.client.post(
+        f"/api/mastery-paths/progress/{real_path.path_id}/skip-question",
+        json={"question_id": "q-open"},
+        headers=_auth("sara"),
+    )
+    assert skipped.status_code == 200, skipped.text
+    assert get(f"/api/mastery-paths/topics/{real_path.path_id}", headers=_auth("sara")).json()[
+        "origin"
+    ]["revision"] == 2
+    assert get(new, headers=_auth("sara")).status_code == 200
+    assert get(old, headers=_auth("sara")).status_code == 404
