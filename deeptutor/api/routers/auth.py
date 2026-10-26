@@ -1922,6 +1922,16 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
                     len(moved_books), username, successor,
                 )
 
+        try:
+            from deeptutor.teaching.service import handle_account_deleted
+
+            # R6 / D17: the deleted teacher's paths (and their reference
+            # ownership) go to the same successor as their libraries and books;
+            # students keep learning. A deleted student's assignments are revoked.
+            handle_account_deleted(user_id, successor_id=successor)
+        except Exception:
+            logger.exception("Could not hand over teacher paths of deleted user '%s'", username)
+
     actor = current.username if current else "local"
     logger.info("Admin '%s' deleted user '%s'", actor, username)
     return 200, ""

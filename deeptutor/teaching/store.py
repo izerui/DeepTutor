@@ -38,6 +38,7 @@ _write_lock = threading.Lock()
 #: Set while this thread holds :meth:`TeachingStore.material_lock`.
 _held = threading.local()
 _DB_FILENAME = "teaching.sqlite3"
+_JOINT_SCHEMAS = ("main", "kb", "books")
 
 # No journal_mode PRAGMA here: SQLite defaults to DELETE, matching the
 # existing registry-compatible contract (see deeptutor/knowledge/registry.py
@@ -155,6 +156,66 @@ def _write(path: Path) -> Iterator[sqlite3.Connection]:
                     conn.execute("ROLLBACK")
                 raise
         finally:
+            conn.close()
+
+
+@contextmanager
+def _joint_write(path: Path) -> Iterator[sqlite3.Connection]:
+    """One crash-atomic writer over the teaching, KB and book databases.
+
+    The teaching DB is ``main``; the KB registry is attached as ``kb`` and the
+    book registry as ``books``. Locks are taken in the established order
+    teaching -> KB -> Book (the same order as ``material_lock`` followed by
+    plan D's shared writer), both the in-process ones and SQLite's own:
+    ``BEGIN IMMEDIATE`` reserves ``main`` first, then the attached files in
+    attach order. Multi-file atomicity needs on-disk rollback journals, so a
+    database that is not in DELETE mode is refused after locking, before any
+    write. Nothing here awaits; callers keep the block short.
+    """
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+
+    if getattr(_held, "material_lock", False):
+        raise RuntimeError("Teaching store writes are not allowed inside material_lock().")
+    if getattr(books._writer_state, "active", False):
+        raise books.BookRegistryError("Cannot enter the teaching writer from an active book writer.")
+    teaching_path = path.resolve()
+    kb_path, book_path = kbs._db_path().resolve(), books._db_path().resolve()
+    if len({teaching_path, kb_path, book_path}) != 3:
+        raise RuntimeError("Teaching, KB and book databases must be distinct files.")
+    with _write_lock, kbs._write_lock, books._write_lock:
+        # Create schemas one at a time, before any database has a writer.
+        for target in (teaching_path, kb_path, book_path):
+            target.parent.mkdir(parents=True, exist_ok=True)
+        _open(teaching_path).close()
+        kbs._open(kb_path).close()
+        books._open(book_path).close()
+        conn = sqlite3.connect(teaching_path, timeout=30, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        books._writer_state.active = True
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("ATTACH DATABASE ? AS kb", (str(kb_path),))
+            conn.execute("ATTACH DATABASE ? AS books", (str(book_path),))
+            for schema in _JOINT_SCHEMAS:
+                conn.execute(f"PRAGMA {schema}.synchronous = FULL")
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                # Checked under the lock: nobody can switch modes meanwhile.
+                for schema in _JOINT_SCHEMAS:
+                    mode = conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0]
+                    if str(mode).lower() != "delete":
+                        raise RuntimeError(
+                            f"Joint teaching transfers require DELETE journals ({schema}: {mode})."
+                        )
+                yield conn
+                conn.execute("COMMIT")
+            except BaseException:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                raise
+        finally:
+            books._writer_state.active = False
             conn.close()
 
 
@@ -323,18 +384,46 @@ class TeachingStore:
         The draft lived in the deleted account's workspace, so it is detached:
         the successor can keep assigning, revoking and archiving, but a new
         revision needs a new draft.
+
+        The templates' active KB and book references (including those kept
+        for older applied revisions) change owner in the same transaction, so
+        they can never disagree with the template's owner. Targets, document
+        scope and revoked rows are left exactly as they are: revoked access is
+        history, not something a hand-over renews. References of any other
+        referrer are not touched, whoever created them.
         """
-        with _write(self.db_path) as conn:
-            cursor = conn.execute(
+        from deeptutor.teaching import books as book_access
+        from deeptutor.teaching import kb as kb_access
+
+        if from_user_id == to_user_id:
+            return 0
+        with _joint_write(self.db_path) as conn:
+            template_ids = [
+                row["id"]
+                for row in conn.execute(
+                    "SELECT id FROM main.mastery_templates WHERE owner_user_id = ?",
+                    (from_user_id,),
+                )
+            ]
+            conn.execute(
                 """
-                UPDATE mastery_templates
+                UPDATE main.mastery_templates
                 SET owner_user_id = ?, draft_path_id = '', draft_workspace_id = '',
                     updated_at = ?
                 WHERE owner_user_id = ?
                 """,
                 (to_user_id, time.time(), from_user_id),
             )
-        return int(cursor.rowcount)
+            for table, kind in (
+                ("kb.kb_references", kb_access.REFERRER_KIND),
+                ("books.book_references", book_access.REFERRER_KIND),
+            ):
+                conn.executemany(
+                    f"UPDATE {table} SET created_by = ? "  # nosec B608 - fixed tables
+                    "WHERE referrer_kind = ? AND referrer_id = ?",
+                    [(to_user_id, kind, template_id) for template_id in template_ids],
+                )
+        return len(template_ids)
 
     @contextmanager
     def material_lock(self) -> Iterator[None]:

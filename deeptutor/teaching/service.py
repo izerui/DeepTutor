@@ -826,3 +826,38 @@ class TeachingService:
             and not row.get("disabled")
             and (not needle or needle in str(row["username"]).casefold())
         ][:200]
+
+
+def handle_account_deleted(user_id: str, *, successor_id: str) -> None:
+    """Keep teaching data alive when an account goes (spec §7.4).
+
+    A deleted teacher's paths move to the admin who deleted them, together
+    with their active KB/book reference ownership, so assigned students keep
+    learning; the draft is detached, so the path can be assigned, revoked or
+    archived but never republished (D17). A deleted student's assignments are
+    revoked so the counts teachers see stay true.
+    """
+    store = TeachingStore()
+    # Independent hand-overs: one failing must not skip the other.
+    try:
+        moved = store.transfer_owner(user_id, successor_id)
+        if moved:
+            logger.info("Transferred %d teacher path(s) of %s to %s", moved, user_id, successor_id)
+    except Exception:
+        logger.exception("Could not transfer teacher paths of deleted user %s", user_id)
+    try:
+        studied = {
+            assignment.template_id
+            for assignment in store.assignments_for_student(user_id)
+            if assignment.status == "active"
+        }
+        store.revoke_all_for_student(user_id)
+    except Exception:
+        logger.exception("Could not revoke assignments of deleted user %s", user_id)
+        return
+    for template_id in sorted(studied):
+        try:
+            # Like a single revoke: release old-revision materials nobody needs.
+            sync_material_references(template_id, store=store)
+        except Exception:
+            logger.exception("Could not release old materials of teacher path %s", template_id)
