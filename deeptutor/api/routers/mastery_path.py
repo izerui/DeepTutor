@@ -441,6 +441,11 @@ def _topic_payload_from_snapshot(
             if progress.learner_profile is not None and not progress.learner_profile.is_empty()
             else None
         ),
+        # Who owns this path's outline. Null for every path the learner built;
+        # the list and topic routes enrich it with the teacher's name.
+        "origin": (
+            progress.origin.model_dump(mode="json") if progress.origin is not None else None
+        ),
         "session_count": session_count,
         "updated_at": progress.updated_at,
     }

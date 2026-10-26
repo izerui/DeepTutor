@@ -616,6 +616,38 @@ class ReadingLearningRecords(BaseModel):
     activities: list[ReadingActivityRecord] = Field(default_factory=list)
 
 
+class TemplateUpdateNotice(BaseModel):
+    """One-time "your teacher updated this course" receipt.
+
+    Written when a newer teacher revision is applied to a student's path and
+    cleared when the student acknowledges it.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    from_revision: int
+    to_revision: int
+    added: int = 0
+    removed: int = 0
+    redefined: int = 0
+    applied_at: float = Field(default_factory=time.time)
+
+
+class PathOrigin(BaseModel):
+    """Where a path's outline comes from when the learner does not own it.
+
+    ``None`` on every path a learner built themselves. A path with an origin
+    keeps its outline read-only; only the learner's own state changes.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["teacher_template"] = "teacher_template"
+    template_id: str
+    revision: int
+    update_notice: TemplateUpdateNotice | None = None
+
+
 class LearningProgress(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -629,6 +661,10 @@ class LearningProgress(BaseModel):
     # every path behaved before this field existed — so an aggregate persisted
     # without it needs no migration.
     name: str = ""
+    # Set only on a student's copy of a teacher path. Absent on every path a
+    # learner built themselves, which is how all paths behaved before teacher
+    # paths existed — so no migration is needed.
+    origin: PathOrigin | None = None
     diagnostic: DiagnosticResult | None = None
     modules: list[LearningModule] = Field(default_factory=list)
     current_module_id: str = ""
@@ -703,5 +739,7 @@ __all__ = [
     "ReadingActivityRecord",
     "ReadingLearningRecords",
     "ReadingProgressRecord",
+    "PathOrigin",
+    "TemplateUpdateNotice",
     "LearningProgress",
 ]

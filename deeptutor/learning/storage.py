@@ -36,6 +36,7 @@ from deeptutor.learning.models import (
     MasteryInteraction,
     MasteryPathLease,
     MasteryTopic,
+    PathOrigin,
     ReadingActivityRecord,
     ReadingLearningRecords,
     ReadingProgressRecord,
@@ -963,6 +964,24 @@ class LearningStore:
                 "SELECT * FROM mastery_paths WHERE path_id = ?", (path_id,)
             ).fetchone()
         return self._progress_from_row(row) if row is not None else None
+
+    def load_origin(self, book_id: str) -> PathOrigin | None:
+        """The path's outline owner, read without materializing the aggregate.
+
+        Every outline-changing route asks this before doing anything, so it
+        reads one JSON member instead of the whole learning state.
+        """
+        path_id = self._validate_id(book_id)
+        self._import_legacy_if_needed(path_id)
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT json_extract(state_json, '$.origin') AS origin "
+                "FROM mastery_paths WHERE path_id = ?",
+                (path_id,),
+            ).fetchone()
+        if row is None or not row["origin"]:
+            return None
+        return PathOrigin.model_validate(json.loads(row["origin"]))
 
     def list_learning_evidence(
         self,
