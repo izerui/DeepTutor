@@ -540,9 +540,18 @@ def assert_writable(kb_ref: str) -> KnowledgeResource:
 
 
 def resolve_for_rag(kb_ref: str | None) -> KnowledgeResource | None:
+    """The library a retrieval reads, after access *and* the turn's allowlist.
+
+    Every textual and visual retrieval resolves its library here, so this is
+    where a teacher path's R8 restriction is enforced (403 outside it). The
+    allowlist is checked after the ordinary rules and therefore only narrows.
+    """
     if not kb_ref:
         return None
+    from .retrieval_scope import enforce_retrieval_scope
+
     resource = resolve_kb(kb_ref, require_write=False)
+    enforce_retrieval_scope(resource)
     if resource.assigned:
         from .audit import log_usage
 
@@ -583,8 +592,11 @@ def resolve_kb_manifest(
     """
     if not kb_ref:
         return None
+    from .retrieval_scope import enforce_retrieval_scope
+
     try:
         resource = resolve_kb(str(kb_ref), require_write=False)
+        enforce_retrieval_scope(resource)
     except HTTPException:
         return None
     manager = _manager_for(str(resource.base_dir.resolve()))
@@ -616,8 +628,11 @@ def resolve_kb_document_path(kb_ref: str | None, rel_path: str) -> Path | None:
     """
     if not kb_ref or not str(rel_path or "").strip():
         return None
+    from .retrieval_scope import enforce_retrieval_scope
+
     try:
         resource = resolve_kb(str(kb_ref), require_write=False)
+        enforce_retrieval_scope(resource)
     except HTTPException:
         return None
     manager = _manager_for(str(resource.base_dir.resolve()))

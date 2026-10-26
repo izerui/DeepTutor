@@ -41,6 +41,15 @@ async def rag_search(
             raise ValueError(f"Knowledge base '{kb_name}' is not accessible.")
         kb_base_dir = str(resource.base_dir)
         kb_name = resource.name
+    else:
+        from deeptutor.multi_user.retrieval_scope import (
+            TEACHER_PATH_RETRIEVAL_DENIED,
+            location_allowed,
+        )
+
+        # An explicit location skips resolution, never the turn's allowlist.
+        if not location_allowed(kb_base_dir, kb_name):
+            raise ValueError(TEACHER_PATH_RETRIEVAL_DENIED)
 
     service = RAGService(kb_base_dir=kb_base_dir, provider=provider)
     return await service.search(

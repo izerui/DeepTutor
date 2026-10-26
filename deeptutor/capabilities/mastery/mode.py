@@ -81,6 +81,16 @@ TOOL_MODES: dict[str, frozenset[str]] = {
     "mastery_diagnose": frozenset({STUDY, REVIEW}),
 }
 
+#: What the tutor is told when anything would change a teacher's outline. It
+#: names the move the learner can still make, so the refusal is not retried.
+TEACHER_OUTLINE_LOCKED = (
+    "This path's outline was set by the learner's teacher and is read-only: no "
+    "module or knowledge point can be added, removed, renamed or reordered, and "
+    "the 'outline' mode is closed. Tell the learner the outline comes from their "
+    "teacher and suggest they send the change to the teacher. You can still "
+    "adapt how you explain and how hard the practice is."
+)
+
 
 def normalize_mode(value: Any) -> str:
     """The mode to *show and frame with*, always one of :data:`MODES`.
@@ -120,18 +130,19 @@ def tool_is_allowed(tool_name: str, mode: Any) -> bool:
     return True if current is None else current in allowed
 
 
-def admission_error(mode: Any, *, has_outline: bool) -> str:
+def admission_error(mode: Any, *, has_outline: bool, outline_locked: bool = False) -> str:
     """Why this mode cannot be entered, or ``""``.
 
-    Exactly one refusal exists, and it is the only one that can: there is
-    nothing to study until an outline is agreed. Reviewing is deliberately
-    *not* gated on anything being due — a due date is a reminder, not a
-    permission, and a learner may always ask to go back over something they
-    have already mastered.
+    Two refusals exist. A teacher's path never opens the outline mode, because
+    its outline is not the learner's to redesign. And there is nothing to
+    study until an outline is agreed. Reviewing is deliberately *not* gated on
+    anything being due — a due date is a reminder, not a permission.
 
     Shared by the tool and the REST endpoint the mode buttons call, so the
     tutor and the learner cannot be told different things about the same move.
     """
+    if outline_locked and normalize_mode(mode) == OUTLINE:
+        return TEACHER_OUTLINE_LOCKED
     if normalize_mode(mode) == STUDY and not has_outline:
         return (
             "There is no outline to study yet. Stay in 'outline' and design "
@@ -171,6 +182,7 @@ __all__ = [
     "OUTLINE",
     "REVIEW",
     "STUDY",
+    "TEACHER_OUTLINE_LOCKED",
     "TOOL_MODES",
     "admission_error",
     "enforced_mode",

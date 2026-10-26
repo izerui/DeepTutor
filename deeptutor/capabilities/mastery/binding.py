@@ -22,9 +22,12 @@ exactly where they were.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Iterator
 import contextlib
+from contextvars import ContextVar
+from dataclasses import dataclass
 import logging
+from typing import Any
 
 from deeptutor.learning.identity import sanitize_mastery_path_id
 
@@ -38,6 +41,40 @@ PathBinder = Callable[[str], None]
 class PathBindingError(RuntimeError):
     """The requested path cannot be entered."""
 
+    def __init__(self, message: str, *, code: str = "") -> None:
+        super().__init__(message)
+        #: Stable machine-readable reason (``teacher_path_unavailable``, ...).
+        self.code = code
+
+
+@dataclass(frozen=True)
+class PathRefusal:
+    """Why the turn's admission gate kept a switch out."""
+
+    message: str
+    code: str = ""
+
+
+#: Admits the running turn onto another path and, when it may enter, points
+#: the turn's materials scope at it. Receives the target id and the open
+#: ``LearningStore``; returns ``None`` once the switch is admitted.
+PathGate = Callable[[str, Any], Awaitable[PathRefusal | None]]
+
+#: The gate of the mastery turn in progress. Set for the duration of that turn
+#: only (see :func:`turn_path_gate`), so every switch the turn makes — however
+#: many, in whatever task the tool runs — re-runs the very gate the turn
+#: itself was admitted through, and a refused one changes nothing.
+_turn_path_gate: ContextVar[PathGate | None] = ContextVar("mastery_turn_path_gate", default=None)
+
+
+@contextlib.contextmanager
+def turn_path_gate(gate: PathGate) -> Iterator[None]:
+    token = _turn_path_gate.set(gate)
+    try:
+        yield
+    finally:
+        _turn_path_gate.reset(token)
+
 
 async def rebind_active_path(
     *,
@@ -50,7 +87,10 @@ async def rebind_active_path(
     """Move this turn (and the conversation) onto ``path_id``.
 
     Returns the resolved path id. Raises :class:`PathBindingError` when the
-    target does not exist or is busy in another conversation.
+    target does not exist, is busy in another conversation, is a teacher's
+    path the learner may no longer open, or is refused by the running turn's
+    admission gate (which, when it admits, has already re-pointed the turn's
+    materials scope at the target).
     """
     from deeptutor.learning.storage import (
         LearningStore,
@@ -64,6 +104,12 @@ async def rebind_active_path(
             f"No mastery path {path_id!r} exists. Call mastery_paths for the "
             "ids you can switch to, or mastery_build to create one here."
         )
+    if require_existing:
+        from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, instance_access
+
+        # A path without an origin returns before the teaching store is opened.
+        if not (await asyncio.to_thread(instance_access, target, store)).allowed:
+            raise PathBindingError(INSTANCE_UNAVAILABLE, code="teacher_path_unavailable")
 
     # One lease row per turn: the old one has to go before the new one can be
     # taken, and both are scoped to this turn so a concurrent conversation on
@@ -83,9 +129,31 @@ async def rebind_active_path(
             "turn finishes."
         ) from exc
 
+    gate = _turn_path_gate.get()
+    if gate is not None:
+        # The gate runs while this turn holds the target's lease: admission
+        # steps that update the path (a pending revision) rely on it.
+        try:
+            refusal = await gate(target, store)
+        except BaseException:
+            await _hand_back(store, released, session_id, turn_id)
+            raise
+        if refusal is not None:
+            await _hand_back(store, released, session_id, turn_id)
+            raise PathBindingError(refusal.message, code=refusal.code)
+
     _apply(bind_turn, target)
     await _remember_on_session(session_id, target)
     return target
+
+
+async def _hand_back(store: Any, released: str, session_id: str, turn_id: str) -> None:
+    """Undo a lease handoff the gate refused, back onto the path the turn left."""
+    with contextlib.suppress(Exception):
+        await asyncio.to_thread(store.release_leases_for_turn, turn_id)
+    if released:
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(store.acquire_path_lease, released, session_id, turn_id)
 
 
 async def leave_active_path(
@@ -172,7 +240,10 @@ async def remember_mode_on_session(session_id: str, mode: str) -> None:
 
 __all__ = [
     "PathBindingError",
+    "PathGate",
+    "PathRefusal",
     "leave_active_path",
     "rebind_active_path",
     "remember_mode_on_session",
+    "turn_path_gate",
 ]

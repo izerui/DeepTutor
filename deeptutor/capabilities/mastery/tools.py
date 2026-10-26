@@ -642,6 +642,23 @@ def _wrong_mode_result(tool_name: str, kwargs: dict[str, Any]) -> ToolResult | N
     return ToolResult(content=wrong_mode_message(tool_name, raw), success=False)
 
 
+def _outline_locked_result(service: LearningService, path_id: str) -> ToolResult | None:
+    """Refuse an outline change on a path whose outline belongs to a teacher.
+
+    Reads one stored member (the path's origin) and never the teaching
+    database, so a learner's own path pays nothing for the check. Synchronous
+    storage access: async callers hand it to a worker thread.
+    """
+    from deeptutor.capabilities.mastery.mode import TEACHER_OUTLINE_LOCKED
+    from deeptutor.teaching.instances import OutlineLockedError, ensure_outline_mutable
+
+    try:
+        ensure_outline_mutable(path_id, service.store)
+    except OutlineLockedError:
+        return ToolResult(content=TEACHER_OUTLINE_LOCKED, success=False)
+    return None
+
+
 def _no_built_path_result(tool: str) -> ToolResult:
     return ToolResult(
         content=(
@@ -2544,6 +2561,9 @@ class MasteryBuildTool(BaseTool):
             mode = "replace"
 
         service = _new_service()
+        locked = await asyncio.to_thread(_outline_locked_result, service, path_id)
+        if locked is not None:
+            return locked
         new_modules, relation_refs, error = _parse_modules_with_refs(
             kwargs.get("modules"),
             path_id,
@@ -2651,7 +2671,11 @@ class MasteryModeTool(BaseTool):
         has_outline = progress is not None and any(
             module.knowledge_points for module in progress.modules
         )
-        refusal = admission_error(requested, has_outline=has_outline)
+        refusal = admission_error(
+            requested,
+            has_outline=has_outline,
+            outline_locked=progress is not None and progress.origin is not None,
+        )
         if refusal:
             return ToolResult(content=refusal, success=False)
 
@@ -3079,6 +3103,9 @@ class MasteryReviseTool(BaseTool):
         if action not in (None, "preview", "commit"):
             return ToolResult(content="Use action preview or commit, or omit it.", success=False)
         service = _new_service()
+        locked = await asyncio.to_thread(_outline_locked_result, service, path_id)
+        if locked is not None:
+            return locked
         if action == "commit":
             if any(
                 kwargs.get(key) is not None
