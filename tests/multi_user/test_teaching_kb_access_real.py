@@ -594,12 +594,14 @@ def test_study_page_opens_the_original_with_the_path_context(real_path, teaching
         url, headers={**_auth("sara"), "X-DeepTutor-Mastery-Template": real_path.template_id}
     )
     assert by_header.status_code == 200
-    # Sam has no assignment: naming the path does not open it.
+    # Sam has no assignment: naming the path does not open it — the template
+    # parameter is ignored and the plain route's own rules apply (B2-12).
+    # A private KB returns 404 to Sam regardless of the template param.
     assert (
         teaching_http.client.get(
             f"{url}?mastery_template={real_path.template_id}", headers=_auth("sam")
         ).status_code
-        == 403
+        == teaching_http.client.get(url, headers=_auth("sam")).status_code
     )
 
 
@@ -627,7 +629,12 @@ def test_revoking_closes_the_originals(real_path, teaching_http, as_account, tea
     assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 200
     with as_account("tina"):
         TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
-    assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 403
+    # After revocation the template param is ignored (B2-12): the private KB's
+    # plain-route status (404) applies, not 403.
+    plain_url = _files_url(real_path.record.ref, "doc.md")
+    revoked = teaching_http.client.get(url, headers=_auth("sara"))
+    plain = teaching_http.client.get(plain_url, headers=_auth("sara"))
+    assert revoked.status_code == plain.status_code
 
 
 def _png() -> bytes:
@@ -860,13 +867,14 @@ def test_study_page_opens_a_reference_only_book_with_the_path_context(
     page = teaching_http.client.get("/api/books/bk_real/pages/pg_1", headers=scoped)
     assert page.status_code == 200
     assert "Nodes stay still." in page.text
-    assert (
-        teaching_http.client.get(
-            "/api/books/bk_real",
-            headers={**_auth("sam"), "X-DeepTutor-Mastery-Template": real_book_path.template_id},
-        ).status_code
-        == 403
+    # Sam has no assignment: the template param is ignored (B2-12) and the
+    # plain route's status applies — a private book is 404 for Sam.
+    sam_scoped = teaching_http.client.get(
+        "/api/books/bk_real",
+        headers={**_auth("sam"), "X-DeepTutor-Mastery-Template": real_book_path.template_id},
     )
+    sam_plain = teaching_http.client.get("/api/books/bk_real", headers=_auth("sam"))
+    assert sam_scoped.status_code == sam_plain.status_code
     # Writes and non-original routes keep their normal rules.
     assert (
         teaching_http.client.get("/api/books/bk_real/sharing", headers=scoped).status_code != 200
