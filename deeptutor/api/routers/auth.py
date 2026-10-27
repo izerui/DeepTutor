@@ -1,5 +1,6 @@
 """Auth router — login, logout, status, registration, profile, and user-management endpoints."""
 
+import asyncio
 from contextvars import Token as _CtxToken
 import csv
 from datetime import datetime, timedelta, timezone
@@ -1875,6 +1876,15 @@ async def admin_import_users(
 
 
 def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int, str]:
+    """Delete one account, then hand its libraries, books and paths to the admin.
+
+    Blocking: the hand-overs take SQLite writers with process locks and long
+    busy timeouts, so async callers must run this in a worker thread through
+    :func:`_delete_admin_user_off_loop`. The successor comes from ``current``;
+    the stages that re-check the actor read the request's current-user
+    ContextVar, which the worker thread inherits as a context copy. Nothing
+    here sets a ContextVar the caller needs afterwards.
+    """
     if current and username == current.username:
         return 400, "You cannot delete your own account"
 
@@ -1937,13 +1947,21 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
     return 200, ""
 
 
+async def _delete_admin_user_off_loop(
+    username: str, current: TokenPayload | None
+) -> tuple[int, str]:
+    # asyncio.to_thread copies the request context, so the deleting admin
+    # stays the current user inside the hand-overs.
+    return await asyncio.to_thread(_delete_admin_user, username, current)
+
+
 @router.delete("/users/{username}", status_code=status.HTTP_200_OK)
 async def remove_user(
     username: str,
     current: TokenPayload = Depends(require_admin),
 ) -> dict:
     """Delete a user. Admins cannot delete their own account."""
-    status_code, detail = _delete_admin_user(username, current)
+    status_code, detail = await _delete_admin_user_off_loop(username, current)
     if status_code != 200:
         raise HTTPException(status_code=status_code, detail=detail)
     return {"ok": True}
@@ -1957,7 +1975,7 @@ async def batch_remove_users(
     """Delete selected users and report each outcome separately."""
     results: list[dict] = []
     for username in body.usernames:
-        _status_code, detail = _delete_admin_user(username, current)
+        _status_code, detail = await _delete_admin_user_off_loop(username, current)
         results.append({"username": username, "ok": not detail, "error": detail or None})
 
     deleted_count = sum(1 for result in results if result["ok"])
