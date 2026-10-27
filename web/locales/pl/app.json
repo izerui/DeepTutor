@@ -5574,9 +5574,7 @@
   "Referenced by": "Odwołują się do niej",
   "Not referenced anywhere.": "Brak odwołań.",
   "Referenced by: {{items}}": "Odwołania: {{items}}",
-  "Remove these references before deleting.": "Usuń te odwołania przed usunięciem.",
   "Delete anyway? Every item that references it will lose this material.": "Usunąć mimo to? Wszystkie odwołujące się elementy stracą ten materiał.",
-  "Other accounts reference this knowledge base. Make it private anyway?": "Inne konta odwołują się do tej bazy wiedzy. Ustawić ją mimo to jako prywatną?",
   "Delete this document anyway?": "Usunąć mimo to ten dokument?",
   "Force delete this document? Items that cite it will lose it.": "Wymusić usunięcie tego dokumentu? Elementy, które go cytują, go stracą.",
   "My books": "Moje książki",
@@ -5592,13 +5590,9 @@
   "Personal connectors cannot be shared.": "Osobistych konektorów nie można udostępniać.",
   "Another account's private knowledge base; readers could not use it.": "Prywatna baza wiedzy innego konta; czytelnicy nie mogliby z niej korzystać.",
   "Some knowledge bases of this book no longer exist: {{items}}": "Niektóre bazy wiedzy tej książki już nie istnieją: {{items}}",
-  "Other accounts reference this book; it cannot be made private until those references are removed.": "Inne konta odwołują się do tej książki; można ją ustawić jako prywatną dopiero po usunięciu tych odwołań.",
   "Publish anyway; the blocked knowledge bases stay unavailable to readers": "Opublikuj mimo to; zablokowane bazy wiedzy pozostaną niedostępne dla czytelników",
   "Make it private anyway": "Ustaw mimo to jako prywatną",
   "Resolve the items above first.": "Najpierw rozwiąż powyższe kwestie.",
-  "This book is still referenced by: {{items}}. Remove those references before deleting it.": "Do tej książki wciąż odwołują się: {{items}}. Usuń te odwołania przed usunięciem.",
-  "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "Do tej książki wciąż odwołują się: {{items}}. Usunąć mimo to? Te elementy stracą tę książkę.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "Do tej książki wciąż odwołują się inne elementy. Usuń te odwołania przed usunięciem.",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "Dostęp do pojedynczych książek został wycofany. Książki udostępnia się, czyniąc je publicznymi; edytować mogą tylko twórca i administratorzy.",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Książka „{{title}}” jest teraz publiczna, ponieważ była udostępniona: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} mógł(-a) edytować „{{title}}”. Teraz edytować mogą tylko twórca i administratorzy; możesz ustawić książkę jako publiczną, aby {{username}} nadal mógł(-a) ją czytać.",
@@ -5730,5 +5724,6 @@
   "{{count}} items from other accounts use this material_other": "Z tego materiału korzysta {{count}} elementu innych kont",
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Niedostępna: właściciel ustawił tę bazę wiedzy jako prywatną lub ją usunął. Usuń ją z tego partnera.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Właściciel ustawił tę bazę wiedzy jako prywatną — usuń odwołanie lub dołącz inny zasób.",
-  "Delete anyway": "Usuń mimo to"
+  "Delete anyway": "Usuń mimo to",
+  "Its owner made this book private — remove the reference, or attach another resource.": "Właściciel ustawił tę książkę jako prywatną — usuń odwołanie lub dołącz inny zasób."
 }

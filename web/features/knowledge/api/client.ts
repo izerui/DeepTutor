@@ -3,10 +3,12 @@ import { invalidateClientCache, withClientCache } from "@/lib/client-cache";
 import type { ImaKnowledgeBaseOption } from "@/lib/ima-connection";
 import { stripBasePath } from "@/lib/workspace-scope";
 import {
+  confirmationFields,
   parseOtherReferences,
   parseWithdrawalImpact,
   WithdrawalConfirmationError,
   type OtherReferences,
+  type WithdrawalImpact,
 } from "@/lib/withdrawal-confirmation";
 
 function inKnowledgeLibrary(): boolean {
@@ -1566,7 +1568,7 @@ export async function retryKnowledgeBase(
  */
 export async function deleteKnowledgeBase(
   name: string,
-  options?: { force?: boolean; confirm?: boolean },
+  options?: { force?: boolean; confirmed?: WithdrawalImpact | null },
 ): Promise<void> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/delete`), {
     method: "POST",
@@ -1574,7 +1576,7 @@ export async function deleteKnowledgeBase(
     body: JSON.stringify({
       name,
       force: Boolean(options?.force),
-      ...(options?.confirm ? { confirm: true } : {}),
+      ...confirmationFields(options?.confirmed),
     }),
   });
   await throwIfWithdrawalNeedsConfirmation(res);
@@ -1625,7 +1627,7 @@ export class KbFileDeleteBlockedError extends Error {
 export async function setKnowledgeBaseVisibility(
   ref: string,
   visibility: "public" | "private",
-  options?: { force?: boolean; confirm?: boolean },
+  options?: { force?: boolean; confirmed?: WithdrawalImpact | null },
 ): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {
     method: "PUT",
@@ -1633,7 +1635,7 @@ export async function setKnowledgeBaseVisibility(
     body: JSON.stringify({
       visibility,
       force: Boolean(options?.force),
-      ...(options?.confirm ? { confirm: true } : {}),
+      ...confirmationFields(options?.confirmed),
     }),
   });
   await throwIfWithdrawalNeedsConfirmation(res);

@@ -3,7 +3,11 @@
 import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
-import { describeOtherReferences, runWithWithdrawalConfirmation } from "@/lib/withdrawal-confirmation";
+import {
+  describeOtherReferences,
+  runWithWithdrawalConfirmation,
+  type WithdrawalImpact,
+} from "@/lib/withdrawal-confirmation";
 import { moveKnowledgeBase, resourceUsage } from "@/lib/workspaces-api";
 import { apiFetch, apiUrl } from "@/lib/api";
 import type { EmbeddingModelSelection } from "@/features/knowledge/model/types";
@@ -290,7 +294,7 @@ export default function KnowledgePage() {
   );
 
   const handleVisibilityChange = useCallback(
-    async (name: string, visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean }) => {
+    async (name: string, visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact }) => {
       await setKnowledgeBaseVisibility(name, visibility, options);
       await refresh({ force: true, showSpinner: false });
     },
@@ -333,11 +337,10 @@ export default function KnowledgePage() {
           ? t("Delete anyway? Every item that references it will lose this material.")
           : t('Delete knowledge base "{{name}}"?', { name: kb?.name ?? name });
         if (!window.confirm(question + impact + referenced)) return;
-        let deleted = false;
-        await runWithWithdrawalConfirmation(async (confirm) => {
-          await (confirm ? deleteKb(name, { confirm: true }) : deleteKb(name));
-          deleted = true;
-        }, t);
+        const deleted = await runWithWithdrawalConfirmation(
+          (confirmed) => (confirmed ? deleteKb(name, { confirmed }) : deleteKb(name)),
+          t,
+        );
         if (!deleted) return;
         if (name === selectedKbName || (kb && knowledgeBaseMatches(kb, explicitSelection ?? ""))) {
           setDirectDetail(null);

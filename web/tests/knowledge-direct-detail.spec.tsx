@@ -76,7 +76,9 @@ it("deletes a KB cited by teacher paths only after confirming the counts (R1)", 
   render(<KnowledgePage />);
   expect(await screen.findByText("Authorized private")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Delete loaded detail" }));
-  await waitFor(() => expect(fixture.deleteKb).toHaveBeenLastCalledWith("kb:private", { confirm: true }));
+  await waitFor(() => expect(fixture.deleteKb).toHaveBeenLastCalledWith("kb:private", {
+    confirmed: { affectedPaths: 1, affectedStudents: 4 },
+  }));
   expect(fixture.deleteKb).toHaveBeenCalledTimes(2);
   expect(confirm).toHaveBeenCalledTimes(2);
   expect(String(confirm.mock.calls[1][0])).toContain("published teacher paths use this material");

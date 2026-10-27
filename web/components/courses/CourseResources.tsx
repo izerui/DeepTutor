@@ -213,7 +213,9 @@ export default function CourseResources({
                   {!resource.available ? (
                     <Tooltip
                       label={resource.unavailable_reason === "made_private"
-                        ? t("Its owner made this knowledge base private — remove the reference, or attach another resource.")
+                        ? resource.kind === "book"
+                          ? t("Its owner made this book private — remove the reference, or attach another resource.")
+                          : t("Its owner made this knowledge base private — remove the reference, or attach another resource.")
                         : t(
                           "This target no longer exists — remove the reference, or attach the resource again.",
                         )}

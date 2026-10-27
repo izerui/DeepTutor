@@ -57,8 +57,10 @@ it("book API keeps the structured 409 detail and sends confirm on delete/visibil
   expect(bookWithdrawalImpact(new Error("other"))).toBeNull();
 
   fixture.fetch.mockResolvedValueOnce(Response.json({ deleted: true, book_id: "b" }));
-  await bookApi.delete("book:b", "", { confirm: true });
-  expect(fixture.fetch.mock.lastCall?.[0]).toMatch(/\/books\/book%3Ab\?confirm=true$/);
+  await bookApi.delete("book:b", "", { confirmed: { affectedPaths: 1, affectedStudents: 6 } });
+  expect(fixture.fetch.mock.lastCall?.[0]).toMatch(
+    /\/books\/book%3Ab\?confirm=true&expected_paths=1&expected_students=6$/,
+  );
   fixture.fetch.mockResolvedValueOnce(Response.json({ deleted: true, book_id: "b" }));
   await bookApi.delete("book:b", "", { force: true });
   expect(fixture.fetch.mock.lastCall?.[0]).toMatch(/\/books\/book%3Ab\?force=true$/);
@@ -68,20 +70,32 @@ it("book API keeps the structured 409 detail and sends confirm on delete/visibil
   expect(JSON.parse(fixture.fetch.mock.lastCall?.[1].body)).toEqual({ visibility: "private", confirm: true });
 });
 
-it("runs once, asks with the counts, and repeats confirmed only when accepted", async () => {
+it("runs once, asks with the counts, and repeats confirming exactly those counts", async () => {
   const needs = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 3 });
   for (const accept of [true, false]) {
     const run = vi.fn().mockRejectedValueOnce(needs).mockResolvedValue(undefined);
     const ask = vi.fn().mockReturnValue(accept);
-    await runWithWithdrawalConfirmation(run, t, ask);
+    expect(await runWithWithdrawalConfirmation(run, t, ask)).toBe(accept);
     expect(ask).toHaveBeenCalledWith(describeWithdrawalImpact(needs.impact, t));
-    expect(run.mock.calls).toEqual(accept ? [[false], [true]] : [[false]]);
+    expect(run.mock.calls).toEqual(accept ? [[null], [needs.impact]] : [[null]]);
   }
   const plain = vi.fn().mockResolvedValue(undefined);
   const never = vi.fn();
-  await runWithWithdrawalConfirmation(plain, t, never);
-  expect(plain.mock.calls).toEqual([[false]]);
+  expect(await runWithWithdrawalConfirmation(plain, t, never)).toBe(true);
+  expect(plain.mock.calls).toEqual([[null]]);
   expect(never).not.toHaveBeenCalled();
   await expect(runWithWithdrawalConfirmation(() => Promise.reject(new Error("boom")), t, never))
     .rejects.toThrow("boom");
+});
+
+it("asks again with fresh counts when they changed after the first confirmation", async () => {
+  const first = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 3 });
+  const changed = new WithdrawalConfirmationError("changed", { affectedPaths: 2, affectedStudents: 5 });
+  const run = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(changed).mockResolvedValue(undefined);
+  const ask = vi.fn().mockReturnValue(true);
+  expect(await runWithWithdrawalConfirmation(run, t, ask)).toBe(true);
+  expect(run.mock.calls).toEqual([[null], [first.impact], [changed.impact]]);
+  expect(ask.mock.calls.map(([question]) => question)).toEqual([
+    describeWithdrawalImpact(first.impact, t), describeWithdrawalImpact(changed.impact, t),
+  ]);
 });

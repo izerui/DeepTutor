@@ -5558,9 +5558,7 @@
   "Referenced by": "Referenced by",
   "Not referenced anywhere.": "Not referenced anywhere.",
   "Referenced by: {{items}}": "Referenced by: {{items}}",
-  "Remove these references before deleting.": "Remove these references before deleting.",
   "Delete anyway? Every item that references it will lose this material.": "Delete anyway? Every item that references it will lose this material.",
-  "Other accounts reference this knowledge base. Make it private anyway?": "Other accounts reference this knowledge base. Make it private anyway?",
   "Delete this document anyway?": "Delete this document anyway?",
   "Force delete this document? Items that cite it will lose it.": "Force delete this document? Items that cite it will lose it.",
   "My books": "My books",
@@ -5576,13 +5574,9 @@
   "Personal connectors cannot be shared.": "Personal connectors cannot be shared.",
   "Another account's private knowledge base; readers could not use it.": "Another account's private knowledge base; readers could not use it.",
   "Some knowledge bases of this book no longer exist: {{items}}": "Some knowledge bases of this book no longer exist: {{items}}",
-  "Other accounts reference this book; it cannot be made private until those references are removed.": "Other accounts reference this book; it cannot be made private until those references are removed.",
   "Publish anyway; the blocked knowledge bases stay unavailable to readers": "Publish anyway; the blocked knowledge bases stay unavailable to readers",
   "Make it private anyway": "Make it private anyway",
   "Resolve the items above first.": "Resolve the items above first.",
-  "This book is still referenced by: {{items}}. Remove those references before deleting it.": "This book is still referenced by: {{items}}. Remove those references before deleting it.",
-  "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "This book is still referenced elsewhere. Remove those references before deleting it.",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Book “{{title}}” is now public because it was shared with: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.",
@@ -5698,5 +5692,6 @@
   "{{count}} items from other accounts use this material_other": "{{count}} items from other accounts use this material",
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Its owner made this knowledge base private — remove the reference, or attach another resource.",
-  "Delete anyway": "Delete anyway"
+  "Delete anyway": "Delete anyway",
+  "Its owner made this book private — remove the reference, or attach another resource.": "Its owner made this book private — remove the reference, or attach another resource."
 }

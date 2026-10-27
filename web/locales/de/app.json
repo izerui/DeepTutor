@@ -5558,9 +5558,7 @@
   "Referenced by": "Referenziert von",
   "Not referenced anywhere.": "Nirgends referenziert.",
   "Referenced by: {{items}}": "Referenziert von: {{items}}",
-  "Remove these references before deleting.": "Entferne diese Verweise vor dem Löschen.",
   "Delete anyway? Every item that references it will lose this material.": "Trotzdem löschen? Alle verweisenden Elemente verlieren dieses Material.",
-  "Other accounts reference this knowledge base. Make it private anyway?": "Andere Konten verweisen auf diese Knowledge Base. Trotzdem privat machen?",
   "Delete this document anyway?": "Dieses Dokument trotzdem löschen?",
   "Force delete this document? Items that cite it will lose it.": "Dokument zwangsweise löschen? Elemente, die es zitieren, verlieren es.",
   "My books": "Meine Bücher",
@@ -5576,13 +5574,9 @@
   "Personal connectors cannot be shared.": "Persönliche Konnektoren können nicht geteilt werden.",
   "Another account's private knowledge base; readers could not use it.": "Private Knowledge Base eines anderen Kontos; Lesende könnten sie nicht nutzen.",
   "Some knowledge bases of this book no longer exist: {{items}}": "Einige Knowledge Bases dieses Buchs existieren nicht mehr: {{items}}",
-  "Other accounts reference this book; it cannot be made private until those references are removed.": "Andere Konten verweisen auf dieses Buch; es kann erst privat werden, wenn diese Verweise entfernt sind.",
   "Publish anyway; the blocked knowledge bases stay unavailable to readers": "Trotzdem veröffentlichen; die blockierten Knowledge Bases bleiben für Lesende nicht verfügbar",
   "Make it private anyway": "Trotzdem privat machen",
   "Resolve the items above first.": "Kläre zuerst die obigen Punkte.",
-  "This book is still referenced by: {{items}}. Remove those references before deleting it.": "Dieses Buch wird noch referenziert von: {{items}}. Entferne diese Verweise vor dem Löschen.",
-  "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "Dieses Buch wird noch referenziert von: {{items}}. Trotzdem löschen? Diese Elemente verlieren das Buch.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "Dieses Buch wird noch anderswo referenziert. Entferne diese Verweise vor dem Löschen.",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "Der Zugriff pro Buch wurde eingestellt. Bücher werden geteilt, indem man sie öffentlich macht; Bearbeiten bleibt Erstellenden und Admins vorbehalten.",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Das Buch „{{title}}“ ist jetzt öffentlich, weil es geteilt war mit: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} konnte „{{title}}“ bearbeiten. Bearbeiten ist jetzt Erstellenden und Admins vorbehalten; du kannst das Buch öffentlich machen, damit {{username}} es weiterhin lesen kann.",
@@ -5698,5 +5692,6 @@
   "{{count}} items from other accounts use this material_other": "{{count}} Elemente anderer Konten nutzen dieses Material",
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Nicht verfügbar: Die Person, der diese Knowledge Base gehört, hat sie privat gemacht oder gelöscht. Entferne sie von diesem Partner.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Die Person, der diese Knowledge Base gehört, hat sie privat gemacht – entferne den Verweis oder hänge eine andere Ressource an.",
-  "Delete anyway": "Trotzdem löschen"
+  "Delete anyway": "Trotzdem löschen",
+  "Its owner made this book private — remove the reference, or attach another resource.": "Die Person, der dieses Buch gehört, hat es privat gemacht – entferne den Verweis oder hänge eine andere Ressource an."
 }

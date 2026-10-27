@@ -331,7 +331,7 @@ export function useKnowledgeBases() {
   );
 
   const deleteKb = useCallback(
-    async (kbName: string, options?: { force?: boolean; confirm?: boolean }) => {
+    async (kbName: string, options?: Parameters<typeof deleteKbApi>[1]) => {
       await deleteKbApi(kbName, options);
       progress.cleanupKb(kbName);
       history.removeKb(kbName);

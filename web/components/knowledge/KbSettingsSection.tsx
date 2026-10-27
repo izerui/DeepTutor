@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
-import { describeOtherReferences, runWithWithdrawalConfirmation } from "@/lib/withdrawal-confirmation";
+import {
+  describeOtherReferences,
+  runWithWithdrawalConfirmation,
+  type WithdrawalImpact,
+} from "@/lib/withdrawal-confirmation";
 import type { KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import {
@@ -26,8 +30,10 @@ interface KbSettingsSectionProps {
   onSetDefault?: () => Promise<void>;
   onDelete?: () => Promise<void>;
   onMove?: (targetWorkspaceId: string) => Promise<void>;
-  /** Rule R1: retried with `confirm` after the user accepts the teacher-path impact. */
-  onVisibilityChange?: (visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean }) => Promise<void>;
+  /** Rule R1: retried with the confirmed counts after the user accepts the teacher-path impact. */
+  onVisibilityChange?: (
+    visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact },
+  ) => Promise<void>;
 }
 
 export default function KbSettingsSection({
@@ -79,7 +85,7 @@ export default function KbSettingsSection({
       // Rule R1: other accounts never block a withdrawal; published teacher
       // paths only need the owner to confirm the (counts-only) impact.
       await runWithWithdrawalConfirmation(
-        (confirm) => (confirm ? onVisibilityChange(next, { confirm: true }) : onVisibilityChange(next)),
+        (confirmed) => (confirmed ? onVisibilityChange(next, { confirmed }) : onVisibilityChange(next)),
         t,
       );
     } catch (error) {

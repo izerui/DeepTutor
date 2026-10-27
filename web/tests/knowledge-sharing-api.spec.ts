@@ -78,11 +78,16 @@ it("turns a counts-only teacher-path 409 into a confirmation error and retries w
   expect(fixture.invalidate).not.toHaveBeenCalled();
 
   fixture.fetch.mockResolvedValueOnce(Response.json({ kb_id: "id", ref: "kb:id", visibility: "private" }));
-  await setKnowledgeBaseVisibility("kb:id", "private", { confirm: true });
-  expect(fixture.fetch.mock.lastCall?.[1].body).toBe('{"visibility":"private","force":false,"confirm":true}');
+  const shown = { affectedPaths: 1, affectedStudents: 4 };
+  await setKnowledgeBaseVisibility("kb:id", "private", { confirmed: shown });
+  expect(fixture.fetch.mock.lastCall?.[1].body).toBe(
+    '{"visibility":"private","force":false,"confirm":true,"expected_paths":1,"expected_students":4}',
+  );
   fixture.fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
-  await deleteKnowledgeBase("kb:id", { confirm: true });
-  expect(fixture.fetch.mock.lastCall?.[1].body).toBe('{"name":"kb:id","force":false,"confirm":true}');
+  await deleteKnowledgeBase("kb:id", { confirmed: shown });
+  expect(fixture.fetch.mock.lastCall?.[1].body).toBe(
+    '{"name":"kb:id","force":false,"confirm":true,"expected_paths":1,"expected_students":4}',
+  );
 
   fixture.fetch.mockResolvedValueOnce(Response.json({ detail: "Other conflict" }, { status: 409 }));
   await expect(deleteKnowledgeBase("kb:id")).rejects.toThrow("Other conflict");

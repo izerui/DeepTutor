@@ -2,6 +2,7 @@ import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
 import { apiFetch, apiUrl, wsUrl } from "@/lib/api";
 import { MASTERY_TEMPLATE_HEADER, currentMasteryTemplate } from "@/lib/mastery-template-scope";
 import {
+  confirmationFields,
   parseWithdrawalImpact,
   type OtherReferences,
   type WithdrawalImpact,
@@ -69,10 +70,12 @@ function requestOverSocket<T extends BookWsEvent>(
   });
 }
 
-function deleteQuery(options?: { force?: boolean; confirm?: boolean }): string {
+function deleteQuery(options?: { force?: boolean; confirmed?: WithdrawalImpact | null }): string {
   const params = new URLSearchParams();
   if (options?.force) params.set("force", "true");
-  if (options?.confirm) params.set("confirm", "true");
+  for (const [key, value] of Object.entries(confirmationFields(options?.confirmed))) {
+    params.set(key, String(value));
+  }
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -178,7 +181,7 @@ export const bookApi = {
   delete: (
     book_id: string,
     workspaceId = activeWorkspaceId(),
-    options?: { force?: boolean; confirm?: boolean },
+    options?: { force?: boolean; confirmed?: WithdrawalImpact | null },
   ) =>
     request<{ deleted: boolean; book_id: string }>(
       scopedUrl(`/books/${encodeURIComponent(book_id)}${deleteQuery(options)}`, workspaceId),
@@ -193,8 +196,11 @@ export const bookApi = {
     body: {
       visibility: BookVisibility;
       force?: boolean;
-      /** Rule R1: proceed although published teacher paths cite the book. */
+      /** Rule R1: proceed although published teacher paths cite the book… */
       confirm?: boolean;
+      /** …as long as these counts (the ones shown) still hold. */
+      expected_paths?: number;
+      expected_students?: number;
       kb_choices?: Record<string, BookKbChoice>;
     },
     workspaceId = activeWorkspaceId(),

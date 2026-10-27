@@ -2,6 +2,7 @@
 
 import Tooltip from "@/shared/ui/Tooltip";
 import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import type { WithdrawalImpact } from "@/lib/withdrawal-confirmation";
 import type { EmbeddingModelSelection } from "@/features/knowledge/model/types";
 
 import { useState } from "react";
@@ -87,7 +88,7 @@ interface KnowledgeBaseDetailProps {
   onDelete: (kbName: string) => Promise<void>;
   onMove?: (kbName: string, targetWorkspaceId: string) => Promise<void>;
   onVisibilityChange?: (
-    kbName: string, visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean },
+    kbName: string, visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact },
   ) => Promise<void>;
   onClearHistory: (kbName: string) => void;
   onBack?: () => void;

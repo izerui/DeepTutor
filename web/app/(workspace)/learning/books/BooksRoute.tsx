@@ -556,9 +556,9 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     void refreshLearningCaptures(selectedBookId)
   }, [view, selectedBookId, refreshLearningCaptures])
 
-  const removeBook = async (book: Book, confirm = false) => {
+  const removeBook = async (book: Book, confirmed: WithdrawalImpact | null = null) => {
     const id = bookRequestRef(book)
-    await bookApi.delete(id, book.content_workspace_id ?? '', { confirm })
+    await bookApi.delete(id, book.content_workspace_id ?? '', { confirmed })
     if (!isActiveReader()) return
     if (selectedBookId === id) {
       setSelectedBookId(null)
@@ -569,19 +569,20 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     await refreshBooks()
   }
 
-  const deleteBook = async (book: Book, confirm = false) =>
-    guard('Delete book', () => removeBook(book, confirm))
+  // Rule R1: other references never block; teacher paths need consent to the
+  // counts shown. Changed counts come back as a fresh confirmation.
+  const deleteBook = async (book: Book, confirmed: WithdrawalImpact | null = null) =>
+    guard('Delete book', async () => {
+      try {
+        await removeBook(book, confirmed)
+      } catch (err) {
+        const impact = bookWithdrawalImpact(err)
+        if (!impact) throw err
+        if (isActiveReader()) setReferencedDelete({ book, impact })
+      }
+    })
 
-  const handleDeleteBook = async (book: Book) => guard('Delete book', async () => {
-    try {
-      await removeBook(book)
-    } catch (err) {
-      // Rule R1: other references never block; teacher paths need consent.
-      const impact = bookWithdrawalImpact(err)
-      if (!impact) throw err
-      if (isActiveReader()) setReferencedDelete({ book, impact })
-    }
-  })
+  const handleDeleteBook = (book: Book) => deleteBook(book)
 
   const handleResumeBook = async () => {
     if (!isActiveReader()) return
@@ -1239,11 +1240,11 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
               <button type="button" disabled={deleting} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
                 onClick={() => {
                   if (!referencedDelete || deleting) return
+                  const { book, impact } = referencedDelete
                   setDeleting(true)
-                  void deleteBook(referencedDelete.book, true).finally(() => {
-                    if (!alive.current) return
-                    setDeleting(false)
-                    setReferencedDelete(null)
+                  setReferencedDelete(null)
+                  void deleteBook(book, impact).finally(() => {
+                    if (alive.current) setDeleting(false)
                   })
                 }}>{t('Delete anyway')}</button>
             </>}>

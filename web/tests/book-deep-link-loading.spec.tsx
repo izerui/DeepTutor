@@ -195,7 +195,7 @@ describe("book deep-link loading", () => {
   it("deletes unregistered local collisions without querying foreign references", async () => {
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete collision"));
-    await waitFor(() => expect(fixture.delete).toHaveBeenCalledWith("same", "local", { confirm: false }));
+    await waitFor(() => expect(fixture.delete).toHaveBeenCalledWith("same", "local", { confirmed: null }));
     expect(fixture.references).not.toHaveBeenCalled();
   });
 
@@ -207,10 +207,32 @@ describe("book deep-link loading", () => {
     fireEvent.click(screen.getByText("Delete cited"));
     expect(await screen.findByText(/2 published teacher paths use this material/)).toBeTruthy();
     expect(screen.getByText(/9 students assigned/)).toBeTruthy();
-    expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirm: false });
+    expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirmed: null });
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
-    await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", { confirm: true }));
+    await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
+      confirmed: { affectedPaths: 2, affectedStudents: 9 },
+    }));
     expect(fixture.references).not.toHaveBeenCalled();
+    expect(fixture.notify).not.toHaveBeenCalled();
+  });
+
+  it("asks again with fresh counts when the impact changed before the confirmed delete (R1)", async () => {
+    fixture.delete
+      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 1, affectedStudents: 2 } }))
+      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 3, affectedStudents: 4 } }));
+    render(<BookPage />);
+    fireEvent.click(screen.getByText("Delete cited"));
+    expect(await screen.findByText(/1 published teacher paths use this material/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
+    expect(await screen.findByText(/3 published teacher paths use this material/)).toBeTruthy();
+    expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
+      confirmed: { affectedPaths: 1, affectedStudents: 2 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
+    await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
+      confirmed: { affectedPaths: 3, affectedStudents: 4 },
+    }));
+    expect(fixture.delete).toHaveBeenCalledTimes(3);
     expect(fixture.notify).not.toHaveBeenCalled();
   });
 

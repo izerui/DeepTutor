@@ -5558,9 +5558,7 @@
   "Referenced by": "被以下内容引用",
   "Not referenced anywhere.": "没有任何引用。",
   "Referenced by: {{items}}": "被以下内容引用：{{items}}",
-  "Remove these references before deleting.": "请先解除这些引用再删除。",
   "Delete anyway? Every item that references it will lose this material.": "仍然删除？所有引用它的内容都将失去这份资料。",
-  "Other accounts reference this knowledge base. Make it private anyway?": "其他账号正在引用这个知识库。仍然设为私有？",
   "Delete this document anyway?": "仍然删除这份文档？",
   "Force delete this document? Items that cite it will lose it.": "强制删除这份文档？单独引用它的内容将失去它。",
   "My books": "我的书籍",
@@ -5576,13 +5574,9 @@
   "Personal connectors cannot be shared.": "个人连接器不能共享。",
   "Another account's private knowledge base; readers could not use it.": "其他账号的私有知识库，读者无法使用。",
   "Some knowledge bases of this book no longer exist: {{items}}": "这本书引用的部分知识库已不存在：{{items}}",
-  "Other accounts reference this book; it cannot be made private until those references are removed.": "其他账号正在引用这本书，解除这些引用后才能设为私有。",
   "Publish anyway; the blocked knowledge bases stay unavailable to readers": "仍然公开；上述知识库对读者不可用",
   "Make it private anyway": "仍然设为私有",
   "Resolve the items above first.": "请先处理上面的问题。",
-  "This book is still referenced by: {{items}}. Remove those references before deleting it.": "这本书仍被以下内容引用：{{items}}。请先解除这些引用再删除。",
-  "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "这本书仍被以下内容引用：{{items}}。仍然删除？这些内容将失去这本书。",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "这本书仍被其他内容引用，请先解除引用再删除。",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "逐本授权已停用。书籍改为通过“设为公开”共享，编辑仅限创建者和管理员。",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "书籍《{{title}}》已公开，因为它曾共享给：{{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} 曾可编辑《{{title}}》。现在只有创建者和管理员能编辑，您可以将书设为公开，这样 {{username}} 仍然可以阅读。",
@@ -5698,5 +5692,6 @@
   "{{count}} items from other accounts use this material_other": "其他账号的 {{count}} 项内容正在使用该资料",
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "不可用：所有者已将该知识库设为私有或删除。请从此伙伴中移除。",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "所有者已将该知识库设为私有——请移除此引用，或改为添加其他资源。",
-  "Delete anyway": "仍然删除"
+  "Delete anyway": "仍然删除",
+  "Its owner made this book private — remove the reference, or attach another resource.": "所有者已将这本书设为私有——请移除此引用，或改为添加其他资源。"
 }

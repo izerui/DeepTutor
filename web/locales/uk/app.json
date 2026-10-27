@@ -5574,9 +5574,7 @@
   "Referenced by": "Посилаються",
   "Not referenced anywhere.": "Посилань немає.",
   "Referenced by: {{items}}": "Посилання: {{items}}",
-  "Remove these references before deleting.": "Приберіть ці посилання перед видаленням.",
   "Delete anyway? Every item that references it will lose this material.": "Усе одно видалити? Усі елементи, що на неї посилаються, втратять цей матеріал.",
-  "Other accounts reference this knowledge base. Make it private anyway?": "Інші облікові записи посилаються на цю базу знань. Усе одно зробити її приватною?",
   "Delete this document anyway?": "Усе одно видалити цей документ?",
   "Force delete this document? Items that cite it will lose it.": "Примусово видалити цей документ? Елементи, що його цитують, втратять його.",
   "My books": "Мої книги",
@@ -5592,13 +5590,9 @@
   "Personal connectors cannot be shared.": "Особисті конектори не можна поширювати.",
   "Another account's private knowledge base; readers could not use it.": "Приватна база знань іншого облікового запису; читачі не змогли б нею користуватися.",
   "Some knowledge bases of this book no longer exist: {{items}}": "Деяких баз знань цієї книги більше не існує: {{items}}",
-  "Other accounts reference this book; it cannot be made private until those references are removed.": "Інші облікові записи посилаються на цю книгу; її можна зробити приватною лише після видалення цих посилань.",
   "Publish anyway; the blocked knowledge bases stay unavailable to readers": "Опублікувати попри це; заблоковані бази знань залишаться недоступними для читачів",
   "Make it private anyway": "Усе одно зробити приватною",
   "Resolve the items above first.": "Спершу розв’яжіть наведені вище питання.",
-  "This book is still referenced by: {{items}}. Remove those references before deleting it.": "На цю книгу досі посилаються: {{items}}. Приберіть ці посилання перед видаленням.",
-  "This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.": "На цю книгу досі посилаються: {{items}}. Усе одно видалити? Ці елементи втратять цю книгу.",
-  "This book is still referenced elsewhere. Remove those references before deleting it.": "На цю книгу досі посилаються інші елементи. Приберіть ці посилання перед видаленням.",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "Доступ до окремих книг вимкнено. Книгами діляться, роблячи їх публічними; редагувати можуть лише автор і адміністратори.",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Книга «{{title}}» тепер публічна, бо нею ділилися з: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} міг(-ла) редагувати «{{title}}». Тепер редагувати можуть лише автор і адміністратори; ви можете зробити книгу публічною, щоб {{username}} міг(-ла) її читати.",
@@ -5730,5 +5724,6 @@
   "{{count}} items from other accounts use this material_other": "Цей матеріал використовують {{count}} елемента інших облікових записів",
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Недоступно: власник зробив цю базу знань приватною або видалив її. Вилучіть її з цього партнера.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Власник зробив цю базу знань приватною — вилучіть посилання або додайте інший ресурс.",
-  "Delete anyway": "Усе одно видалити"
+  "Delete anyway": "Усе одно видалити",
+  "Its owner made this book private — remove the reference, or attach another resource.": "Власник зробив цю книгу приватною — вилучіть посилання або додайте інший ресурс."
 }

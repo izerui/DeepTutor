@@ -7,6 +7,7 @@ import { bookApi, bookWithdrawalImpact } from "@/lib/book-api";
 import { bookErrorMessage } from "@/lib/book-errors";
 import { bookRequestRef, bookSelectionKey } from "@/lib/book-sharing";
 import {
+  confirmationFields,
   describeOtherReferences,
   describeWithdrawalImpact,
   NO_OTHER_REFERENCES,
@@ -77,7 +78,7 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
         visibility: makingPublic ? "public" : "private",
         kb_choices: makingPublic ? choices : {},
         force: makingPublic && isAdmin && force,
-        ...(!makingPublic && impact ? { confirm: true } : {}),
+        ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
       if (!alive.current) return;
       onChanged();

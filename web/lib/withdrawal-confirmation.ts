@@ -44,6 +44,17 @@ export function parseOtherReferences(value: unknown): OtherReferences {
   return { total: count(raw.total), by_kind: byKind };
 }
 
+/** Request fields confirming exactly the counts the owner saw (server re-checks them). */
+export function confirmationFields(impact: WithdrawalImpact | null | undefined): {
+  confirm?: true;
+  expected_paths?: number;
+  expected_students?: number;
+} {
+  return impact
+    ? { confirm: true, expected_paths: impact.affectedPaths, expected_students: impact.affectedStudents }
+    : {};
+}
+
 /** Thrown by API helpers when the server asks to confirm a withdrawal. */
 export class WithdrawalConfirmationError extends Error {
   constructor(
@@ -65,21 +76,28 @@ export function describeWithdrawalImpact(impact: WithdrawalImpact, t: Translate)
 }
 
 /**
- * Run a withdrawal (make private / delete) once; when published teacher paths
- * need consent, ask with the counts and, if accepted, run it again confirmed.
- * Other errors propagate unchanged.
+ * Run a withdrawal (make private / delete); when published teacher paths need
+ * consent, ask with the counts and, if accepted, run it again confirming those
+ * counts. If they changed meanwhile the server answers with fresh counts,
+ * which are asked about again (a few times at most). Other errors propagate.
  */
 export async function runWithWithdrawalConfirmation(
-  run: (confirm: boolean) => Promise<void>,
+  run: (confirmed: WithdrawalImpact | null) => Promise<void>,
   t: Translate,
   ask: (question: string) => boolean = (question) => window.confirm(question),
-): Promise<void> {
-  try {
-    await run(false);
-  } catch (error) {
-    if (!(error instanceof WithdrawalConfirmationError)) throw error;
-    if (ask(describeWithdrawalImpact(error.impact, t))) await run(true);
+): Promise<boolean> {
+  let confirmed: WithdrawalImpact | null = null;
+  for (let round = 0; round < 4; round += 1) {
+    try {
+      await run(confirmed);
+      return true;
+    } catch (error) {
+      if (!(error instanceof WithdrawalConfirmationError) || round === 3) throw error;
+      if (!ask(describeWithdrawalImpact(error.impact, t))) return false;
+      confirmed = error.impact;
+    }
   }
+  return false;
 }
 
 /** One line about other accounts' references, or `""` when there are none. */

@@ -1,4 +1,4 @@
-import type { Book, BookReference } from "./book-types";
+import type { Book } from "./book-types";
 
 export function groupBooks(books: Book[]): { mine: Book[]; public: Book[] } {
   const groups: { mine: Book[]; public: Book[] } = { mine: [], public: [] };
@@ -32,15 +32,4 @@ export function bookKnowledgeRefs(book: Pick<Book, "source" | "knowledge_bases" 
   return book.source === "shared" && book.kb_refs
     ? book.kb_refs
     : book.knowledge_bases || [];
-}
-
-const REFERRER_LABELS: Record<string, string> = {
-  mastery_template: "Mastery path",
-  course: "Course",
-};
-
-export function describeBookReferences(references: BookReference[], t: (key: string) => string): string {
-  return references.map(ref =>
-    `${t(REFERRER_LABELS[ref.referrer_kind] ?? ref.referrer_kind)} ${ref.referrer_id}`,
-  ).join(", ");
 }

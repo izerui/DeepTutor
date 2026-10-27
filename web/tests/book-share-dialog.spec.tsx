@@ -108,6 +108,7 @@ it("lets the owner withdraw a referenced book after confirming teacher-path coun
   fireEvent.click(screen.getByRole("button", { name: "Make it private anyway" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenLastCalledWith("book:same", {
-    visibility: "private", kb_choices: {}, force: false, confirm: true,
+    visibility: "private", kb_choices: {}, force: false,
+    confirm: true, expected_paths: 2, expected_students: 7,
   }, "w");
 });
