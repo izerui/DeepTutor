@@ -1134,3 +1134,61 @@ def test_reassigning_restores_an_old_revisions_reference_only_book(
         assert held() == {"bk_own"}
         TeachingService().assign(template_id, [sara])
     assert held() == {"bk_own", "bk_two"}
+
+
+@pytest.mark.asyncio
+async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
+    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+):
+    """Review B2-1 I1: Adam makes K1 private after the restore decision, before the write."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+    from deeptutor.teaching import kb as kb_access
+
+    with as_account("adam"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        make_kb(KnowledgeBaseManager(base_dir=str(root)), "algebra")
+        k1 = kb_registry.ensure_registered(
+            root, "algebra", created_by=teaching_users["adam"]["id"]
+        )
+        kb_registry.set_visibility(k1.kb_id, "public")
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
+                label="Algebra notes", position=0,
+            ),
+        )
+    )
+    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+        "template"
+    ]["id"]
+    with as_account("sara"):
+        path_id = (await mastery_path.list_topics())["topics"][0]["path_id"]
+    with as_account("tina"):
+        tina_root = get_account_path_service().get_knowledge_bases_root()
+        tina_root.mkdir(parents=True, exist_ok=True)
+    k2 = await asyncio.to_thread(
+        _park_on_v1_then_publish_v2,
+        SimpleNamespace(record=k1, template_id=template_id, path_id=path_id, root=tina_root),
+        teaching_users, as_account, make_kb, publish_template,
+    )
+
+    write = kb_access.replace_template_references
+
+    def private_first(*args, **kwargs):
+        with as_account("adam"):
+            kb_registry.set_visibility(k1.kb_id, "private")
+        return write(*args, **kwargs)
+
+    monkeypatch.setattr(kb_access, "replace_template_references", private_first)
+    with as_account("tina"):
+        rows = await asyncio.to_thread(
+            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+        )
+    assert [row["status"] for row in rows] == ["active"]
+    assert kb_registry.get_kb(k1.kb_id).visibility == "private"
+    assert {
+        record.kb_id for record in kb_registry.list_referenced("mastery_template", template_id)
+    } == {k2.kb_id}

@@ -6,7 +6,7 @@ the single source of truth and tests can stand it in with ``monkeypatch``.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 import hashlib
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -189,8 +189,13 @@ def replace_template_references(
     explicit_reference_only: Sequence[str] = (),
     readable_by: Any | None = None,
     retain_revoked_kb_ids: Sequence[str] = (),
+    restore_kb_ids: Sequence[str] = (),
+    restorable: Callable[[Any], bool] | None = None,
 ) -> None:
     """Declare what the template cites (plan B references), in one transaction.
+
+    ``restore_kb_ids`` / ``restorable``: released KBs asked back, each kept
+    only if ``restorable`` accepts its fresh record inside plan B's writer.
 
     ``explicit_reference_only`` must hold only the KB ids the publisher
     explicitly mapped to ``reference_only`` in its request: for those that are
@@ -204,6 +209,9 @@ def replace_template_references(
         options["readable_by"] = readable_by
     if retain_revoked_kb_ids:
         options["retain_revoked_kb_ids"] = list(retain_revoked_kb_ids)
+    if restore_kb_ids:
+        options["restore_kb_ids"] = list(restore_kb_ids)
+        options["restorable"] = restorable
     registry.replace_references(
         REFERRER_KIND, template_id, _merged(kb_refs), created_by=created_by, **options
     )

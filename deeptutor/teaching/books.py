@@ -7,7 +7,7 @@ reference, other accounts' private books cannot be cited.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -153,6 +153,8 @@ def replace_template_references(
     *,
     created_by: str,
     explicit_reference_only: Sequence[str] = (),
+    restore_book_ids: Sequence[str] = (),
+    restorable: Callable[[Any], bool] | None = None,
 ) -> None:
     """Declare the books the template cites (plan D references and KB protection).
 
@@ -160,10 +162,15 @@ def replace_template_references(
     explicitly mapped to ``reference_only``: plan D records their durable
     private intent in the same transaction when they are still private and
     writable. Defaults and earlier choices are not consent.
+    ``restore_book_ids`` / ``restorable``: released books asked back, each kept
+    only if ``restorable`` accepts its fresh record inside plan D's writer.
     """
     options: dict[str, Any] = {}
     if explicit_reference_only:
         options["private_intent_book_ids"] = list(explicit_reference_only)
+    if restore_book_ids:
+        options["restore_book_ids"] = list(restore_book_ids)
+        options["restorable"] = restorable
     book_registry.replace_book_references(
         REFERRER_KIND, template_id, list(dict.fromkeys(book_ids)), created_by=created_by, **options
     )

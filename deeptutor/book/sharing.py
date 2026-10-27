@@ -12,7 +12,7 @@ entry. Never call independent registry writers from the yielded connection.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 import sqlite3
@@ -371,16 +371,30 @@ def _previous(conn: sqlite3.Connection, kind: str, referrer: str) -> set[str]:
 def replace_references(
     kind: str, referrer: str, book_ids: Sequence[str], *, created_by: str,
     private_intent_book_ids: Sequence[str] = (),
+    restore_book_ids: Sequence[str] = (),
+    restorable: Callable[[books.BookRecord], bool] | None = None,
 ) -> None:
     """``private_intent_book_ids``: explicit share-by-reference choices.
 
     Each one that is also a target, still private and writable by the actor
     records durable Book private intent in this same transaction. Other keys,
     public books and defaults record nothing.
+
+    ``restore_book_ids``: released books the referrer asks back. Each is kept
+    only when still registered and ``restorable`` accepts its fresh record in
+    this transaction; otherwise it is left out (never an error).
     """
     explicit = {books.strip_ref(value) for value in private_intent_book_ids}
+    restore = {books.strip_ref(value) for value in restore_book_ids}
     with shared_write() as conn:
-        targets = {books._target(conn, value).book_id for value in book_ids}
+        targets: set[str] = set()
+        for value in book_ids:
+            if books.strip_ref(value) not in restore:
+                targets.add(books._target(conn, value).book_id)
+                continue
+            record = books._get_book(conn, books.strip_ref(value))
+            if record is not None and restorable is not None and restorable(record):
+                targets.add(record.book_id)
         user = get_current_user()
         newly_shared = set()
         for book_id in targets:

@@ -48,7 +48,6 @@ from deeptutor.teaching.changes import (
 from deeptutor.teaching.models import (
     MasteryTemplate,
     PublishRequest,
-    TemplateBookRef,
     TemplateKbRef,
     TemplateRevision,
     TemplateSources,
@@ -138,6 +137,12 @@ class _References:
     kb_refs: list[TemplateKbRef] = field(default_factory=list)
     #: Revoked KBs a still-applied revision cites: keep the withdrawal visible.
     retain_revoked_kb_ids: list[str] = field(default_factory=list)
+    #: Released KBs/books an older applied revision asks back, with the
+    #: access each was published with (re-admitted only after a fresh check).
+    restore_kbs: dict[str, set[str]] = field(default_factory=dict)
+    restore_books: dict[str, set[str]] = field(default_factory=dict)
+    #: Whether any active instance is still on an older revision.
+    has_retained: bool = False
     book_ids: list[str] = field(default_factory=list)
 
 
@@ -169,7 +174,7 @@ def _references(
     *,
     latest: int,
     reduce_only: bool,
-    restore_for_owner: str = "",
+    restore: bool = False,
 ) -> _References:
     """The references for revision *latest* plus every older revision still applied.
 
@@ -178,36 +183,30 @@ def _references(
     withdrawal stays recorded instead. With ``reduce_only`` the latest
     revision is held to the same rule, so a resync can only take access away.
 
-    ``restore_for_owner`` (the template owner's id) is for re-assignment: an
-    older revision's material that a revoke released comes back while it is
-    still referable as published (see :func:`_kb_restorable`); one that was
-    deleted, revoked by an admin or made private by another owner stays out.
+    With ``restore`` (re-assignment), an older revision's material that a
+    revoke released and no admin revoked is asked back: it is listed in
+    ``restore_kbs`` / ``restore_books`` and the registries re-admit it only if
+    :func:`_restorable` still accepts it inside their own write transaction.
     """
     retained = _retained_revisions(store, template_id, latest)
     needs_live = reduce_only or bool(retained)
     live_kbs = kb_access.referenced_kb_ids(template_id) if needs_live else set()
     live_books = book_access.referenced_book_ids(template_id) if needs_live else set()
     revoked = {row.kb_id for row in kb_access.unavailable_references(template_id)}
-    if restore_for_owner and retained:
-        revoked_books = {row.book_id for row in book_access.unavailable_references(template_id)}
-        live_kbs |= {
-            ref.kb_id
-            for revision in retained
-            for ref in revision.sources.kb_refs
-            if ref.kb_id not in live_kbs
-            and ref.kb_id not in revoked
-            and _kb_restorable(ref, restore_for_owner)
-        }
-        live_books |= {
-            ref.book_id
-            for revision in retained
-            for ref in revision.sources.book_refs
-            if ref.book_id not in live_books
-            and ref.book_id not in revoked_books
-            and _book_restorable(ref, restore_for_owner)
-        }
 
-    result = _References()
+    result = _References(has_retained=bool(retained))
+    if restore and retained:
+        revoked_books = {row.book_id for row in book_access.unavailable_references(template_id)}
+        for revision in retained:
+            for ref in revision.sources.kb_refs:
+                if ref.kb_id not in live_kbs and ref.kb_id not in revoked:
+                    result.restore_kbs.setdefault(ref.kb_id, set()).add(ref.access)
+            for ref in revision.sources.book_refs:
+                if ref.book_id not in live_books and ref.book_id not in revoked_books:
+                    result.restore_books.setdefault(ref.book_id, set()).add(ref.access)
+        live_kbs |= set(result.restore_kbs)
+        live_books |= set(result.restore_books)
+
     wanted_kbs: set[str] = set()
     for ref in sources.kb_refs:
         wanted_kbs.add(ref.kb_id)
@@ -231,41 +230,46 @@ def _references(
     return result
 
 
-def _kb_restorable(ref: TemplateKbRef, owner_id: str) -> bool:
-    """Whether a released KB may be referenced again as its revision published it.
+def _restorable(accesses: dict[str, set[str]], owner_id: str) -> Callable[[Any], bool]:
+    """Whether a released KB or book may be referenced again as it was published.
 
-    A KB published as public must still be public; one shared by reference
-    only must still be the owner's own. Gone or connector KBs never return.
+    Judged by the registries on the fresh record inside their write
+    transaction. One published as public must still be public; one shared by
+    reference only must still be the template owner's own. (An admin's
+    force-private of an owner's already-private material writes no
+    revocation, so it does not block this; the registry has no such state.)
     """
-    record = kb_access.resolve_id(ref.kb_id)
-    if record is None or kb_access.is_connector(record):
-        return False
-    if record.visibility == "public":
-        return True
-    return ref.access == "reference_only" and record.created_by == owner_id
+
+    def check(record: Any) -> bool:
+        if record.visibility == "public":
+            return True
+        key = getattr(record, "kb_id", None) or record.book_id
+        return "reference_only" in accesses.get(key, set()) and record.created_by == owner_id
+
+    return check
 
 
-def _book_restorable(ref: TemplateBookRef, owner_id: str) -> bool:
-    """:func:`_kb_restorable` for books."""
-    record = book_access.get(ref.book_id)
-    if record is None:
-        return False
-    if record.visibility == "public":
-        return True
-    return ref.access == "reference_only" and record.created_by == owner_id
+def sync_material_references(
+    template_id: str, *, store: TeachingStore | None = None, restore: bool = False
+) -> None:
+    """Release references no entitled instance needs any more; never add any.
 
+    Call it after an instance's revision migration commits (Task 10) or after
+    an assignment is revoked. Archived and unpublished templates are left
+    alone: archiving already released everything. The KB references are
+    rewritten in place (withdrawals kept); the book references are only
+    rewritten when a book is no longer needed, because plan D re-derives book
+    protection on every rewrite. Plan D also rechecks that the current actor
+    can read each kept book.
 
-def restore_material_references(template_id: str, *, store: TeachingStore | None = None) -> None:
-    """Give re-activated students back the older-revision materials they need.
-
-    :func:`sync_material_references` after a revoke releases what only the
-    revoked student's older revision cited; re-assigning that student must
-    not leave a pending old-revision question without its materials. The
-    latest revision is resynced as by a revoke (never granting more), older
-    revisions still applied regain what is still referable as published.
-    Same lock and order as a sync: teaching, then KB, then book.
+    With ``restore`` (after a re-assignment) the latest revision is still only
+    reduced, but older revisions still applied ask back what a revoke released
+    (:func:`_references`); the registries re-admit each one only when
+    :func:`_restorable` accepts its fresh record in their write transaction.
     """
     store = store or TeachingStore()
+    # Read and rewrite under one cross-process lock, so a publish (or an
+    # archive) cannot land between them and lose what its revision needs.
     with store.material_lock():
         template = store.get_template(template_id)
         if template is None or template.status != "published":
@@ -279,55 +283,28 @@ def restore_material_references(template_id: str, *, store: TeachingStore | None
             current.sources,
             latest=current.revision,
             reduce_only=True,
-            restore_for_owner=template.owner_user_id,
+            restore=restore,
         )
-        # Rewritten even when the KB set is unchanged: a released document of
-        # a still-cited KB comes back through the merged document list.
+        if restore and not refs.has_retained:
+            return  # Nobody is on an older revision: nothing to ask back.
+        owner = template.owner_user_id
         kb_access.replace_template_references(
             template_id,
             refs.kb_refs,
-            created_by=template.owner_user_id,
+            created_by=owner,
             retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
+            restore_kb_ids=sorted(refs.restore_kbs),
+            restorable=_restorable(refs.restore_kbs, owner),
         )
-        if set(refs.book_ids) != book_access.referenced_book_ids(template_id):
+        if refs.restore_books or set(refs.book_ids) != book_access.referenced_book_ids(
+            template_id
+        ):
             book_access.replace_template_references(
-                template_id, refs.book_ids, created_by=template.owner_user_id
-            )
-
-
-def sync_material_references(template_id: str, *, store: TeachingStore | None = None) -> None:
-    """Release references no entitled instance needs any more; never add any.
-
-    Call it after an instance's revision migration commits (Task 10) or after
-    an assignment is revoked. Archived and unpublished templates are left
-    alone: archiving already released everything. The KB references are
-    rewritten in place (withdrawals kept); the book references are only
-    rewritten when a book is no longer needed, because plan D re-derives book
-    protection on every rewrite. Plan D also rechecks that the current actor
-    can read each kept book.
-    """
-    store = store or TeachingStore()
-    # Read and rewrite under one cross-process lock, so a publish (or an
-    # archive) cannot land between them and lose what its revision needs.
-    with store.material_lock():
-        template = store.get_template(template_id)
-        if template is None or template.status != "published":
-            return
-        current = store.get_revision(template_id, template.current_revision)
-        if current is None:
-            return
-        refs = _references(
-            store, template_id, current.sources, latest=current.revision, reduce_only=True
-        )
-        kb_access.replace_template_references(
-            template_id,
-            refs.kb_refs,
-            created_by=template.owner_user_id,
-            retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
-        )
-        if set(refs.book_ids) != book_access.referenced_book_ids(template_id):
-            book_access.replace_template_references(
-                template_id, refs.book_ids, created_by=template.owner_user_id
+                template_id,
+                refs.book_ids,
+                created_by=owner,
+                restore_book_ids=sorted(refs.restore_books),
+                restorable=_restorable(refs.restore_books, owner),
             )
 
 
@@ -885,10 +862,14 @@ class TeachingService:
         user_id, _ = self._actor()
         self.store.assign(template.id, students, assigned_by=user_id)
         try:
-            restore_material_references(template.id, store=self.store)
+            sync_material_references(template.id, store=self.store, restore=True)
         except Exception:
             # The assignment stands; its old-revision materials stay unavailable.
-            logger.exception("Could not restore old materials of teacher path %s", template.id)
+            logger.exception(
+                "Could not restore old materials of teacher path %s for students %s",
+                template.id,
+                students,
+            )
         return self.assignments(template.id)
 
     def revoke(self, template_id: str, student_id: str) -> None:

@@ -355,6 +355,32 @@ def test_replace_and_remove_references(tmp_path):
     assert registry.list_referenced("course", "c1") == []
 
 
+def test_restored_references_are_rechecked_inside_the_write(tmp_path):
+    """Released targets asked back are judged on fresh records; failures drop, never raise."""
+    kept = registry.register_kb(base_dir=tmp_path, name="kept", kind="uploaded", created_by="t1")
+    back = registry.register_kb(base_dir=tmp_path, name="back", kind="uploaded", created_by="t1")
+    refused = registry.register_kb(base_dir=tmp_path, name="no", kind="uploaded", created_by="t2")
+    seen: list[str] = []
+
+    def restorable(record):
+        seen.append(record.kb_id)
+        return record.created_by == "t1"
+
+    registry.replace_references(
+        "mastery_template",
+        "tpl1",
+        [(kept.kb_id, None), (back.kb_id, None), (refused.kb_id, None), ("gone", None)],
+        created_by="t1",
+        restore_kb_ids=[back.kb_id, refused.ref, "gone"],
+        restorable=restorable,
+    )
+    assert sorted(seen) == sorted([back.kb_id, refused.kb_id])
+    assert {r.kb_id for r in registry.list_referenced("mastery_template", "tpl1")} == {
+        kept.kb_id,
+        back.kb_id,
+    }
+
+
 def test_read_and_write_rules(tmp_path, make_user):
     admin = make_user("root", role="admin")
     owner = make_user("t1", role="teacher")

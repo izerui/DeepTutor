@@ -999,8 +999,15 @@ def replace_references(
     readable_by: CurrentUser | None = None,
     retain_revoked_kb_ids: Sequence[str] = (),
     private_intent_kb_ids: Sequence[str] = (),
+    restore_kb_ids: Sequence[str] = (),
+    restorable: Callable[[KbRecord], bool] | None = None,
 ) -> None:
     """Atomically replace live references and settle earlier revocations.
+
+    ``restore_kb_ids`` are targets the referrer had released and now asks
+    back. Each is kept only when it is still registered, consistent, not a
+    connector and ``restorable`` accepts its fresh record, all judged inside
+    this transaction; otherwise it is silently left out (never an error).
 
     ``readable_by`` rechecks access using fresh targets while visibility and
     reference writers are excluded by BEGIN IMMEDIATE. Failure changes nothing.
@@ -1015,8 +1022,25 @@ def replace_references(
     migration cannot publish it later. Other keys are ignored; nothing is
     withdrawn. Defaults and generic restatements record nothing.
     """
+    restore = {_strip_ref(kb_id) for kb_id in restore_kb_ids}
     with _write() as conn:
-        targets = [(_reference_target(conn, kb_id, referrer_kind), doc_ids) for kb_id, doc_ids in refs]
+        targets: list[tuple[KbRecord, list[str] | None]] = []
+        for kb_id, doc_ids in refs:
+            if _strip_ref(kb_id) not in restore:
+                targets.append((_reference_target(conn, kb_id, referrer_kind), doc_ids))
+                continue
+            row = conn.execute(
+                "SELECT * FROM kb_registry WHERE kb_id = ?", (_strip_ref(kb_id),)
+            ).fetchone()
+            record = _record(row) if row is not None else None
+            if (
+                record is not None
+                and classification_is_consistent(record)
+                and not is_connector(record)
+                and restorable is not None
+                and restorable(record)
+            ):
+                targets.append((record, doc_ids))
         if readable_by is not None:
             for record, _docs in targets:
                 if not can_read(record, readable_by):
