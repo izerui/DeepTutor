@@ -1109,7 +1109,7 @@ def test_migration_pending_legacy_tree_validates_before_moving(
     if damaged:
         result = run()
         assert result == ({"referenced": [], "adopted": []} if entrypoint == "direct" else {
-            "admin": 0, "account": 0, "workspace": 0, "promoted": 0,
+            "admin": 0, "admin_normalized": 0, "account": 0, "workspace": 0, "promoted": 0,
             "connectors_disabled": 0, "partner_copies": 0,
         })
         assert path.read_bytes() == identity_bytes
