@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import { TeachingApiError, type TeacherTemplate } from "../lib/teaching-api";
 import {
@@ -111,6 +113,19 @@ test("other failures are localized by status", () => {
     teachingErrorMessage(new TeachingApiError("English", 422, "English")).key,
     "Only active student accounts can be assigned.",
   );
+  // Request validation (a list detail) is not the student-account check.
+  assert.equal(
+    teachingErrorMessage(new TeachingApiError("x", 422, { detail: [] } as Record<string, unknown>)).key,
+    "Update failed",
+  );
+  assert.equal(
+    teachingErrorMessage(new TeachingApiError("x", 403, "x"), "manage").key,
+    "You can no longer manage this teacher path.",
+  );
+  assert.doesNotMatch(
+    teachingErrorMessage(new TeachingApiError("x", 409, "x")).key,
+    /Close this dialog/,
+  );
   assert.equal(teachingErrorMessage(new TypeError("fetch failed")).key, "Update failed");
   assert.equal(teachingErrorMessage(new TeachingApiError("x", 500, "x")).key, "Update failed");
 });
@@ -134,4 +149,38 @@ test("templates without an own card are listed with the reason they cannot be pu
   assert.deepEqual(unpublishableReason(foreign).values, { owner: "tom" });
   assert.match(unpublishableReason(transferred).key, /account was removed/);
   assert.match(unpublishableReason(draftGone).key, /not in your library/);
+});
+
+function catalog(locale: string): Record<string, string> {
+  let dir = __dirname;
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, "locales", locale, "app.json");
+    if (fs.existsSync(candidate)) return JSON.parse(fs.readFileSync(candidate, "utf8"));
+    dir = path.dirname(dir);
+  }
+  throw new Error(`could not locate locales/${locale}/app.json`);
+}
+
+test("teacher count strings use plural keys in every locale", () => {
+  const forms: Record<string, string[]> = {
+    en: ["one", "other"],
+    zh: ["one", "other"],
+    de: ["one", "other"],
+    fr: ["one", "many", "other"],
+    pl: ["one", "few", "many", "other"],
+    uk: ["one", "few", "many", "other"],
+  };
+  for (const key of [
+    "{{count}} students assigned",
+    "{{count}} students will get this update the next time they study",
+  ]) {
+    for (const [locale, needed] of Object.entries(forms)) {
+      const rows = catalog(locale);
+      assert.equal(rows[key], undefined, `${locale}: stale non-plural ${key}`);
+      for (const form of needed) {
+        assert.match(rows[`${key}_${form}`] ?? "", /{{count}}/, `${locale}: ${key}_${form}`);
+      }
+    }
+  }
+  assert.equal(catalog("en")["{{count}} students assigned_one"], "{{count}} student assigned");
 });

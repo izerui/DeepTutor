@@ -175,7 +175,8 @@ export function TopicAtlas({
           }
         />
       ) : null}
-      {unlistedTemplates && onManage && !loading && (
+      {/* Without the topics, own templates would be misreported as draftless. */}
+      {unlistedTemplates && onManage && !loading && !error && (
         <UnlistedTeacherTemplates templates={unlistedTemplates} onManage={onManage} />
       )}
     </LearningShell>

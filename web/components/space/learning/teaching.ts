@@ -158,19 +158,28 @@ export function publishBlocked(error: unknown): PublishBlockedDetail | null {
  * Teacher-route failures other than PublishBlocked, localized by HTTP status.
  * These answers carry English sentences only, so the status is what decides.
  */
-export function teachingErrorMessage(error: unknown): Message {
+export function teachingErrorMessage(
+  error: unknown,
+  context: "publish" | "manage" = "publish",
+): Message {
   if (!isTeachingApiError(error)) return { key: "Update failed" };
   switch (error.status) {
     case 403:
-      return { key: "Only the teacher who owns this path can publish it." };
+      return context === "manage"
+        ? { key: "You can no longer manage this teacher path." }
+        : { key: "Only the teacher who owns this path can publish it." };
     case 404:
       return { key: "This teacher path or assignment no longer exists." };
     case 409:
       return {
-        key: "This teacher path changed in the meantime (edited, published or archived elsewhere). Close this dialog and try again.",
+        key: "This teacher path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.",
       };
     case 422:
-      return { key: "Only active student accounts can be assigned." };
+      // A plain sentence is the service's student check; request validation
+      // (a list, e.g. too many ids) is not about student accounts.
+      return typeof error.detail === "string"
+        ? { key: "Only active student accounts can be assigned." }
+        : { key: "Update failed" };
     default:
       return { key: "Update failed" };
   }

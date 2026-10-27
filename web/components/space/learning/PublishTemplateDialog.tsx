@@ -275,7 +275,7 @@ export function PublishTemplateDialog({
                 ))}
                 {outlineIssues.length > 0 && (
                   <li>
-                    {t("The outline is not ready to publish. Fix it in the outline, then check again.")}
+                    {t("The outline or the change decisions cannot be published yet. Fix them, then check again.")}
                     <ul lang="en" className="mt-1 list-[circle] pl-4 text-[var(--muted-foreground)]">
                       {outlineIssues.map((message, index) => (
                         <li key={`${index}:${message}`}>{message}</li>

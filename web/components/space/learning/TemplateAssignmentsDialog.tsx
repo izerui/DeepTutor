@@ -52,7 +52,7 @@ export function TemplateAssignmentsDialog({
         if (alive) setRows(next);
       })
       .catch((reason) => {
-        if (alive) setError(teachingErrorMessage(reason));
+        if (alive) setError(teachingErrorMessage(reason, "manage"));
       });
     return () => {
       alive = false;
@@ -68,7 +68,7 @@ export function TemplateAssignmentsDialog({
       if (after) after();
       else setReload((value) => value + 1);
     } catch (reason) {
-      setError(teachingErrorMessage(reason));
+      setError(teachingErrorMessage(reason, "manage"));
     } finally {
       setBusy(false);
     }
