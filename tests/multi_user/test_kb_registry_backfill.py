@@ -241,12 +241,17 @@ def test_missing_dir_kb_skipped_and_does_not_block_promotion(mu_isolated_root, s
     # Migration must be marked complete (key set), not left pending.
     assert registry.get_meta(GRANTS_PROMOTED_KEY) is not None
 
-    # A skip notice must be recorded.
+    # A skip notice must be recorded with consistent fields.
     items = {(item.kind, item.key): item.data for item in registry.list_migration_items()}
-    vanished_skips = [
-        (k, key) for (k, key) in items if k == "kb_dir_missing_skipped"
-    ]
-    assert len(vanished_skips) >= 1
+    vanished_skips = {
+        key: data for (k, key), data in items.items() if k == "kb_dir_missing_skipped"
+    }
+    assert len(vanished_skips) == 1
+    skip_data = next(iter(vanished_skips.values()))
+    assert skip_data["kb_id"] == vanished.kb_id
+    assert skip_data["name"] == vanished.name  # display name
+    assert skip_data["dir_name"] == "vanished"  # directory name
+    assert "alice" in skip_data["users"]
 
     # Step 5: Second run is a no-op (idempotent).
     report3 = backfill_registry()

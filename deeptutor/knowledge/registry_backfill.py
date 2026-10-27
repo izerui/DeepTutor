@@ -362,7 +362,10 @@ def _freeze_targets(admin_root: Path, *, census_complete: bool | None = None) ->
                     logger.warning(
                         "Registered admin KB directory missing, skipping D16 target: %s", name
                     )
-                    _record_dir_missing(conn, record.kb_id, name, usernames)
+                    _record_dir_missing(
+                        conn, record.kb_id,
+                        name=record.name, dir_name=name, users=usernames,
+                    )
                     continue
                 if not stat.S_ISDIR(info.st_mode):
                     raise ValueError(f"Unsafe legacy KB location: {name}")
@@ -391,15 +394,30 @@ def _freeze_targets(admin_root: Path, *, census_complete: bool | None = None) ->
         return snapshot
 
 
-def _record_dir_missing(conn: sqlite3.Connection, kb_id: str, name: str, users: list[str]) -> None:
-    """Record a migration skip for a registered KB whose directory no longer exists."""
+def _record_dir_missing(
+    conn: sqlite3.Connection,
+    kb_id: str,
+    *,
+    name: str,
+    dir_name: str,
+    users: list[str],
+) -> None:
+    """Record a migration skip for a registered KB whose directory no longer exists.
+
+    Uses ``conn`` directly instead of ``registry.add_migration_item`` because
+    the caller is already inside a ``_write()`` transaction — opening a second
+    writer would deadlock under BEGIN IMMEDIATE.
+    """
     conn.execute(
         "INSERT INTO migration_items (kind, item_key, data, created_at) VALUES (?, ?, ?, ?) "
         "ON CONFLICT(kind, item_key) DO UPDATE SET data = excluded.data",
         (
             "kb_dir_missing_skipped",
             kb_id,
-            json.dumps({"kb_id": kb_id, "name": name, "users": users}, ensure_ascii=False),
+            json.dumps(
+                {"kb_id": kb_id, "name": name, "dir_name": dir_name, "users": users},
+                ensure_ascii=False,
+            ),
             registry._now(),
         ),
     )
@@ -440,7 +458,11 @@ def _promote_target(kb_id: str) -> tuple[dict, bool]:
                     logger.warning(
                         "KB directory missing during promotion, skipping: %s", kb_id
                     )
-                    _record_dir_missing(conn, kb_id, record.name, target["users"])
+                    _record_dir_missing(
+                        conn, kb_id,
+                        name=record.name, dir_name=record.dir_name,
+                        users=target["users"],
+                    )
                     progress = {"notices": [], "done": True}
                     _put_progress(conn, kb_id, progress)
                     return progress, False
