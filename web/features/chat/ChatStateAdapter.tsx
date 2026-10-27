@@ -4,6 +4,7 @@ import { supportsSubmissionReplacement } from "@/lib/session-api";
 
 import { activeWorkspaceId } from "@/lib/workspace-scope";
 import {
+  annotateFailureCode,
   clearFailedSubmission,
   moveFailedSubmissions,
   readFailedSubmissions,
@@ -342,6 +343,8 @@ export interface MessageItem {
   failedSubmissionNeedsReview?: boolean;
   failedSubmissionNotSaved?: boolean;
   failedSubmissionId?: string;
+  /** Stable teacher-path failure code preserved across reloads (B2-16). */
+  failureCode?: string;
   /** A backend failure with a saved user row and no assistant reply (#1570). */
   orphanedFailedTurn?: OrphanedFailedTurn;
 }
@@ -559,6 +562,7 @@ function restoredFailedMessage(
     failedSubmission: true,
     failedSubmissionNeedsReview: record.retryRequiresReview,
     failedSubmissionId: record.submissionId,
+    ...(record.failureCode ? { failureCode: record.failureCode } : {}),
   };
 }
 
@@ -2254,6 +2258,20 @@ export function ChatStateAdapterProvider({
         // user row. Other terminal errors are not causal proof that the user
         // row was persisted either; transcript reconciliation uses the
         // client_submission_id stored on that row.
+        // B2-16: when the turn was refused by a teacher-path gate (e.g.
+        // materials forced private), annotate the local-storage record with
+        // the stable failure code so the localized reason survives a reload.
+        const pendingSub = pendingSubmissionIdsRef.current.get(effectiveKey);
+        const errorCode = String(
+          (event.metadata as { error_code?: string } | undefined)?.error_code || "",
+        );
+        if (pendingSub?.submissionId && errorCode) {
+          annotateFailureCode(
+            pendingSub.storageKey,
+            pendingSub.submissionId,
+            errorCode,
+          );
+        }
         pendingSubmissionIdsRef.current.delete(effectiveKey);
         const status = String(
           (event.metadata as { status?: string } | undefined)?.status ||

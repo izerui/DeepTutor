@@ -18,6 +18,11 @@ export interface FailedSubmissionRecord {
   priorMatchingUserIds?: string[];
   /** The text survived, but its request context could not be stored. */
   retryRequiresReview?: boolean;
+  /** Stable machine-readable code of a teacher-path refusal that ended the
+   *  turn before the server could persist the user row (e.g.
+   *  `teacher_materials_unavailable`). Annotated after the terminal error
+   *  arrives so the reason survives a reload. */
+  failureCode?: string;
 }
 
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -265,6 +270,25 @@ export function storeFailedSubmission(
     priorMatchingUserIds: submission.priorMatchingUserIds ?? [],
   };
   return persistRecord(sessionId, record) ? submissionId : null;
+}
+
+/** Annotate an existing failed-submission record with a stable failure code.
+ *
+ * Called when a terminal error carries a teacher-path refusal code but the
+ * server never confirmed the user row (no `user_message_id` in DONE). The
+ * code is written back so a reload can display the localized refusal reason
+ * instead of the generic "Not sent" label. */
+export function annotateFailureCode(
+  sessionId: string,
+  submissionId: string,
+  failureCode: string,
+): boolean {
+  if (!sessionId || !submissionId || !failureCode) return false;
+  const record = directRecords(sessionId)
+    .find((r) => r.submissionId === submissionId);
+  if (!record) return false;
+  record.failureCode = failureCode;
+  return persistRecord(sessionId, record) !== null;
 }
 
 /** Read this owner's local and tab fallback records. Unowned legacy data is

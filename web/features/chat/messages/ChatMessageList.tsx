@@ -167,6 +167,8 @@ interface ChatMessageItem {
    *  unsent message, not an ordinary sent one. */
   failedSubmission?: boolean;
   failedSubmissionNeedsReview?: boolean;
+  /** Stable teacher-path failure code preserved across reloads (B2-16). */
+  failureCode?: string;
   orphanedFailedTurn?: OrphanedFailedTurn;
 }
 
@@ -1912,7 +1914,12 @@ export const UserMessage = memo(function UserMessage({
             className="flex items-center gap-1 pr-1 text-[11px] font-medium text-[var(--destructive)]"
           >
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("Not sent")}
+            {(() => {
+              const teacher = msg.failureCode
+                ? teacherTurnErrorMessage({ error_code: msg.failureCode })
+                : null;
+              return teacher ? t(teacher.key, teacher.values) : t("Not sent");
+            })()}
             {onRetryFailedSubmission && !msg.failedSubmissionNeedsReview && typeof msg.id === "number" && (
               <button type="button" disabled={editDisabled || retrying} onClick={async () => {
                 if (retrying || typeof msg.id !== "number") return;
@@ -2346,7 +2353,14 @@ export const ChatMessageList = memo(function ChatMessageList({
                 >
                   <AlertCircle className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
                   <span className="min-w-0 flex-1 text-[12px] leading-[1.5] text-[var(--foreground)]">
-                    {orphanedFailure.error || t("The turn was interrupted.")}
+                    {(() => {
+                      const teacher = orphanedFailure.failure_code
+                        ? teacherTurnErrorMessage({ error_code: orphanedFailure.failure_code })
+                        : null;
+                      return teacher
+                        ? t(teacher.key, teacher.values)
+                        : (orphanedFailure.error || t("The turn was interrupted."));
+                    })()}
                   </span>
                   {!isStreaming && rowIndex === messageRows.length - 1 &&
                     canResendLastTurn && orphanedFailure.retryable && onResendLastTurn ? (
