@@ -28,13 +28,11 @@ def test_locked_registry_during_migration_raises_workspace_error(account, tmp_pa
     workspace = account.create_workspace("Busy")
     destination = tmp_path / "busy-move"
 
-    original_snapshot = migration._registry_snapshot
-
     def locked_snapshot(sources):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(migration, "_registry_snapshot", locked_snapshot)
-    with pytest.raises(WorkspaceError, match="(?i)busy|locked|in use"):
+    with pytest.raises(WorkspaceError, match="(?i)snapshot"):
         with account.maintenance():
             account.migrate_workspace(workspace["workspace_id"], str(destination))
     assert not destination.exists()
@@ -48,13 +46,28 @@ def test_locked_registry_during_joint_write_raises_workspace_error(account, tmp_
     workspace = account.create_workspace("BusyJoint")
     destination = tmp_path / "busy-joint-move"
 
-    original_relocate = migration._relocate_registry_rows
-
     def locked_relocate(conn, *args, **kwargs):
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(migration, "_relocate_registry_rows", locked_relocate)
-    with pytest.raises(WorkspaceError, match="(?i)busy|locked|in use"):
+    with pytest.raises(WorkspaceError, match="(?i)migration commit"):
+        with account.maintenance():
+            account.migrate_workspace(workspace["workspace_id"], str(destination))
+
+
+def test_non_lock_operational_error_is_not_converted(account, tmp_path, monkeypatch):
+    """A non-lock OperationalError (e.g. disk full, corruption) must NOT be
+    converted to WorkspaceError — it should propagate as-is (→ 500)."""
+    from deeptutor.services.workspace import migration
+
+    workspace = account.create_workspace("DiskFull")
+    destination = tmp_path / "disk-full-move"
+
+    def corrupt_snapshot(sources):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(migration, "_registry_snapshot", corrupt_snapshot)
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
         with account.maintenance():
             account.migrate_workspace(workspace["workspace_id"], str(destination))
 
@@ -62,7 +75,7 @@ def test_locked_registry_during_joint_write_raises_workspace_error(account, tmp_
 # ── Problem 2: attach-path collision message accuracy ────────────────
 
 
-def test_attach_path_collision_message_names_actual_conflict(tmp_path):
+def test_attach_path_collision_message_names_actual_conflict(account):
     """When an attach path collides with a registry path, the error message
     should name the actual conflict, not just 'Book and KB registries'."""
     from deeptutor.book import registry as books

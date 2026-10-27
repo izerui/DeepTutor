@@ -103,6 +103,10 @@ def migrate_locations(
     from deeptutor.book.sharing import shared_write
     from deeptutor.services.workspace.models import WorkspaceError
 
+    def _is_lock_error(exc: sqlite3.OperationalError) -> bool:
+        msg = str(exc).lower()
+        return "locked" in msg or "busy" in msg
+
     prepared: list[tuple[dict, Path, Path]] = []
     owned_destinations: list[Path] = []
     staging: list[Path] = []
@@ -119,15 +123,19 @@ def migrate_locations(
         try:
             snapshot = _registry_snapshot(sources)
         except sqlite3.OperationalError as exc:
+            if not _is_lock_error(exc):
+                raise
             raise WorkspaceError(
                 "The registry database is currently in use by another operation. "
-                "Retry after active writes have finished."
+                "Retry the snapshot after active writes have finished."
             ) from exc
         for (row, destination), source in zip(moves, sources):
             destination = destination.expanduser().resolve()
             if source == destination:
                 continue
             service._assert_allowed_root(destination)
+            # Re-check after snapshot: the source could have been removed between
+            # the early validation and the copy (TOCTOU defense).
             if not source.is_dir():
                 raise WorkspaceError("The source workspace folder does not exist.")
             if destination.is_relative_to(source) or source.is_relative_to(destination):
@@ -192,11 +200,13 @@ def migrate_locations(
                 "Choose a new folder."
             ) from exc
         except sqlite3.OperationalError as exc:
+            if not _is_lock_error(exc):
+                raise
             # A busy/locked database from a concurrent writer must surface as a
             # retryable 409, not an unhandled 500.
             raise WorkspaceError(
-                "The registry database is currently in use by another operation. "
-                "Retry after active writes have finished."
+                "The registry database is locked by another writer during the "
+                "migration commit. Retry after active writes have finished."
             ) from exc
         except BookRegistryError as exc:
             # e.g. a non-DELETE journal: registries cannot follow atomically,
