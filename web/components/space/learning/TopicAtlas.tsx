@@ -22,7 +22,10 @@ import { setPendingPrompt } from '@/lib/pending-prompt'
 
 import { useLibraryFilter } from '@/components/learning/LibraryWorkspace'
 import { libraryItemKey } from '@/lib/learning-library'
+import type { TeacherTemplate } from '@/lib/teaching-api'
 import { topicDisplayName } from './format'
+import { TeacherCardActions, UnlistedTeacherTemplates } from './TeacherCardActions'
+import { isTeacherInstance, templateForTopic } from './teaching'
 import { TopicMapCard } from './TopicMapCard'
 
 export function TopicAtlas({
@@ -32,6 +35,10 @@ export function TopicAtlas({
   onCreate,
   onRetry,
   scopeChip,
+  teacherTemplates,
+  unlistedTemplates,
+  onPublish,
+  onManage,
 }: {
   topics: MasteryTopic[]
   loading: boolean
@@ -40,6 +47,16 @@ export function TopicAtlas({
   onRetry: () => void
   /** Rendered beside the eyebrow when this visit belongs to one course. */
   scopeChip?: React.ReactNode
+  /** Present for teachers and admins: their own templates, to decorate their own cards. */
+  teacherTemplates?: TeacherTemplate[]
+  /** Templates without a card here (another teacher's, or without a draft): manage only. */
+  unlistedTemplates?: TeacherTemplate[]
+  onPublish?: (
+    topic: MasteryTopic,
+    template: TeacherTemplate | undefined,
+    trigger: HTMLButtonElement
+  ) => void
+  onManage?: (template: TeacherTemplate, trigger: HTMLButtonElement) => void
 }) {
   const { t } = useTranslation()
   const { rows: topics, control } = useLibraryFilter(allTopics)
@@ -123,7 +140,20 @@ export function TopicAtlas({
           className={`mt-9 ${pageGridClass(3)}`}
         >
           {activeTopics.map(topic => (
-            <TopicMapCard key={libraryItemKey(topic, topic.path_id)} topic={topic} />
+            <TopicMapCard
+              key={libraryItemKey(topic, topic.path_id)}
+              topic={topic}
+              footer={
+                teacherTemplates && onPublish && onManage && !isTeacherInstance(topic) ? (
+                  <TeacherCardActions
+                    topic={topic}
+                    template={templateForTopic(teacherTemplates, topic)}
+                    onPublish={onPublish}
+                    onManage={onManage}
+                  />
+                ) : undefined
+              }
+            />
           ))}
         </section>
       ) : !error ? (
@@ -145,6 +175,9 @@ export function TopicAtlas({
           }
         />
       ) : null}
+      {unlistedTemplates && onManage && !loading && (
+        <UnlistedTeacherTemplates templates={unlistedTemplates} onManage={onManage} />
+      )}
     </LearningShell>
   )
 }
