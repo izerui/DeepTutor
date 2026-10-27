@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 import logging
+import threading
 import time
 
 from deeptutor.knowledge.registry import AccountHandoff
@@ -256,19 +257,23 @@ def retry_handoff(user_id: str, *, fallback_successor: str = "") -> AccountHando
 
 
 def retry_pending_handoffs(
-    *, limit: int = STARTUP_RETRY_LIMIT, budget: float = STARTUP_RETRY_BUDGET
+    *,
+    limit: int = STARTUP_RETRY_LIMIT,
+    budget: float = STARTUP_RETRY_BUDGET,
+    stop: threading.Event | None = None,
 ) -> dict[str, int]:
     """Startup pass: retry each pending hand-over once, oldest first.
 
     Blocked records are skipped. Bounded by *limit* records and by *budget*
-    seconds (no new record starts after it). Blocking: run it off the loop.
+    seconds, and ended by *stop* (shutdown): no new record starts after any
+    of them; the record in progress finishes. Blocking: run it off the loop.
     """
     records = list_pending_handoffs()
     waiting = [record for record in records if record.status != "blocked"]
     deadline = time.monotonic() + budget
     retried = cleared = blocked_now = 0
     for record in waiting[: max(limit, 0)]:
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= deadline or (stop is not None and stop.is_set()):
             break
         retried += 1
         try:
@@ -291,12 +296,17 @@ def retry_pending_handoffs(
     }
 
 
-def start_background_retry() -> asyncio.Task[dict[str, int] | None]:
-    """Schedule the startup pass on a worker thread; serving does not wait."""
+def start_background_retry(
+    stop: threading.Event | None = None,
+) -> asyncio.Task[dict[str, int] | None]:
+    """Schedule the startup pass on a worker thread; serving does not wait.
+
+    Set *stop* at shutdown: the pass ends after the record in progress.
+    """
 
     async def run() -> dict[str, int] | None:
         try:
-            report = await asyncio.to_thread(retry_pending_handoffs)
+            report = await asyncio.to_thread(retry_pending_handoffs, stop=stop)
         except Exception:
             logger.exception("Pending account hand-over retry failed")
             return None

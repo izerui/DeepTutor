@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import sys
+import threading
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -358,10 +359,11 @@ async def lifespan(app: FastAPI):
     # failed or was interrupted (B2-9): in the background on a worker thread,
     # bounded by count and time; each stage is idempotent. Serving never waits.
     handoff_retry = None
+    handoff_stop = threading.Event()
     try:
         from deeptutor.multi_user.account_handoff import start_background_retry
 
-        handoff_retry = start_background_retry()
+        handoff_retry = start_background_retry(handoff_stop)
     except Exception:
         logger.exception("Could not start the pending account hand-over retry")
     yield
@@ -372,8 +374,9 @@ async def lifespan(app: FastAPI):
 
     install_progress_ports(broadcast=None, emit_task_event=None)
 
+    # No further hand-over record starts; the one in progress finishes.
+    handoff_stop.set()
     if handoff_retry is not None and not handoff_retry.done():
-        # The worker thread cannot be interrupted; give it a moment, then go on.
         await asyncio.wait({handoff_retry}, timeout=5)
 
     try:

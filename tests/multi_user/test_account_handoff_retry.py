@@ -299,7 +299,7 @@ def test_the_lifespan_schedules_the_retry_after_startup_without_awaiting_it():
     from deeptutor.api import main
 
     source = inspect.getsource(main.lifespan)
-    scheduled = source.index("start_background_retry()")
+    scheduled = source.index("start_background_retry(handoff_stop)")
     assert source.index("app.state.ready = True") < scheduled < source.index("yield")
     assert "retry_pending_handoffs" not in source  # never awaited inline
 
@@ -344,6 +344,44 @@ def test_the_background_retry_keeps_the_event_loop_serving(world, teaching_users
     assert report == {"retried": 1, "cleared": 1, "pending": 0, "blocked": 0}
     assert sum(gaps) >= 0.8 and max(gaps) < 0.5
     assert book_registry.get_book(world.book.book_id).created_by == world.adam
+
+
+def test_a_stop_signal_ends_the_startup_pass_after_the_current_record(
+    world, teaching_users, monkeypatch
+):
+    import threading
+
+    with monkeypatch.context() as broken:
+        broken.setattr(kb_registry, "transfer_ownership", _broken)
+        auth_router._delete_admin_user("tina", _as_admin(teaching_users))
+        auth_router._delete_admin_user("sara", _as_admin(teaching_users))
+
+    stop = threading.Event()
+    seen: list[str] = []
+    original = account_handoff.retry_handoff
+
+    def retry_then_shut_down(user_id, **kwargs):
+        seen.append(user_id)
+        stop.set()  # shutdown arrives while this record runs
+        return original(user_id, **kwargs)
+
+    monkeypatch.setattr(account_handoff, "retry_handoff", retry_then_shut_down)
+
+    report = account_handoff.retry_pending_handoffs(stop=stop)
+
+    assert len(seen) == 1  # the current record finished, no further one started
+    assert report == {"retried": 1, "cleared": 1, "pending": 1, "blocked": 0}
+    assert len(account_handoff.list_pending_handoffs()) == 1
+
+
+def test_the_lifespan_signals_the_retry_to_stop_at_shutdown():
+    import inspect
+
+    from deeptutor.api import main
+
+    source = inspect.getsource(main.lifespan)
+    assert "start_background_retry(handoff_stop)" in source
+    assert source.index("yield") < source.index("handoff_stop.set()")
 
 
 def test_a_crash_between_revocation_and_release_is_finished_by_the_retry(world, monkeypatch):
