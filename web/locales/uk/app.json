@@ -5605,7 +5605,7 @@
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} міг(-ла) редагувати «{{title}}». Тепер редагувати можуть лише автор і адміністратори; розгляньте передачу книги.",
   "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Публічна книга «{{title}}» використовує {{kb}}, недоступну її читачам.",
   "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}": "Бази знань «{{name}}» більше не існує, тому її не зроблено публічною. Доступ до неї мали: {{users}}",
-  "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}": "Книгу «{{title}}» прибрано зі спільної полиці до оновлення, тому її не зроблено публічною. Нею ділилися з: {{users}}",
+  "Book “{{title}}” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: {{users}}": "Книгу «{{title}}» переміщено або видалено зі спільної полиці до перенесення її спільного доступу, тому її не зроблено публічною. Нею ділилися з: {{users}}",
   "{{materials}} public books · {{resources}} enabled resources": "{{materials}} публічних книг · {{resources}} увімкнених ресурсів",
   "Review authorized learners and their learning reports.": "Переглядайте авторизованих учнів та їхні звіти про навчання.",
   "Publish to students": "Опублікувати для учнів",

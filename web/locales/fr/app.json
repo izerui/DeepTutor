@@ -5958,7 +5958,7 @@
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} pouvait modifier « {{title}} ». Seuls le créateur et les administrateurs peuvent désormais le modifier ; envisagez de transférer le livre.",
   "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Le livre public « {{title}} » utilise {{kb}}, inaccessible à ses lecteurs.",
   "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}": "La base de connaissances « {{name}} » n’existe plus ; elle n’a donc pas été rendue publique. Elle était accordée à : {{users}}",
-  "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}": "Le livre « {{title}} » a quitté l’étagère partagée avant la mise à niveau ; il n’a donc pas été rendu public. Il était partagé avec : {{users}}",
+  "Book “{{title}}” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: {{users}}": "Le livre « {{title}} » a été déplacé ou retiré de l’étagère partagée avant la migration de son partage ; il n’a donc pas été rendu public. Il était partagé avec : {{users}}",
   "{{materials}} public books · {{resources}} enabled resources": "{{materials}} livres publics · {{resources}} ressources activées",
   "Review authorized learners and their learning reports.": "Consultez les apprenants autorisés et leurs rapports d'apprentissage.",
   "Publish to students": "Publier pour les élèves",

@@ -148,13 +148,15 @@ def _resume_inventory() -> dict:
     """Recover only directories proven to predate the durable start fence.
 
     Kernel ctime (not editable manifest timestamps or mtime alone) is evidence
-    of prior existence. A directory whose ctime is after the fence (created,
-    copied or moved in later) is a new book: it is classified ``post_fence``
-    and never auto-published. A listing is a complete original census only if
-    the shelf directory itself had not changed since the fence when it was
-    taken; once one such listing succeeded, later shelf changes no longer
-    block completion. Without it, unknown obligations remain, even if all
-    currently visible old books have been migrated.
+    of prior existence. A listing is a complete original census only if the
+    shelf directory itself had not changed since the fence when it was taken;
+    its names are then persisted as ``census_names`` and every listed
+    directory is original (an edited book's own ctime may have advanced).
+    After that proof, names outside the census are new books (``post_fence``,
+    never auto-published), and an original name that disappeared becomes a
+    target that promotion reports as having left the shelf. An original name
+    whose identity cannot be proven stays pending. Without a proven census,
+    unknown obligations remain, even if all visible old books are migrated.
     """
     with registry._write() as conn:
         snapshot = json.loads(conn.execute(
@@ -188,41 +190,63 @@ def _resume_inventory() -> dict:
                     raise ValueError(f"Unsafe legacy shelf: {root}")
                 names = {child.name for child in root.iterdir() if child.name.startswith("book_")}
                 snapshot["observed"] = sorted(set(snapshot["observed"]) | names)
+                post_fence = snapshot.setdefault("post_fence", {})
+                staged = {}
                 for dirname in snapshot["observed"]:
-                    if dirname in snapshot["targets"] or dirname in snapshot.get("post_fence", {}):
+                    if dirname in snapshot["targets"] or dirname in post_fence:
                         continue
                     try:
                         info = (root / dirname).lstat()
                         if not stat.S_ISDIR(info.st_mode):
                             raise ValueError("Not a canonical book directory")
-                        now = time.time_ns()
-                        if snapshot["started_ns"] <= info.st_ctime_ns <= now:
-                            # Created, copied or moved in after the fence: a
-                            # new book, never auto-published (fail closed).
-                            snapshot.setdefault("post_fence", {})[dirname] = [info.st_dev, info.st_ino]
-                            snapshot["pending"].pop(dirname, None)
-                            continue
-                        if not 0 < info.st_ctime_ns < snapshot["started_ns"] <= now:
-                            raise ValueError("Directory cannot be proven to predate migration")
-                        snapshot["targets"][dirname] = [info.st_dev, info.st_ino]
-                        snapshot["pending"].pop(dirname, None)
+                        staged[dirname] = info
                     except (OSError, ValueError) as exc:
-                        snapshot["pending"][dirname] = str(exc)
-                        logger.warning("Legacy inventory target pending %s: %s", root / dirname, exc)
+                        staged[dirname] = exc
                 after = root.lstat()
+                now = time.time_ns()
                 unchanged_census = (
                     (before.st_dev, before.st_ino, before.st_ctime_ns, before.st_mtime_ns)
                     == (after.st_dev, after.st_ino, after.st_ctime_ns, after.st_mtime_ns)
-                    and 0 < after.st_ctime_ns < snapshot["started_ns"] <= time.time_ns()
+                    and 0 < after.st_ctime_ns < snapshot["started_ns"] <= now
                     and after.st_mtime_ns < snapshot["started_ns"]
                 )
-                # One unchanged listing proves the original name census; later
-                # shelf changes (post-fence arrivals) cannot shrink ``observed``.
-                if unchanged_census:
-                    snapshot["census_proven"] = True
-                snapshot["inventory_complete"] = (
-                    bool(snapshot.get("census_proven")) and not snapshot["pending"]
-                )
+                # An unchanged root since the fence means no entry was added,
+                # removed or renamed: this listing is the original census and
+                # every listed directory keeps its original inode, even if its
+                # own ctime advanced because the book was edited.
+                if unchanged_census and "census_names" not in snapshot:
+                    snapshot["census_names"] = sorted(snapshot["observed"])
+                census = set(snapshot.get("census_names", ()))
+                proven = "census_names" in snapshot
+                for dirname, info in staged.items():
+                    if proven and dirname not in census:
+                        # Added after the proven original census: a new book,
+                        # never auto-published (fail closed).
+                        post_fence[dirname] = None if isinstance(info, Exception) else [
+                            info.st_dev, info.st_ino,
+                        ]
+                        snapshot["pending"].pop(dirname, None)
+                        continue
+                    if isinstance(info, FileNotFoundError) and proven:
+                        # An original book left the shelf before classification;
+                        # promotion reports it once and never publishes it.
+                        snapshot["targets"][dirname] = None
+                        snapshot["pending"].pop(dirname, None)
+                        continue
+                    if not isinstance(info, Exception) and (
+                        unchanged_census
+                        or 0 < info.st_ctime_ns < snapshot["started_ns"] <= now
+                    ):
+                        snapshot["targets"][dirname] = [info.st_dev, info.st_ino]
+                        snapshot["pending"].pop(dirname, None)
+                        continue
+                    reason = (
+                        str(info) if isinstance(info, Exception)
+                        else "Directory cannot be proven to predate migration"
+                    )
+                    snapshot["pending"][dirname] = reason
+                    logger.warning("Legacy inventory target pending %s: %s", root / dirname, reason)
+                snapshot["inventory_complete"] = proven and not snapshot["pending"]
         except (OSError, ValueError):
             logger.exception("Legacy shelf inventory remains unknown: %s", root)
         conn.execute(
@@ -399,6 +423,12 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
         if previous:
             return json.loads(previous[0]), False
         folder = Path(snapshot["base_dir"]) / dirname
+        from deeptutor.multi_user.paths import get_admin_path_service
+
+        storage = BookStorage(path_service=get_admin_path_service())
+        # A relocated data root is retryable, never "every book left the shelf".
+        if str(storage.path_service.get_book_dir().resolve()) != snapshot["base_dir"]:
+            raise ValueError("Legacy shelf root changed during migration")
         record = registry._get_book(conn, book_id)
         left_shelf = record is not None and (
             record.base_dir != snapshot["base_dir"] or record.dir_name != dirname
@@ -427,11 +457,6 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
             return progress, False
         if [info.st_dev, info.st_ino] != snapshot["targets"][dirname] or not stat.S_ISDIR(info.st_mode):
             raise ValueError(f"Legacy book location replaced: {folder}")
-        from deeptutor.multi_user.paths import get_admin_path_service
-
-        storage = BookStorage(path_service=get_admin_path_service())
-        if str(storage.path_service.get_book_dir().resolve()) != snapshot["base_dir"]:
-            raise ValueError("Legacy shelf root changed during migration")
         manifest = storage.path_service.get_book_manifest_file(book_id)
         if manifest.is_symlink():
             raise ValueError(f"Unsafe legacy manifest: {manifest}")

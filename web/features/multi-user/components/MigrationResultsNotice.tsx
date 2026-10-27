@@ -54,7 +54,7 @@ export const MIGRATION_ITEM_RENDERERS: Record<
     ),
   book_left_shelf_skipped: (item, t) =>
     t(
-      "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}",
+      "Book “{{title}}” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: {{users}}",
       { title: String(item.data.title ?? item.data.book_id ?? item.key), users: list(item.data.users) },
     ),
   book_kb_unavailable: (item, t) =>

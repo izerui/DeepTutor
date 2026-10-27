@@ -76,8 +76,8 @@ it("renders skipped knowledge bases and books the same way", async () => {
     { kind: "book_left_shelf_skipped", key: "bk4", data: { book_id: "bk4", users: ["carol"] }, created_at: "" },
   ]);
   expect(await screen.findByText("Knowledge base “Gone KB” no longer exists, so it was not made public. It was granted to: alice")).toBeVisible();
-  expect(screen.getByText("Book “<Moved>” left the shared shelf before the upgrade, so it was not made public. It was shared with: alice, bob")).toBeVisible();
-  expect(screen.getByText("Book “bk4” left the shared shelf before the upgrade, so it was not made public. It was shared with: carol")).toBeVisible();
+  expect(screen.getByText("Book “<Moved>” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: alice, bob")).toBeVisible();
+  expect(screen.getByText("Book “bk4” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: carol")).toBeVisible();
 });
 
 it.each([403, 500])("renders nothing when the endpoint returns %s", async status => {

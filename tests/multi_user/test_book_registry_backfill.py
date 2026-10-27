@@ -598,16 +598,17 @@ def test_first_inventory_failure_preserves_boundary_and_legacy_evidence(
     assert current["started_ns"] == first["started_ns"]
     assert current["grants"] == first["grants"]
     assert "book_bk_new" not in current["targets"]
-    # B2-8: a post-fence directory is a new book, not a pending legacy target.
-    assert "book_bk_new" in current["post_fence"]
-    assert "book_bk_new" not in current["pending"]
     if failure == "iterdir":
-        # No unchanged listing ever proved the original census: unknown
-        # original inventory is an obligation, not an empty successful scan.
+        # No unchanged listing ever proved the original census: bk_new cannot
+        # be told apart from an edited original, and the unknown original
+        # inventory is an obligation, not an empty successful scan.
+        assert "book_bk_new" in current["pending"]
         assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
     else:
-        # The first listing was an unchanged census; the later arrival of a
-        # new book cannot leave the migration pending forever.
+        # B2-8: the first listing was an unchanged census, so the later
+        # arrival is a new book and cannot leave the migration pending.
+        assert "book_bk_new" in current["post_fence"]
+        assert "book_bk_new" not in current["pending"]
         assert current["inventory_complete"] is True
         assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
     with user_context(local_admin_user()):
@@ -904,3 +905,89 @@ def test_target_moved_off_shelf_before_promotion_is_recorded_once(
     assert _backfill_warnings(caplog) == []
     assert _items() == items
     assert registry.get_book("bk_edit").visibility == "private"
+
+
+def test_legacy_book_edited_before_first_listing_is_still_legacy(seed_user, caplog):
+    """B2-8 fix round 1: an unchanged shelf root proves every listed book is original."""
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    original = identity.USERS_FILE.read_bytes()
+    identity.USERS_FILE.write_text("{")
+    backfill.backfill_book_registry()
+    first = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert first["attempts"] == 0 and first["inventory_complete"] is False
+    identity.USERS_FILE.write_bytes(original)
+    # Normal editing advances the book directory's ctime past the fence.
+    before = shelf.book_root("bk_edit").lstat().st_ctime_ns
+    shelf.save_book(Book(id="bk_edit", title="Bk_Edit", description="edited after fence"))
+    assert shelf.book_root("bk_edit").lstat().st_ctime_ns > max(before, first["started_ns"])
+
+    backfill.backfill_book_registry()
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert "book_bk_edit" in snapshot["targets"]
+    assert "book_bk_edit" not in snapshot.get("post_fence", {})
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert _items()[("book_auto_public", "bk_edit")]["users"] == ["alice", "bob"]
+    assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    items = _items()
+    assert _backfill_warnings(caplog) == []
+    assert _items() == items
+
+
+def _proven_census_with_pending_bk_edit(shelf, monkeypatch):
+    """First listing proves the census while bk_edit itself cannot be read."""
+    failed_path = shelf.book_root("bk_edit")
+    original = Path.lstat
+    state = {"unavailable": True}
+
+    def fail(path, *args, **kwargs):
+        if state["unavailable"] and path == failed_path:
+            raise PermissionError("synthetic first inventory failure")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", fail)
+    backfill.backfill_book_registry()
+    monkeypatch.setattr(Path, "lstat", original)
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert "book_bk_edit" in snapshot["pending"]
+    return snapshot
+
+
+def test_pending_census_book_edited_after_shelf_change_stays_pending(seed_user, monkeypatch, caplog):
+    """A proven original name is never reclassified as new; unprovable identity stays pending."""
+    shelf, _, _ = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    _proven_census_with_pending_bk_edit(shelf, monkeypatch)
+    shelf.save_book(Book(id="bk_edit", title="Bk_Edit", description="edited after fence"))
+    shelf.save_book(Book(id="bk_new", title="Created after fence"))
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        backfill.backfill_book_registry()
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert "book_bk_edit" in snapshot["pending"]
+    assert "book_bk_edit" not in snapshot.get("post_fence", {})
+    assert "book_bk_new" in snapshot["post_fence"]
+    assert any("book_bk_edit" in record.getMessage() for record in caplog.records)
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    assert registry.get_book("bk_edit").visibility == "private"
+    assert registry.get_book("bk_new").visibility == "private"
+
+
+def test_pending_census_book_removed_later_is_recorded_as_left_shelf(seed_user, monkeypatch, caplog):
+    """B2-8 Minor 1: a never-classified original book that disappears is reported once."""
+    import shutil
+
+    shelf, _, _ = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    _proven_census_with_pending_bk_edit(shelf, monkeypatch)
+    shutil.rmtree(shelf.book_root("bk_edit"))
+    backfill.backfill_book_registry()
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert "book_bk_edit" not in snapshot["pending"]
+    assert _items()[("book_left_shelf_skipped", "bk_edit")]["users"] == ["alice", "bob"]
+    assert ("book_auto_public", "bk_edit") not in _items()
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    items = _items()
+    assert _backfill_warnings(caplog) == []
+    assert _items() == items
