@@ -598,9 +598,18 @@ def test_first_inventory_failure_preserves_boundary_and_legacy_evidence(
     assert current["started_ns"] == first["started_ns"]
     assert current["grants"] == first["grants"]
     assert "book_bk_new" not in current["targets"]
-    assert "book_bk_new" in current["pending"]
-    # Unknown original inventory is an obligation, not an empty successful scan.
-    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    # B2-8: a post-fence directory is a new book, not a pending legacy target.
+    assert "book_bk_new" in current["post_fence"]
+    assert "book_bk_new" not in current["pending"]
+    if failure == "iterdir":
+        # No unchanged listing ever proved the original census: unknown
+        # original inventory is an obligation, not an empty successful scan.
+        assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+    else:
+        # The first listing was an unchanged census; the later arrival of a
+        # new book cannot leave the migration pending forever.
+        assert current["inventory_complete"] is True
+        assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
     with user_context(local_admin_user()):
         registry.set_book_visibility("bk_read", "private")
     assert backfill.backfill_book_registry()["promoted"] == 0
@@ -789,3 +798,109 @@ def test_disappearance_during_fresh_initial_observation_is_not_initial_absence(
     backfill.backfill_book_registry()
     assert registry.get_book("bk_edit").visibility == "public"
     assert ("book_edit_grant_retired", f"{bob['id']}:bk_edit") in _items()
+
+
+def _backfill_warnings(caplog):
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        backfill.backfill_book_registry()
+    return [record for record in caplog.records if record.levelno >= 30]
+
+
+@pytest.mark.parametrize("arrival", ["created", "moved_in"])
+def test_post_fence_shelf_directory_is_not_legacy_and_inventory_completes(
+    seed_user, monkeypatch, caplog, arrival,
+):
+    """B2-8/M8: a book that appears on the shelf after the fence is a new book."""
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    failed_path = shelf.book_root("bk_edit")
+    original = Path.lstat
+    unavailable = True
+
+    def fail(path, *args, **kwargs):
+        if unavailable and path == failed_path:
+            raise PermissionError("synthetic first inventory failure")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", fail)
+    backfill.backfill_book_registry()
+    first = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert first["inventory_complete"] is False
+    unavailable = False
+
+    if arrival == "created":
+        shelf.save_book(Book(id="bk_new", title="Created after fence"))
+    else:
+        outside = BookStorage(path_service=get_path_service_for_scope(scope_for_user(bob["id"], is_admin=False)))
+        outside.save_book(Book(id="bk_new", title="Moved after fence"))
+        outside.book_root("bk_new").rename(shelf.book_root("bk_new"))
+
+    backfill.backfill_book_registry()
+    snapshot = json.loads(registry.get_meta(backfill._INVENTORY_KEY))
+    assert snapshot["started_ns"] == first["started_ns"]
+    assert "book_bk_new" not in snapshot["pending"]
+    assert "book_bk_new" not in snapshot["targets"]
+    assert snapshot["inventory_complete"] is True
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    assert registry.get_book("bk_edit").visibility == "public"
+    assert registry.get_book("bk_new").visibility == "private"
+    assert ("book_auto_public", "bk_new") not in _items()
+    # A second startup is a no-op and logs nothing at warning level.
+    items = _items()
+    assert _backfill_warnings(caplog) == []
+    assert _items() == items
+    assert registry.get_book("bk_new").visibility == "private"
+
+
+@pytest.mark.parametrize("move", ["relocated_copy", "relocated_moved", "deleted"])
+def test_target_moved_off_shelf_before_promotion_is_recorded_once(
+    seed_user, tmp_path, caplog, move,
+):
+    """B2-8/M8: a frozen target that left the shelf is reported, never retried."""
+    import shutil
+
+    from deeptutor.book.sharing import shared_write
+
+    shelf, _, bob = _setup(seed_user)
+    _permission("alice", {"default": "read"})
+    root = shelf.path_service.get_book_dir()
+    backfill._freeze_inventory(root)
+    users, raw = backfill._accounts()
+    backfill._freeze_grants(users, raw)
+    assert backfill._resume_inventory()["inventory_complete"] is True
+    with user_context(local_admin_user()):
+        backfill._sync_scope("local-admin")
+    elsewhere = tmp_path / "workspace-books"
+    elsewhere.mkdir()
+    if move == "deleted":
+        shutil.rmtree(shelf.book_root("bk_edit"))
+    else:
+        if move == "relocated_copy":
+            shutil.copytree(shelf.book_root("bk_edit"), elsewhere / "book_bk_edit")
+        else:
+            shelf.book_root("bk_edit").rename(elsewhere / "book_bk_edit")
+        with shared_write() as conn:
+            registry._relocate_book(conn, "bk_edit", elsewhere)
+
+    caplog.clear()
+    backfill.backfill_book_registry()
+    assert not [r for r in caplog.records if "D22 migration will retry" in r.getMessage()]
+    if move == "relocated_copy":
+        # The stale shelf copy is a separate registration conflict (warned by
+        # the scope sync) until cleaned up; it is never a promotion target.
+        assert registry.get_meta(backfill.SHELF_MIGRATED_KEY) is None
+        shutil.rmtree(shelf.book_root("bk_edit"))
+        backfill.backfill_book_registry()
+    assert registry.get_book("bk_edit").visibility == "private"
+    assert ("book_auto_public", "bk_edit") not in _items()
+    assert _items()[("book_left_shelf_skipped", "bk_edit")] == {
+        "book_id": "bk_edit", "title": "Bk_Edit", "users": ["alice", "bob"],
+    }
+    assert registry.get_book("bk_read").visibility == "public"
+    assert registry.get_meta(backfill.SHELF_MIGRATED_KEY)
+    # A second startup is a no-op and logs nothing at warning level.
+    items = _items()
+    assert _backfill_warnings(caplog) == []
+    assert _items() == items
+    assert registry.get_book("bk_edit").visibility == "private"

@@ -5604,6 +5604,8 @@
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Książka „{{title}}” jest teraz publiczna, ponieważ była udostępniona: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} mógł(-a) edytować „{{title}}”. Teraz edytować mogą tylko twórca i administratorzy; rozważ przekazanie książki.",
   "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Publiczna książka „{{title}}” używa {{kb}}, z której czytelnicy nie mogą korzystać.",
+  "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}": "Baza wiedzy „{{name}}” już nie istnieje, więc nie została upubliczniona. Była udostępniona: {{users}}",
+  "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}": "Książka „{{title}}” została usunięta ze wspólnej półki przed aktualizacją, więc nie została upubliczniona. Była udostępniona: {{users}}",
   "{{materials}} public books · {{resources}} enabled resources": "{{materials}} publicznych książek · {{resources}} włączonych zasobów",
   "Review authorized learners and their learning reports.": "Przeglądaj upoważnionych uczniów i ich raporty z nauki.",
   "Publish to students": "Opublikuj dla uczniów",

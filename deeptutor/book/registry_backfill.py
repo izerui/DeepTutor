@@ -148,10 +148,13 @@ def _resume_inventory() -> dict:
     """Recover only directories proven to predate the durable start fence.
 
     Kernel ctime (not editable manifest timestamps or mtime alone) is evidence
-    of prior existence. A directory changed after the fence stays pending.
-    A later listing is a complete original census only if the shelf directory
-    itself has not changed since that fence; otherwise unknown obligations
-    remain, even if all currently visible old books have been migrated.
+    of prior existence. A directory whose ctime is after the fence (created,
+    copied or moved in later) is a new book: it is classified ``post_fence``
+    and never auto-published. A listing is a complete original census only if
+    the shelf directory itself had not changed since the fence when it was
+    taken; once one such listing succeeded, later shelf changes no longer
+    block completion. Without it, unknown obligations remain, even if all
+    currently visible old books have been migrated.
     """
     with registry._write() as conn:
         snapshot = json.loads(conn.execute(
@@ -186,13 +189,20 @@ def _resume_inventory() -> dict:
                 names = {child.name for child in root.iterdir() if child.name.startswith("book_")}
                 snapshot["observed"] = sorted(set(snapshot["observed"]) | names)
                 for dirname in snapshot["observed"]:
-                    if dirname in snapshot["targets"]:
+                    if dirname in snapshot["targets"] or dirname in snapshot.get("post_fence", {}):
                         continue
                     try:
                         info = (root / dirname).lstat()
                         if not stat.S_ISDIR(info.st_mode):
                             raise ValueError("Not a canonical book directory")
-                        if not 0 < info.st_ctime_ns < snapshot["started_ns"] <= time.time_ns():
+                        now = time.time_ns()
+                        if snapshot["started_ns"] <= info.st_ctime_ns <= now:
+                            # Created, copied or moved in after the fence: a
+                            # new book, never auto-published (fail closed).
+                            snapshot.setdefault("post_fence", {})[dirname] = [info.st_dev, info.st_ino]
+                            snapshot["pending"].pop(dirname, None)
+                            continue
+                        if not 0 < info.st_ctime_ns < snapshot["started_ns"] <= now:
                             raise ValueError("Directory cannot be proven to predate migration")
                         snapshot["targets"][dirname] = [info.st_dev, info.st_ino]
                         snapshot["pending"].pop(dirname, None)
@@ -206,7 +216,13 @@ def _resume_inventory() -> dict:
                     and 0 < after.st_ctime_ns < snapshot["started_ns"] <= time.time_ns()
                     and after.st_mtime_ns < snapshot["started_ns"]
                 )
-                snapshot["inventory_complete"] = unchanged_census and not snapshot["pending"]
+                # One unchanged listing proves the original name census; later
+                # shelf changes (post-fence arrivals) cannot shrink ``observed``.
+                if unchanged_census:
+                    snapshot["census_proven"] = True
+                snapshot["inventory_complete"] = (
+                    bool(snapshot.get("census_proven")) and not snapshot["pending"]
+                )
         except (OSError, ValueError):
             logger.exception("Legacy shelf inventory remains unknown: %s", root)
         conn.execute(
@@ -383,7 +399,32 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
         if previous:
             return json.loads(previous[0]), False
         folder = Path(snapshot["base_dir"]) / dirname
-        info = folder.lstat()
+        record = registry._get_book(conn, book_id)
+        left_shelf = record is not None and (
+            record.base_dir != snapshot["base_dir"] or record.dir_name != dirname
+        )
+        try:
+            info = None if left_shelf else folder.lstat()
+        except FileNotFoundError:
+            # Only a present shelf proves the book itself is gone; an absent
+            # (e.g. unmounted) shelf stays a retryable obligation.
+            if not stat.S_ISDIR(folder.parent.lstat().st_mode):
+                raise ValueError(f"Unsafe legacy shelf: {folder.parent}")
+            left_shelf = True
+        if left_shelf:
+            # Moved off the shelf (e.g. into a workspace) or removed before
+            # promotion: never publish, tell admins once and stop retrying.
+            users = [
+                grant["username"] for grant in snapshot["grants"]
+                if grant["books"].get(book_id, grant["default"]) != "none"
+            ]
+            notices = [["book_left_shelf_skipped", book_id, {
+                "book_id": book_id, "title": record.title if record else book_id, "users": users,
+            }]] if users else []
+            logger.info("Legacy book left the shelf before D22 promotion, skipped: %s", book_id)
+            progress = {"notices": notices, "done": False}
+            _put_progress(conn, key, progress)
+            return progress, False
         if [info.st_dev, info.st_ino] != snapshot["targets"][dirname] or not stat.S_ISDIR(info.st_mode):
             raise ValueError(f"Legacy book location replaced: {folder}")
         from deeptutor.multi_user.paths import get_admin_path_service
@@ -397,14 +438,12 @@ def _promote_target(snapshot: dict, dirname: str) -> tuple[dict, bool]:
         book = storage.load_book(book_id)
         if book is None or book.id != book_id:
             raise ValueError(f"Mismatched legacy manifest: {manifest}")
-        record = registry._target(conn, book_id)
         from deeptutor.multi_user.models import LOCAL_ADMIN_ID
 
-        if (
-            record.base_dir != snapshot["base_dir"] or record.dir_name != dirname
-            or record.created_by != LOCAL_ADMIN_ID
-        ):
-            raise ValueError(f"Legacy book location conflict: {book_id}")
+        if record is None:
+            raise registry.BookReferenceError(f"Book {book_id} is not registered.")
+        if record.created_by != LOCAL_ADMIN_ID:
+            raise ValueError(f"Legacy book owner conflict: {book_id}")
         state = conn.execute(
             "SELECT complete FROM books.book_kb_binding_state WHERE book_id = ?", (book_id,),
         ).fetchone()

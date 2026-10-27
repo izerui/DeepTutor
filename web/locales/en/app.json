@@ -5588,6 +5588,8 @@
   "Book “{{title}}” is now public because it was shared with: {{users}}": "Book “{{title}}” is now public because it was shared with: {{users}}",
   "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.",
   "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "Public book “{{title}}” uses {{kb}}, which its readers cannot use.",
+  "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}": "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}",
+  "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}": "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}",
   "{{materials}} public books · {{resources}} enabled resources": "{{materials}} public books · {{resources}} enabled resources",
   "Review authorized learners and their learning reports.": "Review authorized learners and their learning reports.",
   "Publish to students": "Publish to students",

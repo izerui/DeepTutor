@@ -34,6 +34,11 @@ export const MIGRATION_ITEM_RENDERERS: Record<
         name: String(item.data.name ?? item.key),
       },
     ),
+  kb_dir_missing_skipped: (item, t) =>
+    t(
+      "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}",
+      { name: String(item.data.name ?? item.key), users: list(item.data.users) },
+    ),
   book_auto_public: (item, t) =>
     t("Book “{{title}}” is now public because it was shared with: {{users}}", {
       title: String(item.data.title ?? item.key),
@@ -46,6 +51,11 @@ export const MIGRATION_ITEM_RENDERERS: Record<
         username: String(item.data.username ?? ""),
         title: String(item.data.title ?? item.data.book_id ?? item.key),
       },
+    ),
+  book_left_shelf_skipped: (item, t) =>
+    t(
+      "Book “{{title}}” left the shared shelf before the upgrade, so it was not made public. It was shared with: {{users}}",
+      { title: String(item.data.title ?? item.data.book_id ?? item.key), users: list(item.data.users) },
     ),
   book_kb_unavailable: (item, t) =>
     t("Public book “{{title}}” uses {{kb}}, which its readers cannot use.", {

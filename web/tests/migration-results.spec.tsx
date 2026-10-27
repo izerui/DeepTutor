@@ -69,6 +69,17 @@ it("renders book migration data and fallback identities in the shared notice", a
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
+it("renders skipped knowledge bases and books the same way", async () => {
+  await show([
+    { kind: "kb_dir_missing_skipped", key: "kb:9", data: { kb_id: "kb:9", name: "Gone KB", users: ["alice"] }, created_at: "" },
+    { kind: "book_left_shelf_skipped", key: "bk3", data: { book_id: "bk3", title: "<Moved>", users: ["alice", "bob"] }, created_at: "" },
+    { kind: "book_left_shelf_skipped", key: "bk4", data: { book_id: "bk4", users: ["carol"] }, created_at: "" },
+  ]);
+  expect(await screen.findByText("Knowledge base “Gone KB” no longer exists, so it was not made public. It was granted to: alice")).toBeVisible();
+  expect(screen.getByText("Book “<Moved>” left the shared shelf before the upgrade, so it was not made public. It was shared with: alice, bob")).toBeVisible();
+  expect(screen.getByText("Book “bk4” left the shared shelf before the upgrade, so it was not made public. It was shared with: carol")).toBeVisible();
+});
+
 it.each([403, 500])("renders nothing when the endpoint returns %s", async status => {
   vi.mocked(apiFetch).mockResolvedValue(Response.json({ detail: "Denied" }, { status }));
   const view = render(<MigrationResultsNotice />);
