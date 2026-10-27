@@ -35,6 +35,9 @@ DIR_PREFIX = "book_"
 REGISTRY_FILENAME = "book_registry.sqlite3"
 DB_PATH_OVERRIDE: Path | None = None
 KB_REFERRER_KIND = "book"
+#: Referrers whose withdrawal needs the owner's explicit confirmation (rule
+#: R1): published teacher paths. Others are revoked and shown as unavailable.
+CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({"mastery_template"})
 KbChoice = Literal["make_public", "reference_only"]
 KB_CHOICES: frozenset[str] = frozenset({"make_public", "reference_only"})
 
@@ -117,6 +120,32 @@ class BookVisibilityError(BookRegistryError):
 
 class BookReferenceError(BookRegistryError):
     """Invalid or unavailable reference target."""
+
+
+class BookWithdrawalNeedsConfirmation(BookVisibilityError):
+    """Making private / deleting would cut off published teacher paths (rule R1).
+
+    Raised before anything is written; repeat with ``confirm=True``.
+    ``referrer_ids`` are the affected template ids, for aggregate counts only.
+    """
+
+    def __init__(self, referrer_ids: Sequence[str]) -> None:
+        self.referrer_ids = tuple(sorted(set(referrer_ids)))
+        super().__init__(
+            f"Withdrawing this book affects {len(self.referrer_ids)} teacher path(s); "
+            "confirm to proceed."
+        )
+
+
+def require_withdrawal_confirmation(
+    references: Sequence[BookReference], *, confirm: bool,
+) -> None:
+    """Refuse an unconfirmed withdrawal that would revoke teacher-path references."""
+    if confirm:
+        return
+    blocking = [ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS]
+    if blocking:
+        raise BookWithdrawalNeedsConfirmation(blocking)
 
 
 class BookKbResolutionError(BookRegistryError):
@@ -889,11 +918,13 @@ def share_book_kbs(
 
 def set_book_visibility(
     book_id: str, visibility: str, *, force: bool = False,
-    kb_choices: Mapping[str, str] | None = None,
+    kb_choices: Mapping[str, str] | None = None, confirm: bool = False,
 ) -> BookRecord:
     from .sharing import set_visibility
 
-    return set_visibility(book_id, visibility, force=force, kb_choices=kb_choices)
+    return set_visibility(
+        book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
+    )
 
 
 active_books: ContextVar[frozenset[str]] = ContextVar("active_books", default=frozenset())

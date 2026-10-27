@@ -324,17 +324,24 @@ def share(
 
 def set_visibility(
     book_id: str, visibility: str, *, force: bool, kb_choices: Mapping[str, str] | None,
+    confirm: bool = False,
 ) -> books.BookRecord:
     with shared_write() as conn:
         return change_visibility(conn, books._target(conn, book_id), visibility,
-                                 force=force, kb_choices=kb_choices)
+                                 force=force, kb_choices=kb_choices, confirm=confirm)
 
 
 def change_visibility(
     conn: sqlite3.Connection, record: books.BookRecord, visibility: str, *,
-    force: bool, kb_choices: Mapping[str, str] | None,
+    force: bool, kb_choices: Mapping[str, str] | None, confirm: bool = False,
 ) -> books.BookRecord:
-    """Connection-taking transition for callers retaining a bound target."""
+    """Connection-taking transition for callers retaining a bound target.
+
+    Rule R1: the owner may always make a book private. Other accounts'
+    references are revoked (``made_private``); published teacher paths among
+    them need ``confirm`` first (:class:`BookWithdrawalNeedsConfirmation`,
+    nothing written). ``force`` (admins only) implies the confirmation.
+    """
     if visibility not in books.VISIBILITIES:
         raise books.BookVisibilityError("Visibility must be 'public' or 'private'.")
     choices = _choices(kb_choices)
@@ -349,8 +356,7 @@ def change_visibility(
             ref for ref in books._references_of(conn, record.book_id)
             if ref.created_by != record.created_by
         ]
-        if foreign and not force:
-            raise books.BookVisibilityError("Still referenced by other accounts.")
+        books.require_withdrawal_confirmation(foreign, confirm=confirm or force)
         books._revoke(conn, record, foreign, reason="made_private")
     conn.execute(
         "UPDATE book_registry SET visibility = ?, updated_at = ? WHERE book_id = ?",

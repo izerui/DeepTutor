@@ -57,13 +57,11 @@ async def test_sharing_visibility_and_reference_contract(owned, as_user):
         assert kbs.get_kb(kb.kb_id).visibility == "private"
         registry.replace_book_references("course", "c1", ["bk_one"], created_by="other")
         refs = await router.get_book_references("book:bk_one")
-        assert [r["referrer_id"] for r in refs["references"]] == ["c1"]
-        with pytest.raises(HTTPException) as blocked:
-            await router.set_book_visibility("bk_one", router.BookVisibilityRequest(visibility="private"))
-        assert blocked.value.status_code == 409
-    with as_user("root", role="admin"):
+        # Other accounts' referrers only as counts (rule R1).
+        assert refs["references"] == []
+        assert refs["other_references"] == {"total": 1, "by_kind": {"course": 1}}
         result = await router.set_book_visibility(
-            "book:bk_one", router.BookVisibilityRequest(visibility="private", force=True),
+            "bk_one", router.BookVisibilityRequest(visibility="private"),
         )
         assert result["visibility"] == "private"
     assert registry.list_unavailable_book_references("course", "c1")[0].reason == "made_private"
@@ -95,18 +93,16 @@ async def test_sharing_denials_and_roles(owned, as_user):
 
 
 @pytest.mark.asyncio
-async def test_references_block_delete_and_admin_force_revokes(owned, as_user):
+async def test_references_never_block_the_owners_delete_and_are_revoked(owned, as_user):
+    """Rule R1: non-teacher-path references are revoked; force stays admin-only."""
     resolved, kb = owned
     with as_user("owner", role="teacher"):
         registry.replace_book_references("course", "c1", ["bk_one"], created_by="owner")
-        for force in (False, True):
-            with pytest.raises(HTTPException) as blocked:
-                await router.delete_book("bk_one", force=force)
-            assert blocked.value.status_code == 409
-            assert blocked.value.detail["code"] == "book_referenced"
+        with pytest.raises(HTTPException) as denied:
+            await router.delete_book("bk_one", force=True)
+        assert denied.value.status_code == 403
         assert kbs.list_referenced("book", "bk_one") == [kb]
-    with as_user("root", role="admin"):
-        assert await router.delete_book("book:bk_one", force=True) == {
+        assert await router.delete_book("book:bk_one") == {
             "deleted": True, "book_id": "bk_one",
         }
     assert registry.get_book("bk_one") is None
@@ -343,16 +339,25 @@ async def test_new_reference_before_delete_lock_blocks_deletion(owned, as_user, 
         # the deletion guard. Its reference must be checked by the guard.
         with monkeypatch.context() as scoped:
             scoped.setattr(sharing, "shared_write", original)
-            registry.replace_book_references("course", "late", ["bk_one"], created_by="owner")
+            registry.replace_book_references(
+                "mastery_template", "late", ["bk_one"], created_by="owner",
+            )
         with original(**kwargs) as conn:
             yield conn
 
     monkeypatch.setattr(sharing, "shared_write", referenced_before_lock)
+    monkeypatch.setattr(
+        "deeptutor.teaching.access.withdrawal_impact", lambda ids: (len(tuple(ids)), 3),
+    )
     with as_user("owner", role="teacher"):
         with pytest.raises(HTTPException) as blocked:
             await router.delete_book("bk_one")
     assert blocked.value.status_code == 409
-    assert blocked.value.detail["references"][0]["referrer_id"] == "late"
+    detail = blocked.value.detail
+    assert (detail["code"], detail["affected_paths"], detail["affected_students"]) == (
+        "referenced_by_teacher_paths", 1, 3,
+    )
+    assert "late" not in str(detail)
     assert resolved.engine.load_book("bk_one") is not None
 
 

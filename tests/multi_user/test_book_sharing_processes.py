@@ -94,6 +94,8 @@ try:
         books.set_book_visibility(book_id, "public")
     elif mode == "reference":
         books.replace_book_references("template", "two", [book_id], created_by="reader")
+    elif mode == "path_reference":
+        books.replace_book_references("mastery_template", "two", [book_id], created_by="reader")
     elif mode == "withdraw":
         books.set_book_visibility(book_id, "private")
     else:
@@ -236,15 +238,18 @@ def test_standalone_preparation_process_death_leaves_no_refs(process_library):
 def test_withdrawal_checks_reference_committed_by_other_worker(process_library):
     root, book, _ = process_library
     books.set_book_visibility(book.ref, "public")
-    process = start(root, "reference", book.book_id)
+    process = start(root, "path_reference", book.book_id)
     try:
-        assert finish(process, root, "reference") == {"status": "ok"}
+        assert finish(process, root, "path_reference") == {"status": "ok"}
     finally:
         stop_all([process])
     process = start(root, "withdraw", book.book_id)
     try:
         result = finish(process, root, "withdraw")
-        assert result["status"] == "error" and result["error"] == "BookVisibilityError"
+        # Rule R1: a teacher-path reference committed by another worker is seen
+        # by the withdrawal, which then asks for confirmation and changes nothing.
+        assert result["status"] == "error"
+        assert result["error"] == "BookWithdrawalNeedsConfirmation"
         assert books.get_book(book.ref).visibility == "public"
         assert books.list_book_references(book.ref)
         assert kbs.list_referenced("book", book.book_id)

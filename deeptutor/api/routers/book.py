@@ -848,11 +848,59 @@ async def get_page(book_id: str, page_id: str) -> dict[str, Any]:
     return {"page": page.model_dump(mode="json")}
 
 
+def _reference_summary(
+    record: book_registry.BookRecord, references: list[book_registry.BookReference],
+) -> dict[str, Any]:
+    """The owner's own references in full; other accounts' only as counts (rule R1)."""
+    other: dict[str, int] = {}
+    for ref in references:
+        if ref.created_by != record.created_by:
+            other[ref.referrer_kind] = other.get(ref.referrer_kind, 0) + 1
+    return {
+        "references": [ref.to_dict() for ref in references if ref.created_by == record.created_by],
+        "other_references": {"total": sum(other.values()), "by_kind": dict(sorted(other.items()))},
+    }
+
+
+async def _withdrawal_conflict(
+    exc: book_registry.BookWithdrawalNeedsConfirmation,
+) -> HTTPException | None:
+    """Counts-only 409 (rule R1); ``None`` when no published teacher path is affected.
+
+    Called after the registry writers ended: teaching precedes them in lock order.
+    """
+    from deeptutor.teaching.access import withdrawal_confirmation_detail
+
+    detail = await asyncio.to_thread(
+        withdrawal_confirmation_detail, exc.referrer_ids, resource="book",
+    )
+    return None if detail is None else HTTPException(status_code=409, detail=detail)
+
+
 @router.delete("/books/{book_id}")
-async def delete_book(book_id: str, force: bool = False) -> dict[str, Any]:
+async def delete_book(book_id: str, force: bool = False, confirm: bool = False) -> dict[str, Any]:
+    """Rule R1: references never block the owner; teacher paths need ``confirm``.
+
+    Every reference is revoked (``book_deleted``) with the deletion. When a
+    published teacher path cites the book, the first request answers a
+    counts-only 409 and nothing changes.
+    """
+    try:
+        return await _delete_book(book_id, force=force, confirm=confirm)
+    except book_registry.BookWithdrawalNeedsConfirmation as exc:
+        conflict = await _withdrawal_conflict(exc)
+        if conflict is not None:
+            raise conflict from exc
+        # Only stale references of unpublished paths: nothing to confirm.
+        return await _delete_book(book_id, force=force, confirm=True)
+
+
+async def _delete_book(book_id: str, *, force: bool, confirm: bool) -> dict[str, Any]:
     resolved = _resolve_book_or_404(book_id, delete=True)
     book_id = book_registry.strip_ref(book_id)
     user = get_current_user()
+    if force and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
     references = []
     # Recovery stays inside the writer: failures restore before ROLLBACK;
     # success finalizes runtimes/buses only after COMMIT.
@@ -866,17 +914,7 @@ async def delete_book(book_id: str, force: bool = False) -> dict[str, Any]:
             record = _locked_writable(conn, resolved, current)
         if record is not None:
             references = book_registry._references_of(conn, record.book_id)
-            if references and not (force and user.is_admin):
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "book_referenced",
-                        "message": "This book is still referenced. Remove those references first.",
-                        "references": [ref.to_dict() for ref in references],
-                    },
-                )
-        if force and not user.is_admin:
-            raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
+            book_registry.require_withdrawal_confirmation(references, confirm=confirm or force)
         deleted = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
         if not deleted:
             raise HTTPException(status_code=404, detail="Book not found")
@@ -897,6 +935,8 @@ async def delete_book(book_id: str, force: bool = False) -> dict[str, Any]:
 class BookVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
+    #: Rule R1: make private although published teacher paths cite the book.
+    confirm: bool = False
     kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
 
 
@@ -948,9 +988,7 @@ async def get_book_sharing(book_id: str) -> dict[str, Any]:
                 "can_set_visibility": resolved.capabilities()["can_set_visibility"],
                 "can_make_public": resolved.capabilities()["can_make_public"],
                 "kbs": book_sharing._plan(conn, record).to_dict(),
-                "references": [
-                    ref.to_dict() for ref in book_registry._references_of(conn, record.book_id)
-                ],
+                **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
             }
     except book_registry.BookRegistryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -966,13 +1004,24 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
     if req.visibility == "public" and not is_teacher_or_admin():
         raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
-    try:
+    def apply(confirm: bool) -> tuple[book_registry.BookRecord, dict[str, Any]]:
         with book_sharing.shared_write() as conn:
             current = _locked_writable(conn, resolved, record)
-            updated = book_sharing.change_visibility(
+            changed = book_sharing.change_visibility(
                 conn, current, req.visibility, force=req.force, kb_choices=req.kb_choices,
+                confirm=confirm,
             )
-            plan = book_sharing._plan(conn, updated).to_dict()
+            return changed, book_sharing._plan(conn, changed).to_dict()
+
+    try:
+        try:
+            updated, plan = apply(req.confirm)
+        except book_registry.BookWithdrawalNeedsConfirmation as exc:
+            conflict = await _withdrawal_conflict(exc)
+            if conflict is not None:
+                raise conflict from exc
+            # Only stale references of unpublished paths: nothing to confirm.
+            updated, plan = apply(True)
     except book_registry.BookRegistryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if user.is_admin and record.created_by != user.id:
@@ -995,9 +1044,7 @@ async def get_book_references(book_id: str) -> dict[str, Any]:
         record = _locked_writable(conn, resolved, expected)
         return {
             "book_id": record.book_id, "ref": record.ref,
-            "references": [
-                ref.to_dict() for ref in book_registry._references_of(conn, record.book_id)
-            ],
+            **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
         }
 
 

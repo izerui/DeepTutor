@@ -249,13 +249,14 @@ def test_takeover_keeps_the_successors_own_references_and_foreign_protection(
 
     with as_account("adam"):
         if foreign:
-            with pytest.raises(kb_registry.KbVisibilityError, match="other accounts"):
+            # Rule R1: Tom's published path needs an explicit confirmation.
+            with pytest.raises(kb_registry.KbWithdrawalNeedsConfirmation):
                 kb_registry.set_visibility(materials.kb.kb_id, "private")
-            with pytest.raises(book_registry.BookVisibilityError, match="other accounts"):
+            with pytest.raises(book_registry.BookWithdrawalNeedsConfirmation):
                 book_registry.set_book_visibility("bk_tina", "private")
             assert _template_refs(materials.kb.kb_id) == after
-        kb_registry.set_visibility(materials.kb.kb_id, "private", force=foreign)
-        book_registry.set_book_visibility("bk_tina", "private", force=foreign)
+        kb_registry.set_visibility(materials.kb.kb_id, "private", confirm=foreign)
+        book_registry.set_book_visibility("bk_tina", "private", confirm=foreign)
 
     assert _template_refs(materials.kb.kb_id) == {materials.template_id: own}
     assert _book_template_refs("bk_tina") == {materials.template_id: adam}

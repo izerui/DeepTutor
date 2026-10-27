@@ -127,24 +127,28 @@ def test_publish_role_and_force_permissions(library, as_user, role):
     assert not protected(book)
 
 
-def test_forced_withdraw_revokes_only_foreign_then_delete_keeps_evidence(library, as_user):
+@pytest.mark.parametrize("kind", ["template", "mastery_template"])
+def test_owner_withdraw_revokes_only_foreign_then_delete_keeps_evidence(library, as_user, kind):
+    """Rule R1: the owner withdraws; only teacher paths need a confirmation first."""
     book, _, _ = library
     with as_user("t1", role="teacher"):
         books.set_book_visibility(book.ref, "public")
-        books.replace_book_references("template", "own", [book.ref], created_by="t1")
-        books.replace_book_references("template", "other", [book.ref], created_by="t2")
-        with pytest.raises(books.BookVisibilityError, match="other accounts"):
-            books.set_book_visibility(book.ref, "private")
-        assert len(books.list_book_references(book.ref)) == 2
-    with as_user("root", role="admin"):
-        books.set_book_visibility(book.ref, "private", force=True)
+        books.replace_book_references(kind, "own", [book.ref], created_by="t1")
+        books.replace_book_references(kind, "other", [book.ref], created_by="t2")
+        if kind == "mastery_template":
+            with pytest.raises(books.BookWithdrawalNeedsConfirmation) as needs:
+                books.set_book_visibility(book.ref, "private")
+            assert needs.value.referrer_ids == ("other",)
+            assert len(books.list_book_references(book.ref)) == 2
+            assert books.get_book(book.ref).visibility == "public"
+        books.set_book_visibility(book.ref, "private", confirm=True)
         assert [ref.referrer_id for ref in books.list_book_references(book.ref)] == ["own"]
-        assert books.list_unavailable_book_references("template", "other")[0].reason == "made_private"
+        assert books.list_unavailable_book_references(kind, "other")[0].reason == "made_private"
         assert protected(book)
         books.unregister_book(book.ref)
     assert not protected(book) and books.get_book(book.ref) is None
-    assert books.list_unavailable_book_references("template", "own")[0].reason == "book_deleted"
-    assert books.list_unavailable_book_references("template", "other")[0].reason == "made_private"
+    assert books.list_unavailable_book_references(kind, "own")[0].reason == "book_deleted"
+    assert books.list_unavailable_book_references(kind, "other")[0].reason == "made_private"
 
 
 def test_cached_builtin_actual_can_read_and_custom_precedence(library, as_user, monkeypatch):
