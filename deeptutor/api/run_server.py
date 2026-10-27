@@ -93,6 +93,7 @@ def main() -> None:
         ws_max_size=get_ws_max_size(),
         timeout_keep_alive=HTTP_KEEP_ALIVE_TIMEOUT,
         root_path=context_path,
+        timeout_graceful_shutdown=1,
     )
 
 

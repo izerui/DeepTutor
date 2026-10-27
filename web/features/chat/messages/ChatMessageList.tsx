@@ -427,7 +427,6 @@ function buildMessageBlocks(
   });
   // Keep Mastery teaching/feedback visible before an assessment arrives and
   // when a turn ends with bookkeeping without posing an assessment at all.
-  // Explicitly retracted prose is already a trace, not a text segment.
   if (isMastery) preserveTeachingBefore(segments.length);
   const blocks: MessageBlock[] = [];
   let run: MessageSegment[] = [];

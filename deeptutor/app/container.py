@@ -131,7 +131,9 @@ class ApplicationContainer:
     async def close(self) -> None:
         if not self._started:
             return
-        await self.runtime_registry.close(drain_timeout_seconds=60.0)
+        # Cancel active turns now so their finally blocks can persist shutdown
+        # state and release subprocesses within the launcher grace period.
+        await self.runtime_registry.close(drain_timeout_seconds=0.0)
         with contextlib.suppress(Exception):
             await self.coordinator.close()
         self._started = False

@@ -22,11 +22,10 @@ unresolved pause (or a terminator tool) halts the turn.
 
 There is no separate respond pass and no text destination has to be guessed:
 every round's text streams to the user as it is generated and stays there. The
-``call_status`` marker a completed round emits carries two independent facts —
+``call_status`` marker a completed round emits describes its phase —
 ``call_role`` (``narration`` = more work follows, ``finish`` = terminal) says
-where the turn is, while ``answer_visible`` says whether the text counts as
-answer content. It is ``True`` for every ordinary round; only a capability
-retracting a rejected round sets it ``False``.
+where the turn is. ``answer_visible`` remains true for compatibility; published
+answer text is never retracted by a finish check.
 """
 
 from __future__ import annotations
@@ -454,7 +453,7 @@ class AgentLoop:
             if settling:
                 if state.settlement_rounds >= MAX_SETTLEMENT_ROUNDS:
                     if recovery_tools is not None:
-                        return await self._reject_capability_finish()
+                        return await self._reject_finish_keeping(continued_answer_parts)
                     recovery = self.pipeline._capability_settlement_recovery(self.context)
                     if recovery is not None:
                         instruction, names = recovery
@@ -467,7 +466,7 @@ class AgentLoop:
                             schema["function"]["name"] for schema in recovery_schemas
                         )
                         if not recovery_tools:
-                            return await self._reject_capability_finish()
+                            return await self._reject_finish_keeping(continued_answer_parts)
                         self._append_loop_instruction(messages, instruction)
                     else:
                         # Tool-less salvage and restricted delivery share the
@@ -533,8 +532,10 @@ class AgentLoop:
             ):
                 # Provider schema hints are not an execution permission. Reject
                 # the entire batch before binding or dispatching any rogue tool.
+                if result.deferred_chunk_metadata is None and result.visible_text:
+                    continued_answer_parts.append(result.visible_text)
                 await self._discard_deferred_output(result)
-                return await self._reject_capability_finish()
+                return await self._reject_finish_keeping(continued_answer_parts)
             if not result.tool_calls:
                 final_text = self._clean(result.text)
                 if _finish_was_truncated(result.finish_reason) or _reasoning_budget_exhausted(
@@ -687,6 +688,10 @@ class AgentLoop:
                     self.context, final_text
                 )
                 if finish_redirect:
+                    # Published prose stays the reader's answer; a finish
+                    # check may ask for more work but never retracts it.
+                    if result.deferred_chunk_metadata is None and result.visible_text:
+                        continued_answer_parts.append(result.visible_text)
                     await self._discard_deferred_output(result)
                     if not finish_redirect_used:
                         finish_redirect_used = True
@@ -694,11 +699,22 @@ class AgentLoop:
                             messages.append(_assistant_round_message(result))
                         self._append_loop_instruction(messages, finish_redirect)
                         continue
-                    return await self._reject_capability_finish()
+                    return await self._reject_finish_keeping(continued_answer_parts)
                 final_override = self.pipeline._capability_final_text_override(
                     self.context, final_text
                 )
                 if final_override is not None:
+                    if result.deferred_chunk_metadata is None and result.visible_text:
+                        continued_answer_parts.append(result.visible_text)
+                        messages.append(_assistant_round_message(result))
+                        # An additive notice may include the original answer.
+                        # That answer is already on screen, so publish only
+                        # the addition.
+                        if result.visible_text in final_override:
+                            before, _, after = final_override.partition(result.visible_text)
+                            final_override = (before + after).strip()
+                            if final_override:
+                                final_override = "\n\n" + final_override
                     await self._discard_deferred_output(result)
                     if not self.context.capability_output.answer_published:
                         await self.pipeline._emit_protocol_fallback_final_response(
@@ -707,6 +723,7 @@ class AgentLoop:
                         self.context.capability_output.answer_published = True
                     return await self._finalize_finish(
                         final_override,
+                        visible_text=final_override,
                         continued_answer_parts=continued_answer_parts,
                         allow_empty=True,
                     )
@@ -914,7 +931,9 @@ class AgentLoop:
         # Empty text asks capabilities about state, without inventing prose to
         # validate or giving the model another chance to claim completion.
         if self.pipeline._capability_finish_instruction(self.context, ""):
-            return await self._reject_capability_finish()
+            outcome = await self._reject_capability_finish()
+            outcome.final_text = _join_answer_parts(continued_answer_parts or [], "")
+            return outcome
         if reason == "error":
             # The caller has the exception and logs it; without it here the
             # reader is told a step failed and never which one or why — the
@@ -1070,36 +1089,18 @@ class AgentLoop:
         result.deferred_chunk_metadata = None
         result.deferred_completion_metadata = None
 
+    async def _reject_finish_keeping(self, continued_answer_parts: list[str]) -> LoopOutcome:
+        """Reject the finish while keeping prose the reader already saw."""
+        outcome = await self._reject_capability_finish()
+        outcome.final_text = _join_answer_parts(continued_answer_parts, "")
+        return outcome
+
     async def _discard_deferred_output(self, result: LLMCallResult) -> None:
-        """Take a rejected round's prose back out of the answer.
-
-        Two shapes reach here. A *buffered* round is simply never published,
-        so closing its trace as retracted is the whole retraction. A round
-        that already **streamed** — the ordinary case now that only protocol
-        capabilities buffer — was published optimistically, so its retraction
-        has to be a correction: the same ``call_id`` re-marked
-        ``answer_visible: False``, which is what moves that text out of the
-        answer and into the collapsed trace on the reader's side.
-
-        This is the ONLY way prose leaves the answer. Ordinary commentary
-        written before a tool call stays where the reader saw it.
-
-        Emitting nothing in that second case was what left rejected prose
-        sitting in the answer as though it had been accepted.
-        """
-        metadata = result.deferred_completion_metadata or result.completion_metadata
-        if metadata is not None:
-            metadata = dict(metadata)
+        """Discard only unpublished protocol payloads, never public answer text."""
+        if result.deferred_completion_metadata is not None:
+            metadata = dict(result.deferred_completion_metadata)
             metadata["call_role"] = "narration"
-            metadata["answer_visible"] = False
-            metadata["finish_rejected"] = True
-            await self.stream.progress(
-                "",
-                source=self.source,
-                stage=self.stage,
-                metadata=metadata,
-            )
-        result.completion_metadata = None
+            await self.stream.progress("", source=self.source, stage=self.stage, metadata=metadata)
         result.deferred_chunk_metadata = None
         result.deferred_completion_metadata = None
 
@@ -1334,11 +1335,6 @@ class AgentLoop:
                     if segment.strip():
                         action_started = True
                         content_chars += len(segment)
-                    if forced_tool_choice:
-                        # This round exists to produce a call, so its prose is
-                        # not an answer and must not reach the reader — but
-                        # that is a rule about *content*, not about reasoning.
-                        continue
                     output_emitted = True
                     visible_text_parts.append(segment)
                     if not defer_visible_output:
@@ -1766,8 +1762,7 @@ class AgentLoop:
             # Every round's prose belongs to the answer, in the order it was
             # written. Commentary written before a tool call is what the reader
             # is told while the work happens, not an internal preamble to hide,
-            # so the only text that ever leaves the answer is text a capability
-            # explicitly retracts (see ``_discard_deferred_output``).
+            # and a capability finish check must never retract it.
             "answer_visible": True,
             "finish_reason": finish_reason or "stop",
             "requested_max_tokens": int(max_tokens),
@@ -1813,14 +1808,6 @@ class AgentLoop:
             logger.info(log_line, *log_args)
 
         completion_event_metadata = merge_trace_metadata(trace_meta, completion_metadata)
-        if forced_tool_choice and not tool_calls and text:
-            # Some compatibility providers accept ``tool_choice`` but ignore
-            # it. Do not lose their answer merely because it was buffered.
-            fallback_dsml = DSMLStreamFilter()
-            fallback_filter = InlineThinkFilter()
-            visible = fallback_dsml.feed(text) + fallback_dsml.flush()
-            await _emit_segments(fallback_filter.feed(visible) + fallback_filter.flush())
-
         if not defer_visible_output:
             await self.stream.progress(
                 "",
