@@ -13,9 +13,10 @@ import { currentMasteryTemplate } from '@/lib/mastery-template-scope'
 
 import { useTranslation } from 'react-i18next'
 
-import { BookApiError, bookApi, type BookWsEvent } from '@/lib/book-api'
+import { BookApiError, bookApi, bookWithdrawalImpact, type BookWsEvent } from '@/lib/book-api'
 import { bookErrorMessage } from '@/lib/book-errors'
-import { bookRequestRef, bookRouteParam, bookSelectionKey, describeBookReferences } from '@/lib/book-sharing'
+import { bookRequestRef, bookRouteParam, bookSelectionKey } from '@/lib/book-sharing'
+import { describeWithdrawalImpact, type WithdrawalImpact } from '@/lib/withdrawal-confirmation'
 import { useAuthStatus } from '@/hooks/useAuthStatus'
 import { Dialog } from '@/shared/ui/Dialog'
 import BookShareDialog from './components/BookShareDialog'
@@ -29,7 +30,6 @@ import type {
   Page,
   Spine,
   LearningCapture,
-  BookReference,
 } from '@/lib/book-types'
 import { RESET_BOOK_PROGRESS, emptyBookProgress, reduceBookEvent } from '@/lib/book-progress'
 import { bookEventKind, bookEventPageId, useBookStream } from '@/lib/use-book-stream'
@@ -129,7 +129,8 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   const [booksError, setBooksError] = useState<string | null>(null)
   const { isAdmin } = useAuthStatus()
   const [sharingBook, setSharingBook] = useState<Book | null>(null)
-  const [referencedDelete, setReferencedDelete] = useState<{ book: Book; references: BookReference[] } | null>(null)
+  // Rule R1: published teacher paths cite the book; confirm with counts only.
+  const [referencedDelete, setReferencedDelete] = useState<{ book: Book; impact: WithdrawalImpact } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const alive = useRef(true)
   useEffect(() => {
@@ -555,32 +556,31 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     void refreshLearningCaptures(selectedBookId)
   }, [view, selectedBookId, refreshLearningCaptures])
 
-  const deleteBook = async (book: Book, force = false) =>
-    guard('Delete book', async () => {
-      const id = bookRequestRef(book)
-      await bookApi.delete(id, book.content_workspace_id ?? '', { force })
-      if (!isActiveReader()) return
-      if (selectedBookId === id) {
-        setSelectedBookId(null)
-        setDetail(null)
-        setView('list')
-        router.replace(bookRoute())
-      }
-      await refreshBooks()
-    })
+  const removeBook = async (book: Book, confirm = false) => {
+    const id = bookRequestRef(book)
+    await bookApi.delete(id, book.content_workspace_id ?? '', { confirm })
+    if (!isActiveReader()) return
+    if (selectedBookId === id) {
+      setSelectedBookId(null)
+      setDetail(null)
+      setView('list')
+      router.replace(bookRoute())
+    }
+    await refreshBooks()
+  }
+
+  const deleteBook = async (book: Book, confirm = false) =>
+    guard('Delete book', () => removeBook(book, confirm))
 
   const handleDeleteBook = async (book: Book) => guard('Delete book', async () => {
-    // Empty ref is an unregistered local collision. Its management endpoints
-    // intentionally reject 409; DELETE still authorizes that local location.
-    if (book.ref) {
-      const { references } = await bookApi.references(book.ref, book.content_workspace_id ?? '')
-      if (!isActiveReader()) return
-      if (references.length) {
-        setReferencedDelete({ book, references })
-        return
-      }
+    try {
+      await removeBook(book)
+    } catch (err) {
+      // Rule R1: other references never block; teacher paths need consent.
+      const impact = bookWithdrawalImpact(err)
+      if (!impact) throw err
+      if (isActiveReader()) setReferencedDelete({ book, impact })
     }
-    await deleteBook(book)
   })
 
   const handleResumeBook = async () => {
@@ -1236,7 +1236,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
             footer={<>
               <button type="button" data-autofocus disabled={deleting} onClick={() => setReferencedDelete(null)}
                 className="rounded-lg px-3 py-1.5 text-sm">{t('Cancel')}</button>
-              {isAdmin && <button type="button" disabled={deleting} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
+              <button type="button" disabled={deleting} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
                 onClick={() => {
                   if (!referencedDelete || deleting) return
                   setDeleting(true)
@@ -1245,12 +1245,11 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                     setDeleting(false)
                     setReferencedDelete(null)
                   })
-                }}>{t('Delete book')}</button>}
+                }}>{t('Delete anyway')}</button>
             </>}>
-            {referencedDelete && <p className="break-words">{t(isAdmin
-              ? 'This book is still referenced by: {{items}}. Delete it anyway? Those items will lose this book.'
-              : 'This book is still referenced by: {{items}}. Remove those references before deleting it.',
-            { items: describeBookReferences(referencedDelete.references, t) })}</p>}
+            {referencedDelete && <p className="whitespace-pre-line break-words">
+              {describeWithdrawalImpact(referencedDelete.impact, t)}
+            </p>}
           </Dialog>
 
           {displayView === 'creator' && (

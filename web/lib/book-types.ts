@@ -1,3 +1,4 @@
+import type { OtherReferences } from "@/lib/withdrawal-confirmation";
 import type { LearningOrigin } from "@/lib/learning-library";
 // Type definitions mirroring deeptutor.book.models on the backend.
 // Kept loose (Record<string, unknown>) where the payload is block-type
@@ -229,7 +230,9 @@ export interface BookSharing {
   can_set_visibility: boolean;
   can_make_public?: boolean;
   kbs: BookSharingPlan;
+  /** The owner's own references; other accounts' arrive only as counts (rule R1). */
   references: BookReference[];
+  other_references?: OtherReferences;
 }
 
 export interface Book extends LearningOrigin {

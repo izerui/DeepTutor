@@ -6,6 +6,7 @@ import KbSettingsSection from "@/components/knowledge/KbSettingsSection";
 import KbDocumentList from "@/components/knowledge/KbDocumentList";
 import KnowledgeHome from "@/components/knowledge/KnowledgeHome";
 import { KbFileDeleteBlockedError } from "@/features/knowledge/api/client";
+import { WithdrawalConfirmationError } from "@/lib/withdrawal-confirmation";
 import type { KnowledgeBase } from "@/lib/knowledge-helpers";
 
 const fixture = vi.hoisted(() => ({
@@ -16,7 +17,7 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({
   t: (key: string, values?: Record<string, unknown>) =>
-    key.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(values?.[name] ?? name)),
+    key.replace(/\{\{(\w+)}}/g, (_, name: string) => String(values?.[name] ?? name)),
 }) }));
 vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => fixture.auth }));
 vi.mock("@/lib/workspaces-api", () => ({
@@ -37,7 +38,7 @@ const owned: KnowledgeBase = {
 };
 beforeEach(() => {
   fixture.auth = { isAdmin: false, isTeacher: true, allowPrivateKb: true };
-  fixture.references.mockReset().mockResolvedValue([]);
+  fixture.references.mockReset().mockResolvedValue({ references: [], other_references: { total: 0, by_kind: {} } });
   fixture.files.mockReset().mockResolvedValue([{ name: "sample.txt", type: "file" }]);
   fixture.deleteFile.mockReset().mockResolvedValue({ was_indexed: false });
 });
@@ -62,17 +63,41 @@ it("allows managing an external owned KB but never offers a scoped default", asy
   expect(screen.getByRole("button", { name: "Delete knowledge base" })).toBeTruthy();
 });
 
-it("publishes with a real callback and requires admin confirmation before forced withdrawal", async () => {
-  fixture.auth.isAdmin = true;
-  fixture.references.mockResolvedValue([{ referrer_kind: "partner", referrer_id: "p", created_by: "other" }]);
+it("lets the owner withdraw despite other accounts' references, shown only as counts (R1)", async () => {
+  fixture.references.mockResolvedValue({
+    references: [{ referrer_kind: "partner", referrer_id: "mine", created_by: "teacher" }],
+    other_references: { total: 3, by_kind: { course: 2, partner: 1 } },
+  });
   const change = vi.fn().mockResolvedValue(undefined);
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<KbSettingsSection kb={{ ...owned, visibility: "public" }} onVisibilityChange={change} />);
+  expect(await screen.findByText("partner: mine")).toBeTruthy();
+  expect(screen.getByText("3 items from other accounts use this material and will show it as unavailable.")).toBeTruthy();
+  const button = screen.getByRole("button", { name: "Make private" });
+  await waitFor(() => expect(button).not.toBeDisabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(change).toHaveBeenCalledWith("private"));
+  expect(change).toHaveBeenCalledOnce();
+  expect(confirm).not.toHaveBeenCalled();
+});
+
+it.each([true, false])("asks to confirm teacher-path impact by counts, then retries with confirm (accept=%s)", async (accept) => {
+  const change = vi.fn()
+    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 2, affectedStudents: 5 }))
+    .mockResolvedValue(undefined);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(accept);
   render(<KbSettingsSection kb={{ ...owned, visibility: "public" }} onVisibilityChange={change} />);
   const button = screen.getByRole("button", { name: "Make private" });
   await waitFor(() => expect(button).not.toBeDisabled());
   fireEvent.click(button);
-  await waitFor(() => expect(change).toHaveBeenCalledWith("private", true));
-  expect(confirm).toHaveBeenCalledOnce();
+  await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+  expect(confirm.mock.calls[0][0]).toBe(
+    "2 published teacher paths use this material\n5 students assigned\nThose paths will show this material as unavailable. Continue?",
+  );
+  if (accept) await waitFor(() => expect(change).toHaveBeenLastCalledWith("private", { confirm: true }));
+  await waitFor(() => expect(button).not.toBeDisabled());
+  expect(change).toHaveBeenCalledTimes(accept ? 2 : 1);
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("matches and deselects relocated admin aliases without selecting a namesake", () => {
@@ -142,7 +167,7 @@ it.each([true, false])("preserves files without delete, move or folder controls 
 it.each(["requires_confirmation", "document_referenced"] as const)("handles document deletion guard %s", async (code) => {
   fixture.deleteFile.mockRejectedValueOnce(new KbFileDeleteBlockedError("Protected", code, [
     { kb_id: "own", referrer_kind: "partner", referrer_id: "reader", created_by: "teacher", doc_ids: null },
-  ]));
+  ], { total: 2, by_kind: { course: 2 } }));
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   render(<KbDocumentList kbName="kb:own" collapsed={false} selectedFile={null}
     onSelect={vi.fn()} onToggleCollapsed={vi.fn()} />);
@@ -151,6 +176,7 @@ it.each(["requires_confirmation", "document_referenced"] as const)("handles docu
   if (code === "requires_confirmation") {
     await waitFor(() => expect(fixture.deleteFile).toHaveBeenCalledWith("kb:own", "sample.txt", { confirm: true }));
     expect(confirm.mock.calls[0][0]).toContain("partner:reader");
+    expect(confirm.mock.calls[0][0]).toContain("2 items from other accounts use this material");
   } else {
     expect(await screen.findByText(/Protected/)).toBeTruthy();
     expect(fixture.deleteFile).toHaveBeenCalledTimes(1);

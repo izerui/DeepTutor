@@ -5714,5 +5714,21 @@
   "{{count}} knowledge points to re-check_one": "{{count}} punkt wiedzy do ponownej oceny",
   "{{count}} knowledge points to re-check_few": "{{count}} punkty wiedzy do ponownej oceny",
   "{{count}} knowledge points to re-check_many": "{{count}} punktów wiedzy do ponownej oceny",
-  "{{count}} knowledge points to re-check_other": "{{count}} punktu wiedzy do ponownej oceny"
+  "{{count}} knowledge points to re-check_other": "{{count}} punktu wiedzy do ponownej oceny",
+  "{{count}} published teacher paths use this material_one": "Z tego materiału korzysta {{count}} opublikowana ścieżka nauczyciela",
+  "{{count}} published teacher paths use this material_few": "Z tego materiału korzystają {{count}} opublikowane ścieżki nauczycieli",
+  "{{count}} published teacher paths use this material_many": "Z tego materiału korzysta {{count}} opublikowanych ścieżek nauczycieli",
+  "{{count}} published teacher paths use this material_other": "Z tego materiału korzysta {{count}} opublikowanej ścieżki nauczycieli",
+  "Those paths will show this material as unavailable. Continue?": "Te ścieżki będą pokazywać ten materiał jako niedostępny. Kontynuować?",
+  "{{count}} items from other accounts use this material and will show it as unavailable._one": "Z tego materiału korzysta {{count}} element innego konta; będzie on pokazywać materiał jako niedostępny.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._few": "Z tego materiału korzystają {{count}} elementy innych kont; będą one pokazywać materiał jako niedostępny.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._many": "Z tego materiału korzysta {{count}} elementów innych kont; będą one pokazywać materiał jako niedostępny.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._other": "Z tego materiału korzysta {{count}} elementu innych kont; będą one pokazywać materiał jako niedostępny.",
+  "{{count}} items from other accounts use this material_one": "Z tego materiału korzysta {{count}} element innego konta",
+  "{{count}} items from other accounts use this material_few": "Z tego materiału korzystają {{count}} elementy innych kont",
+  "{{count}} items from other accounts use this material_many": "Z tego materiału korzysta {{count}} elementów innych kont",
+  "{{count}} items from other accounts use this material_other": "Z tego materiału korzysta {{count}} elementu innych kont",
+  "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Niedostępna: właściciel ustawił tę bazę wiedzy jako prywatną lub ją usunął. Usuń ją z tego partnera.",
+  "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Właściciel ustawił tę bazę wiedzy jako prywatną — usuń odwołanie lub dołącz inny zasób.",
+  "Delete anyway": "Usuń mimo to"
 }

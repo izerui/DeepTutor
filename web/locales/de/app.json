@@ -5688,5 +5688,15 @@
   "{{count}} knowledge points removed_one": "{{count}} Wissenspunkt entfernt",
   "{{count}} knowledge points removed_other": "{{count}} Wissenspunkte entfernt",
   "{{count}} knowledge points to re-check_one": "{{count}} Wissenspunkt erneut zu prüfen",
-  "{{count}} knowledge points to re-check_other": "{{count}} Wissenspunkte erneut zu prüfen"
+  "{{count}} knowledge points to re-check_other": "{{count}} Wissenspunkte erneut zu prüfen",
+  "{{count}} published teacher paths use this material_one": "{{count}} veröffentlichter Lehrkraft-Pfad nutzt dieses Material",
+  "{{count}} published teacher paths use this material_other": "{{count}} veröffentlichte Lehrkraft-Pfade nutzen dieses Material",
+  "Those paths will show this material as unavailable. Continue?": "Diese Pfade zeigen das Material dann als nicht verfügbar an. Fortfahren?",
+  "{{count}} items from other accounts use this material and will show it as unavailable._one": "{{count}} Element eines anderen Kontos nutzt dieses Material und zeigt es dann als nicht verfügbar an.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._other": "{{count}} Elemente anderer Konten nutzen dieses Material und zeigen es dann als nicht verfügbar an.",
+  "{{count}} items from other accounts use this material_one": "{{count}} Element eines anderen Kontos nutzt dieses Material",
+  "{{count}} items from other accounts use this material_other": "{{count}} Elemente anderer Konten nutzen dieses Material",
+  "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Nicht verfügbar: Die Person, der diese Knowledge Base gehört, hat sie privat gemacht oder gelöscht. Entferne sie von diesem Partner.",
+  "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Die Person, der diese Knowledge Base gehört, hat sie privat gemacht – entferne den Verweis oder hänge eine andere Ressource an.",
+  "Delete anyway": "Trotzdem löschen"
 }

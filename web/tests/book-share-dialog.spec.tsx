@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import BookShareDialog from "@/app/(workspace)/learning/books/components/BookShareDialog";
+import { BookApiError } from "@/lib/book-api";
 import type { Book } from "@/lib/book-types";
 
 const fixture = vi.hoisted(() => ({ sharing: vi.fn(), setVisibility: vi.fn(), t: (key: string) => key }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
-vi.mock("@/lib/book-api", () => ({
-  BookApiError: class extends Error {},
+vi.mock("@/lib/book-api", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/book-api")>("@/lib/book-api")),
   bookApi: { sharing: fixture.sharing, setVisibility: fixture.setVisibility },
 }));
 const book = { id: "same", ref: "book:same", visibility: "private", owner_id: "owner", content_workspace_id: "w" } as Book;
@@ -84,4 +85,29 @@ it("blocks publication issues until an administrator explicitly chooses force", 
   rerender(<BookShareDialog book={book} isAdmin onClose={vi.fn()} onChanged={vi.fn()} />);
   fireEvent.click(screen.getByRole("checkbox"));
   expect(screen.getByRole("button", { name: "Make public" })).toBeEnabled();
+});
+it("lets the owner withdraw a referenced book after confirming teacher-path counts (R1)", async () => {
+  const publicBook = { ...book, visibility: "public" as const } as Book;
+  fixture.sharing.mockResolvedValue({
+    ...sharing, visibility: "public", kbs: { ...sharing.kbs, private_kbs: [] },
+    references: [], other_references: { total: 2, by_kind: { mastery_template: 2 } },
+  });
+  fixture.setVisibility.mockRejectedValueOnce(new BookApiError("conflict", 409, "referenced_by_teacher_paths", undefined, {
+    code: "referenced_by_teacher_paths", affected_paths: 2, affected_students: 7,
+  }));
+  const close = vi.fn();
+  render(<BookShareDialog book={publicBook} isAdmin={false} onClose={close} onChanged={vi.fn()} />);
+  expect(await screen.findByText("{{count}} items from other accounts use this material and will show it as unavailable.")).toBeTruthy();
+  const button = screen.getByRole("button", { name: "Make private" });
+  expect(button).toBeEnabled();
+  fireEvent.click(button);
+  expect(await screen.findByRole("alert")).toHaveTextContent("{{count}} published teacher paths use this material");
+  expect(fixture.setVisibility).toHaveBeenLastCalledWith("book:same", {
+    visibility: "private", kb_choices: {}, force: false,
+  }, "w");
+  fireEvent.click(screen.getByRole("button", { name: "Make it private anyway" }));
+  await waitFor(() => expect(close).toHaveBeenCalled());
+  expect(fixture.setVisibility).toHaveBeenLastCalledWith("book:same", {
+    visibility: "private", kb_choices: {}, force: false, confirm: true,
+  }, "w");
 });

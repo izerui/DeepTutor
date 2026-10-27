@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import KnowledgePage from "@/components/knowledge/KnowledgePage";
 import type { KnowledgeBase } from "@/lib/knowledge-helpers";
+import { WithdrawalConfirmationError } from "@/lib/withdrawal-confirmation";
 
 const fixture = vi.hoisted(() => ({
   params: { kbName: "kb:private" },
@@ -49,7 +50,7 @@ beforeEach(() => {
   fixture.kbs = [];
   fixture.router.replace.mockReset();
   fixture.fetch.mockReset().mockResolvedValue(Response.json(detail));
-  fixture.references.mockReset().mockResolvedValue([]);
+  fixture.references.mockReset().mockResolvedValue({ references: [], other_references: { total: 0, by_kind: {} } });
   fixture.deleteKb.mockReset().mockResolvedValue(undefined);
   fixture.refresh.mockReset().mockResolvedValue(undefined);
 });
@@ -62,8 +63,23 @@ it("renders an authorized stable detail absent from the intentionally narrower c
   expect(fixture.fetch).toHaveBeenCalledWith("/api/knowledge-bases/kb%3Aprivate?resource_library=true");
   vi.spyOn(window, "confirm").mockReturnValue(true);
   fireEvent.click(screen.getByRole("button", { name: "Delete loaded detail" }));
-  await waitFor(() => expect(fixture.deleteKb).toHaveBeenCalledWith("kb:private", { force: false }));
+  await waitFor(() => expect(fixture.deleteKb).toHaveBeenCalledWith("kb:private"));
   expect(await screen.findByText("Catalog")).toBeTruthy();
+});
+
+it("deletes a KB cited by teacher paths only after confirming the counts (R1)", async () => {
+  fixture.references.mockResolvedValue({ references: [], other_references: { total: 1, by_kind: { mastery_template: 1 } } });
+  fixture.deleteKb
+    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 4 }))
+    .mockResolvedValue(undefined);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<KnowledgePage />);
+  expect(await screen.findByText("Authorized private")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Delete loaded detail" }));
+  await waitFor(() => expect(fixture.deleteKb).toHaveBeenLastCalledWith("kb:private", { confirm: true }));
+  expect(fixture.deleteKb).toHaveBeenCalledTimes(2);
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(String(confirm.mock.calls[1][0])).toContain("published teacher paths use this material");
 });
 
 it("applies the effective student policy to fetched details too", async () => {

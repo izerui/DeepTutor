@@ -5714,5 +5714,21 @@
   "{{count}} knowledge points to re-check_one": "{{count}} пункт знань перевірити знову",
   "{{count}} knowledge points to re-check_few": "{{count}} пункти знань перевірити знову",
   "{{count}} knowledge points to re-check_many": "{{count}} пунктів знань перевірити знову",
-  "{{count}} knowledge points to re-check_other": "{{count}} пункту знань перевірити знову"
+  "{{count}} knowledge points to re-check_other": "{{count}} пункту знань перевірити знову",
+  "{{count}} published teacher paths use this material_one": "Цей матеріал використовує {{count}} опублікований шлях викладача",
+  "{{count}} published teacher paths use this material_few": "Цей матеріал використовують {{count}} опубліковані шляхи викладачів",
+  "{{count}} published teacher paths use this material_many": "Цей матеріал використовують {{count}} опублікованих шляхів викладачів",
+  "{{count}} published teacher paths use this material_other": "Цей матеріал використовують {{count}} опублікованого шляху викладачів",
+  "Those paths will show this material as unavailable. Continue?": "Ці шляхи показуватимуть цей матеріал як недоступний. Продовжити?",
+  "{{count}} items from other accounts use this material and will show it as unavailable._one": "Цей матеріал використовує {{count}} елемент іншого облікового запису; він показуватиме матеріал як недоступний.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._few": "Цей матеріал використовують {{count}} елементи інших облікових записів; вони показуватимуть матеріал як недоступний.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._many": "Цей матеріал використовують {{count}} елементів інших облікових записів; вони показуватимуть матеріал як недоступний.",
+  "{{count}} items from other accounts use this material and will show it as unavailable._other": "Цей матеріал використовують {{count}} елемента інших облікових записів; вони показуватимуть матеріал як недоступний.",
+  "{{count}} items from other accounts use this material_one": "Цей матеріал використовує {{count}} елемент іншого облікового запису",
+  "{{count}} items from other accounts use this material_few": "Цей матеріал використовують {{count}} елементи інших облікових записів",
+  "{{count}} items from other accounts use this material_many": "Цей матеріал використовують {{count}} елементів інших облікових записів",
+  "{{count}} items from other accounts use this material_other": "Цей матеріал використовують {{count}} елемента інших облікових записів",
+  "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Недоступно: власник зробив цю базу знань приватною або видалив її. Вилучіть її з цього партнера.",
+  "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Власник зробив цю базу знань приватною — вилучіть посилання або додайте інший ресурс.",
+  "Delete anyway": "Усе одно видалити"
 }

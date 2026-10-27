@@ -212,9 +212,11 @@ export default function CourseResources({
                       to a different x-position on every row. */}
                   {!resource.available ? (
                     <Tooltip
-                      label={t(
-                        "This target no longer exists — remove the reference, or attach the resource again.",
-                      )}
+                      label={resource.unavailable_reason === "made_private"
+                        ? t("Its owner made this knowledge base private — remove the reference, or attach another resource.")
+                        : t(
+                          "This target no longer exists — remove the reference, or attach the resource again.",
+                        )}
                       side="top"
                     >
                       <span

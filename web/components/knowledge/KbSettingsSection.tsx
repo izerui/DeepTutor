@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
-import { listKnowledgeBaseReferences, type KnowledgeBaseReference } from "@/features/knowledge/api/catalog";
+import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
+import { describeOtherReferences, runWithWithdrawalConfirmation } from "@/lib/withdrawal-confirmation";
 import type { KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import {
@@ -25,7 +26,8 @@ interface KbSettingsSectionProps {
   onSetDefault?: () => Promise<void>;
   onDelete?: () => Promise<void>;
   onMove?: (targetWorkspaceId: string) => Promise<void>;
-  onVisibilityChange?: (visibility: KnowledgeBaseVisibility, force: boolean) => Promise<void>;
+  /** Rule R1: retried with `confirm` after the user accepts the teacher-path impact. */
+  onVisibilityChange?: (visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean }) => Promise<void>;
 }
 
 export default function KbSettingsSection({
@@ -48,10 +50,10 @@ export default function KbSettingsSection({
     : moveSourceId.startsWith("workspace:")
       ? moveSourceId.slice("workspace:".length).split(":kb:")[0]
       : null;
-  const { isAdmin, isTeacher, allowPrivateKb } = useAuthStatus();
+  const { isTeacher, allowPrivateKb } = useAuthStatus();
   const canWrite = !kb.read_only && allowPrivateKb;
   const canManage = Boolean(kb.kb_id) && canWrite;
-  const [references, setReferences] = useState<KnowledgeBaseReference[] | null>(null);
+  const [references, setReferences] = useState<KnowledgeBaseReferenceSummary | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
@@ -71,16 +73,15 @@ export default function KbSettingsSection({
 
   const changeVisibility = async (next: KnowledgeBaseVisibility) => {
     if (!onVisibilityChange || !canManage) return;
-    const foreign = (references ?? []).some((item) => item.created_by !== kb.created_by);
-    let force = false;
-    if (next === "private" && foreign && isAdmin) {
-      if (!window.confirm(t("Other accounts reference this knowledge base. Make it private anyway?"))) return;
-      force = true;
-    }
     setVisibilityBusy(true);
     setVisibilityError(null);
     try {
-      await onVisibilityChange(next, force);
+      // Rule R1: other accounts never block a withdrawal; published teacher
+      // paths only need the owner to confirm the (counts-only) impact.
+      await runWithWithdrawalConfirmation(
+        (confirm) => (confirm ? onVisibilityChange(next, { confirm: true }) : onVisibilityChange(next)),
+        t,
+      );
     } catch (error) {
       setVisibilityError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -281,11 +282,14 @@ export default function KbSettingsSection({
         )}
         {canManage && references !== null && <div className="text-xs text-[var(--muted-foreground)]">
           <h4 className="font-medium">{t("Referenced by")}</h4>
-          {references.length === 0 ? <p>{t("Not referenced anywhere.")}</p> : (
-            <ul className="mt-1 list-disc break-all pl-4">{references.map((item) => (
-              <li key={`${item.referrer_kind}:${item.referrer_id}`}>{item.referrer_kind}: {item.referrer_id}</li>
-            ))}</ul>
-          )}
+          {references.references.length === 0 && references.other_references.total === 0
+            ? <p>{t("Not referenced anywhere.")}</p>
+            : <>
+              {references.references.length > 0 && <ul className="mt-1 list-disc break-all pl-4">{references.references.map((item) => (
+                <li key={`${item.referrer_kind}:${item.referrer_id}`}>{item.referrer_kind}: {item.referrer_id}</li>
+              ))}</ul>}
+              {references.other_references.total > 0 && <p className="mt-1">{describeOtherReferences(references.other_references, t)}</p>}
+            </>}
         </div>}
         {visibilityError && <p role="alert" className="text-xs text-red-600">{visibilityError}</p>}
       </section>}

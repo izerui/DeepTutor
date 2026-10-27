@@ -2,6 +2,12 @@ import { apiFetch, apiUrl as baseApiUrl } from "@/lib/api";
 import { invalidateClientCache, withClientCache } from "@/lib/client-cache";
 import type { ImaKnowledgeBaseOption } from "@/lib/ima-connection";
 import { stripBasePath } from "@/lib/workspace-scope";
+import {
+  parseOtherReferences,
+  parseWithdrawalImpact,
+  WithdrawalConfirmationError,
+  type OtherReferences,
+} from "@/lib/withdrawal-confirmation";
 
 function inKnowledgeLibrary(): boolean {
   return (
@@ -1448,6 +1454,7 @@ export async function deleteKbFile(
         String(detail.message || "Failed to delete file"),
         detail.code,
         Array.isArray(detail.references) ? detail.references : [],
+        parseOtherReferences(detail.other_references),
       );
     }
     throw new Error(typeof detail === "string" ? detail : "Failed to delete file");
@@ -1557,12 +1564,20 @@ export async function retryKnowledgeBase(
  * listed but not removable from the UI. A body has no such limit, so this is
  * the one delete that reaches every registered entry.
  */
-export async function deleteKnowledgeBase(name: string, options?: { force?: boolean }): Promise<void> {
+export async function deleteKnowledgeBase(
+  name: string,
+  options?: { force?: boolean; confirm?: boolean },
+): Promise<void> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/delete`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, force: Boolean(options?.force) }),
+    body: JSON.stringify({
+      name,
+      force: Boolean(options?.force),
+      ...(options?.confirm ? { confirm: true } : {}),
+    }),
   });
+  await throwIfWithdrawalNeedsConfirmation(res);
   if (!res.ok) {
     throw new Error(
       await readErrorDetail(res, `Delete failed (${res.status})`),
@@ -1579,11 +1594,28 @@ export interface KnowledgeBaseReference {
   created_by: string;
 }
 
+/** Rule R1: the owner's own references in full, other accounts' only as counts. */
+export interface KnowledgeBaseReferenceSummary {
+  references: KnowledgeBaseReference[];
+  other_references: OtherReferences;
+}
+
+/** Turn a counts-only 409 (`referenced_by_teacher_paths`) into a typed error. */
+async function throwIfWithdrawalNeedsConfirmation(res: Response): Promise<void> {
+  if (res.status !== 409) return;
+  const body = await res.clone().json().catch(() => null);
+  const impact = parseWithdrawalImpact(body?.detail);
+  if (impact) {
+    throw new WithdrawalConfirmationError(String(body.detail.message || "Confirmation required"), impact);
+  }
+}
+
 export class KbFileDeleteBlockedError extends Error {
   constructor(
     message: string,
     readonly code: "requires_confirmation" | "document_referenced",
     readonly references: KnowledgeBaseReference[],
+    readonly otherReferences: OtherReferences = { total: 0, by_kind: {} },
   ) {
     super(message);
     this.name = "KbFileDeleteBlockedError";
@@ -1593,23 +1625,31 @@ export class KbFileDeleteBlockedError extends Error {
 export async function setKnowledgeBaseVisibility(
   ref: string,
   visibility: "public" | "private",
-  options?: { force?: boolean },
+  options?: { force?: boolean; confirm?: boolean },
 ): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ visibility, force: Boolean(options?.force) }),
+    body: JSON.stringify({
+      visibility,
+      force: Boolean(options?.force),
+      ...(options?.confirm ? { confirm: true } : {}),
+    }),
   });
+  await throwIfWithdrawalNeedsConfirmation(res);
   if (!res.ok) throw new Error(await readErrorDetail(res, "Failed to change visibility"));
   invalidateKnowledgeCaches();
   return res.json();
 }
 
-export async function listKnowledgeBaseReferences(ref: string): Promise<KnowledgeBaseReference[]> {
+export async function listKnowledgeBaseReferences(ref: string): Promise<KnowledgeBaseReferenceSummary> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/references`), { cache: "no-store" });
   if (!res.ok) throw new Error(await readErrorDetail(res, "Failed to load references"));
   const data = await res.json();
-  return Array.isArray(data?.references) ? data.references : [];
+  return {
+    references: Array.isArray(data?.references) ? data.references : [],
+    other_references: parseOtherReferences(data?.other_references),
+  };
 }
 
 // ── GitHub sources ───────────────────────────────────────────────────

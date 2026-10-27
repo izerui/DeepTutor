@@ -2,6 +2,11 @@ import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
 import { apiFetch, apiUrl, wsUrl } from "@/lib/api";
 import { MASTERY_TEMPLATE_HEADER, currentMasteryTemplate } from "@/lib/mastery-template-scope";
 import {
+  parseWithdrawalImpact,
+  type OtherReferences,
+  type WithdrawalImpact,
+} from "@/lib/withdrawal-confirmation";
+import {
   BookSocketOperationError,
   runBookSocketOperation,
   type BookWsEvent,
@@ -34,6 +39,8 @@ export class BookApiError extends Error {
     public readonly status: number,
     public readonly code?: string,
     public readonly currentRevision?: number,
+    /** The structured `detail` object, when the server sent one. */
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "BookApiError";
@@ -62,6 +69,21 @@ function requestOverSocket<T extends BookWsEvent>(
   });
 }
 
+function deleteQuery(options?: { force?: boolean; confirm?: boolean }): string {
+  const params = new URLSearchParams();
+  if (options?.force) params.set("force", "true");
+  if (options?.confirm) params.set("confirm", "true");
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+/** The counts a withdrawal-confirmation 409 announces (rule R1), else `null`. */
+export function bookWithdrawalImpact(error: unknown): WithdrawalImpact | null {
+  return error instanceof BookApiError && error.status === 409
+    ? parseWithdrawalImpact(error.details)
+    : null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // R9: a book opened from a teacher path's Study page carries the path in
   // its URL; only original-content GETs honour it server-side.
@@ -78,10 +100,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let detail: string;
     let code: string | undefined;
     let currentRevision: number | undefined;
+    let details: Record<string, unknown> | undefined;
     try {
       const data = await res.json();
       const raw = data && (data.detail || data.message);
       if (raw && typeof raw === "object") {
+        details = raw as Record<string, unknown>;
         detail = String(raw.message || raw.code || res.statusText);
         code = raw.code ? String(raw.code) : undefined;
         currentRevision =
@@ -99,6 +123,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       res.status,
       code,
       currentRevision,
+      details,
     );
   }
   return (await res.json()) as T;
@@ -150,9 +175,13 @@ export const bookApi = {
       scopedUrl(`/books/${encodeURIComponent(book_id)}` +
         (options?.includeBlocks === false ? "?include_blocks=false" : ""), options?.workspaceId),
     ),
-  delete: (book_id: string, workspaceId = activeWorkspaceId(), options?: { force?: boolean }) =>
+  delete: (
+    book_id: string,
+    workspaceId = activeWorkspaceId(),
+    options?: { force?: boolean; confirm?: boolean },
+  ) =>
     request<{ deleted: boolean; book_id: string }>(
-      scopedUrl(`/books/${encodeURIComponent(book_id)}${options?.force ? "?force=true" : ""}`, workspaceId),
+      scopedUrl(`/books/${encodeURIComponent(book_id)}${deleteQuery(options)}`, workspaceId),
       {
         method: "DELETE",
       },
@@ -161,14 +190,20 @@ export const bookApi = {
     request<BookSharing>(scopedUrl(`/books/${encodeURIComponent(book_id)}/sharing`, workspaceId)),
   setVisibility: (
     book_id: string,
-    body: { visibility: BookVisibility; force?: boolean; kb_choices?: Record<string, BookKbChoice> },
+    body: {
+      visibility: BookVisibility;
+      force?: boolean;
+      /** Rule R1: proceed although published teacher paths cite the book. */
+      confirm?: boolean;
+      kb_choices?: Record<string, BookKbChoice>;
+    },
     workspaceId = activeWorkspaceId(),
   ) => request<{ book_id: string; ref: string; visibility: BookVisibility; kbs: BookSharingPlan }>(
     scopedUrl(`/books/${encodeURIComponent(book_id)}/visibility`, workspaceId),
     { method: "PUT", body: JSON.stringify(body) },
   ),
   references: (book_id: string, workspaceId = activeWorkspaceId()) =>
-    request<{ book_id: string; ref: string; references: BookReference[] }>(
+    request<{ book_id: string; ref: string; references: BookReference[]; other_references?: OtherReferences }>(
       scopedUrl(`/books/${encodeURIComponent(book_id)}/references`, workspaceId),
     ),
   getSpine: (book_id: string) =>

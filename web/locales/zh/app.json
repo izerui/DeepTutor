@@ -5688,5 +5688,15 @@
   "{{count}} knowledge points removed_one": "移除 {{count}} 个知识点",
   "{{count}} knowledge points removed_other": "移除 {{count}} 个知识点",
   "{{count}} knowledge points to re-check_one": "{{count}} 个知识点需要重新评估",
-  "{{count}} knowledge points to re-check_other": "{{count}} 个知识点需要重新评估"
+  "{{count}} knowledge points to re-check_other": "{{count}} 个知识点需要重新评估",
+  "{{count}} published teacher paths use this material_one": "{{count}} 条已发布的教师路径正在使用该资料",
+  "{{count}} published teacher paths use this material_other": "{{count}} 条已发布的教师路径正在使用该资料",
+  "Those paths will show this material as unavailable. Continue?": "这些路径将显示该资料不可用。是否继续？",
+  "{{count}} items from other accounts use this material and will show it as unavailable._one": "其他账号的 {{count}} 项内容正在使用该资料，之后将显示为不可用。",
+  "{{count}} items from other accounts use this material and will show it as unavailable._other": "其他账号的 {{count}} 项内容正在使用该资料，之后将显示为不可用。",
+  "{{count}} items from other accounts use this material_one": "其他账号的 {{count}} 项内容正在使用该资料",
+  "{{count}} items from other accounts use this material_other": "其他账号的 {{count}} 项内容正在使用该资料",
+  "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "不可用：所有者已将该知识库设为私有或删除。请从此伙伴中移除。",
+  "Its owner made this knowledge base private — remove the reference, or attach another resource.": "所有者已将该知识库设为私有——请移除此引用，或改为添加其他资源。",
+  "Delete anyway": "仍然删除"
 }

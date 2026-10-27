@@ -3,6 +3,7 @@
 import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
+import { describeOtherReferences, runWithWithdrawalConfirmation } from "@/lib/withdrawal-confirmation";
 import { moveKnowledgeBase, resourceUsage } from "@/lib/workspaces-api";
 import { apiFetch, apiUrl } from "@/lib/api";
 import type { EmbeddingModelSelection } from "@/features/knowledge/model/types";
@@ -50,7 +51,7 @@ const ConnectKiwixModal = dynamic(() => import("./ConnectKiwixModal"));
 
 export default function KnowledgePage() {
   const { t } = useTranslation();
-  const { isAdmin, allowPrivateKb } = useAuthStatus();
+  const { allowPrivateKb } = useAuthStatus();
   const router = useRouter();
   const routeParams = useParams<{ kbName?: string }>();
   const searchParams = useSearchParams();
@@ -289,8 +290,8 @@ export default function KnowledgePage() {
   );
 
   const handleVisibilityChange = useCallback(
-    async (name: string, visibility: KnowledgeBaseVisibility, force: boolean) => {
-      await setKnowledgeBaseVisibility(name, visibility, { force });
+    async (name: string, visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean }) => {
+      await setKnowledgeBaseVisibility(name, visibility, options);
       await refresh({ force: true, showSpinner: false });
     },
     [refresh],
@@ -321,18 +322,23 @@ export default function KnowledgePage() {
           ? "\n\n" +
             t("Used by workspaces: {{names}}", { names: workspaces.join(", ") })
           : "";
-        const referenced = references.length ? "\n\n" + t("Referenced by: {{items}}", {
-          items: references.map((item) => `${item.referrer_kind}:${item.referrer_id}`).join(", "),
-        }) : "";
-        if (references.length && !isAdmin) {
-          window.alert(t("Remove these references before deleting.") + referenced);
-          return;
-        }
-        const question = references.length
+        // Rule R1: references never block the owner. Own ones are listed;
+        // other accounts' are counts only and show the KB as unavailable.
+        const own = references.references;
+        const others = describeOtherReferences(references.other_references, t);
+        const referenced = (own.length ? "\n\n" + t("Referenced by: {{items}}", {
+          items: own.map((item) => `${item.referrer_kind}:${item.referrer_id}`).join(", "),
+        }) : "") + (others ? "\n\n" + others : "");
+        const question = own.length || others
           ? t("Delete anyway? Every item that references it will lose this material.")
           : t('Delete knowledge base "{{name}}"?', { name: kb?.name ?? name });
         if (!window.confirm(question + impact + referenced)) return;
-        await deleteKb(name, { force: references.length > 0 });
+        let deleted = false;
+        await runWithWithdrawalConfirmation(async (confirm) => {
+          await (confirm ? deleteKb(name, { confirm: true }) : deleteKb(name));
+          deleted = true;
+        }, t);
+        if (!deleted) return;
         if (name === selectedKbName || (kb && knowledgeBaseMatches(kb, explicitSelection ?? ""))) {
           setDirectDetail(null);
           setExplicitSelection(null);
@@ -342,7 +348,7 @@ export default function KnowledgePage() {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [deleteKb, explicitSelection, isAdmin, kbs, selectedKb, selectedKbName, setError, t],
+    [deleteKb, explicitSelection, kbs, selectedKb, selectedKbName, setError, t],
   );
 
   const handleUpload = useCallback(

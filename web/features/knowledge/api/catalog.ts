@@ -28,7 +28,7 @@ export {
   listKiwixArchives,
   setDefaultKnowledgeBase,
 } from "./client";
-export type { KnowledgeBaseReference } from "./client";
+export type { KnowledgeBaseReference, KnowledgeBaseReferenceSummary } from "./client";
 
 export type {
   IndexingLLMSelection,

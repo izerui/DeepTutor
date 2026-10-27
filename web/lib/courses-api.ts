@@ -72,6 +72,8 @@ export interface StudyCourse {
 /** One resource plus whether its target still resolves, and a per-kind summary. */
 export interface CourseResourceState extends CourseResource {
   available: boolean;
+  /** Rule R1: why an unavailable knowledge base went (its owner withdrew it). */
+  unavailable_reason?: "made_private" | "kb_deleted";
   detail: Record<string, unknown>;
 }
 

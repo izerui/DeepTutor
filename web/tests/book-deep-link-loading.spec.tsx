@@ -53,6 +53,8 @@ vi.mock("@/lib/book-api", () => ({
     status = 500;
     code?: string;
   },
+  bookWithdrawalImpact: (error: unknown) =>
+    (error as { impact?: { affectedPaths: number; affectedStudents: number } } | null)?.impact ?? null,
   bookApi: {
     get: fixture.get,
     list: fixture.list,
@@ -73,6 +75,7 @@ vi.mock("@/lib/use-book-stream", () => ({
 vi.mock("@/app/(workspace)/learning/books/components/BookLibrary", () => ({
   default: ({ onDeleteBook }: { onDeleteBook: (book: unknown) => void }) => <div data-testid="book-library">
     <button onClick={() => onDeleteBook({ id: "same", ref: "", can_delete: true, content_workspace_id: "local" })}>Delete collision</button>
+    <button onClick={() => onDeleteBook({ id: "cited", ref: "book:cited", can_delete: true, content_workspace_id: "local" })}>Delete cited</button>
   </div>,
 }));
 vi.mock("@/app/(workspace)/learning/books/components/BookCreator", () => ({
@@ -192,8 +195,23 @@ describe("book deep-link loading", () => {
   it("deletes unregistered local collisions without querying foreign references", async () => {
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete collision"));
-    await waitFor(() => expect(fixture.delete).toHaveBeenCalledWith("same", "local", { force: false }));
+    await waitFor(() => expect(fixture.delete).toHaveBeenCalledWith("same", "local", { confirm: false }));
     expect(fixture.references).not.toHaveBeenCalled();
+  });
+
+  it("confirms teacher-path impact by counts before deleting a cited book (R1)", async () => {
+    fixture.delete.mockRejectedValueOnce(Object.assign(new Error("409"), {
+      impact: { affectedPaths: 2, affectedStudents: 9 },
+    }));
+    render(<BookPage />);
+    fireEvent.click(screen.getByText("Delete cited"));
+    expect(await screen.findByText(/2 published teacher paths use this material/)).toBeTruthy();
+    expect(screen.getByText(/9 students assigned/)).toBeTruthy();
+    expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirm: false });
+    fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
+    await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", { confirm: true }));
+    expect(fixture.references).not.toHaveBeenCalled();
+    expect(fixture.notify).not.toHaveBeenCalled();
   });
 
   it.each(["reference", "workspace"])("discards delayed page and progress from an old %s with the same model ID", async change => {

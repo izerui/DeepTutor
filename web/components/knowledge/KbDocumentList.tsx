@@ -223,9 +223,14 @@ export default function KbDocumentList({
         await deleteKbFile(kbName, path);
       } catch (err) {
         if (!(err instanceof KbFileDeleteBlockedError)) throw err;
-        const details = `${err.message}\n\n${t("Referenced by: {{items}}", {
+        // Other accounts' referrers arrive as counts only (rule R1).
+        const own = err.references.length ? `\n\n${t("Referenced by: {{items}}", {
           items: err.references.map((item) => `${item.referrer_kind}:${item.referrer_id}`).join(", "),
-        })}`;
+        })}` : "";
+        const others = err.otherReferences.total > 0
+          ? `\n\n${t("{{count}} items from other accounts use this material", { count: err.otherReferences.total })}`
+          : "";
+        const details = `${err.message}${own}${others}`;
         if (err.code === "requires_confirmation") {
           if (!window.confirm(`${details}\n\n${t("Delete this document anyway?")}`)) return;
           await deleteKbFile(kbName, path, { confirm: true });

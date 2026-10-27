@@ -3,9 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/shared/ui/Dialog";
-import { bookApi } from "@/lib/book-api";
+import { bookApi, bookWithdrawalImpact } from "@/lib/book-api";
 import { bookErrorMessage } from "@/lib/book-errors";
-import { bookRequestRef, bookSelectionKey, describeBookReferences } from "@/lib/book-sharing";
+import { bookRequestRef, bookSelectionKey } from "@/lib/book-sharing";
+import {
+  describeOtherReferences,
+  describeWithdrawalImpact,
+  NO_OTHER_REFERENCES,
+  type WithdrawalImpact,
+} from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
 
 const ISSUE_MESSAGES = {
@@ -36,6 +42,9 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   const [force, setForce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Rule R1: set once the server reports published teacher paths citing the
+  // book; the next submission then confirms the withdrawal.
+  const [impact, setImpact] = useState<WithdrawalImpact | null>(null);
   const alive = useRef(true);
   const requestedRef = bookRequestRef(book);
   const workspaceId = book.content_workspace_id ?? "";
@@ -56,8 +65,9 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   const makingPublic = (sharing?.visibility ?? book.visibility) !== "public";
   const canMakePublic = sharing?.can_make_public ?? true;
   const issues = sharing?.kbs.issues ?? [];
-  const foreignReferences = (sharing?.references ?? []).filter(ref => ref.created_by !== book.owner_id);
-  const blocked = (makingPublic && !canMakePublic) || ((makingPublic ? issues.length > 0 : foreignReferences.length > 0) && !(isAdmin && force));
+  const otherReferences = sharing?.other_references ?? NO_OTHER_REFERENCES;
+  // References never block making a book private (rule R1).
+  const blocked = makingPublic && (!canMakePublic || (issues.length > 0 && !(isAdmin && force)));
   const confirm = async () => {
     if (busy || !sharing?.can_set_visibility || blocked) return;
     setBusy(true);
@@ -66,13 +76,17 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
       await bookApi.setVisibility(requestedRef, {
         visibility: makingPublic ? "public" : "private",
         kb_choices: makingPublic ? choices : {},
-        force: isAdmin && force,
+        force: makingPublic && isAdmin && force,
+        ...(!makingPublic && impact ? { confirm: true } : {}),
       }, workspaceId);
       if (!alive.current) return;
       onChanged();
       onClose();
     } catch (err) {
-      if (alive.current) setError(bookErrorMessage(err, t));
+      if (!alive.current) return;
+      const needed = makingPublic ? null : bookWithdrawalImpact(err);
+      if (needed) setImpact(needed);
+      else setError(bookErrorMessage(err, t));
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -86,7 +100,7 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
       <button type="button" disabled={busy || !sharing?.can_set_visibility || blocked}
         onClick={() => void confirm()}
         className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-sm text-[var(--primary-foreground)] disabled:opacity-40">
-        {makingPublic ? t("Make public") : t("Make private")}
+        {makingPublic ? t("Make public") : impact ? t("Make it private anyway") : t("Make private")}
       </button>
     </>}>
     <div className="space-y-3 text-sm">
@@ -110,13 +124,13 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
         {issues.map(issue => <li key={`${issue.ref}:${issue.kb_id}`}>{issue.name}: {t(ISSUE_MESSAGES[issue.code])}</li>)}
       </ul>}
       {makingPublic && !!sharing?.kbs.missing.length && <p>{t("Some knowledge bases of this book no longer exist: {{items}}", { items: sharing.kbs.missing.join(", ") })}</p>}
-      {!makingPublic && foreignReferences.length > 0 && <p>
-        {t("Other accounts reference this book; it cannot be made private until those references are removed.")}{" "}
-        {t("Referenced by: {{items}}", { items: describeBookReferences(foreignReferences, t) })}
+      {!makingPublic && otherReferences.total > 0 && !impact && <p>{describeOtherReferences(otherReferences, t)}</p>}
+      {!makingPublic && impact && <p role="alert" className="whitespace-pre-line text-amber-700 dark:text-amber-300">
+        {describeWithdrawalImpact(impact, t)}
       </p>}
-      {isAdmin && (makingPublic ? issues.length > 0 : foreignReferences.length > 0) && <label className="flex items-start gap-2">
+      {isAdmin && makingPublic && issues.length > 0 && <label className="flex items-start gap-2">
         <input type="checkbox" checked={force} disabled={busy} onChange={event => setForce(event.target.checked)} />
-        <span>{makingPublic ? t("Publish anyway; the blocked knowledge bases stay unavailable to readers") : t("Make it private anyway")}</span>
+        <span>{t("Publish anyway; the blocked knowledge bases stay unavailable to readers")}</span>
       </label>}
       {error && <p role="alert" className="break-words text-red-600">{error}</p>}
     </div>

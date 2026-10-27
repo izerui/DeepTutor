@@ -96,6 +96,9 @@ export interface PartnerAssets {
     adopted?: boolean;
     /** A copy from before references, not migrated yet. */
     legacy?: boolean;
+    /** Rule R1: its owner made it private or deleted it; the partner lost it. */
+    unavailable?: boolean;
+    reason?: "made_private" | "kb_deleted";
   }[];
   skills: { name: string }[];
   notebooks: { id: string; name: string; record_count?: number }[];

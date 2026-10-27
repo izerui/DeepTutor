@@ -86,7 +86,9 @@ interface KnowledgeBaseDetailProps {
   onSetDefault: (kbName: string) => Promise<void>;
   onDelete: (kbName: string) => Promise<void>;
   onMove?: (kbName: string, targetWorkspaceId: string) => Promise<void>;
-  onVisibilityChange?: (kbName: string, visibility: KnowledgeBaseVisibility, force: boolean) => Promise<void>;
+  onVisibilityChange?: (
+    kbName: string, visibility: KnowledgeBaseVisibility, options?: { confirm?: boolean },
+  ) => Promise<void>;
   onClearHistory: (kbName: string) => void;
   onBack?: () => void;
 }
@@ -391,7 +393,7 @@ export default function KnowledgeBaseDetail({
                   onMove={!kb.read_only && onMove ? (targetWorkspaceId) => onMove(kb.id && !kb.id.startsWith("kb:") ? kb.id : knowledgeBaseRef(kb), targetWorkspaceId) : undefined}
                   onSetDefault={!kb.read_only && kb.can_set_default ? () => onSetDefault(knowledgeBaseRef(kb)) : undefined}
                   onDelete={!kb.read_only ? () => onDelete(knowledgeBaseRef(kb)) : undefined}
-                  onVisibilityChange={!kb.read_only && onVisibilityChange ? (visibility, force) => onVisibilityChange(knowledgeBaseRef(kb), visibility, force) : undefined}
+                  onVisibilityChange={!kb.read_only && onVisibilityChange ? (visibility, options) => onVisibilityChange(knowledgeBaseRef(kb), visibility, options) : undefined}
                 />
               )}
             </div>

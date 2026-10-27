@@ -300,9 +300,11 @@ export default function PartnerConfigure({
         id: kb.ref ?? kb.name,
         label: kb.name,
         kind: t("Knowledge base"),
-        notice: kb.adopted
-          ? t("The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.")
-          : undefined,
+        notice: kb.unavailable
+          ? t("Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.")
+          : kb.adopted
+            ? t("The original knowledge base no longer exists. This copy is now your private knowledge base; review it in the Knowledge Center.")
+            : undefined,
       })),
       ...assets.skills.map((skill) => ({
         type: "skill" as const,
@@ -528,7 +530,7 @@ export default function PartnerConfigure({
                 onChange={setPendingAssets}
                 excluded={{
                   knowledge_bases:
-                    assets?.knowledge_bases.map((kb) => kb.name) ?? [],
+                    assets?.knowledge_bases.filter((kb) => !kb.unavailable).map((kb) => kb.name) ?? [],
                   skills: assets?.skills.map((skill) => skill.name) ?? [],
                   notebooks: assets?.notebooks.map((nb) => nb.id) ?? [],
                 }}
