@@ -60,6 +60,11 @@ def admin_kb_manager() -> KnowledgeBaseManager:
     return _manager_for(str(admin_kb_base_dir().resolve()))
 
 
+def _is_admin_root(base_dir: Path | str) -> bool:
+    """True when *base_dir* resolves to the shared admin knowledge-base root."""
+    return str(Path(base_dir).resolve()) == str(admin_kb_base_dir().resolve())
+
+
 def _strip_resource_prefix(value: str) -> tuple[str | None, str]:
     raw = str(value or "").strip()
     if raw.startswith(ADMIN_PREFIX):
@@ -382,13 +387,18 @@ def _list_visible_knowledge_bases() -> list[dict[str, Any]]:
     """The current scope's own KBs, registered on first sight (connect routes, manual folders)."""
     from deeptutor.knowledge import registry
 
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
     user = get_current_user()
     manager = current_kb_manager()
+    base_dir = current_kb_base_dir()
     names = manager.list_knowledge_bases()
+    # Admin-root KBs always belong to LOCAL_ADMIN_ID, not the incidental admin.
+    owner = LOCAL_ADMIN_ID if _is_admin_root(base_dir) else user.id
     records = registry.sync_base_dir(
-        current_kb_base_dir(),
+        base_dir,
         {name: manager.get_kb_entry(name) for name in names},
-        created_by=user.id,
+        created_by=owner,
     )
     return [
         {

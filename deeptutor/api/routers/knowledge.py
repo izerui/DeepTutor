@@ -4001,14 +4001,20 @@ def _requested_visibility(value: object) -> str:
 def _register_created_kb(name: str, visibility: str):
     """Commit a fresh identity before publishing the new catalog entry."""
     from deeptutor.knowledge import registry
+    from deeptutor.multi_user.knowledge_access import _is_admin_root
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    base_dir = _current_kb_base_dir()
 
     def check_available():
         if name in get_kb_manager().list_knowledge_bases():
             raise HTTPException(status_code=400, detail=f"Knowledge base '{name}' already exists")
 
+    # Admin-root KBs always belong to LOCAL_ADMIN_ID, not the incidental admin.
+    owner = LOCAL_ADMIN_ID if _is_admin_root(base_dir) else get_current_user().id
     return registry.register_new_kb(
-        base_dir=_current_kb_base_dir(), name=name, check_available=check_available,
-        created_by=get_current_user().id, visibility=visibility,
+        base_dir=base_dir, name=name, check_available=check_available,
+        created_by=owner, visibility=visibility,
     )
 
 

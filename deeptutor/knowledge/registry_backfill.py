@@ -79,6 +79,7 @@ def backfill_registry() -> dict[str, int]:
 
     report = {
         "admin": 0,
+        "admin_normalized": 0,
         "account": 0,
         "workspace": 0,
         "promoted": 0,
@@ -107,6 +108,7 @@ def backfill_registry() -> dict[str, int]:
             or _census_unchanged(admin_root)
         )
         report["admin"] = _sync_root_unguarded(admin_root, created_by=LOCAL_ADMIN_ID)
+        report["admin_normalized"] = normalize_admin_root_created_by()
         admin_sync_ok = True
     except Exception:
         admin_sync_ok = False
@@ -162,6 +164,25 @@ def backfill_registry() -> dict[str, int]:
     except Exception:
         logger.exception("Partner knowledge-base copy migration failed")
     return report
+
+
+def normalize_admin_root_created_by() -> int:
+    """Fix admin-root KB rows where created_by is a concrete admin id instead of LOCAL_ADMIN_ID.
+
+    Idempotent: rows already set to LOCAL_ADMIN_ID are untouched; non-admin-root
+    rows are never modified. Returns the number of rows updated.
+    """
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+    from deeptutor.multi_user.paths import get_admin_path_service
+
+    admin_root = str(get_admin_path_service().get_knowledge_bases_root().resolve())
+    with registry._write() as conn:
+        cursor = conn.execute(
+            "UPDATE kb_registry SET created_by = ?, updated_at = ? "
+            "WHERE base_dir = ? AND created_by != ?",
+            (LOCAL_ADMIN_ID, registry._now(), admin_root, LOCAL_ADMIN_ID),
+        )
+        return cursor.rowcount
 
 
 def _sync_root(root: Path, *, created_by: str) -> int:
