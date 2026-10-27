@@ -89,6 +89,9 @@ test("German UI uses the informal second person consistently", () => {
     "Beachten Sie",
     "Prüfen Sie",
     "Laden Sie",
+    "Sie können",
+    "Sie müssen",
+    "Sie haben",
   ]) {
     assert.equal(
       text.includes(formal),
