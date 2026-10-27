@@ -1902,45 +1902,19 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
         delete_avatar_file(user_id)
 
     if user_id:
-        from deeptutor.knowledge import registry
+        from deeptutor.multi_user import account_handoff
         from deeptutor.multi_user.models import LOCAL_ADMIN_ID
 
         successor = (current.user_id if current else "") or LOCAL_ADMIN_ID
-        try:
-            transferred = registry.transfer_ownership(user_id, successor)
-        except Exception:
-            # The account is already deleted; hand-over failure is nonfatal.
-            logger.exception("Could not transfer knowledge bases of deleted user '%s'", username)
-        else:
-            if transferred:
-                logger.info(
-                    "Transferred %d knowledge base(s) of '%s' to %s",
-                    len(transferred), username, successor,
-                )
-
-        from deeptutor.book import registry as book_registry
-
-        try:
-            moved_books = book_registry.transfer_book_ownership(user_id, successor)
-        except Exception:
-            # Keep the same nonfatal hand-over contract as knowledge bases.
-            logger.exception("Could not transfer books of deleted user '%s'", username)
-        else:
-            if moved_books:
-                logger.info(
-                    "Transferred %d book(s) of '%s' to %s",
-                    len(moved_books), username, successor,
-                )
-
-        try:
-            from deeptutor.teaching.service import handle_account_deleted
-
-            # R6 / D17: the deleted teacher's paths (and their reference
-            # ownership) go to the same successor as their libraries and books;
-            # students keep learning. A deleted student's assignments are revoked.
-            handle_account_deleted(user_id, successor_id=successor)
-        except Exception:
-            logger.exception("Could not hand over teacher paths of deleted user '%s'", username)
+        # The account is already deleted; a failed stage is nonfatal and stays
+        # recorded as a pending hand-over for a retry (B2-9).
+        failed = account_handoff.hand_over_deleted_account(
+            user_id, successor, username=username
+        )
+        if failed:
+            logger.warning(
+                "Hand-over of deleted user '%s' is pending for: %s", username, ", ".join(failed)
+            )
 
     actor = current.username if current else "local"
     logger.info("Admin '%s' deleted user '%s'", actor, username)
@@ -1992,6 +1966,40 @@ async def batch_remove_users(
         "failed_count": failed_count,
         "results": results,
     }
+
+
+@router.get("/account-handoffs")
+async def list_account_handoffs(current: TokenPayload = Depends(require_admin)) -> list[dict]:
+    """Deleted accounts whose hand-over (KBs, books, teacher paths) is unfinished."""
+    from deeptutor.multi_user import account_handoff
+
+    records = await asyncio.to_thread(account_handoff.list_pending_handoffs)
+    return [record.to_dict() for record in records]
+
+
+@router.post("/account-handoffs/{user_id}/retry")
+async def retry_account_handoff(
+    user_id: str,
+    current: TokenPayload = Depends(require_admin),
+) -> dict:
+    """Re-run the failed hand-over stages of one deleted account."""
+    from deeptutor.multi_user import account_handoff
+
+    try:
+        # Blocking writers: run them off the loop under a copy of the request
+        # context, so the retrying admin stays the current user.
+        remaining = await asyncio.to_thread(
+            account_handoff.retry_handoff,
+            user_id,
+            fallback_successor=(current.user_id if current else "") or "",
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No pending hand-over for this account")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    actor = current.username if current else "local"
+    logger.info("Admin '%s' retried the hand-over of deleted user %s", actor, user_id)
+    return {"cleared": remaining is None, "handoff": remaining.to_dict() if remaining else None}
 
 
 @router.put("/users/{username}/role", status_code=status.HTTP_200_OK)

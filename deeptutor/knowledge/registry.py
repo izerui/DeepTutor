@@ -137,6 +137,16 @@ CREATE TABLE IF NOT EXISTS migration_items (
     created_at TEXT NOT NULL,
     PRIMARY KEY (kind, item_key)
 );
+CREATE TABLE IF NOT EXISTS account_handoffs (
+    user_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL DEFAULT '',
+    successor_id TEXT NOT NULL,
+    stages TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 _write_lock = threading.RLock()
@@ -887,6 +897,143 @@ def set_meta(key: str, value: str) -> None:
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value),
         )
+
+
+# ── pending account hand-overs (B2-9) ───────────────────────────────
+#
+# Account deletion hands a deleted account's KBs, books and teacher paths to
+# a successor in separate best-effort stages. A row here names the stages
+# still to run, so they can be retried. It lives in this deployment-wide
+# registry because the registry already keeps cross-feature admin
+# bookkeeping (``registry_meta``, ``migration_items``) and every hand-over
+# stage writes it anyway. Rows are written in their own short transaction,
+# never inside a stage's writer, so the teaching -> KB -> Book order holds.
+
+
+@dataclass(frozen=True)
+class AccountHandoff:
+    """Stages of a deleted account's hand-over that have not succeeded yet."""
+
+    user_id: str
+    username: str
+    successor_id: str
+    stages: list[str]
+    attempts: int
+    last_error: str
+    created_at: str
+    updated_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "username": self.username,
+            "successor_id": self.successor_id,
+            "stages": list(self.stages),
+            "attempts": self.attempts,
+            "last_error": self.last_error,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+def _account_handoff(row: sqlite3.Row) -> AccountHandoff:
+    return AccountHandoff(
+        user_id=str(row["user_id"]),
+        username=str(row["username"]),
+        successor_id=str(row["successor_id"]),
+        stages=[str(stage) for stage in json.loads(row["stages"])],
+        attempts=int(row["attempts"]),
+        last_error=str(row["last_error"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def begin_account_handoff(
+    user_id: str, username: str, successor_id: str, stages: Sequence[str]
+) -> AccountHandoff:
+    """Record a hand-over before its stages run (a crash leaves it pending)."""
+    now = _now()
+    with _write() as conn:
+        conn.execute(
+            "INSERT INTO account_handoffs (user_id, username, successor_id, stages, attempts, "
+            "last_error, created_at, updated_at) VALUES (?, ?, ?, ?, 0, '', ?, ?) "
+            "ON CONFLICT(user_id) DO NOTHING",
+            (user_id, username, successor_id, json.dumps(list(stages)), now, now),
+        )
+        row = conn.execute(
+            "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return _account_handoff(row)
+
+
+def finish_account_handoff(
+    user_id: str,
+    *,
+    username: str,
+    successor_id: str,
+    expected_attempts: int,
+    stages: Sequence[str],
+    error: str = "",
+) -> AccountHandoff | None:
+    """Store one attempt's outcome; ``None`` once nothing is left to run.
+
+    ``expected_attempts`` is the count the attempt started from. When another
+    attempt finished first (the count moved on, or the row was cleared after
+    the start) its outcome stands: every stage is idempotent, so the later
+    one has nothing to add.
+    """
+    now = _now()
+    with _write() as conn:
+        row = conn.execute(
+            "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if row is None:
+            if expected_attempts or not stages:
+                return None
+            # The write-ahead row could not be stored; record the failure now.
+            conn.execute(
+                "INSERT INTO account_handoffs (user_id, username, successor_id, stages, "
+                "attempts, last_error, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, ?)",
+                (user_id, username, successor_id, json.dumps(list(stages)), error, now, now),
+            )
+        elif int(row["attempts"]) != expected_attempts:
+            return _account_handoff(row)
+        elif not stages:
+            conn.execute("DELETE FROM account_handoffs WHERE user_id = ?", (user_id,))
+            return None
+        else:
+            conn.execute(
+                "UPDATE account_handoffs SET successor_id = ?, stages = ?, attempts = ?, "
+                "last_error = ?, updated_at = ? WHERE user_id = ?",
+                (successor_id, json.dumps(list(stages)), expected_attempts + 1, error, now,
+                 user_id),
+            )
+        row = conn.execute(
+            "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return _account_handoff(row)
+
+
+def get_account_handoff(user_id: str) -> AccountHandoff | None:
+    with _read() as conn:
+        if conn is None:
+            return None
+        row = conn.execute(
+            "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return None if row is None else _account_handoff(row)
+
+
+def list_account_handoffs() -> list[AccountHandoff]:
+    """Pending hand-overs, oldest first."""
+    with _read() as conn:
+        if conn is None:
+            return []
+        rows = conn.execute(
+            "SELECT * FROM account_handoffs ORDER BY created_at, user_id"
+        ).fetchall()
+    return [_account_handoff(row) for row in rows]
 
 
 # ── migration results (R1) ──────────────────────────────────────────

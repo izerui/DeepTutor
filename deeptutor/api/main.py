@@ -175,6 +175,17 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Knowledge-base registry backfill failed")
 
+    # Retry account deletions whose hand-over (KBs, books, teacher paths)
+    # failed or was interrupted (B2-9). Bounded; each stage is idempotent.
+    try:
+        from deeptutor.multi_user.account_handoff import retry_pending_handoffs
+
+        handoff_report = await asyncio.to_thread(retry_pending_handoffs)
+        if handoff_report["retried"]:
+            logger.info("Pending account hand-overs: %s", handoff_report)
+    except Exception:
+        logger.exception("Pending account hand-over retry failed")
+
     # Initialize LLM client early so OPENAI_* env vars are available before
     # any downstream provider integrations start.
     try:
