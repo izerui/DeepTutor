@@ -433,11 +433,12 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   const canEditBook = detail?.book.can_edit !== false
   /**
    * Someone else's private book opened from Study through a teacher path
-   * (R9): the path opens its content only. Progress, bookmarks, quiz answers,
-   * captures and health keep their normal rules and are not available to this
-   * reader, so those controls are left out instead of failing.
+   * (R9). The path opens its content and the reader's own progress,
+   * bookmarks, quiz answers and captures (B2-17: kept in the reader's own
+   * store, like any shared book's). Editor surfaces such as the health
+   * banner stay closed, so they are left out instead of failing.
    */
-  const courseReadOnly =
+  const teacherPathReader =
     !!detail &&
     !isAdmin &&
     detail.book.source === 'shared' &&
@@ -826,7 +827,6 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     if (view !== 'reader' || !selectedBookId || !selectedPage) return
     if (needsHydration(selectedPage)) void hydratePage(selectedPage.id)
-    if (courseReadOnly) return
 
     const key = `${selectedBookId}:${selectedPage.id}`
     if (recordedVisitRef.current === key) return
@@ -842,7 +842,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       .catch(() => {
         // Position tracking is best-effort.
       })
-  }, [view, selectedBookId, selectedPage, hydratePage, courseReadOnly])
+  }, [view, selectedBookId, selectedPage, hydratePage])
 
   const handleUpdateBody = async (block: Block, body: string) => {
     if (!isActiveReader()) return
@@ -1295,7 +1295,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                 onResume={canEditBook ? () => void handleResumeBook() : undefined}
                 resuming={resumingBook}
               />
-              {!courseReadOnly && (
+              {!teacherPathReader && (
               <BookHealthBanner
                 bookId={selectedBookId}
                 refreshKey={detail?.book.updated_at}
@@ -1312,13 +1312,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                 }
               />
               )}
-              {courseReadOnly ? (
-                <div className="mx-6 mt-3 rounded-lg border border-sky-300/60 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
-                  {t(
-                    "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved."
-                  )}
-                </div>
-              ) : detail?.book.source === 'shared' && (
+              {detail?.book.source === 'shared' && (
                 <div className="mx-6 mt-3 rounded-lg border border-sky-300/60 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-100">
                   {canEditBook
                     ? t(
@@ -1350,9 +1344,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                     onInsertBlock={canEditBook ? t => handleInsertBlock(t) : undefined}
                     onDeepDive={canEditBook ? (topic, blockId) => handleDeepDive(topic, blockId) : undefined}
                     onOpenPage={pageId => handleSelectPage(pageId)}
-                    onQuizAttempt={
-                      courseReadOnly ? undefined : (block, args) => void handleQuizAttempt(block, args)
-                    }
+                    onQuizAttempt={(block, args) => void handleQuizAttempt(block, args)}
                     onRequestSupplement={
                       canEditBook ? block => void handleRequestSupplement(block) : undefined
                     }
@@ -1367,17 +1359,15 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                       !!selectedPage &&
                       !!detail?.progress.bookmarked_page_ids.includes(selectedPage.id)
                     }
-                    onToggleBookmark={courseReadOnly ? undefined : () => void handleToggleBookmark()}
+                    onToggleBookmark={() => void handleToggleBookmark()}
                     pendingDeepDiveTopic={pendingDeepDiveTopic}
                     onRecompile={
                       canEditBook && selectedPage
                         ? () => void compilePage(selectedPage.id, true)
                         : undefined
                     }
-                    onCaptureSelection={
-                      courseReadOnly
-                        ? undefined
-                        : payload => void guard('Save selection', () => handleCaptureSelection(payload))
+                    onCaptureSelection={payload =>
+                      void guard('Save selection', () => handleCaptureSelection(payload))
                     }
                   />
                 </div>
