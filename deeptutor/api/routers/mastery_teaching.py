@@ -20,8 +20,9 @@ from deeptutor.teaching.service import TeachingError, TeachingService
 
 #: The only routes a teacher-path context opens (R9): original content of a
 #: KB (file, extracted text, verified visual asset, rendered source page) and
-#: of a book (the book, its chapters, its pages). Config, progress, linked
-#: folders, sync sources and every write keep their normal rules. Matched by
+#: of a book (the book, its chapters, its pages). Config, KB progress, linked
+#: folders, sync sources and every write keep their normal rules, except the
+#: reader's own book state in ``LEARNER_STATE_ROUTES`` (B2-17). Matched by
 #: suffix of the resolved route template, so the include prefix does not matter.
 ORIGINAL_CONTENT_ROUTES: frozenset[str] = frozenset(
     {
@@ -32,6 +33,22 @@ ORIGINAL_CONTENT_ROUTES: frozenset[str] = frozenset(
         "/books/{book_id}",
         "/books/{book_id}/spine",
         "/books/{book_id}/pages/{page_id}",
+    }
+)
+#: R2 (B2-17): the reader's OWN state on a path book — reading progress,
+#: bookmarks, in-book quiz attempts and learning captures. The same entitlement
+#: as reading the book opens them; the endpoints then resolve the canonical
+#: book, whose learning store for a non-owner is the reader's own overlay
+#: (``BookLearningOverlay``), never the owner's book directory. Method-exact:
+#: no other write on these paths is opened.
+LEARNER_STATE_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("POST", "/books/progress/visit"),
+        ("POST", "/books/progress/bookmark"),
+        ("POST", "/books/quiz-attempt"),
+        ("GET", "/books/{book_id}/learning-captures"),
+        ("POST", "/books/{book_id}/learning-captures"),
+        ("PATCH", "/books/{book_id}/learning-captures/{capture_id}"),
     }
 )
 MASTERY_TEMPLATE_PARAM = "mastery_template"
@@ -51,21 +68,38 @@ async def enter_mastery_template_scope(request: Request) -> None:
     then is the request served inside the template's reference access — and,
     for a book or a book's library, inside plan D's reading scope of the
     server-resolved canonical book. On any other route the parameter is
-    ignored. Declared ``async`` so the context variables are set in the
-    endpoint's own context, like ``require_auth`` sets the user.
+    ignored. The reader's own state on a path book (``LEARNER_STATE_ROUTES``,
+    B2-17) gets the same book check, with the book named by the path or, for
+    the body-addressed routes, by the request body's ``book_id``. Declared
+    ``async`` so the context variables are set in the endpoint's own context,
+    like ``require_auth`` sets the user.
     """
     template_id = str(
         request.query_params.get(MASTERY_TEMPLATE_PARAM)
         or request.headers.get(MASTERY_TEMPLATE_HEADER)
         or ""
     ).strip()
-    if not template_id or request.method.upper() != "GET":
+    if not template_id:
         return
     from deeptutor.api.routers.auth import _resolved_route_path
 
+    method = request.method.upper()
     route = _resolved_route_path(request) or ""
-    if not any(route.endswith(template) for template in ORIGINAL_CONTENT_ROUTES):
+    learner_state = any(
+        method == allowed and route.endswith(template)
+        for allowed, template in LEARNER_STATE_ROUTES
+    )
+    if not learner_state and (
+        method != "GET"
+        or not any(route.endswith(template) for template in ORIGINAL_CONTENT_ROUTES)
+    ):
         return
+    params = request.path_params
+    book_ref = str(params.get("book_id") or "")
+    if learner_state and not book_ref:
+        book_ref = await _body_book_id(request)
+        if not book_ref:
+            return
     from deeptutor.teaching import access
 
     materials = await asyncio.to_thread(access.entitled_materials, template_id)
@@ -73,12 +107,9 @@ async def enter_mastery_template_scope(request: Request) -> None:
         # Path closed / not assigned / archived — ignore the template parameter
         # and fall back to the route's normal authorization rules (B2-12).
         return
-    params = request.path_params
     try:
-        if "book_id" in params:
-            grant = await asyncio.to_thread(
-                access.book_original_grant, materials, str(params["book_id"])
-            )
+        if book_ref:
+            grant = await asyncio.to_thread(access.book_original_grant, materials, book_ref)
         else:
             grant = await asyncio.to_thread(
                 access.kb_original_grant,
@@ -107,6 +138,20 @@ async def enter_mastery_template_scope(request: Request) -> None:
         access.original_document.set(grant.rel_path)
     if grant.book_id:
         access.original_book.set(grant.book_id)
+
+
+async def _body_book_id(request: Request) -> str:
+    """The ``book_id`` of a body-addressed learner-state request (B2-17).
+
+    FastAPI has already read the body for the endpoint and caches it on this
+    request, so the endpoint validates the very same value.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return ""
+    value = body.get("book_id") if isinstance(body, dict) else None
+    return value.strip() if isinstance(value, str) else ""
 
 
 router = APIRouter(dependencies=[Depends(require_teacher_or_admin)])

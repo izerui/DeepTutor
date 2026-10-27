@@ -649,7 +649,7 @@ async def list_learning_captures(
     book_id: str,
     status: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(book_id))
     book_id = book_registry.strip_ref(book_id)
 
     parsed_status = _coerce_capture_status(status) if status is not None else None
@@ -663,7 +663,7 @@ async def create_learning_capture(
     book_id: str,
     req: LearningCaptureCreateRequest,
 ) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(book_id))
     book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
 
@@ -722,7 +722,7 @@ async def update_learning_capture(
     capture_id: str,
     req: LearningCaptureUpdateRequest,
 ) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(book_id))
     book_id = book_registry.strip_ref(book_id)
     storage = resolved.learning
     capture = storage.load_learning_capture(book_id, capture_id)
@@ -777,6 +777,10 @@ def _page_summary(page) -> dict[str, Any]:
 
 def _path_book_ref(book_id: str) -> str:
     """A teacher path's book (R9) is always read at its registered identity.
+
+    The same holds for the reader's own state on it (B2-17): progress,
+    bookmarks, quiz attempts and captures of a path book are kept in the
+    canonical book's learning store — for a non-owner, their own overlay.
 
     ``enter_mastery_template_scope`` resolved the path's canonical book for
     this request; a same-id local copy of the reader's never stands in for it.
@@ -1300,7 +1304,7 @@ async def deep_dive(req: DeepDiveRequest) -> dict[str, Any]:
 
 @router.post("/books/quiz-attempt")
 async def quiz_attempt(req: QuizAttemptRequest) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(req.book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(req.book_id))
     req.book_id = book_registry.strip_ref(req.book_id)
     book = resolved.engine.load_book(req.book_id)
     page = next(
@@ -1456,7 +1460,7 @@ async def update_block(req: UpdateBlockRequest) -> dict[str, Any]:
 @router.post("/books/progress/visit")
 async def mark_visited(req: ProgressRequest) -> dict[str, Any]:
     """Remember the reader's position so the book can be resumed later."""
-    resolved = _resolve_book_or_404(req.book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(req.book_id))
     req.book_id = book_registry.strip_ref(req.book_id)
     progress = resolved.load_progress(req.book_id)
     if progress_ops.mark_visited(progress, req.page_id):
@@ -1466,7 +1470,7 @@ async def mark_visited(req: ProgressRequest) -> dict[str, Any]:
 
 @router.post("/books/progress/bookmark")
 async def toggle_bookmark(req: ProgressRequest) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(req.book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(req.book_id))
     req.book_id = book_registry.strip_ref(req.book_id)
     progress = resolved.load_progress(req.book_id)
     progress_ops.toggle_bookmark(progress, req.page_id)
