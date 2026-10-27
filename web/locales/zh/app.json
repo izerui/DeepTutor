@@ -1312,6 +1312,7 @@
   "Shared · read": "共享 · 只读",
   "Shared book: content edits affect everyone who can access it. Reading progress and captures remain private to you.": "共享书籍：内容编辑会影响所有获授权用户；你的阅读进度、书签和摘录仍保持私有。",
   "Shared book (read only): your reading progress, bookmarks and captures remain private to you.": "共享书籍（只读）：你的阅读进度、书签和摘录保持私有。",
+  "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved.": "通过老师布置的路径打开：你可以阅读这本书，但阅读进度、书签和测验答案不会保存。",
   "Some selected sources were not fully covered.": "部分已选来源未被完整覆盖。",
   "Missing: {{sources}}.": "缺失：{{sources}}。",
   "Generate, browse and study your AI-authored books.": "生成、浏览和研读由 AI 为你撰写的书籍。",

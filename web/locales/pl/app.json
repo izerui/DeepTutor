@@ -1195,6 +1195,7 @@
   "Shared · read": "Udostępnione · czytaj",
   "Shared book: content edits affect everyone who can access it. Reading progress and captures remain private to you.": "Współdzielona książka: zmiany treści wpływają na wszystkich, którzy mają do niej dostęp. Postęp czytania i zapisane fragmenty pozostają prywatne.",
   "Shared book (read only): your reading progress, bookmarks and captures remain private to you.": "Współdzielona książka (tylko do odczytu): Twój postęp czytania, zakładki i zapisane fragmenty pozostają prywatne.",
+  "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved.": "Otwarte przez ścieżkę nauczyciela: możesz czytać tę książkę, ale postęp czytania, zakładki i odpowiedzi w quizach nie są zapisywane.",
   "Some selected sources were not fully covered.": "Niektóre wybrane źródła nie zostały w pełni uwzględnione.",
   "Missing: {{sources}}.": "Brakujące: {{sources}}.",
   "Generate, browse and study your AI-authored books.": "Generuj, przeglądaj i studiuj książki utworzone przez AI.",

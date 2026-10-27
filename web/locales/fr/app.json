@@ -1620,6 +1620,7 @@
   "Shared · read": "Partagé · lecture",
   "Shared book: content edits affect everyone who can access it. Reading progress and captures remain private to you.": "Livre partagé : les modifications de contenu concernent tous ceux qui y ont accès. La progression de lecture et les captures restent privées.",
   "Shared book (read only): your reading progress, bookmarks and captures remain private to you.": "Livre partagé (lecture seule) : votre progression, vos favoris et vos captures restent privés.",
+  "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved.": "Ouvert via le parcours de votre enseignant : vous pouvez lire ce livre, mais la progression de lecture, les favoris et les réponses aux quiz ne sont pas enregistrés.",
   "Some selected sources were not fully covered.": "Certaines sources sélectionnées n'ont pas été entièrement couvertes.",
   "Missing: {{sources}}.": "Manquant : {{sources}}.",
   "{{count}} chapters can be retried.": "{{count}} chapitres peuvent être relancés.",

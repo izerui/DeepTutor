@@ -1197,6 +1197,7 @@
   "Shared · read": "Shared · read",
   "Shared book: content edits affect everyone who can access it. Reading progress and captures remain private to you.": "Shared book: content edits affect everyone who can access it. Reading progress and captures remain private to you.",
   "Shared book (read only): your reading progress, bookmarks and captures remain private to you.": "Shared book (read only): your reading progress, bookmarks and captures remain private to you.",
+  "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved.": "Opened through your teacher's path: you can read this book, but reading progress, bookmarks and quiz answers are not saved.",
   "Some selected sources were not fully covered.": "Some selected sources were not fully covered.",
   "Missing: {{sources}}.": "Missing: {{sources}}.",
   "Generate, browse and study your AI-authored books.": "Generate, browse and study your AI-authored books.",
