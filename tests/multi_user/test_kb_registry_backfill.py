@@ -175,6 +175,84 @@ def test_admin_sync_failure_leaves_d16_key_unset_and_retries(mu_isolated_root, s
     assert granted is not None and granted.visibility == "public"
 
 
+def test_missing_dir_kb_skipped_and_does_not_block_promotion(mu_isolated_root, seed_user):
+    """A registered admin KB whose directory was hand-deleted is skipped; others promote normally."""
+    import shutil
+
+    from deeptutor.knowledge.registry_backfill import GRANTS_PROMOTED_KEY, backfill_registry
+
+    alice, admin_root, _alice_root = _setup(mu_isolated_root, seed_user)
+
+    # Seed a second granted KB and give alice a grant to it.
+    _seed_kb(admin_root, "vanished")
+    from deeptutor.multi_user.grants import save_grant
+
+    save_grant(
+        alice["id"],
+        {
+            "knowledge_bases": [
+                {"resource_id": "admin:kb:granted", "name": "granted"},
+                {"resource_id": "admin:kb:wiki", "name": "wiki"},
+                {"resource_id": "admin:kb:vanished", "name": "vanished"},
+            ]
+        },
+    )
+
+    # First backfill: registers all three admin KBs, then we delete "vanished" dir.
+    # We need the sync to happen first so the KB is in the registry, then delete.
+    # Actually, we need the directory to be missing *during freeze_targets*, so
+    # delete it after sync_root but before promotion. Simplest: run the full
+    # backfill once (which succeeds), reset the promotion key, delete the dir,
+    # and run again — the second run re-freezes and hits the missing directory.
+    # Better approach: do the registration, then delete the dir, then call
+    # backfill_registry which does the D16 dance from scratch.
+
+    # Step 1: Do a first run that will register all KBs AND complete promotion.
+    report1 = backfill_registry()
+    assert report1["admin"] == 4  # granted, internal, wiki, vanished
+    assert registry.get_meta(GRANTS_PROMOTED_KEY) is not None
+
+    # Step 2: Reset state — clear the promotion key and inventory so it re-runs.
+    with registry._write() as conn:
+        conn.execute("DELETE FROM main.registry_meta WHERE key = ?", (GRANTS_PROMOTED_KEY,))
+        conn.execute(
+            "DELETE FROM main.registry_meta WHERE key = ?",
+            ("grants_inventory_v1",),
+        )
+        conn.execute("DELETE FROM main.registry_meta WHERE key LIKE 'grants_target_v1:%'")
+        conn.execute("DELETE FROM migration_items")
+        # Reset visibility of the promoted KB so promotion fires again.
+        conn.execute("UPDATE kb_registry SET visibility = 'private'")
+
+    # Step 3: Delete the directory of "vanished" KB (simulates hand-deletion).
+    shutil.rmtree(admin_root / "vanished")
+
+    # Step 4: Re-run — "vanished" is registered but directory missing.
+    backfill_registry()
+
+    # The normal granted KB should be promoted.
+    granted = registry.find_by_location(admin_root, "granted")
+    assert granted is not None and granted.visibility == "public"
+
+    # The missing-dir KB must NOT be public (fail-closed).
+    vanished = registry.find_by_location(admin_root, "vanished")
+    assert vanished is not None and vanished.visibility == "private"
+
+    # Migration must be marked complete (key set), not left pending.
+    assert registry.get_meta(GRANTS_PROMOTED_KEY) is not None
+
+    # A skip notice must be recorded.
+    items = {(item.kind, item.key): item.data for item in registry.list_migration_items()}
+    vanished_skips = [
+        (k, key) for (k, key) in items if k == "kb_dir_missing_skipped"
+    ]
+    assert len(vanished_skips) >= 1
+
+    # Step 5: Second run is a no-op (idempotent).
+    report3 = backfill_registry()
+    assert report3["promoted"] == 0
+
+
 def test_a_failing_startup_step_does_not_stop_the_next(mu_isolated_root, monkeypatch):
     from deeptutor.knowledge import registry_backfill
 

@@ -356,7 +356,14 @@ def _freeze_targets(admin_root: Path, *, census_complete: bool | None = None) ->
             source = None
             connector = registry.is_connector(record)
             if not connector:
-                info = (admin_root / name).lstat()
+                try:
+                    info = (admin_root / name).lstat()
+                except FileNotFoundError:
+                    logger.warning(
+                        "Registered admin KB directory missing, skipping D16 target: %s", name
+                    )
+                    _record_dir_missing(conn, record.kb_id, name, usernames)
+                    continue
                 if not stat.S_ISDIR(info.st_mode):
                     raise ValueError(f"Unsafe legacy KB location: {name}")
                 source = [info.st_dev, info.st_ino]
@@ -382,6 +389,20 @@ def _freeze_targets(admin_root: Path, *, census_complete: bool | None = None) ->
             (json.dumps(snapshot), _INVENTORY_KEY),
         )
         return snapshot
+
+
+def _record_dir_missing(conn: sqlite3.Connection, kb_id: str, name: str, users: list[str]) -> None:
+    """Record a migration skip for a registered KB whose directory no longer exists."""
+    conn.execute(
+        "INSERT INTO migration_items (kind, item_key, data, created_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(kind, item_key) DO UPDATE SET data = excluded.data",
+        (
+            "kb_dir_missing_skipped",
+            kb_id,
+            json.dumps({"kb_id": kb_id, "name": name, "users": users}, ensure_ascii=False),
+            registry._now(),
+        ),
+    )
 
 
 def _put_progress(conn: sqlite3.Connection, kb_id: str, progress: dict) -> None:
@@ -413,7 +434,16 @@ def _promote_target(kb_id: str) -> tuple[dict, bool]:
             ):
                 raise ValueError(f"Legacy KB identity changed: {kb_id}")
             if target["source"] is not None:
-                info = (Path(record.base_dir) / record.dir_name).lstat()
+                try:
+                    info = (Path(record.base_dir) / record.dir_name).lstat()
+                except FileNotFoundError:
+                    logger.warning(
+                        "KB directory missing during promotion, skipping: %s", kb_id
+                    )
+                    _record_dir_missing(conn, kb_id, record.name, target["users"])
+                    progress = {"notices": [], "done": True}
+                    _put_progress(conn, kb_id, progress)
+                    return progress, False
                 if [info.st_dev, info.st_ino] != target["source"] or not stat.S_ISDIR(info.st_mode):
                     raise ValueError(f"Legacy KB source replaced: {kb_id}")
             if target["connector"] or registry.is_connector(record):
