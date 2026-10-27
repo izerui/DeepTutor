@@ -1,5 +1,6 @@
 import type { LearningOrigin } from "@/lib/learning-library";
 import { apiUrl, apiFetch } from "./api";
+import { TEACHER_PATH_UNAVAILABLE_CODE } from "./teacher-path-messages";
 
 export interface ModuleInit {
   id: string;
@@ -228,7 +229,7 @@ export async function fetchProgressEvents(
     ),
     init,
   );
-  if (!res.ok) throw new MasteryApiError(`Failed to fetch path events: ${res.status}`, res.status);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch path events: ${res.status}`);
   return (await res.json()).events as MasteryEvent[];
 }
 
@@ -369,7 +370,7 @@ export async function redoProgress(bookId: string) {
     apiUrl(`/api/mastery-paths/progress/${encodeURIComponent(bookId)}/redo`),
     { method: "POST" },
   );
-  if (!res.ok) throw new MasteryApiError(`Failed to redo progress: ${res.status}`, res.status);
+  if (!res.ok) throw await masteryApiError(res, `Failed to redo progress: ${res.status}`);
   return res.json();
 }
 
@@ -617,42 +618,60 @@ async function masteryJson<T>(
   action = "load mastery data",
 ): Promise<T> {
   const res = await apiFetch(apiUrl(path), init);
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const payload = (await res.json()) as { detail?: string };
-      detail = payload.detail ? `: ${payload.detail}` : "";
-    } catch {
-      // The status remains actionable when an upstream proxy returns HTML.
-    }
-    throw new MasteryApiError(`Failed to ${action} (${res.status})${detail}`, res.status);
-  }
+  if (!res.ok) throw await masteryApiError(res, `Failed to ${action} (${res.status})`);
   return res.json() as Promise<T>;
 }
 
-/** A failed mastery request; the status is what callers branch on, never the English text. */
+/**
+ * The error of a refused mastery request. ``detail`` is either a plain
+ * message or ``{code, message}``; the code is kept for callers to branch on.
+ */
+async function masteryApiError(res: Response, prefix: string): Promise<MasteryApiError> {
+  let message = "";
+  let code: string | undefined;
+  try {
+    const payload = (await res.json()) as { detail?: unknown };
+    const detail = payload.detail;
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (detail && typeof detail === "object") {
+      const coded = detail as { code?: unknown; message?: unknown };
+      if (typeof coded.code === "string") code = coded.code;
+      if (typeof coded.message === "string") message = coded.message;
+    }
+  } catch {
+    // The status remains actionable when an upstream proxy returns HTML.
+  }
+  return new MasteryApiError(message ? `${prefix}: ${message}` : prefix, res.status, code);
+}
+
+/** A failed mastery request; callers branch on the status and code, never the English text. */
 export class MasteryApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /** Machine-readable reason from the server, e.g. `teacher_path_unavailable`. */
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "MasteryApiError";
   }
 }
 
-/** Prefix of a learner's copy of a teacher path (`assigned_<template id>`). */
-export const TEACHER_INSTANCE_PREFIX = "assigned_";
-
 /**
  * A teacher path the learner can no longer open: its assignment was revoked
- * or the path archived. The server answers 403 on every route that names it.
+ * or the path archived. The server refuses every route that names it with 403
+ * and this code (the same one a live subscription ends with); any other 403,
+ * even on a teacher path, is that route's own error.
+ *
+ * ``_pathId`` is accepted for existing call sites and deliberately ignored:
+ * the id never decides why a request was refused.
  */
-export function isCourseUnavailable(error: unknown, pathId: string): boolean {
+export function isCourseUnavailable(error: unknown, _pathId?: string): boolean {
   return (
     error instanceof MasteryApiError &&
     error.status === 403 &&
-    pathId.startsWith(TEACHER_INSTANCE_PREFIX)
+    error.code === TEACHER_PATH_UNAVAILABLE_CODE
   );
 }
 

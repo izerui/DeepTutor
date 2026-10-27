@@ -49,6 +49,8 @@ def test_students_cannot_change_a_teacher_outline(
     )
 
     assert response.status_code == 403
+    # A locked outline is not a closed course: no unavailable code, its own message.
+    assert isinstance(response.json()["detail"], str)
     assert "teacher" in response.json()["detail"].lower()
     with as_account("sara"):
         progress = LearningStore().load(sara_instance.path_id)

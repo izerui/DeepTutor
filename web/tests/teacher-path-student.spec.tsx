@@ -435,9 +435,11 @@ describe('teacher path refusals are localized by code', () => {
       values: { materials: 'C15 Notes · Waves book' },
     })
     expect(teacherTurnErrorMessage({ error_code: 'internal_error' })).toBeNull()
-    expect(isCourseUnavailable(new MasteryApiError('x', 403), 'assigned_tpl1')).toBe(true)
-    expect(isCourseUnavailable(new MasteryApiError('x', 403), 'own_path')).toBe(false)
-    expect(isCourseUnavailable(new MasteryApiError('x', 404), 'assigned_tpl1')).toBe(false)
+    const closed = new MasteryApiError('x', 403, 'teacher_path_unavailable')
+    expect(isCourseUnavailable(closed, 'assigned_tpl1')).toBe(true)
+    // Only the code decides: a bare 403 on a teacher path is that route's own error.
+    expect(isCourseUnavailable(new MasteryApiError('x', 403), 'assigned_tpl1')).toBe(false)
+    expect(isCourseUnavailable(new MasteryApiError('x', 404, 'teacher_path_unavailable'), 'assigned_tpl1')).toBe(false)
     await act(async () => {})
   })
 })

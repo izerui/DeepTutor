@@ -37,7 +37,8 @@ INSTANCE_UNAVAILABLE = (
 )
 #: Stable code of anything refused because the teacher path closed for this
 #: student (revoked assignment, archived path): a live mastery subscription's
-#: terminal message, and the same value a refused mastery turn carries.
+#: terminal message, the ``detail.code`` of a refused mastery-path REST route,
+#: and the same value a refused mastery turn carries.
 INSTANCE_UNAVAILABLE_CODE = "teacher_path_unavailable"
 #: Hub reason that wakes live subscriptions to re-check their access.
 INSTANCE_ACCESS_CHANGED = "instance.access_changed"

@@ -207,12 +207,37 @@ def test_legacy_progress_list_and_every_path_route_close_a_revoked_instance(
     ):
         response = client.request(method, url, headers=_auth("sara"))
         assert response.status_code == 403, url
-        assert response.json()["detail"] == INSTANCE_UNAVAILABLE
+        # The code is the contract a client branches on; the message is for people.
+        assert response.json()["detail"] == {
+            "code": "teacher_path_unavailable",
+            "message": INSTANCE_UNAVAILABLE,
+        }, url
 
     # Revoking retains the student's copy; the personal path stays open.
     with as_account("sara"):
         assert LearningStore().exists(path_id)
     assert client.get("/api/mastery-paths/topics/topic_own", headers=_auth("sara")).status_code == 200
+
+
+def test_archived_template_refuses_routes_with_the_unavailable_code(
+    sara_instance, teaching_http, as_account
+):
+    from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE
+
+    client = teaching_http.client
+    path_id = sara_instance.path_id
+    expected = {"code": "teacher_path_unavailable", "message": INSTANCE_UNAVAILABLE}
+
+    with as_account("tina"):
+        TeachingService().archive(sara_instance.template_id)
+    for method, url in (
+        ("GET", f"/api/mastery-paths/topics/{path_id}"),
+        ("GET", f"/api/mastery-paths/progress/{path_id}"),
+        ("POST", f"/api/mastery-paths/progress/{path_id}/skip-question"),
+    ):
+        response = client.request(method, url, headers=_auth("sara"))
+        assert response.status_code == 403, url
+        assert response.json()["detail"] == expected, url
 
 
 def test_archived_instances_leave_the_course_and_navigation_lists(sara_instance, as_account):

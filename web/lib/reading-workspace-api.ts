@@ -115,6 +115,11 @@ async function unwrap<T>(response: Response): Promise<T> {
   try {
     const body = (await response.json()) as { detail?: unknown };
     if (typeof body.detail === "string") message = body.detail;
+    // A coded refusal (e.g. a closed teacher path) is `{code, message}`.
+    else if (body.detail && typeof body.detail === "object") {
+      const coded = (body.detail as { message?: unknown }).message;
+      if (typeof coded === "string") message = coded;
+    }
   } catch {
     // Keep the HTTP status for proxy/non-JSON responses.
   }

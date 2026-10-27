@@ -61,12 +61,17 @@ async def require_instance_access(request: Request) -> None:
     path_id = str(request.path_params.get("path_id") or request.path_params.get("book_id") or "")
     if not path_id or ".." in path_id or "/" in path_id or "\\" in path_id or ":" in path_id:
         return  # the handler's own validation answers with its usual 400
-    from deeptutor.teaching.instances import InstanceUnavailableError
+    from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE_CODE, InstanceUnavailableError
 
     try:
         await asyncio.to_thread(_check_instance_access, path_id)
     except InstanceUnavailableError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        # The code is what clients branch on (the same one a live subscription
+        # ends with); any other 403 on a teacher path carries no code.
+        raise HTTPException(
+            status_code=403,
+            detail={"code": INSTANCE_UNAVAILABLE_CODE, "message": str(exc)},
+        ) from exc
 
 
 router = APIRouter(dependencies=[Depends(require_instance_access)])
