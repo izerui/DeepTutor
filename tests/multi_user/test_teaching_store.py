@@ -241,3 +241,23 @@ def test_material_lock_excludes_writers_and_refuses_nested_writes(store):
             conn.close()
 
     assert store.update_template(template.id, status="archived").status == "archived"
+
+
+def test_record_instance_never_lowers_applied_revision(store):
+    """A stale concurrent call must not overwrite a higher applied_revision."""
+    template = _template(store)
+    store.assign(template.id, ["u_sara"], assigned_by="u_tina")
+
+    # Record revision 3 first (the fast call).
+    store.record_instance(
+        template.id, "u_sara", instance_path_id="path_v3", applied_revision=3
+    )
+    assert store.get_assignment(template.id, "u_sara").applied_revision == 3
+
+    # A slow stale call tries to write revision 1 — must be ignored.
+    store.record_instance(
+        template.id, "u_sara", instance_path_id="path_v1", applied_revision=1
+    )
+    a = store.get_assignment(template.id, "u_sara")
+    assert a.applied_revision == 3, "record_instance must never lower applied_revision"
+    assert a.instance_path_id == "path_v3", "instance_path_id must not change on stale write"

@@ -896,3 +896,25 @@ def test_old_visual_evidence_does_not_pass_the_new_objectives_gate(
         _answer(store, cited_course.path_id, "q-visual-new", visual=_VISUAL)
         progress = store.load(cited_course.path_id)
     assert learning_policy.is_assessed_mastered(progress, rules) is True
+
+
+def test_lease_acquired_between_check_and_write_blocks_migration(
+    sara_instance, as_account, edit_calculus_draft, publish_template, monkeypatch
+):
+    """A lease acquired after the outer check but before BEGIN IMMEDIATE must
+    prevent the migration — the inner re-check catches the race."""
+    _publish_edit(edit_calculus_draft, publish_template)
+    with as_account("sara"):
+        store = LearningStore()
+        # Acquire a lease so the DB row exists.
+        store.acquire_path_lease(sara_instance.path_id, "s1", "t_other", bind_session=False)
+        # Bypass the outer check to simulate a race (lease arrived between
+        # the outer check and BEGIN IMMEDIATE).
+        monkeypatch.setattr(
+            "deeptutor.teaching.instances._lease_blocks", lambda *_a, **_kw: False
+        )
+        notice = apply_pending_revision(
+            sara_instance.path_id, store, respect_lease=True
+        )
+        assert notice is None, "migration must not proceed when lease acquired mid-race"
+        assert store.load_origin(sara_instance.path_id).revision == 1

@@ -606,8 +606,9 @@ class TeachingStore:
                 UPDATE mastery_assignments
                 SET instance_path_id = ?, applied_revision = ?
                 WHERE template_id = ? AND student_user_id = ?
+                  AND applied_revision < ?
                 """,
-                (instance_path_id, applied_revision, template_id, student_id),
+                (instance_path_id, applied_revision, template_id, student_id, applied_revision),
             )
 
     def has_assignments(self, template_id: str) -> bool:
