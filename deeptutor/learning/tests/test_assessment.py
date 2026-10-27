@@ -476,6 +476,106 @@ def test_missing_identity_is_rejected() -> None:
         AssessmentRecord(session_id="s", question_id="", question="...")
 
 
+def test_old_linked_assessment_rejected_after_reassessment_flag_cleared(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An old linked assessment must not sneak in after the redefinition flag is cleared.
+
+    Scenario:
+    1. A linked assessment is created at T0.
+    2. A teacher redefines the KP at T1 (reassessment_required set).
+    3. A newer assessment at T2 clears the flag.
+    4. The old T0 assessment is replayed (e.g. reconcile) — it must still be rejected
+       because it predates the redefinition, even though the flag is already gone.
+    """
+    from deeptutor.learning.assessment import _apply_linked_retention, build_grade_result
+
+    learning_root = tmp_path / "learning"
+    learning_root.mkdir()
+    ls = LearningStore(root=learning_root)
+    T0, T1, T2 = 1_000_000.0, 1_100_000.0, 1_200_000.0
+
+    # Progress with a KP that has been redefined at T1.
+    progress = LearningProgress(
+        book_id="path-1",
+        modules=[
+            LearningModule(
+                id="module-1",
+                name="Module",
+                order=0,
+                knowledge_points=[
+                    KnowledgePoint(
+                        id="kp-1",
+                        name="Concept",
+                        type=KnowledgeType.CONCEPT,
+                        module_id="module-1",
+                    )
+                ],
+            )
+        ],
+        knowledge_types={"kp-1": KnowledgeType.CONCEPT},
+        reassessment_required={"kp-1": T1},
+        kp_redefined_at={"kp-1": T1},
+    )
+    ls.save(progress)
+    monkeypatch.setattr("deeptutor.learning.assessment._get_learning_store", lambda: ls)
+
+    # Step 3: A newer assessment at T2 clears the reassessment flag.
+    newer = AssessmentRecord(
+        session_id="session-1",
+        turn_id="turn-new",
+        question_id="q-new",
+        question="Re-assess concept",
+        result="correct",
+        is_correct=True,
+        source="book",
+        assessment_type="focus_check",
+        mastery_path_id="path-1",
+        knowledge_point_id="kp-1",
+        attempt_id="attempt-new",
+        created_at=T2,
+    )
+    applied_new = _apply_linked_retention(
+        newer,
+        result=build_grade_result(result="correct", is_correct=True),
+        attempt_id="attempt-new",
+    )
+    assert applied_new is True
+    # Flag should now be cleared.
+    reloaded = ls.load("path-1")
+    assert "kp-1" not in reloaded.reassessment_required
+
+    # Step 4: Replay the old T0 assessment — must be REJECTED because it predates T1.
+    old = AssessmentRecord(
+        session_id="session-1",
+        turn_id="turn-old",
+        question_id="q-old",
+        question="Old concept question",
+        result="incorrect",
+        is_correct=False,
+        source="book",
+        assessment_type="focus_check",
+        mastery_path_id="path-1",
+        knowledge_point_id="kp-1",
+        attempt_id="attempt-old",
+        created_at=T0,
+    )
+    applied_old = _apply_linked_retention(
+        old,
+        result=build_grade_result(result="incorrect", is_correct=False),
+        attempt_id="attempt-old",
+    )
+    # The old evidence predates the redefinition and must not be accepted.
+    assert applied_old is False, (
+        "Old linked assessment from before a KP redefinition was accepted "
+        "after the reassessment flag was cleared by a newer assessment"
+    )
+    final = ls.load("path-1")
+    assert len(final.learning_evidence) == 1, "Only the newer evidence should exist"
+    assert final.learning_evidence[0].evidence_id == "attempt-new"
+
+
 def test_missing_question_is_rejected() -> None:
     with pytest.raises(ValueError):
         AssessmentRecord(session_id="s", question_id="q", question="  ")

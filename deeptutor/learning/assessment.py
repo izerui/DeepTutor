@@ -346,7 +346,12 @@ def _apply_linked_retention(
                 f"Unknown linked objective {record.knowledge_point_id!r} "
                 f"on path {record.mastery_path_id!r}"
             )
-        redefined_at = progress.reassessment_required.get(kp.id)
+        # Use the persistent high-water-mark (survives after the UI flag is
+        # cleared by a newer assessment) so stale linked evidence from before
+        # the last redefinition is always rejected.
+        redefined_at = progress.kp_redefined_at.get(kp.id) or progress.reassessment_required.get(
+            kp.id
+        )
         if redefined_at is not None and evidence.timestamp < redefined_at:
             # It assessed the objective a teacher has since redefined (R11).
             return False

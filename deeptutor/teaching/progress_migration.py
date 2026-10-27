@@ -62,6 +62,9 @@ def _reset_objective(progress: LearningProgress, kp_id: str, moment: float) -> N
     _forget_schedule(progress, kp_id)
     # R11: recorded from the change itself, whatever the point's history was.
     progress.reassessment_required[kp_id] = moment
+    # Persistent high-water-mark: never cleared, so linked evidence older than
+    # the redefinition is always rejected even after the UI flag is cleared.
+    progress.kp_redefined_at[kp_id] = moment
 
 
 def apply_revision(progress: LearningProgress, revision: TemplateRevision) -> dict[str, int]:

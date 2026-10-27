@@ -704,6 +704,11 @@ class LearningProgress(BaseModel):
     # Recorded from the revision change itself, never derived from attempts.
     # Absent on every path before teacher updates existed: nothing to migrate.
     reassessment_required: dict[str, float] = Field(default_factory=dict)
+    # Persistent high-water-mark: the most recent redefinition timestamp per KP.
+    # Unlike ``reassessment_required`` (cleared when the student is reassessed),
+    # this survives so that linked evidence older than the redefinition is always
+    # rejected, even after the reassessment flag has been cleared.
+    kp_redefined_at: dict[str, float] = Field(default_factory=dict)
     # A single outstanding question; grading reads its expected answer so the
     # model never has to recall it across turns.
     pending_question: PendingQuestion | None = None
