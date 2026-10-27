@@ -110,7 +110,19 @@ def migrate_locations(
         sources = [Path(row["path"]).resolve() for row, _destination in moves]
         # Registry identities follow the workspace (Plan D global constraint);
         # freeze them before any copy so later registrations are not adopted.
-        snapshot = _registry_snapshot(sources)
+        # Validate sources before touching registries — shared_write creates DB
+        # files as a side effect of initialization, which is wrong for sources
+        # that don't exist.
+        for source in sources:
+            if not source.is_dir():
+                raise WorkspaceError("The source workspace folder does not exist.")
+        try:
+            snapshot = _registry_snapshot(sources)
+        except sqlite3.OperationalError as exc:
+            raise WorkspaceError(
+                "The registry database is currently in use by another operation. "
+                "Retry after active writes have finished."
+            ) from exc
         for (row, destination), source in zip(moves, sources):
             destination = destination.expanduser().resolve()
             if source == destination:
@@ -178,6 +190,13 @@ def migrate_locations(
             raise WorkspaceError(
                 "A knowledge base or book is already registered at the destination. "
                 "Choose a new folder."
+            ) from exc
+        except sqlite3.OperationalError as exc:
+            # A busy/locked database from a concurrent writer must surface as a
+            # retryable 409, not an unhandled 500.
+            raise WorkspaceError(
+                "The registry database is currently in use by another operation. "
+                "Retry after active writes have finished."
             ) from exc
         except BookRegistryError as exc:
             # e.g. a non-DELETE journal: registries cannot follow atomically,

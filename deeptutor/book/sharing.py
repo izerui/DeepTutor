@@ -41,8 +41,21 @@ def shared_write(
         raise books.BookRegistryError("Cannot enter sharing from an active book writer.")
     book_path, kb_path = books._db_path().resolve(), kbs._db_path().resolve()
     extra = {name: Path(path).resolve() for name, path in (attach or {}).items()}
-    if len({book_path, kb_path, *extra.values()}) != 2 + len(extra):
-        raise books.BookRegistryError("Book and KB registries must be distinct files.")
+    all_paths = {book_path, kb_path, *extra.values()}
+    if len(all_paths) != 2 + len(extra):
+        # Identify which paths actually collide for an accurate diagnostic.
+        named = {"books": book_path, "KB": kb_path, **{name: p for name, p in extra.items()}}
+        by_path: dict[Path, list[str]] = {}
+        for name, p in named.items():
+            by_path.setdefault(p, []).append(name)
+        conflicts = [
+            f"{' and '.join(names)} share {path}"
+            for path, names in by_path.items()
+            if len(names) > 1
+        ]
+        raise books.BookRegistryError(
+            "All attached databases must be distinct files: " + "; ".join(conflicts)
+        )
     if set(extra) & {"main", "temp", "books"} or not all(
         name.isidentifier() for name in extra
     ):
