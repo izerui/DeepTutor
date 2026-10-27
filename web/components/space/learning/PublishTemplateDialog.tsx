@@ -24,8 +24,9 @@ import { StudentPicker } from "./StudentPicker";
 import {
   canSubmitPublish,
   decisionValue,
-  defaultKpDecisions,
   duplicateContinuations,
+  keepChoices,
+  keepKpDecisions,
   parseDecision,
   publishBlocked,
   publishStepMessage,
@@ -75,6 +76,13 @@ export function PublishTemplateDialog({
   const workspaceId = topic.content_workspace_id ?? "";
 
   useEffect(() => {
+    // Choices belong to one path: another topic/template starts from defaults.
+    setKbChoices({});
+    setBookChoices({});
+    setDecisions({});
+  }, [knownTemplateId, pathId, workspaceId]);
+
+  useEffect(() => {
     // Every check starts clean, and only the newest one may fill the dialog:
     // a slow answer for an earlier check (or another topic) is dropped.
     let alive = true;
@@ -98,12 +106,28 @@ export function PublishTemplateDialog({
           assignments.filter((row) => row.status === "active").map((row) => row.student_user_id),
         );
         // Defaults come from the server: "make public" the first time, the
-        // previous revision's choice on a republish.
-        setKbChoices(Object.fromEntries(next.private_kbs.map((kb) => [kb.kb_id, kb.default])));
-        setBookChoices(
-          Object.fromEntries(next.private_books.map((book) => [book.book_id, book.default])),
+        // previous revision's choice on a republish. "Check again" keeps the
+        // teacher's own choices for keys that still exist (never silently
+        // turning a reference-only material public); only new keys default.
+        setKbChoices((current) =>
+          keepChoices(
+            current,
+            Object.fromEntries(next.private_kbs.map((kb) => [kb.kb_id, kb.default])),
+          ),
         );
-        setDecisions(defaultKpDecisions(next.changes.items));
+        setBookChoices((current) =>
+          keepChoices(
+            current,
+            Object.fromEntries(next.private_books.map((book) => [book.book_id, book.default])),
+          ),
+        );
+        setDecisions((current) =>
+          keepKpDecisions(
+            current,
+            next.changes.items,
+            next.changes.removed.map((point) => point.kp_id),
+          ),
+        );
       } catch (reason) {
         if (alive) setLoadError(teachingErrorMessage(reason));
       }

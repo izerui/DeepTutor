@@ -320,3 +320,73 @@ it("offers publishing only on an own card; other teachers' paths are manage-only
   fireEvent.click(within(others).getByRole("button", { name: "Manage assignments" }));
   expect(onManage.mock.calls[0][0].id).toBe("tpl_tom");
 });
+
+it("keeps the teacher's material and change choices when checking again", async () => {
+  const blockedDetail = new TeachingApiError("{}", 422, {
+    outline_issues: [],
+    source_issues: [{ source_id: "s_notes", label: "My notes", code: "personal_source", message: "EN" }],
+  });
+  const update = (overrides: Partial<PublishPreview> = {}) =>
+    preview({
+      changes: {
+        first_publish: false,
+        items: [
+          { kp_id: "kp_l", name: "Limits", status: "kept", suggested: "unchanged", from_id: "", from_name: "", reason: "" },
+          { kp_id: "kp_r", name: "Derivative rules", status: "new", suggested: "added", from_id: "", from_name: "", reason: "" },
+        ],
+        removed: [{ kp_id: "kp_d", name: "Derivatives" }],
+      },
+      ...overrides,
+    });
+  api.previewPublish
+    .mockResolvedValueOnce(update())
+    .mockResolvedValueOnce(
+      update({
+        // kb_2 is new since the first check; bk_1 is no longer cited.
+        private_kbs: [
+          { kb_id: "kb_1", name: "Answers", default: "make_public", via: "", via_name: "" },
+          { kb_id: "kb_2", name: "Drafts", default: "make_public", via: "", via_name: "" },
+        ],
+        private_books: [],
+      }),
+    );
+  api.publishTemplate.mockRejectedValueOnce(blockedDetail).mockResolvedValueOnce({
+    template: template({ current_revision: 2 }),
+    revision: 2,
+    affected_students: 0,
+    warnings: [],
+  });
+  const published = vi.fn();
+  render(
+    <PublishTemplateDialog
+      topic={topic()}
+      template={template({ current_revision: 1, status: "published" })}
+      returnFocusRef={createRef()}
+      onClose={vi.fn()}
+      onPublished={published}
+    />,
+  );
+  const kb = await screen.findByRole("group", { name: "Answers" });
+  fireEvent.click(within(kb).getByRole("radio", { name: "Readable through this path only" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Derivative rules" }), {
+    target: { value: "reworded:kp_d" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+  const drafts = await screen.findByRole("group", { name: "Drafts" });
+  // The private KB stays reference-only: never silently made public.
+  expect(
+    within(screen.getByRole("group", { name: "Answers" })).getByRole("radio", {
+      name: "Readable through this path only",
+    }),
+  ).toBeChecked();
+  expect(within(drafts).getByRole("radio", { name: "Make the knowledge base public" })).toBeChecked();
+  expect(screen.getByRole("combobox", { name: "Derivative rules" })).toHaveValue("reworded:kp_d");
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  await waitFor(() => expect(published).toHaveBeenCalled());
+  expect(api.publishTemplate.mock.calls[1][1]).toMatchObject({
+    kb_choices: { kb_1: "reference_only", kb_2: "make_public" },
+    book_choices: {},
+    kp_decisions: { kp_l: { kind: "unchanged" }, kp_r: { kind: "reworded", from_id: "kp_d" } },
+  });
+});

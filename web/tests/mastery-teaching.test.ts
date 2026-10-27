@@ -19,6 +19,8 @@ import {
   defaultKpDecisions,
   duplicateContinuations,
   isTeacherInstance,
+  keepChoices,
+  keepKpDecisions,
   parseDecision,
   splitAssignedTopics,
   templateForTopic,
@@ -174,4 +176,28 @@ test("TeachingApiError is not confused with plain Error", () => {
   assert.equal(isTeachingApiError(new Error("oops")), false);
   assert.equal(isTeachingApiError(null), false);
   assert.equal(isTeachingApiError(undefined), false);
+});
+
+test("a fresh check keeps existing choices, defaults new keys and drops vanished ones", () => {
+  assert.deepEqual(
+    keepChoices(
+      { kb_1: "reference_only", kb_gone: "reference_only" },
+      { kb_1: "make_public", kb_new: "make_public" },
+    ),
+    { kb_1: "reference_only", kb_new: "make_public" },
+  );
+  const items = [
+    { kp_id: "kp_a", suggested: "added", from_id: "" },
+    { kp_id: "kp_b", suggested: "added", from_id: "" },
+  ] as ChangeSuggestion[];
+  const previous: Record<string, KpDecision> = {
+    kp_a: { kind: "reworded", from_id: "kp_old" },
+    kp_b: { kind: "reworded", from_id: "kp_restored" },
+    kp_gone: { kind: "unchanged" },
+  };
+  // kp_restored is no longer removed, so continuing it is no longer valid.
+  assert.deepEqual(keepKpDecisions(previous, items, ["kp_old"]), {
+    kp_a: { kind: "reworded", from_id: "kp_old" },
+    kp_b: { kind: "added" },
+  });
 });

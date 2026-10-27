@@ -58,6 +58,37 @@ export function defaultKpDecisions(items: ChangeSuggestion[]): Record<string, Kp
   );
 }
 
+/**
+ * A fresh check keeps what the teacher already chose for every key that still
+ * exists; only new keys take the server default, and vanished keys drop out.
+ */
+export function keepChoices<T>(
+  previous: Record<string, T>,
+  defaults: Record<string, T>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [
+      key,
+      Object.hasOwn(previous, key) ? previous[key] : value,
+    ]),
+  );
+}
+
+/** Same for per-point decisions; one continuing a no-longer-removed point resets. */
+export function keepKpDecisions(
+  previous: Record<string, KpDecision>,
+  items: ChangeSuggestion[],
+  removedIds: string[],
+): Record<string, KpDecision> {
+  const removed = new Set(removedIds);
+  const valid = Object.fromEntries(
+    Object.entries(previous).filter(
+      ([, decision]) => !decision.from_id || removed.has(decision.from_id),
+    ),
+  );
+  return keepChoices(valid, defaultKpDecisions(items));
+}
+
 /** Removed points that more than one new point claims to continue. */
 export function duplicateContinuations(decisions: Record<string, KpDecision>): string[] {
   const counts = new Map<string, number>();
