@@ -242,3 +242,56 @@ test("a failed sweep is reported as failed, not silently skipped", () => {
   assert.equal(sweep?.state, "error");
   assert.equal(sweep?.detail, "Retrieval failed — written from the plan alone");
 });
+
+test("a ready book without a proposal does not show generation activity", () => {
+  // B1-4: a book that is ready but has no proposal (e.g. reference-only book
+  // or a fixture that bypassed the full generation flow) should NOT appear as
+  // generating. All progress stages are at their initial "pending" state, and
+  // the backend reports no active worker.
+  const activity = buildBookActivity({
+    book: book({ status: "ready", proposal: null }),
+    pages: [page({ id: "pg_a", status: "ready", block_count: 3 })],
+    generation: generation({ status: "ready", working: false, interrupted: false }),
+    progress: emptyBookProgress(),
+    t,
+  });
+
+  assert.equal(activity.phase, "done", "phase should be done for a ready book");
+  assert.equal(activity.live, false, "should not be live");
+  // The ideation prep row must NOT read as running.
+  const ideation = activity.preparation.find((row) => row.id === "ideation");
+  assert.ok(ideation, "ideation row should exist");
+  assert.notEqual(ideation!.state, "running", "ideation must not be running on a ready book");
+});
+
+test("genuinely pending generation (queued, not yet started) still shows activity", () => {
+  // A book whose backend reports working=true should remain live, even when
+  // progress stages have not yet advanced past pending — the worker exists.
+  const activity = buildBookActivity({
+    book: book({ status: "compiling" }),
+    pages: [page({ id: "pg_a" })],
+    generation: generation({ status: "compiling", working: true }),
+    progress: emptyBookProgress(),
+    t,
+  });
+
+  assert.equal(activity.live, true, "should be live when backend says working");
+});
+
+test("running generation with live stream events shows activity", () => {
+  // Ideation actively running: stage_start has fired.
+  const progress = feed([
+    { type: "stage_start", stage: "ideation" },
+  ]);
+  const activity = buildBookActivity({
+    book: book({ status: "compiling", proposal: null }),
+    pages: [],
+    generation: generation({ status: "compiling", working: true }),
+    progress,
+    t,
+  });
+
+  assert.equal(activity.live, true, "should be live during running ideation");
+  const ideation = activity.preparation.find((row) => row.id === "ideation");
+  assert.equal(ideation!.state, "running", "ideation should be running");
+});

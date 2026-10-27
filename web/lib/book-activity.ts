@@ -187,7 +187,13 @@ function preparationRows(
       : ideationDone
         ? ""
         : t("Reading your intent…"),
-    state: ideationDone ? "done" : stage("ideation").state === "error" ? "error" : "running",
+    state: ideationDone
+      ? "done"
+      : stage("ideation").state === "error"
+        ? "error"
+        : stage("ideation").state === "running"
+          ? "running"
+          : "done",
   });
 
   // ── The source sweep ───────────────────────────────────────────────
