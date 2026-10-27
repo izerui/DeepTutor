@@ -3254,6 +3254,31 @@ async def get_knowledge_base_details(kb_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _verify_entitled_kb(resource: Any) -> None:
+    """B2-13: cross-check the endpoint's resolved KB against the dependency's entitled kb_id.
+
+    If ``enter_mastery_template_scope`` entitled a specific kb_id, the endpoint
+    must serve from the same physical KB.  A mismatch is a non-probing 404.
+    Cheap: one registry lookup (already in memory after resolve_kb).
+    """
+    from deeptutor.teaching.access import entitled_kb_id as _entitled_kb_id
+
+    expected = _entitled_kb_id.get()
+    if not expected:
+        return
+    from deeptutor.knowledge import registry
+
+    record = registry.find_by_location(resource.base_dir, resource.name)
+    actual = record.kb_id if record is not None else None
+    if actual != expected:
+        logger.warning(
+            "B2-13 kb_id mismatch: dependency entitled %r but endpoint resolved %r "
+            "(resource %s/%s)",
+            expected, actual, resource.base_dir, resource.name,
+        )
+        raise HTTPException(status_code=404, detail="File not found")
+
+
 def _resolve_kb_raw_dir(kb_name: str, *, allow_unsupported: bool = False) -> Path | None:
     """Resolve a KB's managed ``raw/`` directory without inventing one.
 
@@ -3269,6 +3294,7 @@ def _resolve_kb_raw_dir(kb_name: str, *, allow_unsupported: bool = False) -> Pat
         resource = resolve_kb(kb_name)
         manager = manager_for_resource(resource)
         resolved_name = resource.name
+        _verify_entitled_kb(resource)
 
     kb_entry = _load_kb_entry_or_404(manager, resolved_name)
     if not supports_local_raw_files(kb_entry):

@@ -95,6 +95,8 @@ async def enter_mastery_template_scope(request: Request) -> None:
         raise HTTPException(status_code=404, detail="File not found") from exc
     if grant is None:
         return
+    if grant.kb_id:
+        access.entitled_kb_id.set(grant.kb_id)
     if grant.studying:
         access.active_mastery_template.set(template_id)
     if grant.books:

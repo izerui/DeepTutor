@@ -53,6 +53,8 @@ active_mastery_template: ContextVar[str] = ContextVar("active_mastery_template",
 #: request's dependency for that request's own context only.
 original_document: ContextVar[str] = ContextVar("mastery_original_document", default="")
 original_book: ContextVar[str] = ContextVar("mastery_original_book", default="")
+#: The registry kb_id the dependency entitled for this request (B2-13 cross-check).
+entitled_kb_id: ContextVar[str] = ContextVar("mastery_entitled_kb_id", default="")
 
 
 @contextmanager
@@ -318,6 +320,7 @@ class OriginalGrant:
     studying: bool = False
     books: tuple = ()
     book_id: str = ""
+    kb_id: str = ""
 
 
 class OriginalDenied(PermissionError):
@@ -384,7 +387,7 @@ def kb_original_grant(
         book_ids = materials.book_kbs.get(record.kb_id, ())
         if book_ids:
             books = _path_book_bindings(materials.template_id, book_ids)
-    return OriginalGrant(rel_path=live, studying=not independent, books=books)
+    return OriginalGrant(rel_path=live, studying=not independent, books=books, kb_id=record.kb_id)
 
 
 def book_original_grant(materials: EntitledMaterials, book_ref: str) -> OriginalGrant | None:
