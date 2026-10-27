@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from pathlib import Path
 import sqlite3
 
 from deeptutor.book import registry as books
@@ -24,13 +25,29 @@ from deeptutor.multi_user.roles import is_teacher_or_admin
 
 
 @contextmanager
-def shared_write(*, recovery: AbstractContextManager | None = None) -> Iterator[sqlite3.Connection]:
-    """A bounded, process-safe, crash-atomic transaction over both registries."""
+def shared_write(
+    *,
+    recovery: AbstractContextManager | None = None,
+    attach: Mapping[str, Path] | None = None,
+) -> Iterator[sqlite3.Connection]:
+    """A bounded, process-safe, crash-atomic transaction over both registries.
+
+    ``attach`` adds further existing databases (schema name -> file) to the
+    same transaction, after the two registries in lock order. They are held to
+    the same DELETE-journal / FULL-synchronous contract so one COMMIT covers
+    every file.
+    """
     if getattr(books._writer_state, "active", False):
         raise books.BookRegistryError("Cannot enter sharing from an active book writer.")
     book_path, kb_path = books._db_path().resolve(), kbs._db_path().resolve()
-    if book_path == kb_path:
+    extra = {name: Path(path).resolve() for name, path in (attach or {}).items()}
+    if len({book_path, kb_path, *extra.values()}) != 2 + len(extra):
         raise books.BookRegistryError("Book and KB registries must be distinct files.")
+    if set(extra) & {"main", "temp", "books"} or not all(
+        name.isidentifier() for name in extra
+    ):
+        raise books.BookRegistryError("Invalid attached database name.")
+    schemas = ("main", "books", *extra)
     with kbs._write_lock, books._write_lock:
         # Initialize schemas sequentially, before either database has a writer.
         kb_path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,7 +60,9 @@ def shared_write(*, recovery: AbstractContextManager | None = None) -> Iterator[
         try:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("ATTACH DATABASE ? AS books", (str(book_path),))
-            for schema in ("main", "books"):
+            for name, path in extra.items():
+                conn.execute(f"ATTACH DATABASE ? AS {name}", (str(path),))
+            for schema in schemas:
                 conn.execute(f"PRAGMA {schema}.synchronous = FULL")
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -52,7 +71,7 @@ def shared_write(*, recovery: AbstractContextManager | None = None) -> Iterator[
                 with recovery if recovery is not None else nullcontext():
                     # Check after locking: another connection cannot change
                     # journal mode between validation and the writes.
-                    for schema in ("main", "books"):
+                    for schema in schemas:
                         mode = conn.execute(f"PRAGMA {schema}.journal_mode").fetchone()[0]
                         if mode.lower() != "delete":
                             raise books.BookRegistryError(

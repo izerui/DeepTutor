@@ -32,17 +32,86 @@ def _manifest(root: Path) -> dict[str, tuple[str, str]]:
     return result
 
 
+# (feature, table, id column) of every registry whose rows carry an absolute
+# ``base_dir`` inside workspace folders. Mirrors data_migration's D7 snapshot.
+_REGISTRIES = (
+    ("knowledge_bases", "main.kb_registry", "kb_id"),
+    ("book", "books.book_registry", "book_id"),
+)
+
+
+def _rows_under(conn, table: str, id_key: str, root: Path) -> list[dict]:
+    prefix = str(root) + os.sep
+    return [
+        dict(row)
+        for row in conn.execute(
+            f"SELECT {id_key} AS id, base_dir, dir_name AS name, created_by, created_at "  # nosec B608
+            f"FROM {table} WHERE base_dir = ? OR substr(base_dir, 1, ?) = ? ORDER BY {id_key}",
+            (str(root), len(prefix), prefix),
+        )
+    ]
+
+
+def _registry_snapshot(sources: list[Path]) -> dict[str, dict[str, list[dict]]]:
+    """Freeze registry identities/locations inside each source before copying."""
+    from deeptutor.book.sharing import shared_write
+
+    with shared_write() as conn:
+        return {
+            str(source): {
+                feature: _rows_under(conn, table, id_key, source)
+                for feature, table, id_key in _REGISTRIES
+            }
+            for source in sources
+        }
+
+
+def _relocate_registry_rows(conn, snapshot: dict, source: Path, destination: Path) -> None:
+    """Move frozen KB/Book identities with their workspace in the joint writer.
+
+    Same identity rules as data_migration's D7 relocation: the inventory under
+    the source must be exactly the frozen one, and every row must still have
+    its frozen location, directory name, owner and creation time.
+    """
+    from deeptutor.book import registry as books
+    from deeptutor.knowledge import registry as kbs
+
+    for feature, table, id_key in _REGISTRIES:
+        saved_rows = snapshot[str(source)][feature]
+        current = _rows_under(conn, table, id_key, source)
+        if current != saved_rows:
+            from deeptutor.services.workspace.models import WorkspaceError
+
+            raise WorkspaceError(
+                "Knowledge base or book registrations changed during migration. "
+                "Retry the operation."
+            )
+        for saved in saved_rows:
+            target = destination / Path(saved["base_dir"]).relative_to(source)
+            if feature == "knowledge_bases":
+                kbs._relocate_kb(conn, saved["id"], target)
+            else:
+                books._relocate_book(conn, saved["id"], target)
+
+
 def migrate_locations(
     service: Any, moves: list[tuple[dict, Path]], *, new_root: Path | None = None
 ) -> None:
+    import sqlite3
+
+    from deeptutor.book.registry import BookRegistryError
+    from deeptutor.book.sharing import shared_write
     from deeptutor.services.workspace.models import WorkspaceError
 
-    prepared: list[tuple[dict, Path]] = []
+    prepared: list[tuple[dict, Path, Path]] = []
     owned_destinations: list[Path] = []
     staging: list[Path] = []
     try:
-        for row, destination in moves:
-            source = Path(row["path"]).resolve()
+        sources = [Path(row["path"]).resolve() for row, _destination in moves]
+        # Registry identities follow the workspace (Plan D global constraint);
+        # freeze them before any copy so later registrations are not adopted.
+        snapshot = _registry_snapshot(sources)
+        for (row, destination), source in zip(moves, sources):
             destination = destination.expanduser().resolve()
             if source == destination:
                 continue
@@ -68,36 +137,56 @@ def migrate_locations(
             temporary.rename(destination)
             staging.remove(temporary)
             owned_destinations.append(destination)
-            prepared.append((row, destination))
-        # All paths switch together. A failure before commit leaves every old
-        # binding valid; immutable published-item URLs are outside these roots.
-        with service._catalog_connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            for row, destination in prepared:
-                record = conn.execute(
-                    "SELECT payload FROM workspaces WHERE id = ?", (row["workspace_id"],)
-                ).fetchone()
-                current = json.loads(record[0]) if record else None
-                if current is None or current["path"] != row["path"]:
-                    raise WorkspaceError(
-                        "Workspace location changed during migration. Retry the operation."
+            prepared.append((row, source, destination))
+        # All paths switch together, and the KB/Book registry locations switch
+        # in the same crash-atomic SQLite transaction (catalog attached to D2's
+        # joint writer). A failure before COMMIT leaves every old binding and
+        # registry location valid; immutable published-item URLs are outside
+        # these roots.
+        with service._catalog_connection():
+            pass  # Create the catalog schema before the joint writer attaches it.
+        try:
+            with shared_write(attach={"catalog": service._catalog_file()}) as conn:
+                for row, source, destination in prepared:
+                    _relocate_registry_rows(conn, snapshot, source, destination)
+                for row, _source, destination in prepared:
+                    record = conn.execute(
+                        "SELECT payload FROM catalog.workspaces WHERE id = ?",
+                        (row["workspace_id"],),
+                    ).fetchone()
+                    current = json.loads(record[0]) if record else None
+                    if current is None or current["path"] != row["path"]:
+                        raise WorkspaceError(
+                            "Workspace location changed during migration. Retry the operation."
+                        )
+                    updated = {
+                        **current,
+                        "path": str(destination),
+                        "follows_root": new_root is not None,
+                        "previous_paths": [*row.get("previous_paths", []), row["path"]],
+                    }
+                    conn.execute(
+                        "UPDATE catalog.workspaces SET payload = ? WHERE id = ?",
+                        (json.dumps(updated, ensure_ascii=False), row["workspace_id"]),
                     )
-                updated = {
-                    **current,
-                    "path": str(destination),
-                    "follows_root": new_root is not None,
-                    "previous_paths": [*row.get("previous_paths", []), row["path"]],
-                }
-                conn.execute(
-                    "UPDATE workspaces SET payload = ? WHERE id = ?",
-                    (json.dumps(updated, ensure_ascii=False), row["workspace_id"]),
-                )
-            if new_root is not None:
-                conn.execute(
-                    "INSERT OR REPLACE INTO metadata VALUES ('root', ?)",
-                    (json.dumps(str(new_root)),),
-                )
-    except Exception:
+                if new_root is not None:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO catalog.metadata VALUES ('root', ?)",
+                        (json.dumps(str(new_root)),),
+                    )
+        except sqlite3.IntegrityError as exc:
+            raise WorkspaceError(
+                "A knowledge base or book is already registered at the destination. "
+                "Choose a new folder."
+            ) from exc
+        except BookRegistryError as exc:
+            # e.g. a non-DELETE journal: registries cannot follow atomically,
+            # so refuse rather than let the catalog and registries diverge.
+            raise WorkspaceError(
+                "Knowledge base and book registrations cannot be moved together with this "
+                f"workspace: {exc}"
+            ) from exc
+    except BaseException:
         for path in staging + owned_destinations:
             if path.exists():
                 shutil.rmtree(path)
