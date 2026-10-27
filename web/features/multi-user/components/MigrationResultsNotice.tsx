@@ -46,7 +46,7 @@ export const MIGRATION_ITEM_RENDERERS: Record<
     }),
   book_edit_grant_retired: (item, t) =>
     t(
-      "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.",
+      "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.",
       {
         username: String(item.data.username ?? ""),
         title: String(item.data.title ?? item.data.book_id ?? item.key),

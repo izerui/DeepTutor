@@ -5586,7 +5586,7 @@
   "This book is still referenced elsewhere. Remove those references before deleting it.": "这本书仍被其他内容引用，请先解除引用再删除。",
   "Per-book access has been retired. Books are shared by making them public; edits stay with the creator and admins.": "逐本授权已停用。书籍改为通过“设为公开”共享，编辑仅限创建者和管理员。",
   "Book “{{title}}” is now public because it was shared with: {{users}}": "书籍《{{title}}》已公开，因为它曾共享给：{{users}}",
-  "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; consider transferring the book.": "{{username}} 曾可编辑《{{title}}》。现在只有创建者和管理员能编辑，可考虑把这本书转给该用户。",
+  "{{username}} could edit “{{title}}”. Editing is now limited to the creator and admins; you can make the book public so {{username}} can still read it.": "{{username}} 曾可编辑《{{title}}》。现在只有创建者和管理员能编辑，您可以将书设为公开，这样 {{username}} 仍然可以阅读。",
   "Public book “{{title}}” uses {{kb}}, which its readers cannot use.": "公开书籍《{{title}}》使用了 {{kb}}，读者无法使用该知识库。",
   "Knowledge base “{{name}}” no longer exists, so it was not made public. It was granted to: {{users}}": "知识库“{{name}}”已不存在，因此未设为公开。它曾授权给：{{users}}",
   "Book “{{title}}” was moved off or removed from the shared shelf before its sharing was migrated, so it was not made public. It was shared with: {{users}}": "书籍《{{title}}》在共享设置迁移完成前已移出或从共享书架删除，因此未设为公开。它曾共享给：{{users}}",
