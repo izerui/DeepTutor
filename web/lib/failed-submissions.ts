@@ -23,6 +23,9 @@ export interface FailedSubmissionRecord {
    *  `teacher_materials_unavailable`). Annotated after the terminal error
    *  arrives so the reason survives a reload. */
   failureCode?: string;
+  /** Extra structured data from the refusal event (e.g. the material names
+   *  that were unavailable). Bounded to avoid bloating local storage. */
+  failureDetails?: Record<string, unknown>;
 }
 
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -272,22 +275,54 @@ export function storeFailedSubmission(
   return persistRecord(sessionId, record) ? submissionId : null;
 }
 
-/** Annotate an existing failed-submission record with a stable failure code.
+/** Maximum serialized bytes for failureDetails — keeps local-storage bounded. */
+const MAX_FAILURE_DETAILS_BYTES = 512;
+
+/** Sanitize and bound the event metadata stored as failureDetails. Only
+ *  string and string-array values pass through; the result is capped at
+ *  `MAX_FAILURE_DETAILS_BYTES` serialized bytes. */
+function sanitizeFailureDetails(
+  raw: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") {
+      safe[key] = value;
+    } else if (
+      Array.isArray(value) &&
+      value.every((item) => typeof item === "string")
+    ) {
+      safe[key] = value;
+    }
+  }
+  if (!Object.keys(safe).length) return undefined;
+  const serialized = JSON.stringify(safe);
+  if (serialized.length > MAX_FAILURE_DETAILS_BYTES) return undefined;
+  return safe;
+}
+
+/** Annotate an existing failed-submission record with a stable failure code
+ *  and optional structured details (e.g. material names).
  *
  * Called when a terminal error carries a teacher-path refusal code but the
  * server never confirmed the user row (no `user_message_id` in DONE). The
- * code is written back so a reload can display the localized refusal reason
- * instead of the generic "Not sent" label. */
+ * code and details are written back so a reload can display the localized
+ * refusal reason (including material names) instead of the generic "Not sent"
+ * label. */
 export function annotateFailureCode(
   sessionId: string,
   submissionId: string,
   failureCode: string,
+  details?: Record<string, unknown>,
 ): boolean {
   if (!sessionId || !submissionId || !failureCode) return false;
   const record = directRecords(sessionId)
     .find((r) => r.submissionId === submissionId);
   if (!record) return false;
   record.failureCode = failureCode;
+  const sanitized = sanitizeFailureDetails(details);
+  if (sanitized) record.failureDetails = sanitized;
   return persistRecord(sessionId, record) !== null;
 }
 

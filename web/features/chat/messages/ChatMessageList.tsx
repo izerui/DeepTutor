@@ -169,6 +169,8 @@ interface ChatMessageItem {
   failedSubmissionNeedsReview?: boolean;
   /** Stable teacher-path failure code preserved across reloads (B2-16). */
   failureCode?: string;
+  /** Extra structured data from the refusal event (material names, etc.). */
+  failureDetails?: Record<string, unknown>;
   orphanedFailedTurn?: OrphanedFailedTurn;
 }
 
@@ -1916,7 +1918,7 @@ export const UserMessage = memo(function UserMessage({
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
             {(() => {
               const teacher = msg.failureCode
-                ? teacherTurnErrorMessage({ error_code: msg.failureCode })
+                ? teacherTurnErrorMessage({ error_code: msg.failureCode, ...msg.failureDetails })
                 : null;
               return teacher ? t(teacher.key, teacher.values) : t("Not sent");
             })()}

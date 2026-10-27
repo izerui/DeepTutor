@@ -345,6 +345,8 @@ export interface MessageItem {
   failedSubmissionId?: string;
   /** Stable teacher-path failure code preserved across reloads (B2-16). */
   failureCode?: string;
+  /** Extra structured data from the refusal event (material names, etc.). */
+  failureDetails?: Record<string, unknown>;
   /** A backend failure with a saved user row and no assistant reply (#1570). */
   orphanedFailedTurn?: OrphanedFailedTurn;
 }
@@ -563,6 +565,7 @@ function restoredFailedMessage(
     failedSubmissionNeedsReview: record.retryRequiresReview,
     failedSubmissionId: record.submissionId,
     ...(record.failureCode ? { failureCode: record.failureCode } : {}),
+    ...(record.failureDetails ? { failureDetails: record.failureDetails } : {}),
   };
 }
 
@@ -2262,14 +2265,14 @@ export function ChatStateAdapterProvider({
         // materials forced private), annotate the local-storage record with
         // the stable failure code so the localized reason survives a reload.
         const pendingSub = pendingSubmissionIdsRef.current.get(effectiveKey);
-        const errorCode = String(
-          (event.metadata as { error_code?: string } | undefined)?.error_code || "",
-        );
+        const meta = event.metadata as Record<string, unknown> | undefined;
+        const errorCode = (meta?.error_code as string | undefined) ?? "";
         if (pendingSub?.submissionId && errorCode) {
           annotateFailureCode(
             pendingSub.storageKey,
             pendingSub.submissionId,
             errorCode,
+            meta,
           );
         }
         pendingSubmissionIdsRef.current.delete(effectiveKey);
