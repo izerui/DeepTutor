@@ -38,8 +38,6 @@ MASTERY_TEMPLATE_PARAM = "mastery_template"
 MASTERY_TEMPLATE_HEADER = "x-deeptutor-mastery-template"
 #: Optional query parameter naming a cited document by its fixed id.
 DOCUMENT_ID_PARAM = "doc_id"
-COURSE_UNAVAILABLE = "This course is no longer available to you."
-
 
 async def enter_mastery_template_scope(request: Request) -> None:
     """R9: a student opens a teacher path's originals from the Study page.
@@ -72,7 +70,9 @@ async def enter_mastery_template_scope(request: Request) -> None:
 
     materials = await asyncio.to_thread(access.entitled_materials, template_id)
     if materials is None:
-        raise HTTPException(status_code=403, detail=COURSE_UNAVAILABLE)
+        # Path closed / not assigned / archived — ignore the template parameter
+        # and fall back to the route's normal authorization rules (B2-12).
+        return
     params = request.path_params
     try:
         if "book_id" in params:
