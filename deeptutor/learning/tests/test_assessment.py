@@ -575,6 +575,95 @@ def test_old_linked_assessment_rejected_after_reassessment_flag_cleared(
     assert len(final.learning_evidence) == 1, "Only the newer evidence should exist"
     assert final.learning_evidence[0].evidence_id == "attempt-new"
 
+    # M1: A legitimate post-redefinition linked assessment must still be admitted.
+    post_redef = AssessmentRecord(
+        session_id="session-1",
+        turn_id="turn-post",
+        question_id="q-post",
+        question="Post-redefinition question",
+        result="correct",
+        is_correct=True,
+        source="book",
+        assessment_type="focus_check",
+        mastery_path_id="path-1",
+        knowledge_point_id="kp-1",
+        attempt_id="attempt-post",
+        created_at=T1 + 500.0,  # after redefinition
+    )
+    applied_post = _apply_linked_retention(
+        post_redef,
+        result=build_grade_result(result="correct", is_correct=True),
+        attempt_id="attempt-post",
+    )
+    assert applied_post is True, "Post-redefinition linked assessment must be accepted"
+
+
+def test_reset_path_clears_kp_redefined_at(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After reset_path, kp_redefined_at must be empty so new learning starts fresh."""
+    from deeptutor.learning.assessment import _apply_linked_retention, build_grade_result
+
+    learning_root = tmp_path / "learning"
+    learning_root.mkdir()
+    ls = LearningStore(root=learning_root)
+
+    progress = LearningProgress(
+        book_id="path-1",
+        modules=[
+            LearningModule(
+                id="module-1",
+                name="Module",
+                order=0,
+                knowledge_points=[
+                    KnowledgePoint(
+                        id="kp-1",
+                        name="Concept",
+                        type=KnowledgeType.CONCEPT,
+                        module_id="module-1",
+                    )
+                ],
+            )
+        ],
+        knowledge_types={"kp-1": KnowledgeType.CONCEPT},
+        reassessment_required={"kp-1": 1_100_000.0},
+        kp_redefined_at={"kp-1": 1_100_000.0},
+    )
+    ls.save(progress)
+    monkeypatch.setattr("deeptutor.learning.assessment._get_learning_store", lambda: ls)
+
+    # Simulate reset_path clearing both dicts.
+    loaded = ls.load("path-1")
+    loaded.reassessment_required = {}
+    loaded.kp_redefined_at = {}
+    loaded.learning_evidence = []
+    loaded.repetition_states = {}
+    loaded.review_queue = []
+    ls.save(loaded)
+
+    # A linked assessment created at T0 (before old redefinition) is now OK.
+    record = AssessmentRecord(
+        session_id="session-1",
+        turn_id="turn-1",
+        question_id="q-1",
+        question="After reset",
+        result="correct",
+        is_correct=True,
+        source="book",
+        assessment_type="focus_check",
+        mastery_path_id="path-1",
+        knowledge_point_id="kp-1",
+        attempt_id="attempt-reset",
+        created_at=1_000_000.0,
+    )
+    applied = _apply_linked_retention(
+        record,
+        result=build_grade_result(result="correct", is_correct=True),
+        attempt_id="attempt-reset",
+    )
+    assert applied is True, "After path reset, old timestamps must not block new evidence"
+
 
 def test_missing_question_is_rejected() -> None:
     with pytest.raises(ValueError):

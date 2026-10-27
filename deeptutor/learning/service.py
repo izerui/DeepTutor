@@ -420,6 +420,9 @@ class LearningService:
         for key in list(progress.reassessment_required):
             if key not in new_kp_ids:
                 del progress.reassessment_required[key]
+        for key in list(progress.kp_redefined_at):
+            if key not in new_kp_ids:
+                del progress.kp_redefined_at[key]
         progress.error_records = [
             r for r in progress.error_records if r.knowledge_point_id in new_kp_ids
         ]
@@ -2259,6 +2262,7 @@ class LearningService:
             progress.deferred_objectives = {}
             progress.explained_objectives = {}
             progress.reassessment_required = {}
+            progress.kp_redefined_at = {}
             progress.pending_question = None
             progress.feynman_retries = {}
             progress.feynman_explanations = {}

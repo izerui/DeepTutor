@@ -88,6 +88,7 @@ def apply_revision(progress: LearningProgress, revision: TemplateRevision) -> di
         # Answers, evidence, error records and mastery levels stay as history.
         _forget_schedule(progress, kp_id)
         progress.reassessment_required.pop(kp_id, None)
+        progress.kp_redefined_at.pop(kp_id, None)
     progress.modules = modules
     for module in modules:
         for point in module.knowledge_points:
