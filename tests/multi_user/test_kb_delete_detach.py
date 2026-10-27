@@ -3,6 +3,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import contextvars
+import json
 from pathlib import Path
 import shutil
 import threading
@@ -14,6 +15,10 @@ from deeptutor.knowledge import manager as manager_module
 from deeptutor.knowledge import registry
 from deeptutor.knowledge.document_mutation import document_mutation
 from deeptutor.multi_user.knowledge_access import current_kb_manager
+from deeptutor.services.rag.pipelines.lightrag.write_lock import (
+    WriteOwnershipBusy,
+    write_ownership,
+)
 
 
 @pytest.fixture
@@ -138,26 +143,39 @@ async def test_registry_failure_after_detach_restores_the_folder(
 
 
 @pytest.mark.asyncio
-async def test_failed_rename_changes_nothing(knowledge, as_user, make_kb, monkeypatch):
+async def test_failed_rename_still_deletes_in_place(knowledge, as_user, make_kb, monkeypatch):
+    """#370: open handles may block the rename; the KB must still be deletable."""
+    attempts = []
     with as_user("t1", role="teacher"):
         manager, folder, record = _kb(make_kb, "physics")
 
         def refuse(*_args, **_kwargs):
             raise PermissionError("in use")
 
+        def rmtree_always_errors(path, onerror=None, **_kwargs):
+            # Writers stay excluded while the folder is removed under its own name.
+            with pytest.raises(WriteOwnershipBusy):
+                with write_ownership(folder):
+                    pass
+            attempts.append(Path(path))
+            def still_busy(_path):
+                raise OSError("busy")
+
+            onerror(still_busy, str(path), (OSError, OSError("busy"), None))
+
         with monkeypatch.context() as scoped:
             scoped.setattr(manager_module.os, "rename", refuse)
-            with pytest.raises(HTTPException) as error:
-                knowledge._delete_kb(record.ref)
-        assert error.value.status_code == 500
-        assert "physics" in manager._load_config()["knowledge_bases"]
-    assert (folder / "raw" / "doc.md").exists()
-    assert registry.get_kb(record.kb_id) is not None
+            scoped.setattr(manager_module.shutil, "rmtree", rmtree_always_errors)
+            body = await knowledge.delete_knowledge_base(record.ref)
+        assert "deleted" in body["message"]
+        assert "physics" not in manager._load_config()["knowledge_bases"]
+    assert attempts == [folder]
+    assert registry.get_kb(record.kb_id) is None
     assert _staged(folder.parent) == []
 
 
 @pytest.mark.asyncio
-async def test_delete_waits_for_document_write_ownership(knowledge, as_user, make_kb):
+async def test_delete_is_refused_while_a_writer_owns_the_kb(knowledge, as_user, make_kb):
     with as_user("t1", role="teacher"):
         manager, folder, record = _kb(make_kb, "physics")
         held = threading.Event()
@@ -172,15 +190,16 @@ async def test_delete_waits_for_document_write_ownership(knowledge, as_user, mak
         uploader.start()
         try:
             assert held.wait(5)
-            deletion = asyncio.create_task(knowledge.delete_knowledge_base(record.ref))
-            await asyncio.sleep(0.3)
-            assert not deletion.done()
+            with pytest.raises(HTTPException) as error:
+                await asyncio.wait_for(knowledge.delete_knowledge_base(record.ref), 2)
+            assert error.value.status_code == 409
             assert (folder / "raw" / "doc.md").exists()
             assert registry.get_kb(record.kb_id) is not None
+            assert "physics" in manager._load_config()["knowledge_bases"]
         finally:
             release.set()
             uploader.join(5)
-        await asyncio.wait_for(deletion, 10)
+        await knowledge.delete_knowledge_base(record.ref)
     assert not folder.exists()
     assert registry.get_kb(record.kb_id) is None
 
@@ -192,7 +211,32 @@ async def test_interrupted_deletions_are_reported(knowledge, as_user, make_kb):
         leftover = Path(manager.base_dir) / ".kb-deleting-crashed"
         (leftover / "raw").mkdir(parents=True)
         assert manager.interrupted_deletions() == [leftover]
+        assert "unknown knowledge base" in manager.describe_interrupted_deletion(leftover)
         knowledge._delete_kb(record.ref)
         # Never removed automatically: an uncommitted detach may still be recoverable.
         assert manager.interrupted_deletions() == [leftover]
         assert "physics" not in manager.list_knowledge_bases()
+
+
+@pytest.mark.asyncio
+async def test_detached_folder_names_its_knowledge_base(
+    knowledge, as_user, make_kb, monkeypatch
+):
+    with as_user("t1", role="teacher"):
+        manager, folder, record = _kb(make_kb, "physics")
+
+        def crash(*_args, **_kwargs):
+            raise RuntimeError("registry commit failed")
+
+        # Simulate a crash after the detach: keep the hidden folder as it was.
+        monkeypatch.setattr(manager_module.KnowledgeBaseManager, "_restore_detached", crash)
+        monkeypatch.setattr(registry, "_revoke", crash)
+        with pytest.raises(HTTPException):
+            knowledge._delete_kb(record.ref)
+    [leftover] = _staged(folder.parent)
+    marker = json.loads((leftover / manager_module.DELETION_MARKER).read_text(encoding="utf-8"))
+    assert marker["name"] == "physics" and marker["kb_id"] == record.kb_id
+    assert marker["config_entry"]["description"] == "physics"
+    hint = manager.describe_interrupted_deletion(leftover)
+    assert f"'physics' (kb:{record.kb_id})" in hint and str(folder) in hint
+    assert registry.get_kb(record.kb_id) is not None

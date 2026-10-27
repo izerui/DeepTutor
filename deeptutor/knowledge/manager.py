@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 
 # Hidden siblings: the directory scan in ``list_knowledge_bases`` skips dot-names.
 DELETION_STAGING_PREFIX = ".kb-deleting-"
+DELETION_MARKER = ".kb-deletion.json"
 
 
 @dataclass
@@ -72,6 +73,9 @@ class DetachedKnowledgeBase:
     name: str
     entry: dict | None
     staged_dir: Path | None
+    # Set when the rename failed: purge in place while writers are still excluded.
+    in_place_dir: Path | None = None
+    purged: bool = False
 
     def restore(self) -> None:
         """Put the folder and config entry back (the deletion was not committed)."""
@@ -1900,14 +1904,21 @@ class KnowledgeBaseManager:
             self._drop_config_entry(name)
         return True
 
-    def detach_knowledge_base(self, name: str) -> "DetachedKnowledgeBase":
+    def detach_knowledge_base(
+        self, name: str, *, kb_id: str | None = None
+    ) -> "DetachedKnowledgeBase":
         """Make ``name`` disappear quickly; :meth:`DetachedKnowledgeBase.purge` frees it later.
 
         The folder is renamed to a hidden sibling on the same filesystem and the
         config entry is dropped, so a caller can do this inside a short
         transaction and remove the (possibly multi-GB) tree after committing.
-        A failed rename changes nothing; a failed config write undoes the rename.
-        Call :meth:`DetachedKnowledgeBase.restore` if the caller's own commit fails.
+        A marker inside the hidden folder records the name, ``kb_id`` and config
+        entry so an interrupted deletion can be identified and restored by hand.
+        If the folder cannot be renamed (e.g. open handles on Windows) it stays
+        in place and ``in_place_dir`` is set: the caller must purge it while
+        still excluding writers, tolerating leftovers as before (#370).
+        A failed config write undoes the rename. Call
+        :meth:`DetachedKnowledgeBase.restore` if the caller's own commit fails.
         """
         with self._catalog_lock:
             self.config = self._load_config()
@@ -1917,26 +1928,56 @@ class KnowledgeBaseManager:
                 raise ValueError(f"Knowledge base not found: {name}")
             entry = config_kbs.get(name)
             connected = is_connected_kb(entry or {})
-            staged_dir = None
-            if kb_dir.exists() and not connected:
-                staged_dir = self.base_dir / f"{DELETION_STAGING_PREFIX}{uuid.uuid4().hex}"
-                os.rename(kb_dir, staged_dir)
-            elif not connected:
-                logger.warning(
-                    f"KB directory '{kb_dir}' missing on disk; cleaning up orphaned config entry."
-                )
             detached = DetachedKnowledgeBase(
                 manager=self,
                 name=name,
                 entry=deepcopy(entry) if entry is not None else None,
-                staged_dir=staged_dir,
+                staged_dir=None,
             )
+            if kb_dir.exists() and not connected:
+                staged_dir = self.base_dir / f"{DELETION_STAGING_PREFIX}{uuid.uuid4().hex}"
+                try:
+                    os.rename(kb_dir, staged_dir)
+                except OSError:
+                    logger.warning(
+                        "Could not move KB '%s' aside for deletion; it will be removed in place.",
+                        name,
+                        exc_info=True,
+                    )
+                    detached.in_place_dir = kb_dir
+                else:
+                    detached.staged_dir = staged_dir
+                    self._write_deletion_marker(detached, kb_id)
+            elif not connected:
+                logger.warning(
+                    f"KB directory '{kb_dir}' missing on disk; cleaning up orphaned config entry."
+                )
             try:
                 self._drop_config_entry(name)
             except BaseException:
                 detached.restore_or_log()
                 raise
             return detached
+
+    def _write_deletion_marker(self, detached: "DetachedKnowledgeBase", kb_id: str | None) -> None:
+        marker = {
+            "name": detached.name,
+            "kb_id": kb_id,
+            "base_dir": str(self.base_dir),
+            "config_entry": detached.entry,
+            "detached_at": datetime.now().isoformat(),
+        }
+        try:
+            atomic_write_json(detached.staged_dir / DELETION_MARKER, marker)
+        except Exception:
+            # The marker only aids manual recovery; the deletion itself is unaffected.
+            logger.warning(
+                "Could not record which KB %s belongs to ('%s', %s)",
+                detached.staged_dir,
+                detached.name,
+                kb_id,
+                exc_info=True,
+            )
 
     def interrupted_deletions(self) -> list[Path]:
         """Detached folders still on disk (in progress, failed to purge, or crashed).
@@ -1952,22 +1993,43 @@ class KnowledgeBaseManager:
             if path.name.startswith(DELETION_STAGING_PREFIX) and path.is_dir()
         )
 
+    def describe_interrupted_deletion(self, path: Path) -> str:
+        """A log line naming the KB behind ``path`` and how to restore it by hand."""
+        try:
+            marker = json.loads((Path(path) / DELETION_MARKER).read_text(encoding="utf-8"))
+            name, kb_id = marker["name"], marker.get("kb_id")
+        except Exception:
+            return f"{path}: unknown knowledge base (no readable {DELETION_MARKER})"
+        return (
+            f"{path}: knowledge base '{name}' (kb:{kb_id}). If the registry still lists "
+            f"kb:{kb_id}, the deletion never committed: rename this folder back to "
+            f"{Path(self.base_dir) / name}, delete {DELETION_MARKER} and restore its "
+            "'config_entry' under 'knowledge_bases' in kb_config.json. Otherwise it is "
+            "safe to remove."
+        )
+
     def _restore_detached(self, detached: "DetachedKnowledgeBase") -> None:
         with self._catalog_lock:
             kb_dir = self.base_dir / detached.name
             if detached.staged_dir is not None:
                 os.rename(detached.staged_dir, kb_dir)
+                detached.staged_dir = None
+                (kb_dir / DELETION_MARKER).unlink(missing_ok=True)
             self.config = self._load_config()
             if detached.entry is not None:
                 self.config.setdefault("knowledge_bases", {})[detached.name] = detached.entry
             self._save_config()
 
     def _purge_detached(self, detached: "DetachedKnowledgeBase") -> None:
+        if detached.purged:
+            return
+        detached.purged = True
         entry = detached.entry or {}
         if entry.get("type") == MARGINNOTE4_KB_TYPE:
             self._delete_marginnote4_store(detached.name, entry)
-        if detached.staged_dir is not None:
-            self._remove_kb_tree(detached.staged_dir, detached.name)
+        tree = detached.staged_dir or detached.in_place_dir
+        if tree is not None:
+            self._remove_kb_tree(tree, detached.name)
 
     def _drop_config_entry(self, name: str) -> None:
         """Remove ``name`` from the loaded config and persist it; hold ``_catalog_lock``."""

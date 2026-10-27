@@ -8,6 +8,7 @@ Handles knowledge base CRUD operations, file uploads, and initialization.
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime
+import functools
 import json
 import logging
 import mimetypes
@@ -53,6 +54,7 @@ from deeptutor.knowledge.document_mutation import (
     DocumentRecordingError,
     async_document_mutation,
     document_mutation,
+    document_mutation_or_busy,
     finish_document_worker,
     run_document_worker,
 )
@@ -3687,23 +3689,25 @@ def _detach_kb(kb_name: str, *, force: bool = False):
 
     Only the reference check, a same-filesystem rename to a hidden sibling and
     the config/registry updates run while the registry writer is held; the
-    caller purges the returned folder after the commit. The KB's document
-    write ownership is held throughout so uploads and indexing cannot
-    interleave, taken before the registry writer like every document mutation.
+    caller purges the returned folder after the commit. The KB's write
+    ownership is taken first (like every document mutation) without waiting:
+    a KB whose upload or ownership-holding indexing (LightRAG) is running is
+    reported busy. If the folder could not be renamed it is removed in place
+    after the commit while that ownership is still held (#370 tolerance).
     """
     from deeptutor.knowledge import registry
+    from deeptutor.services.rag.pipelines.lightrag.indexing_policy import IndexingPolicyError
 
     if force and not get_current_user().is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force deletion.")
     try:
         manager, resolved_name, base_dir = _writable_kb(kb_name)
-        leftovers = manager.interrupted_deletions()
-        if leftovers:
+        for leftover in manager.interrupted_deletions():
             logger.warning(
-                "Unfinished knowledge-base deletions remain on disk (not removed automatically): %s",
-                ", ".join(str(path) for path in leftovers),
+                "Unfinished knowledge-base deletion (not removed automatically): %s",
+                manager.describe_interrupted_deletion(leftover),
             )
-        with document_mutation(base_dir, resolved_name):
+        with document_mutation_or_busy(base_dir, resolved_name):
             detached = None
             try:
                 with registry.guarded_deletion(base_dir, resolved_name) as (record, references):
@@ -3715,15 +3719,21 @@ def _detach_kb(kb_name: str, *, force: bool = False):
                         _assert_unreferenced_or_forced(
                             record, force=force, references=references
                         )
-                    detached = manager.detach_knowledge_base(resolved_name)
+                    detached = manager.detach_knowledge_base(
+                        resolved_name, kb_id=record.kb_id if record is not None else None
+                    )
             except BaseException:
                 if detached is not None:
                     detached.restore_or_log()
                 raise
+            if detached.in_place_dir is not None:
+                _purge_detached_kb(detached)
     except HTTPException:
         # Re-raised before the catch-all below, which used to turn a 404 from
         # ``_writable_kb`` into a 500 whose detail read "404: ... not found".
         raise
+    except IndexingPolicyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
     except Exception as e:
@@ -3733,14 +3743,14 @@ def _detach_kb(kb_name: str, *, force: bool = False):
 
 
 def _purge_detached_kb(detached) -> None:
-    """Remove the committed deletion's files outside every lock; failures only leave orphans."""
+    """Remove the committed deletion's files; failures only leave orphans."""
     try:
         detached.purge()
     except Exception:
         logger.warning(
             "Could not remove files of deleted knowledge base '%s' at %s",
             detached.name,
-            detached.staged_dir,
+            detached.staged_dir or detached.in_place_dir,
             exc_info=True,
         )
 
@@ -3752,14 +3762,8 @@ def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
 
 
 async def _delete_kb_off_loop(kb_name: str, *, force: bool = False) -> dict[str, str]:
-    """Admit on the loop, then detach and purge on workers like document mutations."""
-    if force and not get_current_user().is_admin:
-        raise HTTPException(status_code=403, detail="Only admins can force deletion.")
-    try:
-        _, resolved_name, base_dir = await asyncio.to_thread(_writable_kb, kb_name)
-    except ValueError:
-        raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
-    detached = await run_document_worker(base_dir, resolved_name, _detach_kb, kb_name, force=force)
+    """Detach on a worker (busy KBs fail fast), then purge outside every lock."""
+    detached = await finish_document_worker(functools.partial(_detach_kb, kb_name, force=force))
     await asyncio.to_thread(_purge_detached_kb, detached)
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 

@@ -56,6 +56,28 @@ def document_mutation(base_dir, name):
             ownership.__exit__(None, None, None)
 
 
+@contextmanager
+def document_mutation_or_busy(base_dir, name):
+    """Like :func:`document_mutation` but never waits: raises ``WriteOwnershipBusy``."""
+    kb_dir = Path(base_dir) / name
+    if (
+        getattr(_worker_ownership, "key", None) == str(kb_dir.resolve())
+        or owns_write_ownership(kb_dir)
+    ):
+        yield
+        return
+    lock = _lock(base_dir, name)
+    if not lock.acquire(blocking=False):
+        raise WriteOwnershipBusy(
+            "Another write is active for this knowledge base; retry after it finishes."
+        )
+    try:
+        with write_ownership(kb_dir):
+            yield
+    finally:
+        lock.release()
+
+
 @asynccontextmanager
 async def async_document_mutation(base_dir, name):
     """Wait without blocking the loop or occupying workers needed by the owner."""
