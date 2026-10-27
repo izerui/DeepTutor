@@ -1253,6 +1253,37 @@ def _latex_selection_is_grounded(source: str, selected: str) -> bool:
     return body in normalized_source
 
 
+def _strip_markdown_markup(text: str) -> str:
+    """Strip Markdown structural markup to match browser-rendered selections."""
+    t = str(text or "")
+    # link [text](url) -> text
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
+    # image ![alt](url) -> alt
+    t = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", t)
+    # table separator rows |--|--|
+    t = re.sub(r"\|(?:\s*[:-]+[-| :]*)\|", " ", t)
+    # table pipes
+    t = t.replace("|", " ")
+    # bold/italic markers: ***, **, *, __, _
+    t = re.sub(r"(\*{1,3}|_{1,3})(.*?)\1", r"\2", t)
+    # inline code backticks
+    t = re.sub(r"`+([^`]+)`+", r"\1", t)
+    # blockquote / headers / list markers at line start or whitespace
+    t = re.sub(r"(?m)^\s*(?:>\s*|[0-9]+[.)]\s+|[-*+]\s+|#{1,6}\s+)", " ", t)
+    t = re.sub(r"\s+[0-9]+[.)]\s+", " ", t)
+    t = re.sub(r"\s+[-*+]\s+", " ", t)
+    return " ".join(t.split())
+
+
+def _markdown_selection_is_grounded(source: str, selected: str) -> bool:
+    """Whether selected text matches source with Markdown formatting normalized."""
+    clean_selected = _strip_markdown_markup(selected)
+    if not clean_selected:
+        return False
+    clean_source = _strip_markdown_markup(source)
+    return clean_selected in clean_source
+
+
 def _selection_is_grounded(source_text: str, selected_text: str) -> bool:
     """Whether the claimed selection occurs in its containing message."""
     source = str(source_text or "")
@@ -1268,7 +1299,9 @@ def _selection_is_grounded(source_text: str, selected_text: str) -> bool:
     normalized_selected = " ".join(selected.split())
     if normalized_selected and normalized_selected in normalized_source:
         return True
-    return _latex_selection_is_grounded(normalized_source, normalized_selected)
+    if _latex_selection_is_grounded(normalized_source, normalized_selected):
+        return True
+    return _markdown_selection_is_grounded(normalized_source, normalized_selected)
 
 
 async def _resolve_selection_tutor_context(
