@@ -235,6 +235,11 @@ class MasteryTurn:
         #: The topic-materials manifest the runtime put at the head of the
         #: turn's ``source_manifest`` (``None``: this turn carries none).
         self.manifest: str | None = None
+        #: The conversation's earlier exchanges (``read_source`` archives)
+        #: merged into the turn's index at its start, and the admission they
+        #: were merged under.
+        self.history_sources: dict[str, str] = {}
+        self._history_admission: _Admission | None = None
 
     async def admit(self, stream: Any, store: Any, path_id: str) -> _Admission | None:
         # Module global on purpose: one gate, also for tests that stand it in.
@@ -297,6 +302,28 @@ class MasteryTurn:
         self.merge_path_sources = self.merge_path_sources or merge_path_sources
         self._apply(context)
 
+    def admit_history(self, sources: dict[str, str]) -> None:
+        """Record the history sources merged at turn start, under the turn's
+        current (start) admission."""
+        self.history_sources = dict(sources or {})
+
+    def _history_survives(self, admission: _Admission) -> bool:
+        """Whether the turn-start history may follow a switch onto ``admission``.
+
+        Scope only narrows (R8): an archive carries no record of which
+        libraries it quoted, so it may enter a teacher path's allowlist only
+        when it was admitted under that same course's scope or a narrower one.
+        A learner-owned path has no allowlist and keeps it.
+        """
+        start = self._history_admission
+        if start is None:
+            return False
+        if admission.allowed is None:
+            return True
+        if start.allowed is None:
+            return False
+        return admission.template_id == start.template_id and start.allowed <= admission.allowed
+
     def _replace_manifest(self, manifest: str) -> None:
         current = str(getattr(self.context, "source_manifest", "") or "")
         old = self.manifest or ""
@@ -325,6 +352,10 @@ class MasteryTurn:
             # the re-pointed scope, so the previous path's never linger.
             manifest, index = await asyncio.to_thread(_material_manifest, path_id)
             if has_index:
+                # The conversation's own history follows only where the new
+                # path's scope allows it (``_history_survives``).
+                if self.history_sources and self._history_survives(admission):
+                    index = {**index, **self.history_sources}
                 self.context.metadata["mastery_topic_source_index"] = index
             if self.manifest is not None:
                 self._replace_manifest(manifest)
@@ -376,6 +407,7 @@ async def open_mastery_turn(
     if admission is None:
         return None
     turn.commit(admission)
+    turn._history_admission = admission
     stack.enter_context(turn_path_gate(turn.switch))
     return turn
 

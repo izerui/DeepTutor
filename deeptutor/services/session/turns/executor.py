@@ -821,6 +821,9 @@ class TurnExecutor:
                 )
                 if mastery_turn is None:
                     raise refusals.unavailable()
+                # Merged into the index below; a path switch keeps them only
+                # where the new path's scope allows.
+                mastery_turn.admit_history(getattr(history_result, "history_sources", {}))
 
             mastery_topic_source_index: dict[str, str] = {}
             if workspace_mode == WORKSPACE_MODE_MASTERY and not source_index:

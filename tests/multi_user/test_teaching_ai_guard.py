@@ -662,6 +662,9 @@ def chat_runtime(libraries, tmp_path, monkeypatch):
     from deeptutor.services.session.turns import executor as executor_module
     from deeptutor.services.skill.service import SkillService
 
+    #: The conversation's earlier exchanges, as ``read_source`` archives.
+    history_sources: dict[str, str] = {}
+
     class History:
         def __init__(self, *_args, **_kwargs):
             pass
@@ -669,7 +672,7 @@ def chat_runtime(libraries, tmp_path, monkeypatch):
         async def build(self, **_kwargs):
             return SimpleNamespace(
                 conversation_history=[], conversation_summary="", context_text="",
-                token_count=0, budget=0,
+                token_count=0, budget=0, history_sources=dict(history_sources),
             )
 
     async def noop(*_args, **_kwargs):
@@ -703,8 +706,16 @@ def chat_runtime(libraries, tmp_path, monkeypatch):
     )
     monkeypatch.setattr("deeptutor.capabilities.mastery.binding._remember_on_session", forget)
 
-    async def run(path_id: str, body, *, knowledge_bases=()):
+    async def run(path_id: str, body, *, knowledge_bases=(), history=None):
         seen: dict = {}
+        history_sources.clear()
+        history_sources.update(history or {})
+        if history:
+            # A mastery-workspace turn builds its history with the tutoring
+            # builder; only these turns stand it in.
+            monkeypatch.setattr(
+                "deeptutor.capabilities.mastery.memory.MasteryContextBuilder", History
+            )
 
         class Execution:
             async def execute(self, context):
@@ -849,6 +860,85 @@ async def test_a_switch_inside_a_chat_action_re_runs_the_gate(
     assert seen["to_revoked"].success is False
     assert seen["to_revoked"].content == INSTANCE_UNAVAILABLE
     assert seen["path"] == courses.personal
+
+
+async def _read_source(context, source_id: str):
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+    from deeptutor.tools.builtin import ReadSourceTool
+
+    kwargs = MasteryLoopCapability().augment_kwargs(
+        "read_source", {"source_id": source_id}, context
+    )
+    return await ReadSourceTool().execute(**kwargs)
+
+
+async def _switch_in_turn(context, path_id: str):
+    from deeptutor.capabilities.mastery.loop import MasteryLoopCapability
+
+    kwargs = MasteryLoopCapability().augment_kwargs(
+        "mastery_switch", {"path_id": path_id}, context
+    )
+    return await MasterySwitchTool().execute(**kwargs)
+
+
+_EARLIER = {"hs-tutor-7": '{"archive_id":"hs-tutor-7","messages":["earlier exchange"]}'}
+
+
+@pytest.mark.asyncio
+async def test_history_admitted_on_a_teacher_path_survives_switches_its_scope_allows(
+    courses, chat_runtime, as_account
+):
+    """B2-15: a switch keeps the conversation's history sources when the new
+    path's scope is no narrower than the one they were admitted under."""
+
+    async def body(context, out):
+        out["start"] = await _read_source(context, "hs-tutor-7")
+        out["to_personal"] = await _switch_in_turn(context, courses.personal)
+        out["on_personal"] = await _read_source(context, "hs-tutor-7")
+        out["back_to_a"] = await _switch_in_turn(context, courses.a)
+        out["on_a"] = await _read_source(context, "hs-tutor-7")
+        out["to_b"] = await _switch_in_turn(context, courses.b)
+        out["on_b"] = await _read_source(context, "hs-tutor-7")
+        out["index_b"] = dict(context.metadata["mastery_topic_source_index"])
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.a, body, history=_EARLIER)
+
+    assert seen["start"].success and "earlier exchange" in seen["start"].content
+    assert seen["to_personal"].success, seen["to_personal"].content
+    # teacher -> personal: a learner-owned path has no allowlist to narrow to.
+    assert seen["on_personal"].success and "earlier exchange" in seen["on_personal"].content
+    assert seen["back_to_a"].success, seen["back_to_a"].content
+    # Back on the scope that admitted them.
+    assert seen["on_a"].success and "earlier exchange" in seen["on_a"].content
+    assert seen["to_b"].success, seen["to_b"].content
+    # teacher -> another teacher's path: outside B's allowlist, refused.
+    assert seen["on_b"].success is False
+    assert "hs-tutor-7" not in seen["index_b"]
+
+
+@pytest.mark.asyncio
+async def test_history_admitted_on_a_personal_path_is_refused_after_a_teacher_switch(
+    courses, chat_runtime, as_account
+):
+    async def body(context, out):
+        out["start"] = await _read_source(context, "hs-tutor-7")
+        out["to_a"] = await _switch_in_turn(context, courses.a)
+        out["on_a"] = await _read_source(context, "hs-tutor-7")
+        out["index_a"] = dict(context.metadata["mastery_topic_source_index"])
+        out["to_personal"] = await _switch_in_turn(context, courses.personal)
+        out["on_personal"] = await _read_source(context, "hs-tutor-7")
+
+    with as_account("sara"):
+        seen = await chat_runtime(courses.personal, body, history=_EARLIER)
+
+    assert seen["start"].success and "earlier exchange" in seen["start"].content
+    assert seen["to_a"].success, seen["to_a"].content
+    # personal -> teacher: unrestricted history never enters an R8 allowlist.
+    assert seen["on_a"].success is False
+    assert "hs-tutor-7" not in seen["index_a"]
+    assert seen["to_personal"].success, seen["to_personal"].content
+    assert seen["on_personal"].success and "earlier exchange" in seen["on_personal"].content
 
 
 # ---------------------------------------------------------------------------
