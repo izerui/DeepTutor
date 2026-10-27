@@ -826,9 +826,8 @@ async def test_delete_routes_unregister(knowledge, as_user, make_kb, monkeypatch
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", [False, RuntimeError("delete failed")])
 async def test_failed_delete_keeps_registration_and_references(
-    knowledge, as_user, make_kb, monkeypatch, failure
+    knowledge, as_user, make_kb, monkeypatch
 ):
     with as_user("root", role="admin"):
         result = await _create(knowledge, monkeypatch, make_kb)
@@ -837,14 +836,12 @@ async def test_failed_delete_keeps_registration_and_references(
         )
 
         def fail(*_args, **_kwargs):
-            if isinstance(failure, Exception):
-                raise failure
-            return failure
+            raise RuntimeError("delete failed")
 
-        monkeypatch.setattr(current_kb_manager(), "delete_knowledge_base", fail)
+        monkeypatch.setattr(current_kb_manager(), "detach_knowledge_base", fail)
         with pytest.raises(HTTPException) as error:
             knowledge._delete_kb(result["ref"], force=True)
-        assert error.value.status_code == (500 if isinstance(failure, Exception) else 400)
+        assert error.value.status_code == 500
     assert registry.get_kb(result["kb_id"]) is not None
     assert len(registry.list_references(result["kb_id"])) == 1
     assert registry.list_unavailable_references("partner", "ada") == []
@@ -857,7 +854,7 @@ async def test_delete_serializes_concurrent_reference_writers(
     with as_user("t1", role="teacher"):
         result = await _create(knowledge, monkeypatch, make_kb)
         manager = current_kb_manager()
-        original = manager.delete_knowledge_base
+        original = manager.detach_knowledge_base
         started = threading.Event()
 
         def add_reference():
@@ -871,7 +868,7 @@ async def test_delete_serializes_concurrent_reference_writers(
 
             def delete(*args, **kwargs):
                 # A separate SQLite connection proves the DB lock, not only a
-                # process-local mutex, covers physical deletion.
+                # process-local mutex, covers detaching the KB from its name.
                 with sqlite3.connect(registry.DB_PATH_OVERRIDE, timeout=0) as conn:
                     with pytest.raises(sqlite3.OperationalError, match="locked"):
                         conn.execute("BEGIN IMMEDIATE")
@@ -880,7 +877,7 @@ async def test_delete_serializes_concurrent_reference_writers(
                 assert not pending[0].done()
                 return original(*args, **kwargs)
 
-            monkeypatch.setattr(manager, "delete_knowledge_base", delete)
+            monkeypatch.setattr(manager, "detach_knowledge_base", delete)
             knowledge._delete_kb(result["ref"])
             with pytest.raises(registry.KbReferenceError):
                 pending[0].result(timeout=5)
@@ -1085,11 +1082,11 @@ def test_http_validation_and_force_forwarding(knowledge, as_user, monkeypatch):
     app.include_router(knowledge.router, prefix="/api")
     calls = []
 
-    def delete(name, *, force=False):
+    async def delete(name, *, force=False):
         calls.append((name, force))
         return {"message": "deleted"}
 
-    monkeypatch.setattr(knowledge, "_delete_kb", delete)
+    monkeypatch.setattr(knowledge, "_delete_kb_off_loop", delete)
     with as_user("root", role="admin"), TestClient(app) as client:
         assert client.delete("/api/knowledge-bases/kb:abc?force=true").status_code == 200
         assert client.post("/api/knowledge-bases/delete", json={"name": "a/b", "force": True}).status_code == 200

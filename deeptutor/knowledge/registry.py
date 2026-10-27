@@ -678,10 +678,12 @@ def unregister_kb(kb_id: str) -> None:
 def guarded_deletion(
     base_dir: Path | str, name: str
 ) -> Iterator[tuple[KbRecord | None, list[KbReference]]]:
-    """Hold a write transaction through authorization and physical deletion.
+    """Hold a write transaction through authorization and detaching the KB.
 
     The caller checks the yielded record/references and raises if deletion is
     refused or fails. Only successful exit revokes references and unregisters.
+    Keep the body short (rename, config update): slow file removal belongs
+    after the commit, since every registry writer in every process waits here.
     BEGIN IMMEDIATE also excludes reference writers in other processes, even
     when this location has not been registered yet.
     """

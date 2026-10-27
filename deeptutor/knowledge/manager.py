@@ -7,6 +7,7 @@ Manages multiple knowledge bases and provides utilities for accessing them.
 
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import hashlib
 import json
@@ -20,6 +21,7 @@ from threading import RLock
 import time
 from typing import Any
 from urllib.parse import urlparse
+import uuid
 
 from deeptutor.knowledge.kb_types import (
     IMA_KB_TYPE,
@@ -57,6 +59,38 @@ from deeptutor.services.rag.index_probe import (
 from deeptutor.services.web_source.crawler import MAX_CRAWL_DEPTH, MAX_CRAWL_PAGES
 
 logger = logging.getLogger(__name__)
+
+# Hidden siblings: the directory scan in ``list_knowledge_bases`` skips dot-names.
+DELETION_STAGING_PREFIX = ".kb-deleting-"
+
+
+@dataclass
+class DetachedKnowledgeBase:
+    """A KB removed from its name and the config but not yet from disk."""
+
+    manager: "KnowledgeBaseManager"
+    name: str
+    entry: dict | None
+    staged_dir: Path | None
+
+    def restore(self) -> None:
+        """Put the folder and config entry back (the deletion was not committed)."""
+        self.manager._restore_detached(self)
+
+    def restore_or_log(self) -> None:
+        """Restore while another error propagates; never mask that error."""
+        try:
+            self.restore()
+        except Exception:
+            logger.exception(
+                "Could not restore knowledge base '%s'; its files remain at %s",
+                self.name,
+                self.staged_dir,
+            )
+
+    def purge(self) -> None:
+        """Best-effort physical removal; call after the deletion is committed."""
+        self.manager._purge_detached(self)
 
 
 def _assert_move_id_available(base_dir: Path, name: str) -> None:
@@ -1856,41 +1890,87 @@ class KnowledgeBaseManager:
             self._delete_marginnote4_store(name, entry)
 
         if dir_exists:
-
-            def _on_rmtree_error(func, path, exc_info):
-                exc = exc_info[1]
-                if isinstance(exc, FileNotFoundError):
-                    # Race: something else removed the entry between walk and unlink.
-                    return
-                # On Windows (and some bind-mounted filesystems) a read-only bit
-                # or a stale handle from a failed RAG init can block removal.
-                # Clear the read-only bit and retry once; if it still fails, log
-                # and continue so the config entry gets cleaned up regardless —
-                # leaving the KB stuck in the list is worse than orphan files on
-                # disk (issue #370).
-                try:
-                    current_mode = os.stat(path).st_mode
-                    writable_mode = current_mode | stat.S_IWRITE
-                    if stat.S_ISDIR(current_mode):
-                        # POSIX directories need execute permission to remain
-                        # traversable. Replacing the whole mode with S_IWRITE
-                        # leaves an orphan that even later cleanup cannot enter.
-                        writable_mode |= stat.S_IXUSR
-                    os.chmod(path, writable_mode)
-                    func(path)
-                except Exception as retry_exc:
-                    logger.warning(
-                        f"Could not remove '{path}' while deleting KB '{name}': "
-                        f"{retry_exc}. Continuing; orphan files may remain on disk."
-                    )
-
-            shutil.rmtree(kb_dir, onerror=_on_rmtree_error)
+            self._remove_kb_tree(kb_dir, name)
         elif not connected:
             logger.warning(
                 f"KB directory '{kb_dir}' missing on disk; cleaning up orphaned config entry."
             )
 
-        # Remove from config
+        with self._catalog_lock:
+            self._drop_config_entry(name)
+        return True
+
+    def detach_knowledge_base(self, name: str) -> "DetachedKnowledgeBase":
+        """Make ``name`` disappear quickly; :meth:`DetachedKnowledgeBase.purge` frees it later.
+
+        The folder is renamed to a hidden sibling on the same filesystem and the
+        config entry is dropped, so a caller can do this inside a short
+        transaction and remove the (possibly multi-GB) tree after committing.
+        A failed rename changes nothing; a failed config write undoes the rename.
+        Call :meth:`DetachedKnowledgeBase.restore` if the caller's own commit fails.
+        """
+        with self._catalog_lock:
+            self.config = self._load_config()
+            config_kbs = self.config.get("knowledge_bases", {})
+            kb_dir = self.base_dir / name
+            if name not in config_kbs and not kb_dir.exists():
+                raise ValueError(f"Knowledge base not found: {name}")
+            entry = config_kbs.get(name)
+            connected = is_connected_kb(entry or {})
+            staged_dir = None
+            if kb_dir.exists() and not connected:
+                staged_dir = self.base_dir / f"{DELETION_STAGING_PREFIX}{uuid.uuid4().hex}"
+                os.rename(kb_dir, staged_dir)
+            elif not connected:
+                logger.warning(
+                    f"KB directory '{kb_dir}' missing on disk; cleaning up orphaned config entry."
+                )
+            detached = DetachedKnowledgeBase(
+                manager=self,
+                name=name,
+                entry=deepcopy(entry) if entry is not None else None,
+                staged_dir=staged_dir,
+            )
+            try:
+                self._drop_config_entry(name)
+            except BaseException:
+                detached.restore_or_log()
+                raise
+            return detached
+
+    def interrupted_deletions(self) -> list[Path]:
+        """Detached folders still on disk (in progress, failed to purge, or crashed).
+
+        They are never removed automatically: a crash before the caller's
+        commit leaves a folder whose registration still exists.
+        """
+        if not self.base_dir.exists():
+            return []
+        return sorted(
+            path
+            for path in self.base_dir.iterdir()
+            if path.name.startswith(DELETION_STAGING_PREFIX) and path.is_dir()
+        )
+
+    def _restore_detached(self, detached: "DetachedKnowledgeBase") -> None:
+        with self._catalog_lock:
+            kb_dir = self.base_dir / detached.name
+            if detached.staged_dir is not None:
+                os.rename(detached.staged_dir, kb_dir)
+            self.config = self._load_config()
+            if detached.entry is not None:
+                self.config.setdefault("knowledge_bases", {})[detached.name] = detached.entry
+            self._save_config()
+
+    def _purge_detached(self, detached: "DetachedKnowledgeBase") -> None:
+        entry = detached.entry or {}
+        if entry.get("type") == MARGINNOTE4_KB_TYPE:
+            self._delete_marginnote4_store(detached.name, entry)
+        if detached.staged_dir is not None:
+            self._remove_kb_tree(detached.staged_dir, detached.name)
+
+    def _drop_config_entry(self, name: str) -> None:
+        """Remove ``name`` from the loaded config and persist it; hold ``_catalog_lock``."""
         if name in self.config.get("knowledge_bases", {}):
             del self.config["knowledge_bases"][name]
 
@@ -1900,7 +1980,37 @@ class KnowledgeBaseManager:
             self.config["default"] = sorted(remaining)[0] if remaining else None
 
         self._save_config()
-        return True
+
+    @staticmethod
+    def _remove_kb_tree(kb_dir: Path, name: str) -> None:
+        def _on_rmtree_error(func, path, exc_info):
+            exc = exc_info[1]
+            if isinstance(exc, FileNotFoundError):
+                # Race: something else removed the entry between walk and unlink.
+                return
+            # On Windows (and some bind-mounted filesystems) a read-only bit
+            # or a stale handle from a failed RAG init can block removal.
+            # Clear the read-only bit and retry once; if it still fails, log
+            # and continue so the config entry gets cleaned up regardless —
+            # leaving the KB stuck in the list is worse than orphan files on
+            # disk (issue #370).
+            try:
+                current_mode = os.stat(path).st_mode
+                writable_mode = current_mode | stat.S_IWRITE
+                if stat.S_ISDIR(current_mode):
+                    # POSIX directories need execute permission to remain
+                    # traversable. Replacing the whole mode with S_IWRITE
+                    # leaves an orphan that even later cleanup cannot enter.
+                    writable_mode |= stat.S_IXUSR
+                os.chmod(path, writable_mode)
+                func(path)
+            except Exception as retry_exc:
+                logger.warning(
+                    f"Could not remove '{path}' while deleting KB '{name}': "
+                    f"{retry_exc}. Continuing; orphan files may remain on disk."
+                )
+
+        shutil.rmtree(kb_dir, onerror=_on_rmtree_error)
 
     def _delete_marginnote4_store(self, name: str, entry: dict) -> None:
         """Remove a MarginNote library's SQLite store, best-effort.

@@ -3682,22 +3682,44 @@ def _assert_unreferenced_or_forced(record, *, force: bool, references=None) -> N
         )
 
 
-def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
-    """Delete ``kb_name``, whichever route addressed it."""
+def _detach_kb(kb_name: str, *, force: bool = False):
+    """Authorize and unregister ``kb_name`` in one short registry transaction.
+
+    Only the reference check, a same-filesystem rename to a hidden sibling and
+    the config/registry updates run while the registry writer is held; the
+    caller purges the returned folder after the commit. The KB's document
+    write ownership is held throughout so uploads and indexing cannot
+    interleave, taken before the registry writer like every document mutation.
+    """
     from deeptutor.knowledge import registry
 
     if force and not get_current_user().is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force deletion.")
     try:
         manager, resolved_name, base_dir = _writable_kb(kb_name)
-        with registry.guarded_deletion(base_dir, resolved_name) as (record, references):
-            if record is not None:
-                if not registry.can_write(record, get_current_user()):
-                    raise HTTPException(status_code=403, detail="This knowledge base is read-only.")
-                _assert_unreferenced_or_forced(record, force=force, references=references)
-            success = manager.delete_knowledge_base(resolved_name, confirm=True)
-            if not success:
-                raise HTTPException(status_code=400, detail="Failed to delete knowledge base")
+        leftovers = manager.interrupted_deletions()
+        if leftovers:
+            logger.warning(
+                "Unfinished knowledge-base deletions remain on disk (not removed automatically): %s",
+                ", ".join(str(path) for path in leftovers),
+            )
+        with document_mutation(base_dir, resolved_name):
+            detached = None
+            try:
+                with registry.guarded_deletion(base_dir, resolved_name) as (record, references):
+                    if record is not None:
+                        if not registry.can_write(record, get_current_user()):
+                            raise HTTPException(
+                                status_code=403, detail="This knowledge base is read-only."
+                            )
+                        _assert_unreferenced_or_forced(
+                            record, force=force, references=references
+                        )
+                    detached = manager.detach_knowledge_base(resolved_name)
+            except BaseException:
+                if detached is not None:
+                    detached.restore_or_log()
+                raise
     except HTTPException:
         # Re-raised before the catch-all below, which used to turn a 404 from
         # ``_writable_kb`` into a 500 whose detail read "404: ... not found".
@@ -3707,6 +3729,38 @@ def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     logger.info(f"KB '{kb_name}' deleted")
+    return detached
+
+
+def _purge_detached_kb(detached) -> None:
+    """Remove the committed deletion's files outside every lock; failures only leave orphans."""
+    try:
+        detached.purge()
+    except Exception:
+        logger.warning(
+            "Could not remove files of deleted knowledge base '%s' at %s",
+            detached.name,
+            detached.staged_dir,
+            exc_info=True,
+        )
+
+
+def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
+    """Delete ``kb_name`` synchronously (worker threads and direct callers)."""
+    _purge_detached_kb(_detach_kb(kb_name, force=force))
+    return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
+
+
+async def _delete_kb_off_loop(kb_name: str, *, force: bool = False) -> dict[str, str]:
+    """Admit on the loop, then detach and purge on workers like document mutations."""
+    if force and not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can force deletion.")
+    try:
+        _, resolved_name, base_dir = await asyncio.to_thread(_writable_kb, kb_name)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+    detached = await run_document_worker(base_dir, resolved_name, _detach_kb, kb_name, force=force)
+    await asyncio.to_thread(_purge_detached_kb, detached)
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
 
@@ -3731,13 +3785,13 @@ async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
     declared ahead of the DELETE routes for linked folders, GitHub sources and
     web sources, and a greedy converter would silently swallow all three.
     """
-    return _delete_kb(payload.name, force=payload.force)
+    return await _delete_kb_off_loop(payload.name, force=payload.force)
 
 
 @router.delete("/knowledge-bases/{kb_name}")
 async def delete_knowledge_base(kb_name: str, force: bool = False):
     """Delete a knowledge base."""
-    return _delete_kb(kb_name, force=force)
+    return await _delete_kb_off_loop(kb_name, force=force)
 
 
 class KbVisibilityRequest(BaseModel):
