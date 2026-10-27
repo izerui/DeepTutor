@@ -3708,19 +3708,54 @@ def _delete_kb_file(kb_name: str, filename: str, confirm: bool, force: bool):
     }
 
 
-def _withdrawal_conflict(exc) -> HTTPException | None:
-    """Counts-only 409 for an unconfirmed withdrawal; ``None``: no published path is hit.
+def _confirmed_withdrawal(
+    attempt,
+    *,
+    confirm: bool,
+    expected_paths: int | None,
+    expected_students: int | None,
+):
+    """Rule R1 confirmation around a KB withdrawal; a counts-only 409 when needed.
 
-    Runs after the registry writer and the KB's mutation ownership ended:
-    the teaching store comes first in the lock order.
+    The counting reads the teaching store only after the registry writer and
+    the KB's mutation ownership ended (lock order teaching -> KB -> Book).
     """
-    from deeptutor.teaching.access import withdrawal_confirmation_detail
+    from deeptutor.knowledge import registry
+    from deeptutor.teaching.access import WithdrawalConsentRequired, run_confirmed_withdrawal
 
-    detail = withdrawal_confirmation_detail(exc.referrer_ids, resource="knowledge base")
-    return None if detail is None else HTTPException(status_code=409, detail=detail)
+    try:
+        return run_confirmed_withdrawal(
+            attempt,
+            registry.KbWithdrawalNeedsConfirmation,
+            confirm=confirm,
+            expected_paths=expected_paths,
+            expected_students=expected_students,
+            resource="knowledge base",
+        )
+    except WithdrawalConsentRequired as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
 
 
-def _detach_kb(kb_name: str, *, force: bool = False, confirm: bool = False):
+def _detach_kb(
+    kb_name: str,
+    *,
+    force: bool = False,
+    confirm: bool = False,
+    expected_paths: int | None = None,
+    expected_students: int | None = None,
+):
+    """Delete-detach ``kb_name``; teacher paths need a confirmation bound to their counts."""
+    if force:
+        return _detach_kb_once(kb_name, force=True, confirmed=None)
+    return _confirmed_withdrawal(
+        lambda confirmed: _detach_kb_once(kb_name, force=False, confirmed=confirmed),
+        confirm=confirm,
+        expected_paths=expected_paths,
+        expected_students=expected_students,
+    )
+
+
+def _detach_kb_once(kb_name: str, *, force: bool, confirmed: frozenset[str] | None):
     """Authorize and unregister ``kb_name`` in one short registry transaction.
 
     Only the reference check, a same-filesystem rename to a hidden sibling and
@@ -3733,8 +3768,9 @@ def _detach_kb(kb_name: str, *, force: bool = False, confirm: bool = False):
 
     Rule R1: references never block the owner. Every live reference is
     revoked (``kb_deleted``) in the same transaction; when published teacher
-    paths cite the KB, an unconfirmed request is refused with a counts-only
-    409 first and ``confirm`` (or an admin's ``force``) proceeds.
+    paths cite the KB (directly or through a book), the transaction is
+    refused with :class:`KbWithdrawalNeedsConfirmation` unless ``confirmed``
+    covers them (or an admin's ``force``); see :func:`_confirmed_withdrawal`.
     """
     from deeptutor.knowledge import registry
     from deeptutor.services.rag.pipelines.lightrag.indexing_policy import IndexingPolicyError
@@ -3757,9 +3793,12 @@ def _detach_kb(kb_name: str, *, force: bool = False, confirm: bool = False):
                             raise HTTPException(
                                 status_code=403, detail="This knowledge base is read-only."
                             )
-                        registry.require_withdrawal_confirmation(
-                            references, confirm=confirm or force
-                        )
+                        if not force:
+                            registry.require_withdrawal_confirmation(
+                                references,
+                                confirm=confirmed is not None,
+                                confirmed_referrers=confirmed,
+                            )
                     detached = manager.detach_knowledge_base(
                         resolved_name, kb_id=record.kb_id if record is not None else None
                     )
@@ -3775,12 +3814,8 @@ def _detach_kb(kb_name: str, *, force: bool = False, confirm: bool = False):
         raise
     except IndexingPolicyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except registry.KbWithdrawalNeedsConfirmation as exc:
-        conflict = _withdrawal_conflict(exc)
-        if conflict is None:
-            # Only stale references of unpublished paths: nothing to confirm.
-            return _detach_kb(kb_name, force=force, confirm=True)
-        raise conflict from exc
+    except registry.KbWithdrawalNeedsConfirmation:
+        raise  # counted by _confirmed_withdrawal once every lock is released
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
     except Exception as e:
@@ -3802,19 +3837,35 @@ def _purge_detached_kb(detached) -> None:
         )
 
 
-def _delete_kb(kb_name: str, *, force: bool = False, confirm: bool = False) -> dict[str, str]:
+def _delete_kb(
+    kb_name: str,
+    *,
+    force: bool = False,
+    confirm: bool = False,
+    expected_paths: int | None = None,
+    expected_students: int | None = None,
+) -> dict[str, str]:
     """Delete ``kb_name`` synchronously (worker threads and direct callers)."""
-    _purge_detached_kb(_detach_kb(kb_name, force=force, confirm=confirm))
+    _purge_detached_kb(_detach_kb(
+        kb_name, force=force, confirm=confirm,
+        expected_paths=expected_paths, expected_students=expected_students,
+    ))
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
 
 async def _delete_kb_off_loop(
-    kb_name: str, *, force: bool = False, confirm: bool = False
+    kb_name: str,
+    *,
+    force: bool = False,
+    confirm: bool = False,
+    expected_paths: int | None = None,
+    expected_students: int | None = None,
 ) -> dict[str, str]:
     """Detach on a worker (busy KBs fail fast), then purge outside every lock."""
-    detached = await finish_document_worker(
-        functools.partial(_detach_kb, kb_name, force=force, confirm=confirm)
-    )
+    detached = await finish_document_worker(functools.partial(
+        _detach_kb, kb_name, force=force, confirm=confirm,
+        expected_paths=expected_paths, expected_students=expected_students,
+    ))
     await asyncio.to_thread(_purge_detached_kb, detached)
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
@@ -3822,8 +3873,11 @@ async def _delete_kb_off_loop(
 class DeleteKnowledgeBaseRequest(BaseModel):
     name: str
     force: bool = False
-    #: Rule R1: proceed although published teacher paths cite the KB.
+    #: Rule R1: proceed although published teacher paths cite the KB, as long
+    #: as the affected counts still equal the ones shown (when given).
     confirm: bool = False
+    expected_paths: int | None = Field(default=None, ge=0)
+    expected_students: int | None = Field(default=None, ge=0)
 
 
 @router.post("/knowledge-bases/delete")
@@ -3842,20 +3896,35 @@ async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
     declared ahead of the DELETE routes for linked folders, GitHub sources and
     web sources, and a greedy converter would silently swallow all three.
     """
-    return await _delete_kb_off_loop(payload.name, force=payload.force, confirm=payload.confirm)
+    return await _delete_kb_off_loop(
+        payload.name, force=payload.force, confirm=payload.confirm,
+        expected_paths=payload.expected_paths, expected_students=payload.expected_students,
+    )
 
 
 @router.delete("/knowledge-bases/{kb_name}")
-async def delete_knowledge_base(kb_name: str, force: bool = False, confirm: bool = False):
+async def delete_knowledge_base(
+    kb_name: str,
+    force: bool = False,
+    confirm: bool = False,
+    expected_paths: int | None = Query(default=None, ge=0),
+    expected_students: int | None = Query(default=None, ge=0),
+):
     """Delete a knowledge base."""
-    return await _delete_kb_off_loop(kb_name, force=force, confirm=confirm)
+    return await _delete_kb_off_loop(
+        kb_name, force=force, confirm=confirm,
+        expected_paths=expected_paths, expected_students=expected_students,
+    )
 
 
 class KbVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
-    #: Rule R1: make private although published teacher paths cite the KB.
+    #: Rule R1: make private although published teacher paths cite the KB, as
+    #: long as the affected counts still equal the ones shown (when given).
     confirm: bool = False
+    expected_paths: int | None = Field(default=None, ge=0)
+    expected_students: int | None = Field(default=None, ge=0)
 
 
 def _registered_record(kb_name: str):
@@ -3889,23 +3958,22 @@ async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
 
 
 def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, str]:
-    """Rule R1: the owner may always withdraw; teacher paths need ``confirm``."""
+    """Rule R1: the owner may always withdraw; teacher paths need a bound ``confirm``."""
     from deeptutor.knowledge import registry
 
-    confirm = payload.confirm
+    def attempt(confirmed: frozenset[str] | None):
+        return registry.set_visibility(
+            kb_id, payload.visibility, force=payload.force,
+            confirm=confirmed is not None, confirmed_referrers=confirmed,
+        )
+
     try:
-        try:
-            updated = registry.set_visibility(
-                kb_id, payload.visibility, force=payload.force, confirm=confirm
-            )
-        except registry.KbWithdrawalNeedsConfirmation as exc:
-            conflict = _withdrawal_conflict(exc)
-            if conflict is not None:
-                raise conflict from exc
-            # Only stale references of unpublished paths: nothing to confirm.
-            updated = registry.set_visibility(
-                kb_id, payload.visibility, force=payload.force, confirm=True
-            )
+        updated = attempt(None) if payload.force else _confirmed_withdrawal(
+            attempt,
+            confirm=payload.confirm,
+            expected_paths=payload.expected_paths,
+            expected_students=payload.expected_students,
+        )
     except registry.KbVisibilityError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except registry.KbRegistryError as exc:

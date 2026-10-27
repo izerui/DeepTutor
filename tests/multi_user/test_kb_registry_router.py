@@ -1075,17 +1075,25 @@ def test_http_validation_and_force_forwarding(knowledge, as_user, monkeypatch):
     app.include_router(knowledge.router, prefix="/api")
     calls = []
 
-    async def delete(name, *, force=False, confirm=False):
-        calls.append((name, force, confirm))
+    async def delete(name, *, force=False, confirm=False, expected_paths=None, expected_students=None):
+        calls.append((name, force, confirm, expected_paths, expected_students))
         return {"message": "deleted"}
 
     monkeypatch.setattr(knowledge, "_delete_kb_off_loop", delete)
     with as_user("root", role="admin"), TestClient(app) as client:
         assert client.delete("/api/knowledge-bases/kb:abc?force=true").status_code == 200
         assert client.post("/api/knowledge-bases/delete", json={"name": "a/b", "force": True}).status_code == 200
-        assert client.delete("/api/knowledge-bases/kb:c?confirm=true").status_code == 200
-        assert client.post("/api/knowledge-bases/delete", json={"name": "d", "confirm": True}).status_code == 200
+        assert client.delete(
+            "/api/knowledge-bases/kb:c?confirm=true&expected_paths=2&expected_students=3"
+        ).status_code == 200
+        assert client.post("/api/knowledge-bases/delete", json={
+            "name": "d", "confirm": True, "expected_paths": 1, "expected_students": 0,
+        }).status_code == 200
+        assert client.post(
+            "/api/knowledge-bases/delete", json={"name": "d", "expected_paths": -1}
+        ).status_code == 422
         assert client.put("/api/knowledge-bases/a/visibility", json={"visibility": "shared"}).status_code == 422
     assert calls == [
-        ("kb:abc", True, False), ("a/b", True, False), ("kb:c", False, True), ("d", False, True),
+        ("kb:abc", True, False, None, None), ("a/b", True, False, None, None),
+        ("kb:c", False, True, 2, 3), ("d", False, True, 1, 0),
     ]

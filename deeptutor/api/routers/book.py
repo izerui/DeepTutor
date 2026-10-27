@@ -862,40 +862,47 @@ def _reference_summary(
     }
 
 
-async def _withdrawal_conflict(
-    exc: book_registry.BookWithdrawalNeedsConfirmation,
-) -> HTTPException | None:
-    """Counts-only 409 (rule R1); ``None`` when no published teacher path is affected.
-
-    Called after the registry writers ended: teaching precedes them in lock order.
-    """
-    from deeptutor.teaching.access import withdrawal_confirmation_detail
-
-    detail = await asyncio.to_thread(
-        withdrawal_confirmation_detail, exc.referrer_ids, resource="book",
-    )
-    return None if detail is None else HTTPException(status_code=409, detail=detail)
-
-
 @router.delete("/books/{book_id}")
-async def delete_book(book_id: str, force: bool = False, confirm: bool = False) -> dict[str, Any]:
+async def delete_book(
+    book_id: str,
+    force: bool = False,
+    confirm: bool = False,
+    expected_paths: int | None = Query(default=None, ge=0),
+    expected_students: int | None = Query(default=None, ge=0),
+) -> dict[str, Any]:
     """Rule R1: references never block the owner; teacher paths need ``confirm``.
 
     Every reference is revoked (``book_deleted``) with the deletion. When a
     published teacher path cites the book, the first request answers a
-    counts-only 409 and nothing changes.
+    counts-only 409 and nothing changes; a confirmation only covers the paths
+    whose counts were shown (``expected_*``), otherwise fresh counts return.
+    The deletion stays on the event loop (its runtime finalization is bound
+    to it); only the teaching-store counting runs in a worker thread.
     """
-    try:
-        return await _delete_book(book_id, force=force, confirm=confirm)
-    except book_registry.BookWithdrawalNeedsConfirmation as exc:
-        conflict = await _withdrawal_conflict(exc)
-        if conflict is not None:
-            raise conflict from exc
-        # Only stale references of unpublished paths: nothing to confirm.
-        return await _delete_book(book_id, force=force, confirm=True)
+    from deeptutor.teaching.access import (
+        WITHDRAWAL_ROUNDS, withdrawal_refusal, withdrawal_unsettled,
+    )
+
+    if force:
+        return await _delete_book(book_id, force=True, confirmed=None)
+    confirmed: frozenset[str] | None = None
+    for _round in range(WITHDRAWAL_ROUNDS):
+        try:
+            return await _delete_book(book_id, force=False, confirmed=confirmed)
+        except book_registry.BookWithdrawalNeedsConfirmation as exc:
+            confirmed = frozenset(exc.referrer_ids)
+            refusal = await asyncio.to_thread(
+                withdrawal_refusal, confirmed, confirm=confirm, expected_paths=expected_paths,
+                expected_students=expected_students, resource="book",
+            )
+            if refusal is not None:
+                raise HTTPException(status_code=409, detail=refusal) from exc
+    raise HTTPException(status_code=409, detail=withdrawal_unsettled("book"))
 
 
-async def _delete_book(book_id: str, *, force: bool, confirm: bool) -> dict[str, Any]:
+async def _delete_book(
+    book_id: str, *, force: bool, confirmed: frozenset[str] | None,
+) -> dict[str, Any]:
     resolved = _resolve_book_or_404(book_id, delete=True)
     book_id = book_registry.strip_ref(book_id)
     user = get_current_user()
@@ -914,7 +921,10 @@ async def _delete_book(book_id: str, *, force: bool, confirm: bool) -> dict[str,
             record = _locked_writable(conn, resolved, current)
         if record is not None:
             references = book_registry._references_of(conn, record.book_id)
-            book_registry.require_withdrawal_confirmation(references, confirm=confirm or force)
+            if not force:
+                book_registry.require_withdrawal_confirmation(
+                    references, confirm=confirmed is not None, confirmed_referrers=confirmed,
+                )
         deleted = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
         if not deleted:
             raise HTTPException(status_code=404, detail="Book not found")
@@ -935,8 +945,11 @@ async def _delete_book(book_id: str, *, force: bool, confirm: bool) -> dict[str,
 class BookVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
-    #: Rule R1: make private although published teacher paths cite the book.
+    #: Rule R1: make private although published teacher paths cite the book, as
+    #: long as the affected counts still equal the ones shown (when given).
     confirm: bool = False
+    expected_paths: int | None = Field(default=None, ge=0)
+    expected_students: int | None = Field(default=None, ge=0)
     kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
 
 
@@ -1004,24 +1017,33 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
     if req.visibility == "public" and not is_teacher_or_admin():
         raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
-    def apply(confirm: bool) -> tuple[book_registry.BookRecord, dict[str, Any]]:
+    def apply(confirmed: frozenset[str] | None) -> tuple[book_registry.BookRecord, dict[str, Any]]:
         with book_sharing.shared_write() as conn:
             current = _locked_writable(conn, resolved, record)
             changed = book_sharing.change_visibility(
                 conn, current, req.visibility, force=req.force, kb_choices=req.kb_choices,
-                confirm=confirm,
+                confirm=confirmed is not None, confirmed_referrers=confirmed,
             )
             return changed, book_sharing._plan(conn, changed).to_dict()
 
+    def run() -> tuple[book_registry.BookRecord, dict[str, Any]]:
+        from deeptutor.teaching.access import run_confirmed_withdrawal
+
+        if req.force:
+            return apply(None)
+        return run_confirmed_withdrawal(
+            apply, book_registry.BookWithdrawalNeedsConfirmation, confirm=req.confirm,
+            expected_paths=req.expected_paths, expected_students=req.expected_students,
+            resource="book",
+        )
+
+    from deeptutor.teaching.access import WithdrawalConsentRequired
+
     try:
-        try:
-            updated, plan = apply(req.confirm)
-        except book_registry.BookWithdrawalNeedsConfirmation as exc:
-            conflict = await _withdrawal_conflict(exc)
-            if conflict is not None:
-                raise conflict from exc
-            # Only stale references of unpublished paths: nothing to confirm.
-            updated, plan = apply(True)
+        # Registry writers and the teaching-store counting stay off the event loop.
+        updated, plan = await asyncio.to_thread(run)
+    except WithdrawalConsentRequired as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
     except book_registry.BookRegistryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if user.is_admin and record.created_by != user.id:

@@ -379,6 +379,19 @@ def withdrawn_kb_reasons(course_id: str) -> dict[str, str]:
     }
 
 
+def withdrawn_book_reason(ref_id: str) -> str | None:
+    """``"made_private"`` when an unreadable course book still exists but its owner
+    made it private (rule R1); ``None`` when it is gone or unknown.
+
+    Courses do not register book references, so there is no revocation row:
+    an existing private record the course can no longer list is a withdrawal.
+    """
+    from deeptutor.book import registry as book_registry
+
+    record = book_registry.get_book(book_registry.strip_ref(ref_id))
+    return "made_private" if record is not None and record.visibility == "private" else None
+
+
 def _resource_kb_id(resource: Any) -> str:
     from deeptutor.knowledge import registry
 
@@ -408,10 +421,13 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
             "available": detail is not None,
             "detail": dict(detail or {}),
         }
+        reason = None
         if detail is None and resource.kind == "knowledge_base":
             reason = withdrawn.get(_resource_kb_id(resource))
-            if reason:
-                row["unavailable_reason"] = reason
+        elif detail is None and resource.kind == "book":
+            reason = await asyncio.to_thread(withdrawn_book_reason, resource.ref_id)
+        if reason:
+            row["unavailable_reason"] = reason
         resources.append(row)
 
     mastery_paths = [

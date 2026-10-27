@@ -34,15 +34,16 @@ registered custom reader always wins.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 import logging
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 REFERRER_KIND = "mastery_template"
 
@@ -144,6 +145,93 @@ def withdrawal_confirmation_detail(
             f"{paths} published teacher path(s) with {students} assigned student(s) cite this "
             f"{resource}; they will show it as unavailable. Confirm to continue."
         ),
+    }
+
+
+class WithdrawalConsentRequired(Exception):
+    """The counts-only 409 ``detail`` to answer (rule R1); nothing was written."""
+
+    def __init__(self, detail: dict[str, Any]) -> None:
+        self.detail = detail
+        super().__init__(detail["message"])
+
+
+def run_confirmed_withdrawal(
+    attempt: Callable[[frozenset[str] | None], T],
+    needs_confirmation: type[Exception],
+    *,
+    confirm: bool,
+    expected_paths: int | None,
+    expected_students: int | None,
+    resource: str,
+) -> T:
+    """Run a KB/book withdrawal so a confirmation covers exactly what was shown.
+
+    ``attempt(None)`` runs unconfirmed; ``attempt(ids)`` runs confirmed for
+    those teacher paths only (the registry refuses again for any other).
+    Each refusal (``needs_confirmation``, carrying ``referrer_ids``) is
+    counted after the registry writer ended (lock order teaching -> KB ->
+    Book). The request proceeds bound to those paths when no published path
+    is affected, or when it was confirmed and the counts still equal the
+    counts the owner saw; otherwise :class:`WithdrawalConsentRequired` carries
+    fresh counts to show.
+    """
+    bound: frozenset[str] | None = None
+    for _round in range(WITHDRAWAL_ROUNDS):
+        try:
+            return attempt(bound)
+        except needs_confirmation as exc:
+            bound = frozenset(getattr(exc, "referrer_ids", ()))
+            refusal = withdrawal_refusal(
+                bound, confirm=confirm, expected_paths=expected_paths,
+                expected_students=expected_students, resource=resource,
+            )
+            if refusal is not None:
+                raise WithdrawalConsentRequired(refusal) from exc
+    raise WithdrawalConsentRequired(withdrawal_unsettled(resource))
+
+
+#: Confirmed rounds before giving up while paths keep appearing.
+WITHDRAWAL_ROUNDS = 3
+
+
+def withdrawal_refusal(
+    template_ids: Iterable[str],
+    *,
+    confirm: bool,
+    expected_paths: int | None,
+    expected_students: int | None,
+    resource: str,
+) -> dict[str, Any] | None:
+    """The counts-only 409 detail, or ``None`` to proceed bound to these paths.
+
+    Proceed when no published path is affected, or when the owner confirmed
+    and the counts they saw (if sent) still hold. Read only (teaching store).
+    """
+    detail = withdrawal_confirmation_detail(template_ids, resource=resource)
+    if detail is None:
+        return None
+    if (
+        confirm
+        and expected_paths in (None, detail["affected_paths"])
+        and expected_students in (None, detail["affected_students"])
+    ):
+        return None
+    if confirm:
+        # What the owner confirmed no longer matches: show the new counts.
+        detail["changed"] = True
+    return detail
+
+
+def withdrawal_unsettled(resource: str) -> dict[str, Any]:
+    return {
+        "code": WITHDRAWAL_CONFIRMATION_CODE,
+        "requires_confirmation": True,
+        "changed": True,
+        "resource": resource,
+        "affected_paths": 0,
+        "affected_students": 0,
+        "message": f"The teacher paths citing this {resource} keep changing; try again.",
     }
 
 

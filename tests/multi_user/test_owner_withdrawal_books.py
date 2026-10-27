@@ -131,3 +131,31 @@ def test_book_references_and_sharing_list_only_the_owners_own_references(
         assert body["other_references"] == {"total": 1, "by_kind": {"mastery_template": 1}}
         text = json.dumps(body)
         assert book_cited_by_tinas_path not in text and tina not in text
+
+
+@pytest.mark.parametrize("operation", ["private", "delete"])
+def test_book_confirmation_is_bound_to_the_counts_that_were_shown(
+    book_cited_by_tinas_path, teaching_http, operation,
+):
+    """Review m1: a confirmation for other counts answers 409 with fresh counts."""
+    client = teaching_http.client
+
+    def withdraw(**extra):
+        if operation == "private":
+            return client.put(
+                "/api/books/bk_tom/visibility", json={"visibility": "private", **extra},
+                headers=_auth("tom"),
+            )
+        query = "&".join(f"{key}={str(value).lower()}" for key, value in extra.items())
+        return client.delete(f"/api/books/bk_tom{'?' + query if query else ''}", headers=_auth("tom"))
+
+    stale = withdraw(confirm=True, expected_paths=1, expected_students=5)
+    assert stale.status_code == 409
+    detail = stale.json()["detail"]
+    assert (detail["affected_paths"], detail["affected_students"], detail["changed"]) == (1, 2, True)
+    assert book_registry.get_book("bk_tom").visibility == "public"
+    assert book_registry.list_unavailable_book_references(
+        "mastery_template", book_cited_by_tinas_path,
+    ) == []
+    assert withdraw(confirm=True, expected_paths=1, expected_students=2).status_code == 200
+    assert book_registry.list_unavailable_book_references("mastery_template", book_cited_by_tinas_path)

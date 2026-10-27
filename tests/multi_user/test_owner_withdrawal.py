@@ -294,3 +294,151 @@ async def test_document_delete_conflicts_hide_other_accounts_referrers(
     assert detail["references"] == []
     assert detail["other_references"] == {"total": 1, "by_kind": {"course": 1}}
     assert "course_alpha" not in json.dumps(detail) and tina not in json.dumps(detail)
+
+
+# ---- fix round 1: indirect citations and confirmations bound to the counts ----
+
+
+def _book_source(book_id: str, label: str, position: int = 1) -> TopicSource:
+    return TopicSource(
+        id=f"b{position}", kind=TopicSourceKind.BOOK, source_id=book_id, label=label,
+        position=position,
+    )
+
+
+@pytest.mark.parametrize("also_direct", [False, True])
+@pytest.mark.parametrize("operation", ["private", "delete"])
+def test_kb_cited_through_a_book_of_a_published_path_needs_confirmation(
+    toms_kb, teaching_users, teacher_draft, publish_template, teaching_http, tmp_path,
+    operation, also_direct,
+):
+    """Review I1: path -> book -> KB counts like a direct citation (deduplicated)."""
+    from deeptutor.book import registry as book_registry
+
+    tina = teaching_users["tina"]["id"]
+    book = book_registry.register_book(
+        base_dir=tmp_path / "books", dir_name="book_bk_waves", title="Waves", created_by=tina,
+    )
+    book_registry.set_book_kb_links(book.book_id, {toms_kb.ref: toms_kb.kb_id})
+    sources = (_book_source(book.book_id, "Waves"),)
+    if also_direct:
+        sources = (_kb_source(toms_kb), *sources)
+    teacher_draft(sources=sources)
+    template_id = publish_template(
+        students=("sara", "sam"), book_choices={book.book_id: "reference_only"},
+    )["template"]["id"]
+    assert [r.kb_id for r in kb_registry.list_referenced("book", book.book_id)] == [toms_kb.kb_id]
+    client = teaching_http.client
+
+    def withdraw(**extra):
+        if operation == "private":
+            return client.put(
+                f"/api/knowledge-bases/{toms_kb.ref}/visibility",
+                json={"visibility": "private", **extra}, headers=_auth("tom"),
+            )
+        return client.post(
+            "/api/knowledge-bases/delete", json={"name": toms_kb.ref, **extra}, headers=_auth("tom"),
+        )
+
+    first = withdraw()
+    assert first.status_code == 409, first.text
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    assert "bk_waves" not in first.text
+    assert kb_registry.list_unavailable_references("book", book.book_id) == []
+    assert _materials_unavailable(teaching_http, template_id) == []
+
+    second = withdraw(confirm=True, expected_paths=1, expected_students=2)
+    assert second.status_code == 200, second.text
+    [revoked] = kb_registry.list_unavailable_references("book", book.book_id)
+    assert revoked.kb_id == toms_kb.kb_id
+    assert "Waves" in _materials_unavailable(teaching_http, template_id)
+
+
+def test_confirmation_is_bound_to_the_counts_that_were_shown(
+    cited_by_tinas_path, toms_kb, teaching_http, teaching_users, as_account,
+):
+    """Review m1: counts changed since they were shown -> 409 again, nothing written."""
+    client = teaching_http.client
+    url = f"/api/knowledge-bases/{toms_kb.ref}/visibility"
+    first = client.put(url, json={"visibility": "private"}, headers=_auth("tom"))
+    shown = first.json()["detail"]
+    assert (shown["affected_paths"], shown["affected_students"]) == (1, 2)
+    # Meanwhile Tina's assignment for Sam is revoked: the impact changed.
+    from deeptutor.teaching.service import TeachingService
+
+    with as_account("tina"):
+        TeachingService().revoke(cited_by_tinas_path, teaching_users["sam"]["id"])
+    stale = client.put(url, json={
+        "visibility": "private", "confirm": True, "expected_paths": 1, "expected_students": 2,
+    }, headers=_auth("tom"))
+    assert stale.status_code == 409
+    fresh = stale.json()["detail"]
+    assert (fresh["affected_paths"], fresh["affected_students"], fresh["changed"]) == (1, 1, True)
+    assert kb_registry.get_kb(toms_kb.kb_id).visibility == "public"
+    assert kb_registry.list_unavailable_references("mastery_template", cited_by_tinas_path) == []
+    done = client.put(url, json={
+        "visibility": "private", "confirm": True, "expected_paths": 1, "expected_students": 1,
+    }, headers=_auth("tom"))
+    assert done.status_code == 200, done.text
+
+
+def test_registry_confirmation_covers_only_the_confirmed_paths(toms_kb, teaching_users):
+    """A path appearing after the counts were shown is not covered by the consent."""
+    tina = teaching_users["tina"]["id"]
+    for template_id in ("tpl_shown", "tpl_later"):
+        kb_registry.add_reference(
+            toms_kb.kb_id, referrer_kind="mastery_template", referrer_id=template_id, created_by=tina,
+        )
+    with pytest.raises(kb_registry.KbWithdrawalNeedsConfirmation) as needs:
+        kb_registry.set_visibility(
+            toms_kb.kb_id, "private", confirm=True, confirmed_referrers={"tpl_shown"},
+        )
+    assert needs.value.referrer_ids == ("tpl_later", "tpl_shown")
+    assert kb_registry.get_kb(toms_kb.kb_id).visibility == "public"
+    kb_registry.set_visibility(
+        toms_kb.kb_id, "private", confirm=True, confirmed_referrers={"tpl_shown", "tpl_later"},
+    )
+    assert kb_registry.get_kb(toms_kb.kb_id).visibility == "private"
+
+
+@pytest.mark.asyncio
+async def test_course_state_explains_withdrawn_kbs_and_books(
+    toms_kb, teaching_users, as_account, tmp_path, monkeypatch,
+):
+    """Review m2: a book its owner made private reads like a withdrawn KB."""
+    from deeptutor.book import registry as book_registry
+    from deeptutor.services import courses, courses_state
+
+    tom = teaching_users["tom"]["id"]
+    withdrawn = book_registry.register_book(
+        base_dir=tmp_path / "books", dir_name="book_bk_priv", title="Optics", created_by=tom,
+    )
+    with as_account("tina"):
+        service = courses.CourseService(root=tmp_path / "tina-courses")
+        course = service.create(name="Borrowed")
+        service.attach_resource(course.id, kind="knowledge_base", ref_id=toms_kb.ref)
+        service.attach_resource(course.id, kind="book", ref_id=withdrawn.ref)
+        service.attach_resource(course.id, kind="book", ref_id="book:bk_gone")
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_kb.kb_id, "private")
+
+    async def no_indexes():
+        return {kind: {} for kind in courses.COURSE_RESOURCE_KINDS}
+
+    async def no_sessions(_course_id):
+        return [], []
+
+    async def no_questions(_session_ids):
+        return {"total": 0, "wrong": 0, "weak_categories": []}
+
+    monkeypatch.setattr(courses, "get_course_service", lambda: service)
+    monkeypatch.setattr(courses_state, "_resource_indexes", no_indexes)
+    monkeypatch.setattr(courses_state, "_session_state", no_sessions)
+    monkeypatch.setattr(courses_state, "_question_bank_state", no_questions)
+    with as_account("tina"):
+        state = await courses_state.build_course_state(course.id)
+    reasons = {row["ref_id"]: row.get("unavailable_reason") for row in state["resources"]}
+    assert reasons == {
+        toms_kb.ref: "made_private", withdrawn.ref: "made_private", "book:bk_gone": None,
+    }
+    assert not any(row["available"] for row in state["resources"])

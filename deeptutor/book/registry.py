@@ -9,7 +9,7 @@ and sync_protection, never nested independent registry writers.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -139,13 +139,18 @@ class BookWithdrawalNeedsConfirmation(BookVisibilityError):
 
 def require_withdrawal_confirmation(
     references: Sequence[BookReference], *, confirm: bool,
+    confirmed_referrers: Collection[str] | None = None,
 ) -> None:
-    """Refuse an unconfirmed withdrawal that would revoke teacher-path references."""
-    if confirm:
+    """Refuse a withdrawal that would revoke teacher-path references not confirmed.
+
+    ``confirmed_referrers`` binds ``confirm`` to the paths it was given for.
+    """
+    blocking = {ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS}
+    if not blocking:
         return
-    blocking = [ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS]
-    if blocking:
-        raise BookWithdrawalNeedsConfirmation(blocking)
+    if confirm and (confirmed_referrers is None or blocking <= set(confirmed_referrers)):
+        return
+    raise BookWithdrawalNeedsConfirmation(sorted(blocking))
 
 
 class BookKbResolutionError(BookRegistryError):
@@ -919,11 +924,13 @@ def share_book_kbs(
 def set_book_visibility(
     book_id: str, visibility: str, *, force: bool = False,
     kb_choices: Mapping[str, str] | None = None, confirm: bool = False,
+    confirmed_referrers: Collection[str] | None = None,
 ) -> BookRecord:
     from .sharing import set_visibility
 
     return set_visibility(
         book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
+        confirmed_referrers=confirmed_referrers,
     )
 
 

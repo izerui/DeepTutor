@@ -12,7 +12,7 @@ entry. Never call independent registry writers from the yielded connection.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from pathlib import Path
 import sqlite3
@@ -324,16 +324,18 @@ def share(
 
 def set_visibility(
     book_id: str, visibility: str, *, force: bool, kb_choices: Mapping[str, str] | None,
-    confirm: bool = False,
+    confirm: bool = False, confirmed_referrers: Collection[str] | None = None,
 ) -> books.BookRecord:
     with shared_write() as conn:
         return change_visibility(conn, books._target(conn, book_id), visibility,
-                                 force=force, kb_choices=kb_choices, confirm=confirm)
+                                 force=force, kb_choices=kb_choices, confirm=confirm,
+                                 confirmed_referrers=confirmed_referrers)
 
 
 def change_visibility(
     conn: sqlite3.Connection, record: books.BookRecord, visibility: str, *,
     force: bool, kb_choices: Mapping[str, str] | None, confirm: bool = False,
+    confirmed_referrers: Collection[str] | None = None,
 ) -> books.BookRecord:
     """Connection-taking transition for callers retaining a bound target.
 
@@ -356,7 +358,10 @@ def change_visibility(
             ref for ref in books._references_of(conn, record.book_id)
             if ref.created_by != record.created_by
         ]
-        books.require_withdrawal_confirmation(foreign, confirm=confirm or force)
+        if not force:
+            books.require_withdrawal_confirmation(
+                foreign, confirm=confirm, confirmed_referrers=confirmed_referrers,
+            )
         books._revoke(conn, record, foreign, reason="made_private")
     conn.execute(
         "UPDATE book_registry SET visibility = ?, updated_at = ? WHERE book_id = ?",

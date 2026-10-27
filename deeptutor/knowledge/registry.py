@@ -15,7 +15,7 @@ always private and only the owner's partners may reference them.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -188,15 +188,44 @@ class KbWithdrawalNeedsConfirmation(KbVisibilityError):
         )
 
 
+def teacher_path_referrers(references: Sequence[KbReference]) -> set[str]:
+    """Published-path ids that lose material if these references are revoked.
+
+    Direct ``mastery_template`` references, plus paths citing a *book* whose
+    reference is revoked: teaching treats a book with a revoked KB binding as
+    unavailable (``teaching.books.unavailable_dependencies``), so its paths
+    lose the whole book. Reads the book registry (lock order KB -> Book).
+    """
+    paths = {ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS}
+    book_ids = sorted({ref.referrer_id for ref in references if ref.referrer_kind == "book"})
+    if book_ids:
+        from deeptutor.book import registry as books
+
+        for book_id in book_ids:
+            paths.update(
+                ref.referrer_id for ref in books.list_book_references(book_id)
+                if ref.referrer_kind in books.CONFIRM_REFERRER_KINDS
+            )
+    return paths
+
+
 def require_withdrawal_confirmation(
-    references: Sequence[KbReference], *, confirm: bool
+    references: Sequence[KbReference],
+    *,
+    confirm: bool,
+    confirmed_referrers: Collection[str] | None = None,
 ) -> None:
-    """Refuse an unconfirmed withdrawal that would revoke teacher-path references."""
-    if confirm:
+    """Refuse a withdrawal that would cut off teacher paths the owner did not confirm.
+
+    ``confirm`` with ``confirmed_referrers`` binds the consent to the paths it
+    was given for: any further path (published meanwhile) asks again.
+    """
+    blocking = teacher_path_referrers(references)
+    if not blocking:
         return
-    blocking = [ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS]
-    if blocking:
-        raise KbWithdrawalNeedsConfirmation(blocking)
+    if confirm and (confirmed_referrers is None or blocking <= set(confirmed_referrers)):
+        return
+    raise KbWithdrawalNeedsConfirmation(sorted(blocking))
 
 
 @dataclass(frozen=True)
@@ -812,17 +841,23 @@ def relocate_base_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int
 
 
 def set_visibility(
-    kb_id: str, visibility: str, *, force: bool = False, confirm: bool = False
+    kb_id: str,
+    visibility: str,
+    *,
+    force: bool = False,
+    confirm: bool = False,
+    confirmed_referrers: Collection[str] | None = None,
 ) -> KbRecord:
     """Change visibility. Who may call this (D3, D12) is the API layer's decision.
 
     Rule R1: the owner may always make a public KB private. Other accounts'
     references move to the revoked table (reason ``made_private``, see
     :func:`list_unavailable_references`) and their referrers show the material
-    as unavailable. When any of them is a published teacher path, the first
-    request is refused with :class:`KbWithdrawalNeedsConfirmation` (nothing
-    written) and must be repeated with ``confirm`` (``force``, admin only by
-    the caller, implies it). References by the owner alone stay and simply
+    as unavailable. When a teacher path would lose it — citing it directly or
+    through a book whose reference is revoked — the request is refused with
+    :class:`KbWithdrawalNeedsConfirmation` (nothing written) and must be
+    repeated with ``confirm``, optionally bound to ``confirmed_referrers``
+    (``force``, admin only by the caller, skips the check). References by the owner alone stay and simply
     turn the KB into "readable through a reference".
 
     The record lookup, reference listing and decision all happen inside a single
@@ -845,7 +880,10 @@ def set_visibility(
                 ref for ref in _references_of(conn, record.kb_id)
                 if ref.created_by != record.created_by
             ]
-            require_withdrawal_confirmation(foreign, confirm=confirm or force)
+            if not force:
+                require_withdrawal_confirmation(
+                    foreign, confirm=confirm, confirmed_referrers=confirmed_referrers
+                )
         # Spec 7.4 / rule R1: a withdrawal cuts the other accounts off; their
         # references become "unavailable" instead of silently reading on.
         _revoke(conn, record, foreign, reason="made_private")
