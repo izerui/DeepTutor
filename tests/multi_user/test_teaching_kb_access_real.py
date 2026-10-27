@@ -928,3 +928,209 @@ def test_originals_follow_the_revision_the_copy_is_on(
     ]["revision"] == 2
     assert get(new, headers=_auth("sara")).status_code == 200
     assert get(old, headers=_auth("sara")).status_code == 404
+
+
+# ---- re-assigning a student parked on an older revision (B2-1) -----------------
+
+
+def _park_on_v1_then_publish_v2(real_path, teaching_users, as_account, make_kb, publish_template):
+    """Sara waits on a v1 question; v2 replaces K1 with K2; Sara is revoked."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.learning.models import PendingQuestion
+
+    with as_account("tina"):
+        make_kb(KnowledgeBaseManager(base_dir=str(real_path.root)), "new-keys", text="new")
+        k2 = kb_registry.ensure_registered(
+            real_path.root, "new-keys", created_by=teaching_users["tina"]["id"]
+        )
+    with as_account("sara"):
+        store = LearningStore()
+        point = store.load(real_path.path_id).modules[0].knowledge_points[0].id
+
+        def ask(tx):
+            tx.progress.pending_question = PendingQuestion(
+                question_id="q-open", knowledge_point_id=point, expected_answer="x"
+            )
+            tx.touch()
+
+        store.mutate(real_path.path_id, ask)
+    with as_account("tina"):
+        store = LearningStore()
+        topic = store.get_topic("topic_calculus")
+        store.put_topic(
+            topic.metadata,
+            [
+                TopicSource(
+                    id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k2.ref,
+                    label="New keys", position=0,
+                )
+            ],
+        )
+    publish_template(kb_choices={k2.kb_id: "reference_only"})
+    with as_account("tina"):
+        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+    # Revoking released K1: no active student needs revision 1 any more.
+    assert kb_registry.list_referenced("mastery_template", real_path.template_id) == [
+        kb_registry.get_kb(k2.kb_id)
+    ]
+    return k2
+
+
+@pytest.mark.asyncio
+async def test_reassigning_restores_the_old_revisions_materials(
+    real_path, teaching_users, as_account, make_kb, publish_template, monkeypatch
+):
+    """Final review C M-a: the re-assigned student's v1 question is answerable again."""
+    from deeptutor.multi_user.knowledge_access import resolve_for_rag
+
+    k2 = await asyncio.to_thread(
+        _park_on_v1_then_publish_v2,
+        real_path, teaching_users, as_account, make_kb, publish_template,
+    )
+    with as_account("tina"):
+        await asyncio.to_thread(
+            TeachingService().assign, real_path.template_id, [teaching_users["sara"]["id"]]
+        )
+    assert {
+        record.kb_id
+        for record in kb_registry.list_referenced("mastery_template", real_path.template_id)
+    } == {real_path.record.kb_id, k2.kb_id}
+
+    seen: dict = {}
+
+    async def body(context):
+        seen["kbs"] = list(context.knowledge_bases)
+        seen["k1"] = resolve_for_rag(real_path.record.ref).name
+        return True
+
+    ran = _probe(monkeypatch, body)
+    stream = _Stream()
+    with as_account("sara"):
+        await MasteryLoopPipeline(language="en").run(_context(real_path.path_id), stream)
+        origin = LearningStore().load_origin(real_path.path_id)
+    assert stream.errors == [] and ran == [True]
+    assert origin.revision == 1
+    assert seen == {"kbs": [real_path.record.ref], "k1": "answer-keys"}
+
+
+@pytest.mark.asyncio
+async def test_reassigning_does_not_restore_a_deleted_old_material(
+    real_path, teaching_users, as_account, make_kb, publish_template, monkeypatch
+):
+    """A K1 deleted meanwhile stays unavailable; the assignment itself still succeeds."""
+    k2 = await asyncio.to_thread(
+        _park_on_v1_then_publish_v2,
+        real_path, teaching_users, as_account, make_kb, publish_template,
+    )
+    with as_account("tina"):
+        kb_registry.unregister_kb(real_path.record.kb_id)
+        rows = await asyncio.to_thread(
+            TeachingService().assign, real_path.template_id, [teaching_users["sara"]["id"]]
+        )
+    assert [row["status"] for row in rows] == ["active"]
+    assert {
+        record.kb_id
+        for record in kb_registry.list_referenced("mastery_template", real_path.template_id)
+    } == {k2.kb_id}
+
+    ran = _probe(monkeypatch, None)
+    stream = _Stream()
+    with as_account("sara"):
+        await MasteryLoopPipeline(language="en").run(_context(real_path.path_id), stream)
+    assert ran == []
+    assert stream.errors[0][0] == MATERIALS_UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_reassigning_does_not_restore_an_old_material_its_owner_made_private(
+    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+):
+    """K1 was cited as Adam's public KB; Adam made it private after the release."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+
+    with as_account("adam"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        make_kb(KnowledgeBaseManager(base_dir=str(root)), "algebra")
+        k1 = kb_registry.ensure_registered(
+            root, "algebra", created_by=teaching_users["adam"]["id"]
+        )
+        kb_registry.set_visibility(k1.kb_id, "public")
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
+                label="Algebra notes", position=0,
+            ),
+        )
+    )
+    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+        "template"
+    ]["id"]
+    with as_account("sara"):
+        path_id = (await mastery_path.list_topics())["topics"][0]["path_id"]
+    with as_account("tina"):
+        tina_root = get_account_path_service().get_knowledge_bases_root()
+        tina_root.mkdir(parents=True, exist_ok=True)
+    k2 = await asyncio.to_thread(
+        _park_on_v1_then_publish_v2,
+        SimpleNamespace(
+            record=k1, template_id=template_id, path_id=path_id, root=tina_root
+        ),
+        teaching_users, as_account, make_kb, publish_template,
+    )
+    with as_account("adam"):
+        kb_registry.set_visibility(k1.kb_id, "private")
+    with as_account("tina"):
+        rows = await asyncio.to_thread(
+            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+        )
+    assert [row["status"] for row in rows] == ["active"]
+    assert {
+        record.kb_id for record in kb_registry.list_referenced("mastery_template", template_id)
+    } == {k2.kb_id}
+
+    ran = _probe(monkeypatch, None)
+    stream = _Stream()
+    with as_account("sara"):
+        await MasteryLoopPipeline(language="en").run(_context(path_id), stream)
+    assert ran == []
+    assert stream.errors[0][0] == MATERIALS_UNAVAILABLE
+
+
+def test_reassigning_restores_an_old_revisions_reference_only_book(
+    teaching_books, teaching_users, teacher_draft, publish_template, as_account, tmp_path
+):
+    """The book half of M-a: a released v1-only private book is cited again."""
+    book_registry.register_book(
+        base_dir=tmp_path / "books",
+        dir_name="book_bk_two",
+        title="Two",
+        created_by=teaching_users["tina"]["id"],
+    )
+    teacher_draft(sources=(_book_source("bk_own", "Waves"), _book_source("bk_two", "Two", 1)))
+    template_id = publish_template(
+        students=("sara",),
+        book_choices={"bk_own": "reference_only", "bk_two": "reference_only"},
+        kb_choices={teaching_books.answers.kb_id: "reference_only"},
+    )["template"]["id"]
+    with as_account("sara"):
+        asyncio.run(mastery_path.list_topics())
+    with as_account("tina"):
+        store = LearningStore()
+        topic = store.get_topic("topic_calculus")
+        store.put_topic(topic.metadata, [_book_source("bk_own", "Waves")])
+    publish_template(book_choices={"bk_own": "reference_only"})
+    sara = teaching_users["sara"]["id"]
+
+    def held() -> set[str]:
+        return {
+            r.book_id for r in book_registry.list_referenced_books("mastery_template", template_id)
+        }
+
+    with as_account("tina"):
+        TeachingService().revoke(template_id, sara)
+        assert held() == {"bk_own"}
+        TeachingService().assign(template_id, [sara])
+    assert held() == {"bk_own", "bk_two"}
