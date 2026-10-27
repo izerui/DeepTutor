@@ -1995,7 +1995,8 @@ async def retry_account_handoff(
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="No pending hand-over for this account")
-    except RuntimeError as exc:
+    except account_handoff.HandoffBlocked as exc:
+        # Kept and listed as "blocked"; nothing was handed over.
         raise HTTPException(status_code=409, detail=str(exc))
     actor = current.username if current else "local"
     logger.info("Admin '%s' retried the hand-over of deleted user %s", actor, user_id)

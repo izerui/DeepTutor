@@ -938,6 +938,7 @@ def handle_account_deleted(
     successor_id: str,
     stages: Sequence[str] = ACCOUNT_DELETION_STAGES,
     errors: list[str] | None = None,
+    quiet: bool = False,
 ) -> list[str]:
     """Keep teaching data alive when an account goes (spec §7.4).
 
@@ -951,12 +952,23 @@ def handle_account_deleted(
     Runs only the requested *stages* and returns those that failed (B2-9), so
     a pending account hand-over can retry exactly them. Every stage is safe to
     run again: a second transfer finds no paths left, a second revocation no
-    active assignment, and a material release only ever reduces. A failure's
-    ``stage: error`` line is appended to *errors* when given.
+    active assignment, and a material release only ever reduces — which is
+    why it covers every path the student was ever assigned, not just the ones
+    revoked now (a crash may have struck between revocation and release). A
+    failure's ``stage: error`` line is appended to *errors* when given; with
+    *quiet* (retries) its traceback is logged at DEBUG only.
     """
     store = TeachingStore()
     failed: list[str] = []
     errors = [] if errors is None else errors
+
+    def _failure(stage: str, error: Exception, message: str, *args: object) -> None:
+        if quiet:
+            logger.debug(message, *args, exc_info=True)
+        else:
+            logger.exception(message, *args)
+        errors.append(f"{stage}: {error!r}")
+
     # Independent hand-overs: one failing must not skip the other.
     if "teacher_paths" in stages:
         try:
@@ -966,44 +978,41 @@ def handle_account_deleted(
                     "Transferred %d teacher path(s) of %s to %s", moved, user_id, successor_id
                 )
         except Exception as exc:
-            logger.exception("Could not transfer teacher paths of deleted user %s", user_id)
+            _failure("teacher_paths", exc, "Could not transfer teacher paths of deleted user %s",
+                     user_id)
             failed.append("teacher_paths")
-            errors.append(f"teacher_paths: {exc!r}")
-    release: set[str] = set()
     if "student_assignments" in stages:
         try:
-            release = {
+            revoked = {
                 assignment.template_id
                 for assignment in store.assignments_for_student(user_id)
                 if assignment.status == "active"
             }
             store.revoke_all_for_student(user_id)
         except Exception as exc:
-            logger.exception("Could not revoke assignments of deleted user %s", user_id)
-            errors.append(f"student_assignments: {exc!r}")
+            _failure("student_assignments", exc,
+                     "Could not revoke assignments of deleted user %s", user_id)
             # Nothing was revoked, so there is nothing to release yet either.
             return [*failed, "student_assignments", "path_materials"]
-        for template_id in sorted(release):
+        for template_id in sorted(revoked):
             notify_instance_closed(template_id)
     if "path_materials" not in stages:
         return failed
-    if "student_assignments" not in stages:
-        # A retry after the revocation committed: release every path the
-        # student was on (reduce-only, so the already-released ones stay put).
-        try:
-            release = {a.template_id for a in store.assignments_for_student(user_id)}
-        except Exception as exc:
-            logger.exception("Could not read assignments of deleted user %s", user_id)
-            errors.append(f"path_materials: {exc!r}")
-            return [*failed, "path_materials"]
+    try:
+        # Every path the student was on: release is reduce-only, so paths
+        # released earlier stay as they are.
+        release = {a.template_id for a in store.assignments_for_student(user_id)}
+    except Exception as exc:
+        _failure("path_materials", exc, "Could not read assignments of deleted user %s", user_id)
+        return [*failed, "path_materials"]
     released = True
     for template_id in sorted(release):
         try:
             # Like a single revoke: release old-revision materials nobody needs.
             sync_material_references(template_id, store=store)
         except Exception as exc:
-            logger.exception("Could not release old materials of teacher path %s", template_id)
-            errors.append(f"path_materials ({template_id}): {exc!r}")
+            _failure(f"path_materials ({template_id})", exc,
+                     "Could not release old materials of teacher path %s", template_id)
             released = False
     if not released:
         failed.append("path_materials")

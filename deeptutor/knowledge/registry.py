@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS account_handoffs (
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
 );
 """
 
@@ -922,10 +923,14 @@ class AccountHandoff:
     last_error: str
     created_at: str
     updated_at: str
+    #: ``pending`` (retried at startup) or ``blocked`` (the id belongs to an
+    #: existing account again; only an admin retry re-checks it).
+    status: str = "pending"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "user_id": self.user_id,
+            "status": self.status,
             "username": self.username,
             "successor_id": self.successor_id,
             "stages": list(self.stages),
@@ -946,7 +951,21 @@ def _account_handoff(row: sqlite3.Row) -> AccountHandoff:
         last_error=str(row["last_error"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+        status=str(row["status"]) if "status" in row.keys() else "pending",
     )
+
+
+#: Longest ``last_error`` kept; the full traceback is in the server log.
+_HANDOFF_ERROR_LIMIT = 500
+
+
+def _ensure_handoff_status(conn: sqlite3.Connection) -> None:
+    """Add ``status`` to a table created before it existed (inside a writer)."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(account_handoffs)")}
+    if "status" not in columns:
+        conn.execute(
+            "ALTER TABLE account_handoffs ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'"
+        )
 
 
 def begin_account_handoff(
@@ -955,6 +974,7 @@ def begin_account_handoff(
     """Record a hand-over before its stages run (a crash leaves it pending)."""
     now = _now()
     with _write() as conn:
+        _ensure_handoff_status(conn)
         conn.execute(
             "INSERT INTO account_handoffs (user_id, username, successor_id, stages, attempts, "
             "last_error, created_at, updated_at) VALUES (?, ?, ?, ?, 0, '', ?, ?) "
@@ -984,7 +1004,9 @@ def finish_account_handoff(
     one has nothing to add.
     """
     now = _now()
+    error = error[:_HANDOFF_ERROR_LIMIT]
     with _write() as conn:
+        _ensure_handoff_status(conn)
         row = conn.execute(
             "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
         ).fetchone()
@@ -1005,7 +1027,7 @@ def finish_account_handoff(
         else:
             conn.execute(
                 "UPDATE account_handoffs SET successor_id = ?, stages = ?, attempts = ?, "
-                "last_error = ?, updated_at = ? WHERE user_id = ?",
+                "last_error = ?, updated_at = ?, status = 'pending' WHERE user_id = ?",
                 (successor_id, json.dumps(list(stages)), expected_attempts + 1, error, now,
                  user_id),
             )
@@ -1013,6 +1035,21 @@ def finish_account_handoff(
             "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
         ).fetchone()
     return _account_handoff(row)
+
+
+def block_account_handoff(user_id: str, reason: str) -> AccountHandoff | None:
+    """Park a record that must not run (kept, visible, skipped at startup)."""
+    with _write() as conn:
+        _ensure_handoff_status(conn)
+        conn.execute(
+            "UPDATE account_handoffs SET status = 'blocked', last_error = ?, updated_at = ? "
+            "WHERE user_id = ?",
+            (reason[:_HANDOFF_ERROR_LIMIT], _now(), user_id),
+        )
+        row = conn.execute(
+            "SELECT * FROM account_handoffs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return None if row is None else _account_handoff(row)
 
 
 def get_account_handoff(user_id: str) -> AccountHandoff | None:

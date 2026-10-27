@@ -175,16 +175,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Knowledge-base registry backfill failed")
 
-    # Retry account deletions whose hand-over (KBs, books, teacher paths)
-    # failed or was interrupted (B2-9). Bounded; each stage is idempotent.
-    try:
-        from deeptutor.multi_user.account_handoff import retry_pending_handoffs
-
-        handoff_report = await asyncio.to_thread(retry_pending_handoffs)
-        if handoff_report["retried"]:
-            logger.info("Pending account hand-overs: %s", handoff_report)
-    except Exception:
-        logger.exception("Pending account hand-over retry failed")
 
     # Initialize LLM client early so OPENAI_* env vars are available before
     # any downstream provider integrations start.
@@ -364,6 +354,16 @@ async def lifespan(app: FastAPI):
         logger.warning(f"v1 memory migration failed: {e}")
 
     app.state.ready = True
+    # Retry account deletions whose hand-over (KBs, books, teacher paths)
+    # failed or was interrupted (B2-9): in the background on a worker thread,
+    # bounded by count and time; each stage is idempotent. Serving never waits.
+    handoff_retry = None
+    try:
+        from deeptutor.multi_user.account_handoff import start_background_retry
+
+        handoff_retry = start_background_retry()
+    except Exception:
+        logger.exception("Could not start the pending account hand-over retry")
     yield
 
     # Execute on shutdown
@@ -371,6 +371,10 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown")
 
     install_progress_ports(broadcast=None, emit_task_event=None)
+
+    if handoff_retry is not None and not handoff_retry.done():
+        # The worker thread cannot be interrupted; give it a moment, then go on.
+        await asyncio.wait({handoff_retry}, timeout=5)
 
     try:
         await background_supervisor.close()

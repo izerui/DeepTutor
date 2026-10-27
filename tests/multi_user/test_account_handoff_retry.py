@@ -274,7 +274,7 @@ def test_startup_retries_pending_handoffs_and_logs_each_attempt(
     with caplog.at_level(logging.INFO, logger=account_handoff.logger.name):
         report = account_handoff.retry_pending_handoffs()
 
-    assert report == {"retried": 2, "cleared": 2, "pending": 0}
+    assert report == {"retried": 2, "cleared": 2, "pending": 0, "blocked": 0}
     assert account_handoff.list_pending_handoffs() == []
     assert _owned_by(world, world.adam)["knowledge_bases"]
     assert _owned_by(world, world.adam)["books"]
@@ -290,15 +290,152 @@ def test_startup_retry_is_bounded(world, teaching_users, monkeypatch):
 
     report = account_handoff.retry_pending_handoffs(limit=1)
 
-    assert report == {"retried": 1, "cleared": 1, "pending": 1}
+    assert report == {"retried": 1, "cleared": 1, "pending": 1, "blocked": 0}
 
 
-def test_the_lifespan_retries_pending_handoffs():
+def test_the_lifespan_schedules_the_retry_after_startup_without_awaiting_it():
     import inspect
 
     from deeptutor.api import main
 
-    assert "retry_pending_handoffs" in inspect.getsource(main.lifespan)
+    source = inspect.getsource(main.lifespan)
+    scheduled = source.index("start_background_retry()")
+    assert source.index("app.state.ready = True") < scheduled < source.index("yield")
+    assert "retry_pending_handoffs" not in source  # never awaited inline
+
+
+def test_the_background_retry_keeps_the_event_loop_serving(world, teaching_users, monkeypatch):
+    """The startup pass runs on a worker thread; the loop keeps ticking."""
+    import threading
+    import time
+
+    with monkeypatch.context() as broken:
+        broken.setattr(book_registry, "transfer_book_ownership", _broken)
+        auth_router._delete_admin_user("tina", _as_admin(teaching_users))
+
+    acquired, release = threading.Event(), threading.Event()
+
+    def hold_kb_writer():
+        with kb_registry._write():
+            acquired.set()
+            release.wait(1.0)
+
+    holder = threading.Thread(target=hold_kb_writer)
+    holder.start()
+    assert acquired.wait(5)
+
+    async def main():
+        task = account_handoff.start_background_retry()
+        ticks: list[float] = []
+        last = time.monotonic()
+        while not task.done():
+            await asyncio.sleep(0.01)
+            now = time.monotonic()
+            ticks.append(now - last)
+            last = now
+        return await task, ticks
+
+    try:
+        report, gaps = asyncio.run(main())
+    finally:
+        release.set()
+        holder.join()
+
+    assert report == {"retried": 1, "cleared": 1, "pending": 0, "blocked": 0}
+    assert sum(gaps) >= 0.8 and max(gaps) < 0.5
+    assert book_registry.get_book(world.book.book_id).created_by == world.adam
+
+
+def test_a_crash_between_revocation_and_release_is_finished_by_the_retry(world, monkeypatch):
+    """Write-ahead record holds every stage, but the revocation had committed."""
+    from deeptutor.multi_user.identity import delete_user
+
+    TeachingStore().revoke_all_for_student(world.sara)
+    assert delete_user("sara")
+    kb_registry.begin_account_handoff(world.sara, "sara", world.adam, ALL_STAGES)
+
+    released: list[str] = []
+    monkeypatch.setattr(
+        teaching_service, "sync_material_references",
+        lambda template_id, **_kwargs: released.append(template_id),
+    )
+
+    assert account_handoff.retry_handoff(world.sara) is None
+    assert released == [world.template_id]
+    assert account_handoff.list_pending_handoffs() == []
+
+
+def test_a_failing_retry_logs_one_line_without_a_traceback(world, teaching_users, monkeypatch, caplog):
+    with monkeypatch.context() as broken:
+        broken.setattr(kb_registry, "transfer_ownership", _broken)
+        broken.setattr(TeachingStore, "transfer_owner", _broken)
+        auth_router._delete_admin_user("tina", _as_admin(teaching_users))
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            account_handoff.retry_handoff(world.tina)
+
+    loud = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(loud) == 1
+    assert loud[0].exc_info is None
+    assert "still failing: knowledge_bases, teacher_paths" in loud[0].getMessage()
+    assert "injected stage failure" in loud[0].getMessage()
+
+
+def test_a_handoff_for_an_existing_account_is_blocked_not_retried_forever(
+    world, teaching_users, monkeypatch, caplog
+):
+    # The id belongs to a live account (e.g. a restored users file).
+    sam = teaching_users["sam"]["id"]
+    kb_registry.begin_account_handoff(sam, "sam", world.adam, ["books"])
+    calls: list[str] = []
+    monkeypatch.setattr(
+        book_registry, "transfer_book_ownership", lambda *a, **k: calls.append("books") or []
+    )
+
+    with pytest.raises(account_handoff.HandoffBlocked):
+        account_handoff.retry_handoff(sam)
+    [record] = account_handoff.list_pending_handoffs()
+    assert record.status == "blocked"
+    assert "existing account" in record.last_error
+    assert calls == []
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=account_handoff.logger.name):
+        report = account_handoff.retry_pending_handoffs()
+    assert report == {"retried": 0, "cleared": 0, "pending": 0, "blocked": 1}
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    assert calls == []
+
+    # Once the account is really gone an admin retry runs and clears it.
+    from deeptutor.multi_user.identity import delete_user
+
+    assert delete_user("sam")
+    assert account_handoff.retry_handoff(sam) is None
+    assert calls == ["books"]
+    assert account_handoff.list_pending_handoffs() == []
+
+
+def test_a_table_from_before_the_status_column_keeps_working(mu_isolated_root):
+    import sqlite3
+
+    path = kb_registry._db_path()
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        "DROP TABLE IF EXISTS account_handoffs;"
+        "CREATE TABLE account_handoffs (user_id TEXT PRIMARY KEY, username TEXT NOT NULL "
+        "DEFAULT '', successor_id TEXT NOT NULL, stages TEXT NOT NULL, attempts INTEGER NOT "
+        "NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, "
+        "updated_at TEXT NOT NULL);"
+        "INSERT INTO account_handoffs VALUES ('u_old', 'old', 'u_admin', '[\"books\"]', 1, "
+        "'', '2026-01-01', '2026-01-01');"
+    )
+    conn.close()
+
+    assert [(r.user_id, r.status) for r in account_handoff.list_pending_handoffs()] == [
+        ("u_old", "pending")
+    ]
+    assert account_handoff.retry_handoff("u_old") is None
+    assert account_handoff.list_pending_handoffs() == []
 
 
 # ---- admin API ---------------------------------------------------------------
@@ -345,6 +482,18 @@ def test_admin_lists_and_retries_pending_handoffs(world, monkeypatch, auth_http)
 
     again = auth_http("POST", f"/api/auth/account-handoffs/{world.tina}/retry", "adam")
     assert again.status_code == 404
+
+
+def test_admin_sees_a_blocked_handoff_and_its_retry_conflicts(world, auth_http):
+    kb_registry.begin_account_handoff(world.sara, "sara", world.adam, ["books"])
+
+    retried = auth_http("POST", f"/api/auth/account-handoffs/{world.sara}/retry", "adam")
+    assert retried.status_code == 409
+    assert "existing account" in retried.json()["detail"]
+    [listed] = auth_http("GET", "/api/auth/account-handoffs", "adam").json()
+    assert (listed["user_id"], listed["status"], listed["stages"]) == (
+        world.sara, "blocked", ["books"]
+    )
 
 
 @pytest.mark.parametrize("user", ["tom", "sara", "uma"])
