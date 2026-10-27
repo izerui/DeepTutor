@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 import html
 import json
+import logging
 import re
 import time
 import uuid
@@ -39,6 +40,8 @@ from deeptutor.learning.storage import LearningStore
 from deeptutor.learning.topic_generation import MAX_MODULE_LIMIT
 from deeptutor.services.settings.interface_settings import get_response_language
 from deeptutor.utils.json_parser import parse_json_response
+
+logger = logging.getLogger(__name__)
 
 
 def _check_instance_access(path_id: str) -> None:
@@ -917,7 +920,7 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
     """Subscribe to one living topic with durable revision replay."""
 
     from deeptutor.api.routers.auth import ws_auth_failed, ws_require_auth
-    from deeptutor.learning.event_hub import mastery_topic_event_hub
+    from deeptutor.learning.event_hub import TopicSignal, mastery_topic_event_hub
     from deeptutor.multi_user.context import reset_current_user
 
     user_token = await ws_require_auth(ws)
@@ -940,8 +943,14 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
             subscription = None
         if forward_task is not None:
             forward_task.cancel()
-            with suppress(asyncio.CancelledError):
+            try:
                 await forward_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                # A send to a socket that just went away; never let it skip
+                # the caller's cleanup.
+                logger.debug("Mastery topic forwarder ended with an error", exc_info=True)
             forward_task = None
 
     async def end_closed(path_id: str) -> None:
@@ -960,6 +969,7 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
     async def forward(path_id: str, store: LearningStore, *, instance: bool) -> None:
         nonlocal cursor
         assert subscription is not None
+        read_failing = False
         while True:
             if instance:
                 try:
@@ -970,9 +980,22 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
                     signal = None
             else:
                 signal = await subscription.get()
-            allowed, events = await asyncio.to_thread(
-                _authorized_tail, path_id, store, cursor, instance=instance
-            )
+            try:
+                allowed, events = await asyncio.to_thread(
+                    _authorized_tail, path_id, store, cursor, instance=instance
+                )
+            except Exception:
+                # A read error is not a revoke. The cursor stays put, so the
+                # next wake-up (or re-check) replays everything missed now.
+                if not read_failing:
+                    logger.warning(
+                        "Mastery live subscription to %s could not read; retrying on the next wake-up",
+                        path_id,
+                        exc_info=True,
+                    )
+                read_failing = True
+                continue
+            read_failing = False
             if not allowed:
                 # Nothing more of this copy reaches the socket; the socket
                 # itself stays open and answers new subscribe messages.
@@ -980,7 +1003,13 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
                 await end_closed(path_id)
                 return
             if signal is None:
-                continue
+                if not events:
+                    continue
+                # A periodic re-check found commits that sent no wake-up here
+                # (another worker): forward them like a regular change.
+                signal = TopicSignal(
+                    path_id=path_id, revision=0, reason="topic.changed", sequence=0
+                )
             if events:
                 cursor = max(cursor, max(event.revision for event in events))
             elif signal.revision <= cursor and signal.reason not in _SCREEN_ONLY_SIGNALS:
@@ -1056,8 +1085,10 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
             )
             forward_task = asyncio.create_task(forward(path_id, store, instance=access.is_instance))
     finally:
-        await stop_forwarding()
-        reset_current_user(user_token)
+        try:
+            await stop_forwarding()
+        finally:
+            reset_current_user(user_token)
 
 
 @router.get("/progress")
