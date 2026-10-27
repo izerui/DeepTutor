@@ -9,6 +9,8 @@
  */
 
 import { BookApiError } from "@/lib/book-api";
+import { currentMasteryTemplate } from "@/lib/mastery-template-scope";
+import { COURSE_UNAVAILABLE_KEY } from "@/lib/teacher-path-messages";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -23,6 +25,10 @@ const CODE_MESSAGES: Record<string, string> = {
 
 /** The message to show for a failed book operation. */
 export function bookErrorMessage(error: unknown, t: Translate): string {
+  // Opened from a teacher path that has since been revoked or archived.
+  if (error instanceof BookApiError && error.status === 403 && currentMasteryTemplate()) {
+    return t(COURSE_UNAVAILABLE_KEY);
+  }
   if (error instanceof BookApiError && error.code) {
     const known = CODE_MESSAGES[error.code];
     if (known) return t(known);

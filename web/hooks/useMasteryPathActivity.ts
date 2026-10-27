@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchProgressEvents, type MasteryEvent } from "@/lib/learning-api";
+import {
+  fetchProgressEvents,
+  isCourseUnavailable,
+  type MasteryEvent,
+} from "@/lib/learning-api";
 import {
   MasteryTopicSocket,
   type MasterySocketEnvelope,
@@ -14,6 +18,8 @@ interface SocketStatus {
   pathId: string | null;
   connection: MasteryConnectionState;
   error: string | null;
+  /** The teacher path behind this id was closed (revoked or archived). */
+  unavailable?: boolean;
 }
 
 export interface MasteryPathActivity {
@@ -23,8 +29,24 @@ export interface MasteryPathActivity {
   signal: number;
   connection: MasteryConnectionState;
   error: string | null;
+  /**
+   * A teacher path that was revoked or archived while open: its feed now
+   * answers 403. Checked on focus, so a stale tab finds out on return.
+   */
+  unavailable: boolean;
   /** Reconcile from durable storage immediately. */
   refresh: () => void;
+}
+
+/** Socket state changes never reopen a path its REST feed found closed. */
+function keepClosed(
+  previous: SocketStatus,
+  pathId: string,
+  next: SocketStatus,
+): SocketStatus {
+  return previous.pathId === pathId && previous.unavailable
+    ? { ...next, unavailable: true }
+    : next;
 }
 
 /** The feed is stamped with its path so a route switch never flashes history. */
@@ -177,12 +199,18 @@ export function useMasteryPathActivity(
           setFeed((previous) =>
             mergeEventBatch(previous, pathId, since, batch, revision),
           );
+          setSocketStatus((previous) =>
+            previous.pathId === pathId && previous.unavailable
+              ? { ...previous, unavailable: false }
+              : previous,
+          );
         })
         .catch((reason: unknown) => {
           if (disposed || reconciliation?.signal.aborted) return;
           setSocketStatus({
             pathId,
             connection: "offline",
+            unavailable: isCourseUnavailable(reason, pathId),
             error:
               reason instanceof Error
                 ? reason.message
@@ -207,21 +235,21 @@ export function useMasteryPathActivity(
         },
         onConnecting: () => {
           if (!disposed) {
-            setSocketStatus({ pathId, connection: "connecting", error: null });
+            setSocketStatus((previous) => keepClosed(previous, pathId, { pathId, connection: "connecting", error: null }));
           }
         },
         onLive: () => {
           if (disposed) return;
-          setSocketStatus({ pathId, connection: "live", error: null });
+          setSocketStatus((previous) => keepClosed(previous, pathId, { pathId, connection: "live", error: null }));
         },
         onDisconnect: () => {
           if (disposed) return;
-          setSocketStatus({ pathId, connection: "offline", error: null });
+          setSocketStatus((previous) => keepClosed(previous, pathId, { pathId, connection: "offline", error: null }));
           reconcile();
         },
         onError: (message) => {
           if (disposed) return;
-          setSocketStatus({ pathId, connection: "offline", error: message });
+          setSocketStatus((previous) => keepClosed(previous, pathId, { pathId, connection: "offline", error: message }));
         },
       },
       initialRevision,
@@ -269,6 +297,7 @@ export function useMasteryPathActivity(
     signal: current.signal,
     connection: status.connection,
     error: status.error,
+    unavailable: Boolean(status.unavailable),
     refresh,
   };
 }

@@ -15,6 +15,7 @@ import { useMasteryPathActivity } from "@/hooks/useMasteryPathActivity";
 import {
   fetchMasteryTopic,
   fetchMasteryTopicSessions,
+  isCourseUnavailable,
   type MasteryTopic,
 } from "@/lib/learning-api";
 import {
@@ -59,6 +60,8 @@ export function useMasteryStudySession(
 
   const [topic, setTopic] = useState<MasteryTopic | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
+  // The teacher path was revoked or archived (the topic read answers 403).
+  const [topicClosed, setTopicClosed] = useState(false);
   const currentRouteKey = `${pathId}:${routeSessionId || "new"}`;
   const [sessionResolution, setSessionResolution] = useState<{
     routeKey: string;
@@ -78,12 +81,16 @@ export function useMasteryStudySession(
     let active = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the route-owned request state before fetching.
     setTopicError(null);
+    setTopicClosed(false);
     void fetchMasteryTopic(pathId, { cache: "no-store" })
       .then((result) => {
-        if (active) setTopic(result);
+        if (!active) return;
+        setTopic(result);
+        setTopicClosed(false);
       })
       .catch((reason: unknown) => {
         if (!active) return;
+        setTopicClosed(isCourseUnavailable(reason, pathId));
         setTopicError(
           reason instanceof Error
             ? reason.message
@@ -306,6 +313,8 @@ export function useMasteryStudySession(
   return {
     topic,
     topicError,
+    /** A closed teacher path: revoked or archived, here or found by the feed. */
+    courseUnavailable: topicClosed || activity.unavailable,
     knowledgeBases,
     sessionError,
     sessionLoading,

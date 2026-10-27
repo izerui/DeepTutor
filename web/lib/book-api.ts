@@ -1,5 +1,6 @@
 import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
 import { apiFetch, apiUrl, wsUrl } from "@/lib/api";
+import { MASTERY_TEMPLATE_HEADER, currentMasteryTemplate } from "@/lib/mastery-template-scope";
 import {
   BookSocketOperationError,
   runBookSocketOperation,
@@ -62,9 +63,16 @@ function requestOverSocket<T extends BookWsEvent>(
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // R9: a book opened from a teacher path's Study page carries the path in
+  // its URL; only original-content GETs honour it server-side.
+  const template = currentMasteryTemplate();
   const res = await apiFetch(apiUrl(`${BASE}${path}`), {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(template ? { [MASTERY_TEMPLATE_HEADER]: template } : {}),
+      ...(init?.headers || {}),
+    },
   });
   if (!res.ok) {
     let detail: string;

@@ -25,6 +25,8 @@ import InlineMarkdown from "@/components/common/InlineMarkdown";
 import { useCardSubmission } from "@/hooks/use-card-submission";
 import { REPLY_NOT_DELIVERED } from "@/lib/ask-user-state";
 import { browserPath } from "@/lib/workspace-scope";
+import { useMasteryTemplate } from "@/components/space/learning/mastery-template-context";
+import { withMasteryTemplate } from "@/lib/mastery-template-scope";
 import {
   MASTERY_ANSWER_REJECTED_MESSAGE,
   type MasteryGradeResult,
@@ -127,6 +129,9 @@ const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
   onChallenge, groupInput, rejectionKey,
 }: MasteryQuestionCardProps & { groupInput?: GroupInput }) {
   const { t } = useTranslation();
+  // R9: originals of an open teacher path are read in its context ("" elsewhere).
+  const templateId = useMasteryTemplate();
+  const sourceUrl = (url: string) => browserPath(withMasteryTemplate(url, templateId));
   const [picked, setPicked] = useState<string>(() => grade?.final === false ? grade.learnerAnswer : "");
   const [skipping, setSkipping] = useState(false);
   const [sourceUnavailable, setSourceUnavailable] = useState(false);
@@ -224,8 +229,8 @@ const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
         {question.visual.pixelsInspected === false && <p>{t("Current model input has no verified source pixels. Retrieve the image again with a vision-capable model before grading.")}</p>}
         {question.visual.sources.map((source, index) => <figure key={`${source.imageUrl}-${index}`}>
           {/* Authenticated source endpoints need the browser's own cookies. */}
-          <a href={browserPath(source.imageUrl)} target="_blank" rel="noreferrer"><img src={browserPath(source.imageUrl)} alt={t("Original source evidence")} onError={() => setSourceUnavailable(true)} className="max-h-80 max-w-full object-contain" /></a>
-          <figcaption><a className="underline" href={browserPath(source.url)} target="_blank" rel="noreferrer">{source.sourcePath}{source.page ? ` · ${t("Page")} ${source.page}` : ""}</a></figcaption>
+          <a href={sourceUrl(source.imageUrl)} target="_blank" rel="noreferrer"><img src={sourceUrl(source.imageUrl)} alt={t("Original source evidence")} onError={() => setSourceUnavailable(true)} className="max-h-80 max-w-full object-contain" /></a>
+          <figcaption><a className="underline" href={sourceUrl(source.url)} target="_blank" rel="noreferrer">{source.sourcePath}{source.page ? ` · ${t("Page")} ${source.page}` : ""}</a></figcaption>
         </figure>)}
       </div>}
 

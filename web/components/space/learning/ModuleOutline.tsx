@@ -24,6 +24,7 @@ import { knowledgeTypeLabel, topicDisplayName, type Translate } from "./format";
 import { ObjectiveDetail } from "./ObjectiveDetail";
 
 function statusLabel(point: MapKnowledgePoint, t: Translate) {
+  if (point.needs_reassessment) return t("Needs re-assessment");
   if (point.mastery_source === "learner") return t("Marked as known");
   if (point.status === "mastered") return t("Mastered");
   if (point.status === "learning") return t("In progress");
@@ -88,7 +89,8 @@ export function ModuleOutline({
   selectedId: string | null;
   zh: boolean;
   onSelect: (id: string | null) => void;
-  onOverride: (
+  /** Absent on a teacher's path: mastery is not claimed by hand there. */
+  onOverride?: (
     objectiveId: string,
     mastered: boolean,
     note: string,
@@ -169,9 +171,17 @@ export function ModuleOutline({
                           {t("Next")}
                         </span>
                       )}
-                      <span className="hidden shrink-0 text-[11px] text-[var(--muted-foreground)] sm:inline">
-                        {statusLabel(point, t)}
-                      </span>
+                      {point.needs_reassessment ? (
+                        // Shown on every width: it is the one status that asks
+                        // the learner to do something.
+                        <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          {statusLabel(point, t)}
+                        </span>
+                      ) : (
+                        <span className="hidden shrink-0 text-[11px] text-[var(--muted-foreground)] sm:inline">
+                          {statusLabel(point, t)}
+                        </span>
+                      )}
                       <ChevronRight
                         className={`h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition ${
                           selected ? "rotate-90" : ""
@@ -213,7 +223,8 @@ function ObjectiveDrawer({
   revision: number;
   zh: boolean;
   onClose: () => void;
-  onOverride: (
+  /** Absent on a teacher's path: mastery is not claimed by hand there. */
+  onOverride?: (
     objectiveId: string,
     mastered: boolean,
     note: string,
@@ -238,6 +249,7 @@ function ObjectiveDrawer({
   }, [objectiveId, pathId, revision, t]);
 
   const applyOverride = async (mastered: boolean) => {
+    if (!onOverride) return;
     setBusy(true);
     setError(null);
     try {
@@ -262,6 +274,11 @@ function ObjectiveDrawer({
             <div>
               <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
                 <span>{knowledgeTypeLabel(report.type, t)}</span>
+                {report.needs_reassessment && (
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-400">
+                    {t("Needs re-assessment")}
+                  </span>
+                )}
                 {report.mastery_source === "learner" && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[var(--muted-foreground)]">
                     <Sparkles className="h-3 w-3" />
@@ -280,7 +297,7 @@ function ObjectiveDrawer({
           </div>
           <ObjectiveDetail report={report} zh={zh} />
 
-          {!report.assessed_mastered && (
+          {onOverride && !report.assessed_mastered && (
             <div className="mt-5 border-t border-[var(--border)] pt-4">
               {report.mastery_source === "learner" ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">

@@ -39,8 +39,8 @@ export function PathTitle({
    * real name and quietly cost the path its fallback.
    */
   storedName: string;
-  /** Resolves once the new name is committed; may reject. */
-  onRename: (name: string) => Promise<void>;
+  /** Resolves once the new name is committed; may reject. Absent = read-only. */
+  onRename?: (name: string) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -59,7 +59,7 @@ export function PathTitle({
   }, [editing]);
 
   const commit = async () => {
-    if (saving) return;
+    if (saving || !onRename) return;
     const next = draft.trim();
     if (next === storedName.trim()) {
       setEditing(false);
@@ -84,22 +84,24 @@ export function PathTitle({
 
   const TITLE_TYPE = PAGE_TITLE_CLASS;
 
-  if (!editing) {
+  if (!editing || !onRename) {
     return (
       <div className="flex min-w-0 items-center gap-2">
         <h1 className={`truncate ${TITLE_TYPE}`}>{displayName}</h1>
         {/* Always present, like the reset/delete controls beside it. A
             hover-revealed affordance does not exist on a touch screen. */}
-        <Tooltip label={t("Rename")}>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label={t("Rename")}
-            className="shrink-0 cursor-pointer rounded-lg p-1.5 text-[var(--muted-foreground)]/60 transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-        </Tooltip>
+        {onRename && (
+          <Tooltip label={t("Rename")}>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label={t("Rename")}
+              className="shrink-0 cursor-pointer rounded-lg p-1.5 text-[var(--muted-foreground)]/60 transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        )}
       </div>
     );
   }

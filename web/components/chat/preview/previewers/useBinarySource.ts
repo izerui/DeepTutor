@@ -11,7 +11,7 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 export type BinarySourceState =
   | { kind: "loading" }
   | { kind: "ready"; buffer: ArrayBuffer; objectUrl?: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; /** HTTP status of a refused fetch. */ status?: number };
 
 /**
  * Fetch the bytes at *url* as an ArrayBuffer for a client-side office
@@ -37,7 +37,11 @@ export function useBinarySource(url: string | null, objectMimeType?: string): Bi
     (async () => {
       try {
         const res = await apiFetch(url, { signal: controller.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          if (controller.signal.aborted || reqIdRef.current !== reqId) return;
+          setState({ kind: "error", message: `HTTP ${res.status}`, status: res.status });
+          return;
+        }
         const lengthHeader = res.headers.get("content-length");
         if (lengthHeader && Number(lengthHeader) > MAX_BYTES) {
           throw new Error(

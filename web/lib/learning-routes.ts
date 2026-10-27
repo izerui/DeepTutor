@@ -1,4 +1,5 @@
 import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
+import { currentMasteryTemplate, withMasteryTemplate } from "@/lib/mastery-template-scope";
 
 const inWorkspace = (path: string, id: string) => id ? scopedUrl(path, id) : path;
 
@@ -16,7 +17,10 @@ const segment = (value: string) => encodeURIComponent(value.trim())
 export function bookRoute(bookId?: string | null, pageId?: string | null, workspaceId = activeWorkspaceId()): string {
   if (!bookId?.trim()) return inWorkspace(BOOKS_HOME, workspaceId)
   const book = `${BOOKS_HOME}/${segment(bookId)}`
-  return inWorkspace(pageId?.trim() ? `${book}/pages/${segment(pageId)}` : book, workspaceId)
+  const route = inWorkspace(pageId?.trim() ? `${book}/pages/${segment(pageId)}` : book, workspaceId)
+  // R9: moving between a teacher path's book pages keeps the path's context
+  // (the library home above does not need it).
+  return withMasteryTemplate(route, currentMasteryTemplate())
 }
 export function masteryTopicRoute(pathId: string, workspaceId = activeWorkspaceId()): string {
   return inWorkspace(`${MASTERY_HOME}/${segment(pathId)}`, workspaceId)

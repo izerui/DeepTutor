@@ -228,7 +228,7 @@ export async function fetchProgressEvents(
     ),
     init,
   );
-  if (!res.ok) throw new Error(`Failed to fetch path events: ${res.status}`);
+  if (!res.ok) throw new MasteryApiError(`Failed to fetch path events: ${res.status}`, res.status);
   return (await res.json()).events as MasteryEvent[];
 }
 
@@ -243,6 +243,10 @@ export interface ObjectiveAttempt {
   is_correct: boolean;
   error_type: string;
   at: number;
+  /** Kept for the record but not evidence, e.g. answered before a teacher redefined the objective. */
+  voided?: boolean;
+  /** `objective_redefined`, or the note recorded when the assessment was voided. */
+  void_reason?: string;
 }
 
 export interface ObjectiveReview {
@@ -294,6 +298,8 @@ export interface ObjectiveReport {
   gate: "quantitative" | "qualitative";
   mastered: boolean;
   assessed_mastered: boolean;
+  /** A teacher redefined this objective; earlier answers no longer count (R11). */
+  needs_reassessment?: boolean;
   explained?: { summary: string; timestamp: number };
   required_visual_tasks?: string[];
   demonstrated_visual_tasks?: string[];
@@ -363,7 +369,7 @@ export async function redoProgress(bookId: string) {
     apiUrl(`/api/mastery-paths/progress/${encodeURIComponent(bookId)}/redo`),
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(`Failed to redo progress: ${res.status}`);
+  if (!res.ok) throw new MasteryApiError(`Failed to redo progress: ${res.status}`, res.status);
   return res.json();
 }
 
@@ -619,9 +625,35 @@ async function masteryJson<T>(
     } catch {
       // The status remains actionable when an upstream proxy returns HTML.
     }
-    throw new Error(`Failed to ${action} (${res.status})${detail}`);
+    throw new MasteryApiError(`Failed to ${action} (${res.status})${detail}`, res.status);
   }
   return res.json() as Promise<T>;
+}
+
+/** A failed mastery request; the status is what callers branch on, never the English text. */
+export class MasteryApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "MasteryApiError";
+  }
+}
+
+/** Prefix of a learner's copy of a teacher path (`assigned_<template id>`). */
+export const TEACHER_INSTANCE_PREFIX = "assigned_";
+
+/**
+ * A teacher path the learner can no longer open: its assignment was revoked
+ * or the path archived. The server answers 403 on every route that names it.
+ */
+export function isCourseUnavailable(error: unknown, pathId: string): boolean {
+  return (
+    error instanceof MasteryApiError &&
+    error.status === 403 &&
+    pathId.startsWith(TEACHER_INSTANCE_PREFIX)
+  );
 }
 
 export async function fetchMasteryTopics(

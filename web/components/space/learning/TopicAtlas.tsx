@@ -1,6 +1,7 @@
 'use client'
 
 import { pageGridClass } from '@/components/layout/FeaturePage'
+import type { ReactNode } from 'react'
 import {
   LearningShell,
   LearningEmptyState,
@@ -25,7 +26,7 @@ import { libraryItemKey } from '@/lib/learning-library'
 import type { TeacherTemplate } from '@/lib/teaching-api'
 import { topicDisplayName } from './format'
 import { TeacherCardActions, UnlistedTeacherTemplates } from './TeacherCardActions'
-import { isTeacherInstance, templateForTopic } from './teaching'
+import { isTeacherInstance, splitAssignedTopics, templateForTopic } from './teaching'
 import { TopicMapCard } from './TopicMapCard'
 
 export function TopicAtlas({
@@ -43,10 +44,11 @@ export function TopicAtlas({
   topics: MasteryTopic[]
   loading: boolean
   error: string | null
-  onCreate: (trigger: HTMLButtonElement) => void
+  /** Absent when this account may not create personal paths. */
+  onCreate?: (trigger: HTMLButtonElement) => void
   onRetry: () => void
   /** Rendered beside the eyebrow when this visit belongs to one course. */
-  scopeChip?: React.ReactNode
+  scopeChip?: ReactNode
   /** Present for teachers and admins: their own templates, to decorate their own cards. */
   teacherTemplates?: TeacherTemplate[]
   /** Templates without a card here (another teacher's, or without a draft): manage only. */
@@ -67,6 +69,16 @@ export function TopicAtlas({
   )
   const dueTopics = activeTopics.filter(topic => topic.reviews.some(review => review.due))
   const firstDueTopic = dueTopics[0]
+  const { assigned, own } = splitAssignedTopics(activeTopics)
+  const teacherFooter = (topic: MasteryTopic): ReactNode =>
+    teacherTemplates && onPublish && onManage && !isTeacherInstance(topic) ? (
+      <TeacherCardActions
+        topic={topic}
+        template={templateForTopic(teacherTemplates, topic)}
+        onPublish={onPublish}
+        onManage={onManage}
+      />
+    ) : undefined
 
   return (
     <LearningShell
@@ -77,17 +89,21 @@ export function TopicAtlas({
       )}
       scopeChip={scopeChip}
       action={
-        <button
-          type="button"
-          onClick={event => onCreate(event.currentTarget)}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)]  transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
-        >
-          <Plus className="h-4 w-4" />
-          {t('New topic')}
-        </button>
+        onCreate ? (
+          <button
+            type="button"
+            onClick={event => onCreate?.(event.currentTarget)}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 text-sm font-medium text-[var(--primary-foreground)]  transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2"
+          >
+            <Plus className="h-4 w-4" />
+            {t('New topic')}
+          </button>
+        ) : null
       }
     >
-      <div className="mt-6 flex items-center justify-between border-b border-border pb-4">{control}</div>
+      <div className="mt-6 flex items-center justify-between border-b border-border pb-4">
+        {control}
+      </div>
       {dueCount > 0 && (
         <section className="mt-8 flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted-foreground)]/[0.07] px-4 py-3.5 text-sm text-[var(--foreground)] sm:flex-row sm:items-center">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted-foreground)]/15 text-[var(--muted-foreground)]">
@@ -121,7 +137,12 @@ export function TopicAtlas({
                   MASTERY_OPENING_SCOPE
                 )
               }
-              href={masterySessionRoute(firstDueTopic.path_id, 'review', '', firstDueTopic.content_workspace_id ?? '')}
+              href={masterySessionRoute(
+                firstDueTopic.path_id,
+                'review',
+                '',
+                firstDueTopic.content_workspace_id ?? ''
+              )}
               className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--primary)] px-3.5 text-xs font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 "
             >
               {t('Start review')}: {topicDisplayName(firstDueTopic, t)}
@@ -135,43 +156,100 @@ export function TopicAtlas({
       {loading ? (
         <LearningSkeleton count={6} />
       ) : activeTopics.length > 0 ? (
-        <section
-          aria-label={t('Active learning topics')}
-          className={`mt-9 ${pageGridClass(3)}`}
-        >
-          {activeTopics.map(topic => (
-            <TopicMapCard
-              key={libraryItemKey(topic, topic.path_id)}
-              topic={topic}
-              footer={
-                teacherTemplates && onPublish && onManage && !isTeacherInstance(topic) ? (
-                  <TeacherCardActions
+        <>
+          {assigned.length > 0 && (
+            <section aria-labelledby="mastery-assigned-heading" className="mt-9">
+              <h2
+                id="mastery-assigned-heading"
+                className="text-[12px] font-semibold text-[var(--foreground)]"
+              >
+                {t('Assigned by your teachers')}
+              </h2>
+              <div className={`mt-3 ${pageGridClass(3)}`}>
+                {assigned.map(topic => (
+                  <TopicMapCard
+                    key={libraryItemKey(topic, topic.path_id)}
                     topic={topic}
-                    template={templateForTopic(teacherTemplates, topic)}
-                    onPublish={onPublish}
-                    onManage={onManage}
+                    // A teacher path has no outline to agree: straight into Study.
+                    href={masterySessionRoute(
+                      topic.path_id,
+                      'study',
+                      '',
+                      topic.content_workspace_id ?? ''
+                    )}
+                    badge={
+                      <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
+                        {t('From {{teacher}}', {
+                          teacher: topic.origin?.teacher_name || t('Teacher'),
+                        })}
+                      </span>
+                    }
+                    footer={
+                      topic.next.knowledge_point_name ? (
+                        <div className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--muted-foreground)]">
+                          {t('Next: {{name}}', { name: topic.next.knowledge_point_name })}
+                        </div>
+                      ) : undefined
+                    }
                   />
-                ) : undefined
-              }
-            />
-          ))}
-        </section>
+                ))}
+              </div>
+            </section>
+          )}
+          {own.length > 0 && (
+            <section
+              aria-label={t('Active learning topics')}
+              className={assigned.length > 0 ? 'mt-9' : `mt-9 ${pageGridClass(3)}`}
+            >
+              {assigned.length > 0 ? (
+                <>
+                  <h2 className="text-[12px] font-semibold text-[var(--foreground)]">
+                    {t('My topics')}
+                  </h2>
+                  <div className={`mt-3 ${pageGridClass(3)}`}>
+                    {own.map(topic => (
+                      <TopicMapCard
+                        key={libraryItemKey(topic, topic.path_id)}
+                        topic={topic}
+                        footer={teacherFooter(topic)}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                own.map(topic => (
+                  <TopicMapCard
+                    key={libraryItemKey(topic, topic.path_id)}
+                    topic={topic}
+                    footer={teacherFooter(topic)}
+                  />
+                ))
+              )}
+            </section>
+          )}
+        </>
       ) : !error ? (
         <LearningEmptyState
           icon={<Compass size={28} />}
           title={t('Your atlas is still uncharted')}
-          description={t(
-            'Tell DeepTutor what you want to learn, mix in your books, notes, and knowledge bases, and it will draft the first outline.'
-          )}
+          description={
+            onCreate
+              ? t(
+                  'Tell DeepTutor what you want to learn, mix in your books, notes, and knowledge bases, and it will draft the first outline.'
+                )
+              : t('Paths your teachers assign to you will appear here.')
+          }
           action={
-            <button
-              type="button"
-              onClick={event => onCreate(event.currentTarget)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm text-[var(--primary-foreground)]"
-            >
-              <Plus size={14} />
-              {t('Chart the first map')}
-            </button>
+            onCreate ? (
+              <button
+                type="button"
+                onClick={event => onCreate?.(event.currentTarget)}
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm text-[var(--primary-foreground)]"
+              >
+                <Plus size={14} />
+                {t('Chart the first map')}
+              </button>
+            ) : undefined
           }
         />
       ) : null}

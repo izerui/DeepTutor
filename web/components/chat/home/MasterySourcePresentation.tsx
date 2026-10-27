@@ -5,6 +5,9 @@ import type { StreamEvent } from "@/features/chat/model/protocol";
 import { apiUrl } from "@/lib/api";
 import ImagePreview from "@/components/chat/preview/previewers/ImagePreview";
 import { useBinarySource } from "@/components/chat/preview/previewers/useBinarySource";
+import { useMasteryTemplate } from "@/components/space/learning/mastery-template-context";
+import { withMasteryTemplate } from "@/lib/mastery-template-scope";
+import { COURSE_UNAVAILABLE_KEY } from "@/lib/teacher-path-messages";
 
 type Page = { title: string; preview_url: string };
 
@@ -31,12 +34,17 @@ function presentedPages(events: StreamEvent[]): Page[] {
 
 function SourcePage({ page }: { page: Page }) {
   const { t } = useTranslation();
-  const state = useBinarySource(apiUrl(page.preview_url), "image/png");
+  // R9: inside an open teacher path's Study page the original is read in the
+  // path's context; elsewhere the context is "" and the URL is unchanged.
+  const templateId = useMasteryTemplate();
+  const state = useBinarySource(apiUrl(withMasteryTemplate(page.preview_url, templateId)), "image/png");
   const url = state.kind === "ready" ? state.objectUrl : null;
+  // 403 in a path's context: the course was closed since the page was shown.
+  const closed = state.kind === "error" && state.status === 403 && Boolean(templateId);
   return <figure className="my-3 rounded-lg border border-[var(--border)] p-2">
     <figcaption className="mb-2 break-words text-xs text-[var(--muted-foreground)]">{page.title}</figcaption>
     {url ? <div className="h-96 w-full"><ImagePreview url={url} filename={page.title} /></div>
-      : <p role="status" className="text-sm">{state.kind === "error" ? t("Failed to load image.") : t("Loading...")}</p>}
+      : <p role="status" className="text-sm">{closed ? t(COURSE_UNAVAILABLE_KEY) : state.kind === "error" ? t("Failed to load image.") : t("Loading...")}</p>}
   </figure>;
 }
 

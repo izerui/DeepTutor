@@ -48,7 +48,7 @@ function MasteryPathRoute() {
   // narrows the atlas to that course's paths and adopts whatever is built here.
   const scope = useCourseScope();
   const creation = useLearningCreation(() => setWizardOpen(true));
-  const { isTeacher } = useAuthStatus();
+  const { isTeacher, allowPersonalMastery } = useAuthStatus();
   const [templates, setTemplates] = useState<TeacherTemplate[]>([]);
   const [publishing, setPublishing] = useState<{
     topic: MasteryTopic;
@@ -119,16 +119,22 @@ function MasteryPathRoute() {
 
   return (
     <>
-      {creation.dialog}
+      {allowPersonalMastery && creation.dialog}
       <TopicAtlas
         topics={scopedTopics}
         loading={loading}
         error={error}
         scopeChip={scope ? <CourseScopeChip scope={scope} /> : null}
-        onCreate={(trigger) => {
-          wizardTriggerRef.current = trigger;
-          creation.begin();
-        }}
+        // A student whose policy forbids personal paths gets no create
+        // control at all, rather than one that does nothing (R12).
+        onCreate={
+          allowPersonalMastery
+            ? (trigger) => {
+                wizardTriggerRef.current = trigger;
+                creation.begin();
+              }
+            : undefined
+        }
         onRetry={() => {
           setLoading(true);
           void loadTopics();
@@ -144,7 +150,9 @@ function MasteryPathRoute() {
           setManaging(template);
         }}
       />
-      {wizardOpen && (
+      {/* `?create=1` and create shortcuts cannot open it around the policy
+          either; the server refuses the creation regardless. */}
+      {wizardOpen && allowPersonalMastery && (
         <CreateTopicWizard
           returnFocusRef={wizardTriggerRef}
           onClose={() => setWizardOpen(false)}

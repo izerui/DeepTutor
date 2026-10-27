@@ -9,6 +9,8 @@ import { learningLibrary } from '@/lib/learning-library'
 import { activeWorkspaceId } from '@/lib/workspace-scope'
 import { useLearningCreation, requestedLearningCreation } from '@/components/learning/LibraryWorkspace'
 import { bookRoute } from "@/lib/learning-routes";
+import { currentMasteryTemplate } from '@/lib/mastery-template-scope'
+
 import { useTranslation } from 'react-i18next'
 
 import { BookApiError, bookApi, type BookWsEvent } from '@/lib/book-api'
@@ -298,6 +300,12 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         if (!alive.current) return
         setLearningCaptures(captures)
       } catch (err) {
+        // A book read through a teacher path (R9) opens its originals only;
+        // the reader's own captures there are simply empty, not an error.
+        if (err instanceof BookApiError && err.status === 404 && currentMasteryTemplate()) {
+          setLearningCaptures([])
+          return
+        }
         const msg = err instanceof Error ? err.message : String(err)
         notify(t('Could not load learning captures: {{message}}', { message: msg }), {
           tone: 'error',

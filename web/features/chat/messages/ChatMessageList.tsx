@@ -91,6 +91,7 @@ import {
   type MasteryQuestion,
 } from "@/lib/mastery-question";
 import { SetupCredentialCard } from "@/components/chat/home/SetupCredentialCard";
+import { teacherTurnErrorMessage } from "@/lib/teacher-path-messages";
 import { extractSetupCredential } from "@/lib/setup-signals";
 import { PartnerDraftCard } from "@/components/chat/home/PartnerDraftCard";
 import { extractPartnerDraft } from "@/lib/partner-draft";
@@ -2457,7 +2458,14 @@ export const ChatMessageList = memo(function ChatMessageList({
                 <div role="alert" className="mt-3 flex w-full max-w-[min(520px,90%)] items-center gap-2 rounded-xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 px-3 py-2">
                   <AlertCircle className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
                   <span className="min-w-0 flex-1 text-[12px] leading-[1.5] text-[var(--foreground)]">
-                    {terminalError?.content || (terminalError
+                    {(() => {
+                      // A teacher path's refusal carries a stable code; its
+                      // English sentence is for logs, not for the learner.
+                      const teacher = teacherTurnErrorMessage(
+                        terminalError?.metadata as Record<string, unknown> | undefined,
+                      );
+                      return teacher ? t(teacher.key, teacher.values) : null;
+                    })() || terminalError?.content || (terminalError
                       ? t("The turn was interrupted.")
                       : t("No response was generated. Please try again."))}
                   </span>

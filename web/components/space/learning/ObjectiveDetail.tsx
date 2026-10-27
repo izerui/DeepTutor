@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Ban, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { ObjectiveReport } from "@/lib/learning-api";
+import { voidedAttemptLabel } from "@/lib/teacher-path-messages";
 
 import { formatAbsolute, formatRelative, type Translate } from "./format";
 
@@ -27,6 +28,10 @@ export function ObjectiveDetail({
   const qualitative = report.gate === "qualitative";
   const evidence = report.evidence ?? [];
   const evidenceCount = report.evidence_count ?? evidence.length;
+  // A voided answer (e.g. given before a teacher redefined the objective) is
+  // kept for the record but is not evidence: it is not in the total and is
+  // marked rather than shown as a pass or a miss.
+  const countedAttempts = countedAttemptTotal(report);
   return (
     <div className="mt-1 mb-2 ml-5 space-y-3 border-l border-[var(--border)] pl-3">
       <GateBar report={report} />
@@ -70,7 +75,7 @@ export function ObjectiveDetail({
           <div className="text-xs text-[var(--muted-foreground)]">
             {t("Attempts ({{correct}}/{{total}} correct)", {
               correct: report.correct_count,
-              total: report.attempts.length,
+              total: countedAttempts,
             })}
           </div>
           <ul className="mt-1 space-y-1.5">
@@ -79,13 +84,23 @@ export function ObjectiveDetail({
                 key={`${attempt.question_id}-${index}`}
                 className="flex gap-2 text-xs"
               >
-                {attempt.is_correct ? (
+                {attempt.voided ? (
+                  <Ban
+                    aria-hidden="true"
+                    className="mt-0.5 h-3 w-3 shrink-0 text-[var(--muted-foreground)]"
+                  />
+                ) : attempt.is_correct ? (
                   <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" />
                 ) : (
                   <X className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
                 )}
-                <div className="min-w-0">
+                <div className={`min-w-0 ${attempt.voided ? "opacity-70" : ""}`}>
                   <div className="text-[var(--foreground)]">
+                    {attempt.voided && (
+                      <span className="mr-1.5 rounded-full bg-[var(--muted)] px-1.5 py-px text-[10px] text-[var(--muted-foreground)]">
+                        {t(voidedAttemptLabel(attempt.void_reason))}
+                      </span>
+                    )}
                     {attempt.prompt || t("(prompt unavailable)")}
                   </div>
                   <div className="text-[var(--muted-foreground)]">
@@ -172,6 +187,11 @@ export function ObjectiveDetail({
   );
 }
 
+/** Attempts that count as evidence: voided ones are kept but not counted. */
+function countedAttemptTotal(report: ObjectiveReport): number {
+  return report.attempts.filter((attempt) => !attempt.voided).length;
+}
+
 /** Mastery against the gate it has to clear. */
 function GateBar({ report }: { report: ObjectiveReport }) {
   const { t } = useTranslation();
@@ -188,8 +208,8 @@ function GateBar({ report }: { report: ObjectiveReport }) {
   const thresholdPct = Math.round(report.threshold * 100);
   const perfectButBelowGate =
     report.gate === "quantitative" &&
-    report.attempts.length > 0 &&
-    report.correct_count === report.attempts.length &&
+    countedAttemptTotal(report) > 0 &&
+    report.correct_count === countedAttemptTotal(report) &&
     report.mastery < report.threshold;
   return (
     <div>
@@ -225,7 +245,7 @@ function GateBar({ report }: { report: ObjectiveReport }) {
         <p className="mt-1.5 text-[11px] leading-4 text-[var(--muted-foreground)]">
           {t(
             "Even with {{correct}}/{{total}} correct so far, mastery also weighs evidence volume, difficulty, and recent consistency. One more discriminating practice can raise it further.",
-            { correct: report.correct_count, total: report.attempts.length },
+            { correct: report.correct_count, total: countedAttemptTotal(report) },
           )}
         </p>
       )}
