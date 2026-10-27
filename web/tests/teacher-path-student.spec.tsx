@@ -404,8 +404,13 @@ describe("originals inside a teacher path's Study page", () => {
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(preview, expect.anything()))
   })
 
-  it('shows the course as unavailable on a 403, not a broken viewer', async () => {
-    apiFetch.mockResolvedValue({ ok: false, status: 403 })
+  it('shows the course as unavailable only for a 403 carrying the unavailable code', async () => {
+    apiFetch.mockResolvedValue(
+      Response.json(
+        { detail: { code: 'teacher_path_unavailable', message: 'closed' } },
+        { status: 403 }
+      )
+    )
     render(
       <MasteryTemplateContext.Provider value="tpl1">
         <MasterySourcePresentation events={[sources]} />
@@ -417,6 +422,17 @@ describe("originals inside a teacher path's Study page", () => {
       )
     )
     expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it("keeps any other 403 in a path's context as a failed image, not a closed course", async () => {
+    apiFetch.mockResolvedValue(Response.json({ detail: 'Knowledge base access denied' }, { status: 403 }))
+    render(
+      <MasteryTemplateContext.Provider value="tpl1">
+        <MasterySourcePresentation events={[sources]} />
+      </MasteryTemplateContext.Provider>
+    )
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Failed to load image.'))
+    expect(screen.getByRole('status')).not.toHaveTextContent('no longer available')
   })
 })
 

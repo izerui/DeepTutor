@@ -11,7 +11,29 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 export type BinarySourceState =
   | { kind: "loading" }
   | { kind: "ready"; buffer: ArrayBuffer; objectUrl?: string }
-  | { kind: "error"; message: string; /** HTTP status of a refused fetch. */ status?: number };
+  | {
+      kind: "error";
+      message: string;
+      /** HTTP status of a refused fetch. */
+      status?: number;
+      /** Machine-readable ``detail.code`` of a refused fetch, when the server sent one. */
+      code?: string;
+    };
+
+/** The ``detail.code`` of a JSON refusal (``{detail: {code, message}}``), if any. */
+async function refusalCode(res: Response): Promise<string | undefined> {
+  try {
+    const payload = (await res.json()) as { detail?: unknown };
+    const detail = payload?.detail;
+    if (detail && typeof detail === "object") {
+      const code = (detail as { code?: unknown }).code;
+      if (typeof code === "string") return code;
+    }
+  } catch {
+    // Not JSON (or no body): the status alone is all there is.
+  }
+  return undefined;
+}
 
 /**
  * Fetch the bytes at *url* as an ArrayBuffer for a client-side office
@@ -38,8 +60,14 @@ export function useBinarySource(url: string | null, objectMimeType?: string): Bi
       try {
         const res = await apiFetch(url, { signal: controller.signal });
         if (!res.ok) {
+          const code = await refusalCode(res);
           if (controller.signal.aborted || reqIdRef.current !== reqId) return;
-          setState({ kind: "error", message: `HTTP ${res.status}`, status: res.status });
+          setState({
+            kind: "error",
+            message: `HTTP ${res.status}`,
+            status: res.status,
+            ...(code ? { code } : {}),
+          });
           return;
         }
         const lengthHeader = res.headers.get("content-length");

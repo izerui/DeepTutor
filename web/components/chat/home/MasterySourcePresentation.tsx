@@ -7,7 +7,7 @@ import ImagePreview from "@/components/chat/preview/previewers/ImagePreview";
 import { useBinarySource } from "@/components/chat/preview/previewers/useBinarySource";
 import { useMasteryTemplate } from "@/components/space/learning/mastery-template-context";
 import { withMasteryTemplate } from "@/lib/mastery-template-scope";
-import { COURSE_UNAVAILABLE_KEY } from "@/lib/teacher-path-messages";
+import { COURSE_UNAVAILABLE_KEY, TEACHER_PATH_UNAVAILABLE_CODE } from "@/lib/teacher-path-messages";
 
 type Page = { title: string; preview_url: string };
 
@@ -39,8 +39,10 @@ function SourcePage({ page }: { page: Page }) {
   const templateId = useMasteryTemplate();
   const state = useBinarySource(apiUrl(withMasteryTemplate(page.preview_url, templateId)), "image/png");
   const url = state.kind === "ready" ? state.objectUrl : null;
-  // 403 in a path's context: the course was closed since the page was shown.
-  const closed = state.kind === "error" && state.status === 403 && Boolean(templateId);
+  // Only the server's code says the course closed; any other refusal (even a
+  // 403 in a path's context) is a failed image like anywhere else.
+  const closed =
+    state.kind === "error" && state.status === 403 && state.code === TEACHER_PATH_UNAVAILABLE_CODE;
   return <figure className="my-3 rounded-lg border border-[var(--border)] p-2">
     <figcaption className="mb-2 break-words text-xs text-[var(--muted-foreground)]">{page.title}</figcaption>
     {url ? <div className="h-96 w-full"><ImagePreview url={url} filename={page.title} /></div>

@@ -46,7 +46,7 @@ export interface ProgressDetail {
 
 export async function fetchProgress(bookId: string): Promise<ProgressDetail> {
   const res = await apiFetch(apiUrl(`/api/mastery-paths/progress/${bookId}`));
-  if (!res.ok) throw new Error(`Failed to fetch progress: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch progress: ${res.status}`);
   return res.json() as Promise<ProgressDetail>;
 }
 
@@ -59,7 +59,7 @@ export async function initModules(bookId: string, modules: ModuleInit[]) {
       body: JSON.stringify({ modules }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to init modules: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to init modules: ${res.status}`);
   return res.json();
 }
 
@@ -171,7 +171,7 @@ export async function fetchMasteryMap(
     apiUrl(`/api/mastery-paths/progress/${encodeURIComponent(pathId)}/map`),
     init,
   );
-  if (!res.ok) throw new Error(`Failed to fetch mastery map: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch mastery map: ${res.status}`);
   return res.json() as Promise<MasteryMapResult>;
 }
 
@@ -185,7 +185,7 @@ export async function fetchLearningBoard(
     ),
     init,
   );
-  if (!res.ok) throw new Error(`Failed to fetch learning board: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch learning board: ${res.status}`);
   return res.json() as Promise<BoardResult>;
 }
 
@@ -199,7 +199,7 @@ export async function renameProgress(pathId: string, name: string) {
       body: JSON.stringify({ name }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to rename path: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to rename path: ${res.status}`);
   return res.json() as Promise<{ status: string; name: string }>;
 }
 
@@ -331,7 +331,7 @@ export async function fetchObjectiveReport(
     ),
     init,
   );
-  if (!res.ok) throw new Error(`Failed to fetch objective: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch objective: ${res.status}`);
   return (await res.json()).objective as ObjectiveReport;
 }
 
@@ -352,7 +352,7 @@ export interface ProgressListResult {
 
 export async function fetchAllProgress(): Promise<ProgressListResult> {
   const res = await apiFetch(apiUrl("/api/mastery-paths/progress"));
-  if (!res.ok) throw new Error(`Failed to fetch all progress: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to fetch all progress: ${res.status}`);
   return res.json();
 }
 
@@ -361,7 +361,7 @@ export async function deleteProgress(bookId: string) {
     apiUrl(`/api/mastery-paths/progress/${encodeURIComponent(bookId)}`),
     { method: "DELETE" },
   );
-  if (!res.ok) throw new Error(`Failed to delete progress: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to delete progress: ${res.status}`);
   return res.json();
 }
 
@@ -382,7 +382,7 @@ export async function skipPendingQuestion(bookId: string) {
     ),
     { method: "POST" },
   );
-  if (!res.ok) throw new Error(`Failed to skip question: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to skip question: ${res.status}`);
   return res.json();
 }
 
@@ -400,7 +400,7 @@ export async function importFromBook(
       body: JSON.stringify({ chapters }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to import from book: ${res.status}`);
+  if (!res.ok) throw await masteryApiError(res, `Failed to import from book: ${res.status}`);
   return res.json();
 }
 
@@ -420,7 +420,7 @@ export async function generateModulesFromNotebook(
     },
   );
   if (!res.ok)
-    throw new Error(`Failed to generate modules from notebook: ${res.status}`);
+    throw await masteryApiError(res, `Failed to generate modules from notebook: ${res.status}`);
   return res.json();
 }
 

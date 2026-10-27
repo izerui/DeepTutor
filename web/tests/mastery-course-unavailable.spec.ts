@@ -5,10 +5,16 @@ vi.mock("@/lib/api", () => ({ apiFetch, apiUrl: (url: string) => url }));
 
 import {
   MasteryApiError,
+  deleteProgress,
+  fetchLearningBoard,
+  fetchMasteryMap,
   fetchMasteryTopic,
+  fetchObjectiveReport,
+  fetchProgress,
   fetchProgressEvents,
   isCourseUnavailable,
   redoProgress,
+  skipPendingQuestion,
 } from "@/lib/learning-api";
 
 const CLOSED = {
@@ -32,6 +38,12 @@ describe("a closed teacher path is recognised by its code, not by its id", () =>
     ["topic", () => fetchMasteryTopic("assigned_tpl1")],
     ["events", () => fetchProgressEvents("assigned_tpl1")],
     ["redo", () => redoProgress("assigned_tpl1")],
+    ["skip", () => skipPendingQuestion("assigned_tpl1")],
+    ["delete", () => deleteProgress("assigned_tpl1")],
+    ["progress", () => fetchProgress("assigned_tpl1")],
+    ["map", () => fetchMasteryMap("assigned_tpl1")],
+    ["board", () => fetchLearningBoard("assigned_tpl1")],
+    ["objective", () => fetchObjectiveReport("assigned_tpl1", "kp1")],
   ])("treats a 403 carrying the unavailable code as closed (%s)", async (_name, run) => {
     apiFetch.mockResolvedValue(Response.json({ detail: CLOSED }, { status: 403 }));
     const error = await failure(run);
