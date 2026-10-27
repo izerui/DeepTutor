@@ -257,7 +257,12 @@ def test_websocket_subscription_refuses_a_closed_instance(
 
     with client.websocket_connect("/ws/mastery-paths?token=sara") as socket:
         socket.send_json({"type": "subscribe", "path_id": sara_instance.path_id})
-        assert socket.receive_json() == {"type": "error", "content": INSTANCE_UNAVAILABLE}
+        assert socket.receive_json() == {
+            "type": "error",
+            "code": "teacher_path_unavailable",
+            "path_id": sara_instance.path_id,
+            "content": INSTANCE_UNAVAILABLE,
+        }
 
 
 def test_other_content_workspaces_neither_create_nor_list_instances(

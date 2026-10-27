@@ -130,3 +130,55 @@ test("topic socket reconnects with the latest server revision", () => {
 
   client.stop();
 });
+
+test("a closed teacher path ends the subscription with its stable code", () => {
+  const sockets: FakeSocket[] = [];
+  const envelopes: MasterySocketEnvelope[] = [];
+  const errors: string[] = [];
+  let unavailable = 0;
+  const client = new MasteryTopicSocket(
+    "assigned_t1",
+    {
+      onEnvelope: (message) => envelopes.push(message),
+      onError: (message) => errors.push(message),
+      onUnavailable: () => {
+        unavailable += 1;
+      },
+    },
+    0,
+    {
+      createSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      scheduler: { set: () => ({}), clear: () => {} },
+    },
+  );
+  client.start();
+  sockets[0].open();
+
+  const closed = {
+    type: "error",
+    code: "teacher_path_unavailable",
+    path_id: "assigned_t1",
+    content: "This course is no longer available to you.",
+  };
+  assert.deepEqual(parseMasterySocketMessage(closed), closed);
+
+  // Another path's terminal message belongs to a formerly selected topic.
+  sockets[0].message({ ...closed, path_id: "assigned_t2" });
+  assert.equal(unavailable, 0);
+
+  sockets[0].message(closed);
+  assert.equal(unavailable, 1);
+  assert.deepEqual(errors, []);
+  assert.equal(envelopes.length, 0);
+
+  // A plain error without a code is still reported as an error.
+  sockets[0].message({ type: "error", content: "Mastery topic not found" });
+  assert.deepEqual(errors, ["Mastery topic not found"]);
+  assert.equal(unavailable, 1);
+
+  client.stop();
+});

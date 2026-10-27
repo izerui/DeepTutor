@@ -109,6 +109,20 @@ class MasteryTopicEventHub:
             except RuntimeError:
                 subscription.close()
 
+    def publish_to_path(self, path_id: str, reason: str) -> None:
+        """Wake every subscription to *path_id*, whichever workspace holds it.
+
+        A teacher path's copies share one id across students' stores. The
+        teaching side does not know (and must not open) those stores, so a
+        change of access wakes all of them; each socket then re-checks its
+        own reader's access. Revision 0 never advances anyone's cursor.
+        """
+        path_id = str(path_id)
+        with self._lock:
+            scopes = [scope for scope, key_path in self._subscriptions if key_path == path_id]
+        for scope in scopes:
+            self.publish(path_id, 0, reason, scope=scope)
+
     @staticmethod
     def _deliver_latest(subscription: TopicSubscription, signal: TopicSignal) -> None:
         if subscription._closed:

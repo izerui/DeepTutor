@@ -31,7 +31,8 @@ export interface MasteryPathActivity {
   error: string | null;
   /**
    * A teacher path that was revoked or archived while open: its feed now
-   * answers 403. Checked on focus, so a stale tab finds out on return.
+   * answers 403 and its live socket ends with `teacher_path_unavailable`.
+   * Also checked on focus, so a tab whose socket was down finds out on return.
    */
   unavailable: boolean;
   /** Reconcile from durable storage immediately. */
@@ -246,6 +247,15 @@ export function useMasteryPathActivity(
           if (disposed) return;
           setSocketStatus((previous) => keepClosed(previous, pathId, { pathId, connection: "offline", error: null }));
           reconcile();
+        },
+        onUnavailable: () => {
+          if (disposed) return;
+          setSocketStatus({
+            pathId,
+            connection: "offline",
+            error: null,
+            unavailable: true,
+          });
         },
         onError: (message) => {
           if (disposed) return;

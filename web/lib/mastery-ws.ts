@@ -4,6 +4,7 @@ import {
   type ReconnectingWebSocketOptions,
 } from "@/lib/reconnecting-websocket";
 import type { MasteryEvent } from "@/lib/learning-api";
+import { TEACHER_PATH_UNAVAILABLE_CODE } from "@/lib/teacher-path-messages";
 
 export const MASTERY_WS_PATH = "/ws/mastery-paths";
 
@@ -26,6 +27,9 @@ export interface MasteryTopicEventMessage {
 export interface MasterySocketErrorMessage {
   type: "error";
   content: string;
+  /** Stable reason, e.g. `teacher_path_unavailable` for a closed teacher path. */
+  code?: string;
+  path_id?: string;
 }
 
 export type MasterySocketMessage =
@@ -62,7 +66,13 @@ export function parseMasterySocketMessage(
   if (!value || typeof value !== "object") return null;
   const message = value as Record<string, unknown>;
   if (message.type === "error" && typeof message.content === "string") {
-    return { type: "error", content: message.content };
+    const error: MasterySocketErrorMessage = {
+      type: "error",
+      content: message.content,
+    };
+    if (typeof message.code === "string") error.code = message.code;
+    if (typeof message.path_id === "string") error.path_id = message.path_id;
+    return error;
   }
   if (
     (message.type !== "subscribed" && message.type !== "topic_event") ||
@@ -90,6 +100,11 @@ export interface MasteryTopicSocketHandlers {
   onLive?: () => void;
   onDisconnect?: () => void;
   onError?: (message: string) => void;
+  /**
+   * The teacher path was revoked or archived: the server ended this
+   * subscription for good (the same closed state REST reports with 403).
+   */
+  onUnavailable?: () => void;
 }
 
 /** One reconnecting, cursor-preserving subscription for a single topic. */
@@ -143,6 +158,12 @@ export class MasteryTopicSocket {
     const message = parseMasterySocketMessage(data);
     if (!message) return;
     if (message.type === "error") {
+      if (message.code === TEACHER_PATH_UNAVAILABLE_CODE) {
+        if (message.path_id === undefined || message.path_id === this.pathId) {
+          this.handlers.onUnavailable?.();
+        }
+        return;
+      }
       this.handlers.onError?.(message.content);
       return;
     }

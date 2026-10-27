@@ -45,6 +45,7 @@ from deeptutor.teaching.changes import (
     first_revision_log,
     suggest_changes,
 )
+from deeptutor.teaching.instances import notify_instance_closed
 from deeptutor.teaching.models import (
     MasteryTemplate,
     PublishRequest,
@@ -877,6 +878,7 @@ class TeachingService:
         template = self.get(template_id)
         if self.store.revoke(template.id, student_id) is None:
             raise TemplateNotFound("Assignment not found")
+        notify_instance_closed(template.id)
         try:
             sync_material_references(template.id, store=self.store)
         except Exception:
@@ -897,6 +899,7 @@ class TeachingService:
         """Stop offering the path; students keep their records but cannot enter."""
         template = self.get(template_id)
         updated = self.store.update_template(template.id, status="archived")
+        notify_instance_closed(template.id)
         self._release_references(template)
         return updated
 
@@ -948,6 +951,7 @@ def handle_account_deleted(user_id: str, *, successor_id: str) -> None:
         logger.exception("Could not revoke assignments of deleted user %s", user_id)
         return
     for template_id in sorted(studied):
+        notify_instance_closed(template_id)
         try:
             # Like a single revoke: release old-revision materials nobody needs.
             sync_material_references(template_id, store=store)

@@ -104,6 +104,12 @@ _OUTLINE_WRITE = [Depends(require_outline_mutable)]
 #: deleted topic changes everything.
 _SCREEN_ONLY_SIGNALS = frozenset({"session.bound", "session.released", "topic.deleted"})
 
+#: How often a live subscription to a teacher path's copy re-checks access
+#: when no signal arrives. Revoke/archive wake this process's sockets at once;
+#: this bounds how long a socket served by another worker process (the wake-up
+#: hub is per process) keeps a closed course open. Ordinary paths never poll.
+_ACCESS_RECHECK_SECONDS = 30.0
+
 
 def get_learning_service() -> LearningService:
     # Create a fresh store + service per request to avoid object-level race conditions.
@@ -889,6 +895,23 @@ async def get_topic_ask_hint(path_id: str, session_id: str = ""):
     return await get_ask_hint(path_id, session_id)
 
 
+def _authorized_tail(
+    path_id: str, store: LearningStore, cursor: int, *, instance: bool
+) -> tuple[bool, list]:
+    """Whether the reader may still follow *path_id*, and its events after *cursor*.
+
+    One worker-thread hop per coalesced signal. A teacher path's copy is
+    re-authorized before anything of it is read, so an event committed after
+    a revoke or archive is never forwarded; an ordinary path skips the check.
+    """
+    if instance:
+        from deeptutor.teaching.instances import instance_access
+
+        if not instance_access(path_id, store).allowed:
+            return False, []
+    return True, store.list_events(path_id, after_revision=cursor)
+
+
 @ws_router.websocket("/mastery-paths")
 async def mastery_topic_websocket(ws: WebSocket) -> None:
     """Subscribe to one living topic with durable revision replay."""
@@ -921,16 +944,43 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
                 await forward_task
             forward_task = None
 
-    async def forward(path_id: str, store: LearningStore) -> None:
+    async def end_closed(path_id: str) -> None:
+        """Terminal message of a subscription whose teacher path closed."""
+        from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, INSTANCE_UNAVAILABLE_CODE
+
+        await send(
+            {
+                "type": "error",
+                "code": INSTANCE_UNAVAILABLE_CODE,
+                "path_id": path_id,
+                "content": INSTANCE_UNAVAILABLE,
+            }
+        )
+
+    async def forward(path_id: str, store: LearningStore, *, instance: bool) -> None:
         nonlocal cursor
         assert subscription is not None
         while True:
-            signal = await subscription.get()
-            events = await asyncio.to_thread(
-                store.list_events,
-                path_id,
-                after_revision=cursor,
+            if instance:
+                try:
+                    signal = await asyncio.wait_for(
+                        subscription.get(), timeout=_ACCESS_RECHECK_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    signal = None
+            else:
+                signal = await subscription.get()
+            allowed, events = await asyncio.to_thread(
+                _authorized_tail, path_id, store, cursor, instance=instance
             )
+            if not allowed:
+                # Nothing more of this copy reaches the socket; the socket
+                # itself stays open and answers new subscribe messages.
+                subscription.close()
+                await end_closed(path_id)
+                return
+            if signal is None:
+                continue
             if events:
                 cursor = max(cursor, max(event.revision for event in events))
             elif signal.revision <= cursor and signal.reason not in _SCREEN_ONLY_SIGNALS:
@@ -967,10 +1017,11 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
             if not await asyncio.to_thread(store.exists, path_id):
                 await send({"type": "error", "content": "Mastery topic not found"})
                 continue
-            from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, instance_access
+            from deeptutor.teaching.instances import instance_access
 
-            if not (await asyncio.to_thread(instance_access, path_id, store)).allowed:
-                await send({"type": "error", "content": INSTANCE_UNAVAILABLE})
+            access = await asyncio.to_thread(instance_access, path_id, store)
+            if not access.allowed:
+                await end_closed(path_id)
                 continue
 
             await stop_forwarding()
@@ -1003,7 +1054,7 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
                     "events": [event.model_dump(mode="json") for event in events],
                 }
             )
-            forward_task = asyncio.create_task(forward(path_id, store))
+            forward_task = asyncio.create_task(forward(path_id, store, instance=access.is_instance))
     finally:
         await stop_forwarding()
         reset_current_user(user_token)

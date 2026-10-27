@@ -35,6 +35,12 @@ INSTANCE_UNAVAILABLE = (
     "This course is no longer available to you. Ask your teacher if you think "
     "this is a mistake."
 )
+#: Stable code of anything refused because the teacher path closed for this
+#: student (revoked assignment, archived path): a live mastery subscription's
+#: terminal message, and the same value a refused mastery turn carries.
+INSTANCE_UNAVAILABLE_CODE = "teacher_path_unavailable"
+#: Hub reason that wakes live subscriptions to re-check their access.
+INSTANCE_ACCESS_CHANGED = "instance.access_changed"
 
 
 class InstanceUnavailableError(PermissionError):
@@ -86,6 +92,23 @@ def ensure_instance_access(path_id: str, store: LearningStore) -> InstanceAccess
     if not access.allowed:
         raise InstanceUnavailableError(INSTANCE_UNAVAILABLE)
     return access
+
+
+def notify_instance_closed(template_id: str) -> None:
+    """Wake this process's live subscriptions to the template's copies.
+
+    Called after the close is committed; each subscription re-checks its own
+    reader's access and ends itself when it is gone. Best effort: the socket
+    also re-checks on every event and periodically (other worker processes).
+    """
+    from deeptutor.learning.event_hub import mastery_topic_event_hub
+
+    try:
+        mastery_topic_event_hub.publish_to_path(
+            instance_path_id(template_id), INSTANCE_ACCESS_CHANGED
+        )
+    except Exception:
+        logger.exception("Could not notify live subscriptions of teacher path %s", template_id)
 
 
 def instance_source_id(path_id: str, source_id: str) -> str:
