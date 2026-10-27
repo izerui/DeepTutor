@@ -942,6 +942,7 @@ async def get_book_sharing(book_id: str) -> dict[str, Any]:
                 "ref": record.ref,
                 "visibility": record.visibility,
                 "can_set_visibility": resolved.capabilities()["can_set_visibility"],
+                "can_make_public": resolved.capabilities()["can_make_public"],
                 "kbs": book_sharing._plan(conn, record).to_dict(),
                 "references": [
                     ref.to_dict() for ref in book_registry._references_of(conn, record.book_id)

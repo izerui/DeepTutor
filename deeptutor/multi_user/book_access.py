@@ -175,6 +175,10 @@ class ResolvedBook:
             "group": "mine" if owned else "public",
             "can_set_visibility": bool(
                 record and self.can_edit and registry.can_write_book(record, get_current_user())
+                and (is_teacher_or_admin() or (owned and record.visibility == "public"))
+            ),
+            "can_make_public": bool(
+                record and self.can_edit and registry.can_write_book(record, get_current_user())
                 and is_teacher_or_admin()
             ),
         }

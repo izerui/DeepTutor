@@ -50,6 +50,31 @@ it("discards old plans when the selected workspace changes", async () => {
   await act(async () => resolve({ ...sharing, kbs: { ...sharing.kbs, private_kbs: [] } }));
   expect(screen.getByRole("combobox", { name: "Physics" })).toBeVisible();
 });
+it("student owner of a public book can withdraw but not publish (B2-11)", async () => {
+  const publicBook = { ...book, visibility: "public" as const } as Book;
+  fixture.sharing.mockResolvedValue({
+    ...sharing,
+    visibility: "public",
+    can_set_visibility: true,
+    can_make_public: false,
+    kbs: { ...sharing.kbs, private_kbs: [] },
+  });
+  render(<BookShareDialog book={publicBook} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
+  const btn = await screen.findByRole("button", { name: "Make private" });
+  expect(btn).toBeEnabled();
+});
+it("student owner blocked from publishing a private book when can_make_public is false (B2-11)", async () => {
+  fixture.sharing.mockResolvedValue({
+    ...sharing,
+    visibility: "private",
+    can_set_visibility: true,
+    can_make_public: false,
+    kbs: { ...sharing.kbs, private_kbs: [] },
+  });
+  render(<BookShareDialog book={book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
+  const btn = await screen.findByRole("button", { name: "Make public" });
+  expect(btn).toBeDisabled();
+});
 it("blocks publication issues until an administrator explicitly chooses force", async () => {
   fixture.sharing.mockResolvedValue({ ...sharing, kbs: { ...sharing.kbs, issues: [{ kb_id: "c", ref: "kb:c", name: "Connector", code: "connector" }] } });
   const { rerender } = render(<BookShareDialog book={book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);

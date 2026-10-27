@@ -227,6 +227,7 @@ export interface BookSharing {
   ref: string;
   visibility: BookVisibility;
   can_set_visibility: boolean;
+  can_make_public?: boolean;
   kbs: BookSharingPlan;
   references: BookReference[];
 }

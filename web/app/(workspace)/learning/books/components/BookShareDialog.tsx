@@ -54,9 +54,10 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   }, [requestedRef, workspaceId, t]);
 
   const makingPublic = (sharing?.visibility ?? book.visibility) !== "public";
+  const canMakePublic = sharing?.can_make_public ?? true;
   const issues = sharing?.kbs.issues ?? [];
   const foreignReferences = (sharing?.references ?? []).filter(ref => ref.created_by !== book.owner_id);
-  const blocked = (makingPublic ? issues.length > 0 : foreignReferences.length > 0) && !(isAdmin && force);
+  const blocked = (makingPublic && !canMakePublic) || ((makingPublic ? issues.length > 0 : foreignReferences.length > 0) && !(isAdmin && force));
   const confirm = async () => {
     if (busy || !sharing?.can_set_visibility || blocked) return;
     setBusy(true);
