@@ -365,6 +365,28 @@ async def build_course_resource_candidates() -> dict[str, list[dict[str, str]]]:
     return candidates
 
 
+def withdrawn_kb_reasons(course_id: str) -> dict[str, str]:
+    """``kb_id -> reason`` for knowledge bases their owner withdrew from this course.
+
+    Rule R1: an owner may make a referenced KB private or delete it at any
+    time; the course then shows it as unavailable and says why.
+    """
+    from deeptutor.knowledge import registry
+
+    return {
+        row.kb_id: row.reason
+        for row in registry.list_unavailable_references("course", course_id)
+    }
+
+
+def _resource_kb_id(resource: Any) -> str:
+    from deeptutor.knowledge import registry
+
+    if resource.ref_id.startswith(registry.REF_PREFIX):
+        return resource.ref_id[len(registry.REF_PREFIX) :]
+    return resource.kb_id
+
+
 async def build_course_state(course_id: str) -> dict[str, Any]:
     """课程全景快照。前端课程页与 course_study capability 的工具共用这一个真相源。"""
     from deeptutor.services.courses import get_course_service
@@ -377,16 +399,20 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
     sessions, session_ids = session_result
     question_bank = await _question_bank_state(session_ids)
 
+    withdrawn = await asyncio.to_thread(withdrawn_kb_reasons, course_id)
     resources: list[dict[str, Any]] = []
     for resource in course.resources:
         detail = indexes.get(resource.kind, {}).get(resource.ref_id)
-        resources.append(
-            {
-                **resource.to_dict(),
-                "available": detail is not None,
-                "detail": dict(detail or {}),
-            }
-        )
+        row = {
+            **resource.to_dict(),
+            "available": detail is not None,
+            "detail": dict(detail or {}),
+        }
+        if detail is None and resource.kind == "knowledge_base":
+            reason = withdrawn.get(_resource_kb_id(resource))
+            if reason:
+                row["unavailable_reason"] = reason
+        resources.append(row)
 
     mastery_paths = [
         dict(indexes["mastery_path"][resource.ref_id])

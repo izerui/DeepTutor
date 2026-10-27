@@ -941,8 +941,13 @@ def test_originals_follow_the_revision_the_copy_is_on(
 # ---- re-assigning a student parked on an older revision (B2-1) -----------------
 
 
-def _park_on_v1_then_publish_v2(real_path, teaching_users, as_account, make_kb, publish_template):
-    """Sara waits on a v1 question; v2 replaces K1 with K2; Sara is revoked."""
+def _park_on_v1_then_publish_v2(
+    real_path, teaching_users, as_account, make_kb, publish_template, before_revoke=None
+):
+    """Sara waits on a v1 question; v2 replaces K1 with K2; Sara is revoked.
+
+    ``before_revoke`` runs while K1 is still cited for Sara's v1 copy.
+    """
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.learning.models import PendingQuestion
 
@@ -975,6 +980,8 @@ def _park_on_v1_then_publish_v2(real_path, teaching_users, as_account, make_kb, 
             ],
         )
     publish_template(kb_choices={k2.kb_id: "reference_only"})
+    if before_revoke is not None:
+        before_revoke()
     with as_account("tina"):
         TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
     # Revoking released K1: no active student needs revision 1 any more.
@@ -1200,3 +1207,72 @@ async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
     assert {
         record.kb_id for record in kb_registry.list_referenced("mastery_template", template_id)
     } == {k2.kb_id}
+
+
+@pytest.mark.asyncio
+async def test_reassigning_does_not_restore_an_old_material_its_owner_withdrew_while_cited(
+    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+):
+    """B2-19 x B2-1: Tom withdraws K1 (confirmed) while Sara's v1 copy still cites it.
+
+    The withdrawal leaves a ``made_private`` revocation for the path, so the
+    later revoke + re-assign of Sara must not ask K1 back.
+    """
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+
+    with as_account("tom"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        make_kb(KnowledgeBaseManager(base_dir=str(root)), "algebra")
+        k1 = kb_registry.ensure_registered(root, "algebra", created_by=teaching_users["tom"]["id"])
+        kb_registry.set_visibility(k1.kb_id, "public")
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
+                label="Algebra notes", position=0,
+            ),
+        )
+    )
+    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+        "template"
+    ]["id"]
+    with as_account("sara"):
+        path_id = (await mastery_path.list_topics())["topics"][0]["path_id"]
+    with as_account("tina"):
+        tina_root = get_account_path_service().get_knowledge_bases_root()
+        tina_root.mkdir(parents=True, exist_ok=True)
+
+    def withdraw():
+        assert k1.kb_id in {
+            r.kb_id for r in kb_registry.list_referenced("mastery_template", template_id)
+        }
+        with as_account("tom"):
+            with pytest.raises(kb_registry.KbWithdrawalNeedsConfirmation):
+                kb_registry.set_visibility(k1.kb_id, "private")
+            kb_registry.set_visibility(k1.kb_id, "private", confirm=True)
+        [revoked] = kb_registry.list_unavailable_references("mastery_template", template_id)
+        assert (revoked.kb_id, revoked.reason) == (k1.kb_id, "made_private")
+
+    k2 = await asyncio.to_thread(
+        _park_on_v1_then_publish_v2,
+        SimpleNamespace(record=k1, template_id=template_id, path_id=path_id, root=tina_root),
+        teaching_users, as_account, make_kb, publish_template, withdraw,
+    )
+    with as_account("tina"):
+        rows = await asyncio.to_thread(
+            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+        )
+    assert [row["status"] for row in rows] == ["active"]
+    assert {
+        record.kb_id for record in kb_registry.list_referenced("mastery_template", template_id)
+    } == {k2.kb_id}
+    assert kb_registry.get_kb(k1.kb_id).visibility == "private"
+
+    ran = _probe(monkeypatch, None)
+    stream = _Stream()
+    with as_account("sara"):
+        await MasteryLoopPipeline(language="en").run(_context(path_id), stream)
+    assert ran == []
+    assert stream.errors[0][0] == MATERIALS_UNAVAILABLE

@@ -337,9 +337,8 @@ def test_admin_delegation_accounts_for_actual_partner_creator(
     with user_context(actor):
         assert provision_assets("ada", knowledge_bases=[record.ref])["errors"] == []
     assert registry.list_references(record.kb_id)[0].created_by == (target_owner or LOCAL_ADMIN_ID)
-    with pytest.raises(registry.KbVisibilityError):
-        registry.set_visibility(record.kb_id, "private")
-    registry.set_visibility(record.kb_id, "private", force=True)
+    # Rule R1: the owner withdraws without force; the partner's reference is revoked.
+    registry.set_visibility(record.kb_id, "private")
     assert registry.list_referenced("partner", "ada") == []
     assert len(registry.list_unavailable_references("partner", "ada")) == 1
     assert not registry.can_read(registry.get_kb(record.ref), partner_user("ada"))

@@ -146,13 +146,8 @@ def test_simultaneous_takeover_keeps_own_refs_and_requires_force_for_foreign_ref
     ]
     assert kbs.list_references(kb.ref) == expected
     with as_user(boss["id"], role="admin"):
-        if foreign_ref:
-            with pytest.raises(kbs.KbVisibilityError, match="other accounts"):
-                kbs.set_visibility(kb.ref, "private")
-            assert kbs.get_kb(kb.ref).visibility == "public"
-            assert kbs.list_references(kb.ref) == expected
-            assert not kbs.list_unavailable_references("book", foreign.book_id)
-        kbs.set_visibility(kb.ref, "private", force=foreign_ref)
+        # Rule R1: a foreign book's reference no longer blocks; it is revoked.
+        kbs.set_visibility(kb.ref, "private")
     assert kbs.list_references(kb.ref) == [
         ref for ref in expected if ref.referrer_id == own.book_id
     ]

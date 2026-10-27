@@ -49,6 +49,10 @@ REGISTRY_FILENAME = "kb_registry.sqlite3"
 CONNECTOR_KINDS: frozenset[str] = frozenset(CONNECTED_KB_TYPES)
 #: The only referrers that may point at a connector: the owner's own partners.
 CONNECTOR_REFERRER_KINDS: frozenset[str] = frozenset({"partner"})
+#: Referrers whose withdrawal needs the owner's explicit confirmation (rule
+#: R1): published teacher paths. Every other referrer (partners, books, ...)
+#: simply records a revocation and shows the material as unavailable.
+CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({"mastery_template"})
 #: KB kinds that need the deployment's embedding model.
 INDEXED_KINDS: frozenset[str] = frozenset({UPLOADED_KIND, "linked"})
 #: Synthetic user id prefix of partner runtimes (``services/partners/scope.py``).
@@ -168,6 +172,33 @@ class KbReferenceError(KbRegistryError):
     """Reference refused (unknown KB, or a connector shared outside its owner)."""
 
 
+class KbWithdrawalNeedsConfirmation(KbVisibilityError):
+    """Withdrawing (private/delete) would cut off published teacher paths (rule R1).
+
+    Raised before anything is written; repeat with ``confirm=True`` to proceed.
+    ``referrer_ids`` are the affected ``mastery_template`` ids, for the caller
+    to turn into aggregate counts — never to show to the owner.
+    """
+
+    def __init__(self, referrer_ids: Sequence[str]) -> None:
+        self.referrer_ids = tuple(sorted(set(referrer_ids)))
+        super().__init__(
+            f"Withdrawing this knowledge base affects {len(self.referrer_ids)} teacher path(s); "
+            "confirm to proceed."
+        )
+
+
+def require_withdrawal_confirmation(
+    references: Sequence[KbReference], *, confirm: bool
+) -> None:
+    """Refuse an unconfirmed withdrawal that would revoke teacher-path references."""
+    if confirm:
+        return
+    blocking = [ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS]
+    if blocking:
+        raise KbWithdrawalNeedsConfirmation(blocking)
+
+
 @dataclass(frozen=True)
 class KbRecord:
     kb_id: str
@@ -208,7 +239,7 @@ RevocationReason = Literal["made_private", "kb_deleted"]
 
 @dataclass(frozen=True)
 class RevokedReference:
-    """A reference an admin's force withdrew (spec 7.4 "资料不可用").
+    """A reference its KB's withdrawal took away (spec 7.4 "资料不可用", rule R1).
 
     Kept outside ``kb_references`` (no foreign key, so it survives the KB's
     deletion) and never consulted by :func:`can_read`: the referrer lost
@@ -682,8 +713,8 @@ def resolve_ref(ref: str) -> KbRecord | None:
 
 
 def unregister_kb(kb_id: str) -> None:
-    """Forget a KB. References still pointing at it (only possible after an
-    admin's force delete) are kept as revoked with reason ``kb_deleted``."""
+    """Forget a KB. References still pointing at it are kept as revoked with
+    reason ``kb_deleted``."""
     with _write() as conn:
         row = conn.execute(
             "SELECT * FROM kb_registry WHERE kb_id = ?", (_strip_ref(kb_id),)
@@ -780,15 +811,19 @@ def relocate_base_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int
         raise KbRegistryError("The destination already has registered knowledge bases.") from exc
 
 
-def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRecord:
+def set_visibility(
+    kb_id: str, visibility: str, *, force: bool = False, confirm: bool = False
+) -> KbRecord:
     """Change visibility. Who may call this (D3, D12) is the API layer's decision.
 
-    Making a public KB private is refused while another account references it
-    (spec 7.4) unless ``force`` — reserved for admins by the caller. A forced
-    withdrawal moves those other accounts' references to the revoked table
-    (reason ``made_private``, see :func:`list_unavailable_references`).
-    References by the owner alone stay and simply turn the KB into "readable
-    through a reference".
+    Rule R1: the owner may always make a public KB private. Other accounts'
+    references move to the revoked table (reason ``made_private``, see
+    :func:`list_unavailable_references`) and their referrers show the material
+    as unavailable. When any of them is a published teacher path, the first
+    request is refused with :class:`KbWithdrawalNeedsConfirmation` (nothing
+    written) and must be repeated with ``confirm`` (``force``, admin only by
+    the caller, implies it). References by the owner alone stay and simply
+    turn the KB into "readable through a reference".
 
     The record lookup, reference listing and decision all happen inside a single
     ``BEGIN IMMEDIATE`` transaction so a concurrent ``add_reference`` cannot
@@ -810,14 +845,9 @@ def set_visibility(kb_id: str, visibility: str, *, force: bool = False) -> KbRec
                 ref for ref in _references_of(conn, record.kb_id)
                 if ref.created_by != record.created_by
             ]
-            if foreign and not force:
-                names = ", ".join(f"{ref.referrer_kind}:{ref.referrer_id}" for ref in foreign)
-                raise KbVisibilityError(
-                    f"Still referenced by other accounts ({names}); "
-                    "it cannot be made private until those references are removed."
-                )
-        # Spec 7.4: an admin's forced withdrawal cuts the other accounts off;
-        # their references become "unavailable" instead of silently reading on.
+            require_withdrawal_confirmation(foreign, confirm=confirm or force)
+        # Spec 7.4 / rule R1: a withdrawal cuts the other accounts off; their
+        # references become "unavailable" instead of silently reading on.
         _revoke(conn, record, foreign, reason="made_private")
         conn.execute(
             "UPDATE kb_registry SET visibility = ?, updated_at = ? WHERE kb_id = ?",
@@ -1335,7 +1365,7 @@ def _revoked(row: sqlite3.Row) -> RevokedReference:
 
 
 def list_unavailable_references(referrer_kind: str, referrer_id: str) -> list[RevokedReference]:
-    """What an admin's force took away from this referrer (spec 7.4).
+    """What withdrawals (made private, deleted) took away from this referrer (spec 7.4).
 
     Plan C shows "资料不可用" on a teacher path for every row returned here.
     """
@@ -1359,6 +1389,17 @@ def list_revoked_references(kb_id: str) -> list[RevokedReference]:
             (_strip_ref(kb_id),),
         ).fetchall()
     return [_revoked(row) for row in rows]
+
+
+def dismiss_unavailable_reference(kb_id: str, referrer_kind: str, referrer_id: str) -> bool:
+    """The referrer lets go of one unavailable (revoked) KB; ``True`` when a row went."""
+    with _write() as conn:
+        removed = conn.execute(
+            "DELETE FROM kb_revoked_references WHERE kb_id = ? AND referrer_kind = ? "
+            "AND referrer_id = ?",
+            (_strip_ref(kb_id), referrer_kind, referrer_id),
+        ).rowcount
+    return bool(removed)
 
 
 def remove_reference(kb_id: str, referrer_kind: str, referrer_id: str) -> None:

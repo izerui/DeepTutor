@@ -34,7 +34,7 @@ registered custom reader always wins.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -94,6 +94,57 @@ def _assignment_open(template_id: str, user_id: str) -> bool:
         return False
     assignment = store.get_assignment(template_id, user_id)
     return assignment is not None and assignment.status == "active"
+
+
+#: 409 ``detail.code`` when a KB/book withdrawal needs confirmation (rule R1).
+WITHDRAWAL_CONFIRMATION_CODE = "referenced_by_teacher_paths"
+
+
+def withdrawal_impact(template_ids: Iterable[str]) -> tuple[int, int]:
+    """Aggregate impact of withdrawing material from these teacher paths (rule R1).
+
+    Returns (published paths, distinct students with an active assignment on
+    them). Only counts leave this function: the owner withdrawing a library
+    or book must not learn which paths, teachers or students cite it. Read
+    only; callers run it after their registry writer has ended (lock order
+    teaching -> KB -> Book).
+    """
+    from deeptutor.teaching.store import TeachingStore
+
+    store = TeachingStore()
+    paths = 0
+    students: set[str] = set()
+    for template_id in sorted(set(template_ids)):
+        template = store.get_template(template_id)
+        if template is None or template.status != "published":
+            continue
+        paths += 1
+        students.update(
+            assignment.student_user_id
+            for assignment in store.list_assignments(template_id)
+            if assignment.status == "active"
+        )
+    return paths, len(students)
+
+
+def withdrawal_confirmation_detail(
+    template_ids: Iterable[str], *, resource: str
+) -> dict[str, Any] | None:
+    """The counts-only 409 detail, or ``None`` when no published path is affected."""
+    paths, students = withdrawal_impact(template_ids)
+    if not paths:
+        return None
+    return {
+        "code": WITHDRAWAL_CONFIRMATION_CODE,
+        "requires_confirmation": True,
+        "resource": resource,
+        "affected_paths": paths,
+        "affected_students": students,
+        "message": (
+            f"{paths} published teacher path(s) with {students} assigned student(s) cite this "
+            f"{resource}; they will show it as unavailable. Confirm to continue."
+        ),
+    }
 
 
 def open_template_for_current_user(template_id: str) -> bool:

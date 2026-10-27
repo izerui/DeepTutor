@@ -835,15 +835,32 @@ def _assert_document_deletable(
         raise HTTPException(status_code=409, detail={
             "code": "document_referenced",
             "message": f"'{rel_path}' is cited by document ID. Remove those references first.",
-            "references": [ref.to_dict() for ref in cited],
+            **_reference_summary(record, cited),
         })
     whole = [ref for ref in references if ref.doc_ids is None]
     if whole and not (confirm or force):
         raise HTTPException(status_code=409, detail={
             "code": "requires_confirmation", "requires_confirmation": True,
             "message": f"These references will no longer see '{rel_path}'.",
-            "references": [ref.to_dict() for ref in whole],
+            **_reference_summary(record, whole),
         })
+
+
+def _reference_summary(record, references) -> dict:
+    """The owner's own references in full; other accounts' only as counts (rule R1).
+
+    A KB owner must not learn which partners, books or teacher paths of other
+    accounts cite the library, so their ids never leave the server.
+    """
+    own = [ref for ref in references if ref.created_by == record.created_by]
+    other: dict[str, int] = {}
+    for ref in references:
+        if ref.created_by != record.created_by:
+            other[ref.referrer_kind] = other.get(ref.referrer_kind, 0) + 1
+    return {
+        "references": [ref.to_dict() for ref in own],
+        "other_references": {"total": sum(other.values()), "by_kind": dict(sorted(other.items()))},
+    }
 
 
 def _upload_file_to_pb(kb_name: str, filename: str, file_path: Path) -> None:
@@ -3691,26 +3708,19 @@ def _delete_kb_file(kb_name: str, filename: str, confirm: bool, force: bool):
     }
 
 
-def _assert_unreferenced_or_forced(record, *, force: bool, references=None) -> None:
-    """The deletion transaction supplies its locked reference snapshot."""
-    from deeptutor.knowledge import registry
+def _withdrawal_conflict(exc) -> HTTPException | None:
+    """Counts-only 409 for an unconfirmed withdrawal; ``None``: no published path is hit.
 
-    if force and not get_current_user().is_admin:
-        raise HTTPException(status_code=403, detail="Only admins can force deletion.")
-    if references is None:
-        references = registry.list_references(record.kb_id)
-    if references and not force:
-        names = ", ".join(f"{ref.referrer_kind}:{ref.referrer_id}" for ref in references)
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"This knowledge base is still referenced by {len(references)} item(s): "
-                f"{names}. Remove those references first."
-            ),
-        )
+    Runs after the registry writer and the KB's mutation ownership ended:
+    the teaching store comes first in the lock order.
+    """
+    from deeptutor.teaching.access import withdrawal_confirmation_detail
+
+    detail = withdrawal_confirmation_detail(exc.referrer_ids, resource="knowledge base")
+    return None if detail is None else HTTPException(status_code=409, detail=detail)
 
 
-def _detach_kb(kb_name: str, *, force: bool = False):
+def _detach_kb(kb_name: str, *, force: bool = False, confirm: bool = False):
     """Authorize and unregister ``kb_name`` in one short registry transaction.
 
     Only the reference check, a same-filesystem rename to a hidden sibling and
@@ -3720,6 +3730,11 @@ def _detach_kb(kb_name: str, *, force: bool = False):
     a KB whose upload or ownership-holding indexing (LightRAG) is running is
     reported busy. If the folder could not be renamed it is removed in place
     after the commit while that ownership is still held (#370 tolerance).
+
+    Rule R1: references never block the owner. Every live reference is
+    revoked (``kb_deleted``) in the same transaction; when published teacher
+    paths cite the KB, an unconfirmed request is refused with a counts-only
+    409 first and ``confirm`` (or an admin's ``force``) proceeds.
     """
     from deeptutor.knowledge import registry
     from deeptutor.services.rag.pipelines.lightrag.indexing_policy import IndexingPolicyError
@@ -3742,8 +3757,8 @@ def _detach_kb(kb_name: str, *, force: bool = False):
                             raise HTTPException(
                                 status_code=403, detail="This knowledge base is read-only."
                             )
-                        _assert_unreferenced_or_forced(
-                            record, force=force, references=references
+                        registry.require_withdrawal_confirmation(
+                            references, confirm=confirm or force
                         )
                     detached = manager.detach_knowledge_base(
                         resolved_name, kb_id=record.kb_id if record is not None else None
@@ -3760,6 +3775,12 @@ def _detach_kb(kb_name: str, *, force: bool = False):
         raise
     except IndexingPolicyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except registry.KbWithdrawalNeedsConfirmation as exc:
+        conflict = _withdrawal_conflict(exc)
+        if conflict is None:
+            # Only stale references of unpublished paths: nothing to confirm.
+            return _detach_kb(kb_name, force=force, confirm=True)
+        raise conflict from exc
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
     except Exception as e:
@@ -3781,15 +3802,19 @@ def _purge_detached_kb(detached) -> None:
         )
 
 
-def _delete_kb(kb_name: str, *, force: bool = False) -> dict[str, str]:
+def _delete_kb(kb_name: str, *, force: bool = False, confirm: bool = False) -> dict[str, str]:
     """Delete ``kb_name`` synchronously (worker threads and direct callers)."""
-    _purge_detached_kb(_detach_kb(kb_name, force=force))
+    _purge_detached_kb(_detach_kb(kb_name, force=force, confirm=confirm))
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
 
-async def _delete_kb_off_loop(kb_name: str, *, force: bool = False) -> dict[str, str]:
+async def _delete_kb_off_loop(
+    kb_name: str, *, force: bool = False, confirm: bool = False
+) -> dict[str, str]:
     """Detach on a worker (busy KBs fail fast), then purge outside every lock."""
-    detached = await finish_document_worker(functools.partial(_detach_kb, kb_name, force=force))
+    detached = await finish_document_worker(
+        functools.partial(_detach_kb, kb_name, force=force, confirm=confirm)
+    )
     await asyncio.to_thread(_purge_detached_kb, detached)
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
@@ -3797,6 +3822,8 @@ async def _delete_kb_off_loop(kb_name: str, *, force: bool = False) -> dict[str,
 class DeleteKnowledgeBaseRequest(BaseModel):
     name: str
     force: bool = False
+    #: Rule R1: proceed although published teacher paths cite the KB.
+    confirm: bool = False
 
 
 @router.post("/knowledge-bases/delete")
@@ -3815,18 +3842,20 @@ async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
     declared ahead of the DELETE routes for linked folders, GitHub sources and
     web sources, and a greedy converter would silently swallow all three.
     """
-    return await _delete_kb_off_loop(payload.name, force=payload.force)
+    return await _delete_kb_off_loop(payload.name, force=payload.force, confirm=payload.confirm)
 
 
 @router.delete("/knowledge-bases/{kb_name}")
-async def delete_knowledge_base(kb_name: str, force: bool = False):
+async def delete_knowledge_base(kb_name: str, force: bool = False, confirm: bool = False):
     """Delete a knowledge base."""
-    return await _delete_kb_off_loop(kb_name, force=force)
+    return await _delete_kb_off_loop(kb_name, force=force, confirm=confirm)
 
 
 class KbVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
+    #: Rule R1: make private although published teacher paths cite the KB.
+    confirm: bool = False
 
 
 def _registered_record(kb_name: str):
@@ -3856,8 +3885,27 @@ async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
         )
     if payload.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
+    return await asyncio.to_thread(_apply_kb_visibility, record.kb_id, payload)
+
+
+def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, str]:
+    """Rule R1: the owner may always withdraw; teacher paths need ``confirm``."""
+    from deeptutor.knowledge import registry
+
+    confirm = payload.confirm
     try:
-        updated = registry.set_visibility(record.kb_id, payload.visibility, force=payload.force)
+        try:
+            updated = registry.set_visibility(
+                kb_id, payload.visibility, force=payload.force, confirm=confirm
+            )
+        except registry.KbWithdrawalNeedsConfirmation as exc:
+            conflict = _withdrawal_conflict(exc)
+            if conflict is not None:
+                raise conflict from exc
+            # Only stale references of unpublished paths: nothing to confirm.
+            updated = registry.set_visibility(
+                kb_id, payload.visibility, force=payload.force, confirm=True
+            )
     except registry.KbVisibilityError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except registry.KbRegistryError as exc:
@@ -3873,11 +3921,9 @@ async def list_kb_references(kb_name: str):
     if not registry.can_write(record, get_current_user()):
         raise HTTPException(status_code=403, detail="Only the owner can see references.")
     resolve_kb(kb_name, require_write=True)
-    return {
-        "kb_id": record.kb_id,
-        "ref": record.ref,
-        "references": [ref.to_dict() for ref in registry.list_references(record.kb_id)],
-    }
+    references = await asyncio.to_thread(registry.list_references, record.kb_id)
+    # Other accounts' referrers only as counts (rule R1, final review M6).
+    return {"kb_id": record.kb_id, "ref": record.ref, **_reference_summary(record, references)}
 
 
 @router.get("/knowledge-bases/tasks/{task_id}/stream")

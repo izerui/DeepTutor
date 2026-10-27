@@ -355,6 +355,16 @@ def list_assets(partner_id: str) -> dict[str, list[dict[str, Any]]]:
         if Path(record.base_dir) == kb_root.resolve():
             item["adopted"] = True
         kbs.append(item)
+    # Rule R1: a KB its owner withdrew (made private / deleted) stays listed as
+    # unavailable until the partner's owner removes it, instead of vanishing.
+    for revoked in registry.list_unavailable_references("partner", partner_id):
+        kbs.append({
+            "name": revoked.kb_name,
+            "ref": f"{registry.REF_PREFIX}{revoked.kb_id}",
+            "documents": 0,
+            "unavailable": True,
+            "reason": revoked.reason,
+        })
     # Compare locations, not names: a legacy copy and a reference may share a
     # display name. Registered local KBs without this reference stay private.
     registered = {record.dir_name for record in registry.list_records(base_dir=kb_root)}
@@ -427,6 +437,10 @@ def remove_asset(partner_id: str, asset_type: str, name: str) -> bool:
             raise ValueError("Knowledge base name is ambiguous; use its kb:<id> reference")
         if matches:
             registry.remove_reference(matches[0].kb_id, "partner", partner_id)
+            return True
+        if name.startswith(registry.REF_PREFIX) and registry.dismiss_unavailable_reference(
+            name, "partner", partner_id
+        ):
             return True
         # Never reinterpret a stable ID or a detached adopted KB as a legacy
         # deletion request, including a repeated removal by display name.

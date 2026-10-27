@@ -775,21 +775,18 @@ async def test_same_name_create_cannot_replace_in_progress_identity(
 
 
 @pytest.mark.asyncio
-async def test_referenced_delete_requires_admin_force(knowledge, as_user, make_kb, monkeypatch):
+async def test_referenced_delete_revokes_without_force(knowledge, as_user, make_kb, monkeypatch):
+    """Rule R1: a partner reference never blocks the owner; force stays admin-only."""
     with as_user("t1", role="teacher"):
         result = await _create(knowledge, monkeypatch, make_kb, visibility="public")
         registry.add_reference(
             result["kb_id"], referrer_kind="partner", referrer_id="ada", created_by="t2"
         )
         with pytest.raises(HTTPException) as error:
-            knowledge._delete_kb(result["ref"])
-        assert error.value.status_code == 409 and "partner:ada" in error.value.detail
-        with pytest.raises(HTTPException) as error:
             knowledge._delete_kb(result["ref"], force=True)
         assert error.value.status_code == 403
         assert "physics" in current_kb_manager().list_knowledge_bases()
-    with as_user("root", role="admin"):
-        knowledge._delete_kb(result["ref"], force=True)
+        knowledge._delete_kb(result["ref"])
     assert registry.get_kb(result["kb_id"]) is None
     [gone] = registry.list_unavailable_references("partner", "ada")
     assert gone.reason == "kb_deleted" and gone.kb_name == "physics"
@@ -897,12 +894,9 @@ async def test_visibility_and_reference_permissions(knowledge, as_user, make_kb,
         )
         refs = await knowledge.list_kb_references("physics")
         assert refs["kb_id"] == result["kb_id"] and refs["ref"] == result["ref"]
-        assert refs["references"] == [r.to_dict() for r in registry.list_references(result["kb_id"])]
-        with pytest.raises(HTTPException) as error:
-            await knowledge.set_kb_visibility(
-                "physics", knowledge.KbVisibilityRequest(visibility="private")
-            )
-        assert error.value.status_code == 409
+        # Other accounts' referrers only as counts (rule R1).
+        assert refs["references"] == []
+        assert refs["other_references"] == {"total": 1, "by_kind": {"partner": 1}}
         with pytest.raises(HTTPException) as error:
             await knowledge.set_kb_visibility(
                 "physics", knowledge.KbVisibilityRequest(visibility="private", force=True)
@@ -916,15 +910,15 @@ async def test_visibility_and_reference_permissions(knowledge, as_user, make_kb,
             with pytest.raises(HTTPException) as error:
                 await operation
             assert error.value.status_code == 403
-    with as_user("root", role="admin"):
+    with as_user("t1", role="teacher"):
         await knowledge.set_kb_visibility(
-            result["ref"], knowledge.KbVisibilityRequest(visibility="private", force=True)
+            result["ref"], knowledge.KbVisibilityRequest(visibility="private")
         )
     assert registry.list_unavailable_references("partner", "ada")[0].reason == "made_private"
 
 
 @pytest.mark.asyncio
-async def test_owner_references_allow_private_but_still_block_delete(
+async def test_owner_references_allow_private_and_delete_revokes_them(
     knowledge, as_user, make_kb, monkeypatch
 ):
     with as_user("t1", role="teacher"):
@@ -935,10 +929,9 @@ async def test_owner_references_allow_private_but_still_block_delete(
         await knowledge.set_kb_visibility(
             result["ref"], knowledge.KbVisibilityRequest(visibility="private")
         )
-        with pytest.raises(HTTPException) as error:
-            knowledge._delete_kb(result["ref"])
-        assert error.value.status_code == 409
         assert len(registry.list_references(result["kb_id"])) == 1
+        knowledge._delete_kb(result["ref"])
+    assert registry.list_unavailable_references("partner", "own")[0].reason == "kb_deleted"
 
 
 @pytest.mark.asyncio
@@ -1082,13 +1075,17 @@ def test_http_validation_and_force_forwarding(knowledge, as_user, monkeypatch):
     app.include_router(knowledge.router, prefix="/api")
     calls = []
 
-    async def delete(name, *, force=False):
-        calls.append((name, force))
+    async def delete(name, *, force=False, confirm=False):
+        calls.append((name, force, confirm))
         return {"message": "deleted"}
 
     monkeypatch.setattr(knowledge, "_delete_kb_off_loop", delete)
     with as_user("root", role="admin"), TestClient(app) as client:
         assert client.delete("/api/knowledge-bases/kb:abc?force=true").status_code == 200
         assert client.post("/api/knowledge-bases/delete", json={"name": "a/b", "force": True}).status_code == 200
+        assert client.delete("/api/knowledge-bases/kb:c?confirm=true").status_code == 200
+        assert client.post("/api/knowledge-bases/delete", json={"name": "d", "confirm": True}).status_code == 200
         assert client.put("/api/knowledge-bases/a/visibility", json={"visibility": "shared"}).status_code == 422
-    assert calls == [("kb:abc", True), ("a/b", True)]
+    assert calls == [
+        ("kb:abc", True, False), ("a/b", True, False), ("kb:c", False, True), ("d", False, True),
+    ]

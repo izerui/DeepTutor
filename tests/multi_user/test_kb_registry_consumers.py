@@ -190,9 +190,8 @@ def test_course_kb_resources_are_registry_references(as_user, make_kb, tmp_path)
         assert registry.list_references(record.kb_id) == []
 
 
-def test_another_owners_course_blocks_withdrawing_a_public_kb(as_user, make_kb, tmp_path):
-    from fastapi import HTTPException
-
+def test_another_owners_course_never_blocks_withdrawing_a_public_kb(as_user, make_kb, tmp_path):
+    """Rule R1: the owner withdraws; the course keeps an "unavailable" record."""
     from deeptutor.api.routers.knowledge import _delete_kb
     from deeptutor.services.courses import CourseService
 
@@ -202,16 +201,21 @@ def test_another_owners_course_blocks_withdrawing_a_public_kb(as_user, make_kb, 
         course = service.create(name="Borrowed")
         service.attach_resource(course.id, kind="knowledge_base", ref_id=record.ref)
     with as_user("t1", role="teacher"):
-        with pytest.raises(registry.KbVisibilityError, match="other accounts"):
-            registry.set_visibility(record.kb_id, "private")
-        with pytest.raises(HTTPException) as error:
-            _delete_kb(record.ref)
-        assert error.value.status_code == 409
-        assert f"course:{course.id}" in error.value.detail
-    with as_user("u2"):
-        service.delete(course.id)
-    with as_user("t1", role="teacher"):
         registry.set_visibility(record.kb_id, "private")
+    assert registry.list_references(record.kb_id) == []
+    [revoked] = registry.list_unavailable_references("course", course.id)
+    assert revoked.reason == "made_private"
+    with as_user("t1", role="teacher"):
+        registry.set_visibility(record.kb_id, "public")
+    with as_user("u2"):
+        # Re-stating the course while the KB is public again re-references it.
+        service.attach_resource(course.id, kind="notebook", ref_id="nb1")
+    assert [r.referrer_id for r in registry.list_references(record.kb_id)] == [course.id]
+    with as_user("t1", role="teacher"):
+        _delete_kb(record.ref)
+    assert registry.get_kb(record.kb_id) is None
+    [revoked] = registry.list_unavailable_references("course", course.id)
+    assert revoked.reason == "kb_deleted"
 
 
 def test_courses_skip_connectors_unreadable_and_missing_refs(as_user, make_kb, tmp_path):
@@ -1053,8 +1057,9 @@ def test_account_deletion_transfers_only_public_or_referenced_and_keeps_same_own
     with as_user(successor, role="admin"):
         registry.set_visibility(records["public"].kb_id, "private")
         assert registry.list_references(records["public"].kb_id)
-        with pytest.raises(registry.KbVisibilityError):
-            registry.set_visibility(records["foreign"].kb_id, "private")
+        # Rule R1: another account's course reference is revoked, never blocking.
+        registry.set_visibility(records["foreign"].kb_id, "private")
+        assert registry.list_unavailable_references("course", "foreign")[0].reason == "made_private"
 
 
 def test_account_deletion_transfer_failure_is_logged_without_failing_delete(seed_user, monkeypatch, caplog):

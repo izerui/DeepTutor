@@ -275,7 +275,8 @@ def test_add_reference_guard_preserves_state_and_excludes_concurrent_writes(tmp_
     assert registry.list_unavailable_references("partner", "ada") == before_revoked
 
 
-def test_making_private_is_blocked_only_by_other_owners_references(tmp_path):
+def test_making_private_revokes_other_owners_references_and_confirms_teacher_paths(tmp_path):
+    """Rule R1: never blocked; only other accounts' teacher paths need confirmation."""
     kb = registry.register_kb(
         base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1", visibility="public"
     )
@@ -286,10 +287,18 @@ def test_making_private_is_blocked_only_by_other_owners_references(tmp_path):
 
     registry.set_visibility(kb.kb_id, "public")
     registry.add_reference(kb.kb_id, referrer_kind="partner", referrer_id="ada", created_by="t2")
-    with pytest.raises(registry.KbVisibilityError, match="other accounts"):
+    registry.add_reference(
+        kb.kb_id, referrer_kind="mastery_template", referrer_id="tpl_t2", created_by="t2"
+    )
+    with pytest.raises(registry.KbWithdrawalNeedsConfirmation) as needs:
         registry.set_visibility(kb.kb_id, "private")
+    assert needs.value.referrer_ids == ("tpl_t2",)
+    assert registry.get_kb(kb.kb_id).visibility == "public"
     assert registry.list_unavailable_references("partner", "ada") == []
-    assert registry.set_visibility(kb.kb_id, "private", force=True).visibility == "private"
+    assert registry.set_visibility(kb.kb_id, "private", confirm=True).visibility == "private"
+    assert registry.list_unavailable_references("mastery_template", "tpl_t2")[0].reason == (
+        "made_private"
+    )
     with pytest.raises(registry.KbVisibilityError):
         registry.set_visibility(kb.kb_id, "hidden")
 
@@ -300,7 +309,7 @@ def test_making_private_is_blocked_only_by_other_owners_references(tmp_path):
     ]
     [revoked] = registry.list_unavailable_references("partner", "ada")
     assert (revoked.kb_id, revoked.kb_name, revoked.reason) == (kb.kb_id, "physics", "made_private")
-    assert registry.list_revoked_references(kb.kb_id) == [revoked]
+    assert [r.referrer_id for r in registry.list_revoked_references(kb.kb_id)] == ["tpl_t2", "ada"]
 
 
 def test_revoked_references_never_grant_access_and_clear_on_restatement(tmp_path, make_user):
@@ -637,9 +646,7 @@ def test_guarded_replacement_holds_sqlite_write_lock_during_read_check(tmp_path,
         "course", "c1", [(kb.ref, None)], created_by=user.id, readable_by=user,
     )
     assert checked == [kb.kb_id]
-    with pytest.raises(registry.KbVisibilityError, match="other accounts"):
-        registry.set_visibility(kb.kb_id, "private")
-    registry.set_visibility(kb.kb_id, "private", force=True)
+    registry.set_visibility(kb.kb_id, "private")
     assert registry.list_references(kb.kb_id) == []
     assert registry.list_unavailable_references("course", "c1")[0].reason == "made_private"
 
