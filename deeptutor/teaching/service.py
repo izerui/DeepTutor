@@ -405,8 +405,9 @@ class TeachingService:
 
     async def preview_publish(self, template_id: str) -> dict:
         """Everything the teacher confirms before publishing; writes nothing."""
-        template = self.get(template_id, owner_only=True)
-        self._ensure_not_archived(template)
+        # Every synchronous store/registry section runs off the event loop:
+        # the teaching store's writer lock can be held by another thread.
+        template = await asyncio.to_thread(self._publishable, template_id)
         progress, topic = await asyncio.to_thread(self._load_draft, template)
         plan = await asyncio.to_thread(self._plan, template, topic)
         issues = outline_issues(progress.modules, topic.sources)
@@ -421,15 +422,15 @@ class TeachingService:
             issues.append(str(exc))
             outline = None
         if outline is not None and template.current_revision > 0:
-            previous = self.store.get_revision(template.id, template.current_revision)
-            if previous is None:
-                raise TemplateConflict("The current revision of this teacher path is missing.")
+            previous = await asyncio.to_thread(self._current_revision, template)
             diff = diff_outlines(previous.outline.modules, outline.modules)
+            # The model call stays async and outside every writer.
             suggestions = await suggest_changes(diff, language=_language())
             changes["items"] = [suggestion.model_dump() for suggestion in suggestions]
             changes["removed"] = [{"kp_id": p.id, "name": p.name} for p in diff.removed]
+        described, affected = await asyncio.to_thread(self._describe_with_count, template)
         return {
-            "template": self.describe(template),
+            "template": described,
             "draft_revision": progress.version,
             "outline_issues": issues,
             "source_issues": [asdict(issue) for issue in plan.issues],
@@ -451,7 +452,7 @@ class TeachingService:
             "changes": changes,
             "module_count": len(progress.modules),
             "knowledge_point_count": sum(len(m.knowledge_points) for m in progress.modules),
-            "affected_students": self.store.count_active(template.id),
+            "affected_students": affected,
             "can_publish": not issues and not plan.issues,
         }
 
@@ -628,8 +629,9 @@ class TeachingService:
 
     async def publish(self, template_id: str, request: PublishRequest) -> dict:
         # 1. Validate everything; nothing below writes until this block passes.
-        template = self.get(template_id, owner_only=True)
-        self._ensure_not_archived(template)
+        # Synchronous store/registry sections run in worker threads (never on
+        # the event loop), and nothing awaits while holding a writer.
+        template = await asyncio.to_thread(self._publishable, template_id)
         progress, topic = await asyncio.to_thread(self._load_draft, template)
         if progress.version != request.draft_revision:
             raise TemplateConflict(
@@ -640,7 +642,7 @@ class TeachingService:
         plan = await asyncio.to_thread(self._plan, template, topic)
         if issues or plan.issues:
             raise _blocked(issues, [asdict(issue) for issue in plan.issues])
-        students = self._validate_students(request.student_ids)
+        students = await asyncio.to_thread(self._validate_students, request.student_ids)
         try:
             outline = snapshot_outline(progress, topic, template.kp_aliases)
         except SnapshotError as exc:
@@ -649,9 +651,7 @@ class TeachingService:
         if template.current_revision == 0:
             change_log = first_revision_log(outline.modules)
         else:
-            previous = self.store.get_revision(template.id, template.current_revision)
-            if previous is None:
-                raise TemplateConflict("The current revision of this teacher path is missing.")
+            previous = await asyncio.to_thread(self._current_revision, template)
             diff = diff_outlines(previous.outline.modules, outline.modules)
             try:
                 change_log, new_aliases = build_change_log(diff, request.kp_decisions)
@@ -716,7 +716,9 @@ class TeachingService:
             published_by=user.id,
         )
         try:
-            updated = self.store.add_revision(revision, aliases=aliases, title=outline.name)
+            updated = await asyncio.to_thread(
+                self.store.add_revision, revision, aliases=aliases, title=outline.name
+            )
         except ValueError as exc:
             logger.exception(
                 "Teacher path %s: revision %s could not be written", template.id, revision.revision
@@ -730,13 +732,28 @@ class TeachingService:
         warnings = await asyncio.to_thread(
             self._after_revision, template, revision, students, user, explicit_kbs, explicit_books
         )
+        described, affected = await asyncio.to_thread(self._describe_with_count, updated)
         return {
-            "template": self.describe(updated),
+            "template": described,
             "revision": revision.revision,
             "change_log": {key: entry.model_dump() for key, entry in change_log.items()},
-            "affected_students": self.store.count_active(template.id),
+            "affected_students": affected,
             "warnings": warnings,
         }
+
+    def _publishable(self, template_id: str) -> MasteryTemplate:
+        template = self.get(template_id, owner_only=True)
+        self._ensure_not_archived(template)
+        return template
+
+    def _current_revision(self, template: MasteryTemplate) -> TemplateRevision:
+        previous = self.store.get_revision(template.id, template.current_revision)
+        if previous is None:
+            raise TemplateConflict("The current revision of this teacher path is missing.")
+        return previous
+
+    def _describe_with_count(self, template: MasteryTemplate) -> tuple[dict, int]:
+        return self.describe(template), self.store.count_active(template.id)
 
     # ---- assignments ------------------------------------------------------
 
