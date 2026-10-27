@@ -29,6 +29,7 @@ import threading
 from typing import TYPE_CHECKING, Any, Literal
 import uuid
 
+from deeptutor.knowledge.file_snapshot import FileSnapshotCache
 from deeptutor.knowledge.kb_types import (
     CONNECTED_KB_TYPES, CONNECTOR_CONFIG_FIELDS, CONNECTOR_PROVIDERS,
 )
@@ -338,11 +339,20 @@ def kind_of(entry: Any) -> str:
     return str(kind) if kind in CONNECTOR_KINDS else UPLOADED_KIND
 
 
+# Parsed ``kb_config.json`` payloads, re-validated against the file on every
+# use; treat cached payloads as read-only.
+_CONFIG_PAYLOADS = FileSnapshotCache()
+
+
+def _parse_config(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def config_kind(record: KbRecord) -> str | None:
     """Read the on-disk kind used by direct consumers of a registry record."""
     path = Path(record.base_dir) / "kb_config.json"
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = _CONFIG_PAYLOADS.load(path, _parse_config)
     except FileNotFoundError:
         # Registry-only records have no readable resource yet. Keep their
         # declared restrictions; resolution separately requires a live entry.

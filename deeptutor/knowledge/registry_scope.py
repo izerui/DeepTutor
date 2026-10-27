@@ -9,6 +9,7 @@ import sqlite3
 from typing import TYPE_CHECKING, cast
 
 from deeptutor.knowledge import registry
+from deeptutor.knowledge.file_snapshot import FileSnapshotCache
 
 if TYPE_CHECKING:
     from deeptutor.multi_user.models import CurrentUser
@@ -51,6 +52,24 @@ def is_retired_source(base_dir: str | Path) -> bool:
     return relative.parts[1:4] == ("workspace", "knowledge_bases", ".retired")
 
 
+# Parsed ``workspaces.sqlite3`` locations, re-validated per use (see file_snapshot):
+# an archive commit by any process is seen by the next admission check.
+_CATALOG_LOCATIONS = FileSnapshotCache()
+
+
+def _catalog_locations(catalog: Path) -> dict[str, bool]:
+    """Resolved KB storage location -> archived, for one account catalog."""
+    locations: dict[str, bool] = {}
+    with closing(sqlite3.connect(f"{catalog.as_uri()}?mode=ro", uri=True)) as conn:
+        for (payload,) in conn.execute("SELECT payload FROM workspaces"):
+            row = json.loads(payload)
+            if row.get("kind") == "workspace":
+                storage = Path(row["path"]).expanduser() / ".deeptutor/data/knowledge_bases"
+                location = str(storage.resolve())
+                locations[location] = locations.get(location, False) or bool(row.get("archived"))
+    return locations
+
+
 def archived_source_roots(
     *, base_dir: str | Path | None = None, require_resolved: bool = False,
 ) -> set[str]:
@@ -84,14 +103,9 @@ def archived_source_roots(
         try:
             if not catalog.is_file():
                 continue
-            locations = {}
-            with closing(sqlite3.connect(f"{catalog.as_uri()}?mode=ro", uri=True)) as conn:
-                for (payload,) in conn.execute("SELECT payload FROM workspaces"):
-                    row = json.loads(payload)
-                    if row.get("kind") == "workspace":
-                        storage = Path(row["path"]).expanduser() / ".deeptutor/data/knowledge_bases"
-                        location = str(storage.resolve())
-                        locations[location] = locations.get(location, False) or bool(row.get("archived"))
+            # Unchanged catalogs are not reopened; every account is still
+            # consulted because any catalog may list (and archive) this root.
+            locations = _CATALOG_LOCATIONS.load(catalog, _catalog_locations)
             resolved = resolved or target in locations
             archived.update(location for location, frozen in locations.items() if frozen)
         except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as exc:
