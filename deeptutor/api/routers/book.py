@@ -1588,7 +1588,7 @@ async def supplement(req: SupplementRequest) -> dict[str, Any]:
 
 @router.post("/books/page-chat-session")
 async def set_page_chat_session(req: PageChatSessionRequest) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(req.book_id)
+    resolved = _resolve_book_or_404(_path_book_ref(req.book_id))
     req.book_id = book_registry.strip_ref(req.book_id)
     engine = resolved.engine
     if resolved.is_shared:

@@ -36,7 +36,7 @@ ORIGINAL_CONTENT_ROUTES: frozenset[str] = frozenset(
     }
 )
 #: R2 (B2-17): the reader's OWN state on a path book — reading progress,
-#: bookmarks, in-book quiz attempts and learning captures. The same entitlement
+#: bookmarks, in-book quiz attempts, learning captures and page-chat bindings. The same entitlement
 #: as reading the book opens them; the endpoints then resolve the canonical
 #: book, whose learning store for a non-owner is the reader's own overlay
 #: (``BookLearningOverlay``), never the owner's book directory. Method-exact:
@@ -49,6 +49,8 @@ LEARNER_STATE_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/books/{book_id}/learning-captures"),
         ("POST", "/books/{book_id}/learning-captures"),
         ("PATCH", "/books/{book_id}/learning-captures/{capture_id}"),
+        # The reader's own page-chat binding (overlay ``page_chat_sessions``).
+        ("POST", "/books/page-chat-session"),
     }
 )
 MASTERY_TEMPLATE_PARAM = "mastery_template"
@@ -89,10 +91,10 @@ async def enter_mastery_template_scope(request: Request) -> None:
         method == allowed and route.endswith(template)
         for allowed, template in LEARNER_STATE_ROUTES
     )
-    if not learner_state and (
-        method != "GET"
-        or not any(route.endswith(template) for template in ORIGINAL_CONTENT_ROUTES)
-    ):
+    original_content = method == "GET" and any(
+        route.endswith(template) for template in ORIGINAL_CONTENT_ROUTES
+    )
+    if not (learner_state or original_content):
         return
     params = request.path_params
     book_ref = str(params.get("book_id") or "")

@@ -24,6 +24,13 @@ from deeptutor.teaching.service import TeachingService
 
 BOOK_ID = "bk_ref"
 OTHER_BOOK_ID = "bk_unlisted"
+QUIZ_QUESTION = {
+    "question_id": "q_nodes",
+    "question": "Which points of a standing wave stay still?",
+    "question_type": "choice",
+    "options": {"A": "Antinodes", "B": "Nodes"},
+    "correct_answer": "B",
+}
 
 
 def _auth(name: str) -> dict[str, str]:
@@ -65,7 +72,13 @@ def _write_book(book_id: str, title: str) -> None:
                         type=BlockType.TEXT,
                         status=BlockStatus.READY,
                         payload={"body": "Nodes stay still."},
-                    )
+                    ),
+                    Block(
+                        id=f"quiz_{page_id}",
+                        type=BlockType.QUIZ,
+                        status=BlockStatus.READY,
+                        payload={"questions": [QUIZ_QUESTION]},
+                    ),
                 ],
             )
         )
@@ -240,7 +253,97 @@ def test_the_owner_naming_the_path_keeps_using_the_book_store(ref_book, teaching
         "/api/books/progress/visit", json={"book_id": BOOK_ID, "page_id": "pg_1"}, headers=headers
     )
     assert visit.status_code == 200
-    assert (ref_book.owner_dir / "progress.json").is_file() or any(
-        "progress" in name for name in _snapshot(ref_book.owner_dir)
-    )
+    assert "progress.json" in _snapshot(ref_book.owner_dir)
     assert not ref_book.overlay_dir.exists()
+
+
+# ---- Fix round 1: page chat binding and the graded quiz (review Minors 1, 2) ----
+
+
+def test_page_chat_binding_lands_in_the_students_own_store(ref_book, teaching_http):
+    client = teaching_http.client
+    before = _snapshot(ref_book.owner_dir)
+    body = {"book_id": BOOK_ID, "page_id": "pg_1", "session_id": "sara-chat-1"}
+
+    assert client.post("/api/books/page-chat-session", json=body, headers=_auth("sara")).status_code == 404
+    linked = client.post("/api/books/page-chat-session", json=body, headers=ref_book.scoped)
+    assert linked.status_code == 200, linked.text
+    assert linked.json()["book"]["metadata"]["page_chat_sessions"] == {"pg_1": "sara-chat-1"}
+
+    assert (ref_book.overlay_dir / "page_chat_sessions.json").is_file()
+    assert _snapshot(ref_book.owner_dir) == before
+    detail = client.get(f"/api/books/{BOOK_ID}", headers=ref_book.scoped).json()
+    assert detail["book"]["metadata"]["page_chat_sessions"] == {"pg_1": "sara-chat-1"}
+    owner = client.get(f"/api/books/{BOOK_ID}", headers=_auth("tina")).json()
+    assert "sara-chat-1" not in str(owner["book"].get("metadata"))
+
+    other = client.post(
+        "/api/books/page-chat-session",
+        json={**body, "book_id": OTHER_BOOK_ID},
+        headers=ref_book.scoped,
+    )
+    assert other.status_code == 404
+
+
+def test_page_chat_binding_is_refused_after_revoke(
+    ref_book, teaching_http, as_account, teaching_users
+):
+    body = {"book_id": BOOK_ID, "page_id": "pg_1", "session_id": "sara-chat-1"}
+    client = teaching_http.client
+    assert client.post("/api/books/page-chat-session", json=body, headers=ref_book.scoped).status_code == 200
+    saved = (ref_book.overlay_dir / "page_chat_sessions.json").read_bytes()
+    with as_account("tina"):
+        TeachingService().revoke(ref_book.template_id, teaching_users["sara"]["id"])
+    assert client.post(
+        "/api/books/page-chat-session", json={**body, "session_id": "x"}, headers=ref_book.scoped
+    ).status_code == 404
+    assert (ref_book.overlay_dir / "page_chat_sessions.json").read_bytes() == saved
+
+
+def test_a_graded_quiz_answer_lands_in_the_students_own_question_bank(
+    ref_book, teaching_http, as_account
+):
+    from deeptutor.services.session import get_sqlite_session_store
+
+    answered = teaching_http.client.post(
+        "/api/books/quiz-attempt",
+        json={
+            "book_id": BOOK_ID,
+            "page_id": "pg_1",
+            "block_id": "quiz_pg_1",
+            "question_id": "q_nodes",
+            "user_answer": "B",
+            "is_correct": True,
+            "submission_id": "sub-graded",
+        },
+        headers=ref_book.scoped,
+    )
+    assert answered.status_code == 200, answered.text
+
+    def entries(name: str) -> list[dict]:
+        with as_account(name):
+            store = get_sqlite_session_store()
+            items = asyncio.run(store.list_notebook_entries(source="book"))["items"]
+        return items
+
+    mine = entries("sara")
+    assert [(e["question_id"], e["user_answer"], e["is_correct"]) for e in mine] == [
+        ("q_nodes", "B", True)
+    ]
+    assert mine[0]["material_id"] == BOOK_ID
+    assert entries("tina") == []
+
+
+def test_an_admin_reader_keeps_state_in_their_own_overlay(ref_book, teaching_http, as_account):
+    """Review Minor 3: a non-owner who may read the book (admin) never writes the owner's dir."""
+    from deeptutor.book.learning_overlay import BookLearningOverlay
+    from deeptutor.multi_user.paths import get_current_path_service
+
+    before = _snapshot(ref_book.owner_dir)
+    headers = {**_auth("adam"), "X-DeepTutor-Mastery-Template": ref_book.template_id}
+    statuses = _write_all(teaching_http.client, headers)
+    with as_account("adam"):
+        admin_overlay = BookLearningOverlay(get_current_path_service()).book_root(BOOK_ID)
+    assert set(statuses.values()) == {200}
+    assert (admin_overlay / "progress.json").is_file()
+    assert _snapshot(ref_book.owner_dir) == before
