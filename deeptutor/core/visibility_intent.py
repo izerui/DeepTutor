@@ -34,3 +34,12 @@ def record_choice(
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (_PREFIX + resource_id, visibility),
     )
+
+
+def remove_choice(
+    conn: sqlite3.Connection, resource_id: str, *, schema: Schema,
+) -> None:
+    """Remove the visibility intent for *resource_id* inside a caller's writer."""
+    conn.execute(
+        f"DELETE FROM {_table(schema)} WHERE key = ?", (_PREFIX + resource_id,),
+    )

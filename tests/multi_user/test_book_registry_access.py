@@ -321,6 +321,36 @@ async def test_failed_creation_emits_no_ready_and_can_retry(as_user, proposal, m
 
 
 @pytest.mark.asyncio
+async def test_post_registration_save_failure_leaves_no_orphan_registry_row(
+    as_user, proposal, monkeypatch,
+):
+    """If save_book fails after prepare_new_book, the registry row must be compensated."""
+    with as_user("root", role="admin"):
+        engine = BookEngine()
+        original_save = engine.storage.save_book
+        captured_id = []
+
+        def fail_save(book):
+            captured_id.append(book.id)
+            raise OSError("synthetic disk failure")
+
+        monkeypatch.setattr(engine.storage, "save_book", fail_save)
+        bus = StreamBus()
+        with pytest.raises(OSError, match="synthetic disk failure"):
+            await engine.create_book(user_intent="Waves", stream=bus)
+        assert captured_id, "save_book must have been called"
+        book_id = captured_id[0]
+        # The orphan registry row should not exist after the failure
+        assert registry.get_book(book_id) is None, "orphan registry row left behind"
+        assert _choice(book_id) is None, "orphan visibility_intent left behind"
+        # Retry must succeed cleanly
+        monkeypatch.setattr(engine.storage, "save_book", original_save)
+        book, _ = await engine.create_book(user_intent="Waves", stream=bus)
+        assert registry.get_book(book.id).created_by == "local-admin"
+        assert _choice(book.id) == "private"
+
+
+@pytest.mark.asyncio
 async def test_repaired_storage_creation_freezes_d22_without_scanning(
     as_user, proposal, monkeypatch, tmp_path, seed_user,
 ):

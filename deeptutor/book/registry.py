@@ -614,11 +614,26 @@ def list_revoked_book_references(book_id: str) -> list[RevokedBookReference]:
         return [_revoked(row) for row in rows]
 
 
+def _book_registry_schema(conn: sqlite3.Connection) -> str:
+    """Return the schema name (``main`` or ``books``) that holds ``book_registry``."""
+    rows = conn.execute(
+        "SELECT name FROM pragma_database_list WHERE name = 'books'"
+    ).fetchall()
+    return "books" if rows else "main"
+
+
 def _unregister(conn: sqlite3.Connection, book_id: str) -> None:
     record = _get_book(conn, book_id)
     if record is not None:
+        from deeptutor.core.visibility_intent import remove_choice
+
         _revoke(conn, record, _references_of(conn, book_id), reason="book_deleted")
         conn.execute("DELETE FROM book_registry WHERE book_id = ?", (record.book_id,))
+        # Clean up the visibility intent stored beside the book_registry rows.
+        # Under shared_write the book DB is attached as "books"; under _write()
+        # it is the main connection. Detect which schema holds our table.
+        _schema = _book_registry_schema(conn)
+        remove_choice(conn, book_id, schema=_schema)
 
 
 def unregister_book(book_id: str) -> None:

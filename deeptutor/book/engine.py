@@ -555,12 +555,27 @@ class BookEngine:
             from deeptutor.multi_user.book_access import prepare_new_book
 
             prepare_new_book(book, self.storage)
-            self.storage.save_book(book)
-            self.storage.save_inputs(book.id, book_inputs)
-            self.storage.save_progress(Progress(book_id=book.id))
-            self.storage.append_log(
-                book.id, f"created (status=draft, title='{book.title}')", op="create"
-            )
+            try:
+                self.storage.save_book(book)
+                self.storage.save_inputs(book.id, book_inputs)
+                self.storage.save_progress(Progress(book_id=book.id))
+                self.storage.append_log(
+                    book.id, f"created (status=draft, title='{book.title}')", op="create"
+                )
+            except BaseException:
+                # Compensate: remove the registry row so no orphan identity
+                # accumulates. The writer committed in prepare_new_book, so a
+                # separate unregister transaction is safe (no writer held across
+                # slow file I/O).
+                try:
+                    from deeptutor.book import registry as _reg
+
+                    _reg.unregister_book(book.id)
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to compensate orphan registry for %s", book.id, exc_info=True,
+                    )
+                raise
 
             await bstream.book_event(
                 "proposal_ready",
