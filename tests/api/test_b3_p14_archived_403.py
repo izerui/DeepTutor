@@ -108,11 +108,27 @@ def test_single_book_workspace_lookup_off_event_loop(archive_env, monkeypatch):
         return real(*args, **kwargs)
 
     monkeypatch.setattr(book_module, "_source_workspace_name", recording)
+
+    # GET /books/{id} — the original R1 site.
     response = client.get(
         f"/api/books/book:{record.book_id}",
         headers=headers("root"),
     )
     assert response.status_code == 200, response.text
+
+    # POST /books/page-chat-session — shared book on the event loop.
+    on_loop.clear()
+    response = client.post(
+        "/api/books/page-chat-session",
+        headers=headers("root"),
+        json={
+            "book_id": f"book:{record.book_id}",
+            "page_id": "pg_archive",
+            "session_id": "sess_test",
+        },
+    )
+    assert response.status_code == 200, response.text
+
     if on_loop:
         assert all(not v for v in on_loop), (
             "_source_workspace_name ran on the event loop"

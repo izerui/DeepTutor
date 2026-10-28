@@ -1940,7 +1940,10 @@ async def set_page_chat_session(req: PageChatSessionRequest) -> dict[str, Any]:
         )
     if book is None:
         raise HTTPException(status_code=404, detail="Book or page not found")
-    return {"book": _book_payload(book, resolved)}
+    # B3-P14 R1: _book_payload may call _source_workspace_name (SQLite I/O)
+    # for shared books; keep it off the event loop.
+    payload = await asyncio.to_thread(_book_payload, book, resolved)
+    return {"book": payload}
 
 
 @router.post("/books/resume")
