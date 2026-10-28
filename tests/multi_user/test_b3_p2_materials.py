@@ -19,6 +19,7 @@ from deeptutor.teaching.instances import apply_pending_revision
 from deeptutor.teaching.models import KpDecision
 from deeptutor.teaching.store import TeachingStore
 
+
 def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
