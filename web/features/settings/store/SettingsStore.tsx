@@ -652,6 +652,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Stays false until GET /api/settings returns a theme. The "system"
   // placeholder above must not be written over a palette this browser chose.
   const serverThemeLoadedRef = useRef(false);
+  // Latest stageUi, so a confirmed load can rebuild a draft that omitted theme.
+  const stageUiRef = useRef<(patch: Partial<UiSettings>) => Promise<void>>(
+    async () => {},
+  );
   const [language, setLanguage] = useState<UiSettings["language"]>("en");
   const [responseLanguage, setResponseLanguage] =
     useState<UiSettings["response_language"]>("en");
@@ -853,6 +857,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         // No draft is the normal case and a failed read must not block the
         // page; the live settings above are already in hand.
       }
+      // A UI draft staged while this GET was failing omitted theme so a
+      // placeholder could not be saved. Once the server confirms a theme,
+      // put that value on the draft; Apply otherwise keeps the closed-over
+      // payload and leaves localStorage and the document unchanged.
+      const pendingUi = pendingRef.current.get("ui");
+      if (
+        loadedTheme &&
+        extensionsRef.current.get("ui")?.dirty &&
+        pendingUi &&
+        typeof pendingUi === "object" &&
+        !("theme" in pendingUi)
+      ) {
+        await stageUiRef.current({ theme: loadedTheme });
+      }
       settingsLoaded = true;
     } catch (err) {
       console.error("Failed to load settings:", err);
@@ -970,6 +988,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       save: async () => { await applyExtensionPayload("ui", next); applyUi(next); },
     });
   }, [liveUi, registerExtension, applyUi]);
+  stageUiRef.current = stageUi;
   const updateTheme = useCallback(async (theme: UiSettings["theme"]) => stageUi({ theme }), [stageUi]);
   const updateLanguage = useCallback(async (language: UiSettings["language"]) => stageUi({ language }), [stageUi]);
   const updateResponseLanguage = useCallback(async (response_language: UiSettings["response_language"]) => stageUi({ response_language }), [stageUi]);

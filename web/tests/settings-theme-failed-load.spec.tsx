@@ -157,3 +157,36 @@ it("still sends the server theme after settings load", async () => {
   expect(body.language).toBe("zh");
   expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
 });
+
+it("includes the confirmed theme in a failed-load draft after retry", async () => {
+  localStorage.setItem(THEME_STORAGE_KEY, "glass");
+  document.documentElement.classList.add("dark", "theme-glass");
+  installFetch(false, "system");
+  await ready();
+
+  await act(async () => {
+    await settings.updateLanguage("zh");
+    await settings.updateTheme("dark");
+  });
+
+  installFetch(true, "snow");
+  await act(async () => {
+    await settings.reloadSettings();
+  });
+
+  expect(settings.theme).toBe("snow");
+  expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("glass");
+  expect(document.documentElement.classList.contains("theme-glass")).toBe(true);
+
+  await act(async () => {
+    await settings.applyCatalog();
+  });
+
+  expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("snow");
+  expect(document.documentElement.classList.contains("theme-snow")).toBe(true);
+  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  expect(document.documentElement.classList.contains("theme-glass")).toBe(false);
+  const body = JSON.parse(String((uiPuts()[0][1] as RequestInit).body));
+  expect(body.language).toBe("zh");
+  expect(body.theme).toBe("snow");
+});

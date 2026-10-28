@@ -78,13 +78,12 @@ const PALETTES: Record<Theme, Palette> = {
 // a left sidebar with one highlighted nav row, a content area with two
 // text lines and an accent button. Pure SVG so it stays crisp at any
 // device pixel ratio without leaking real interactive controls.
-function MiniPreview({ palette }: { palette: Palette }) {
-  const { bg, fg, card, primary, muted, border, glass, split } = palette;
+function PreviewShapes({ palette }: { palette: Palette }) {
+  const { bg, fg, card, primary, muted, border, glass } = palette;
   return (
-    <svg viewBox="0 0 160 96" className="block h-full w-full" aria-hidden>
+    <>
       {/* Outer frame */}
       <rect x="0" y="0" width="160" height="96" rx="6" fill={bg} />
-      {split && <rect x="80" y="0" width="80" height="96" fill="#1a1918" />}
       {glass && (
         <>
           <defs>
@@ -209,6 +208,35 @@ function MiniPreview({ palette }: { palette: Palette }) {
       />
       {/* Accent button */}
       <rect x="62" y="64" width="22" height="9" rx="2.5" fill={primary} />
+    </>
+  );
+}
+
+function MiniPreview({ palette }: { palette: Palette }) {
+  if (!palette.split) {
+    return (
+      <svg viewBox="0 0 160 96" className="block h-full w-full" aria-hidden>
+        <PreviewShapes palette={palette} />
+      </svg>
+    );
+  }
+  // Light page on the left, dark page on the right, each with its own text.
+  return (
+    <svg viewBox="0 0 160 96" className="block h-full w-full" aria-hidden>
+      <defs>
+        <clipPath id="theme-system-left">
+          <rect x="0" y="0" width="80" height="96" />
+        </clipPath>
+        <clipPath id="theme-system-right">
+          <rect x="80" y="0" width="80" height="96" />
+        </clipPath>
+      </defs>
+      <g clipPath="url(#theme-system-left)">
+        <PreviewShapes palette={PALETTES.snow} />
+      </g>
+      <g clipPath="url(#theme-system-right)">
+        <PreviewShapes palette={PALETTES.dark} />
+      </g>
     </svg>
   );
 }
