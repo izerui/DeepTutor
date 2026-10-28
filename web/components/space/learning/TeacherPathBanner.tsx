@@ -35,7 +35,7 @@ export function TeacherPathBanner({
   compact?: boolean
 }) {
   const { t } = useTranslation()
-  const { learningPolicy } = useAuthStatus()
+  const { loading: authLoading, learningPolicy } = useAuthStatus()
   // Keyed by the revision it announced: a later update shows again.
   const [hiddenRevision, setHiddenRevision] = useState<number | null>(null)
   const origin = topic.origin
@@ -45,8 +45,10 @@ export function TeacherPathBanner({
       ? origin.update_notice
       : null
   // A learning policy without the `books` surface makes the library a 403;
-  // the link is absent rather than offered and then rejected (B3-P15).
-  const booksAllowed = !learningPolicy || learningPolicy.allowedSurfaces.includes('books')
+  // the link is absent rather than offered and then rejected (B3-P15). Until
+  // the status is known nothing is offered, so a learner never sees it flash.
+  const booksAllowed =
+    !authLoading && (!learningPolicy || learningPolicy.allowedSurfaces.includes('books'))
   const books = booksAllowed ? courseBooks(topic) : []
   const changes = notice
     ? [

@@ -70,6 +70,13 @@ it('keeps the link for a learner whose policy grants books', () => {
   )
 })
 
+it('offers no link before the auth status is known (no flash for learners)', () => {
+  auth.state = { loading: true, learningPolicy: null }
+  render(<TeacherPathBanner topic={teacherTopic()} />)
+  expect(screen.queryByText(/Course books/)).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
+})
+
 it('keeps the link for accounts without a learning policy', () => {
   render(<TeacherPathBanner topic={teacherTopic()} />)
   expect(screen.getByRole('link', { name: 'Waves book' })).toBeTruthy()
