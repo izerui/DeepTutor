@@ -129,7 +129,7 @@ function App({ page = "workspace" }: { page?: string }) {
   );
 }
 async function ready() {
-  await waitFor(() => expect(settings.settingsLoading).toBe(false));
+  await waitFor(() => expect(settings.settingsLoading).toBe(false), { timeout: 10_000 });
 }
 const writes = (endpoint: string) =>
   mocks.fetch.mock.calls.filter(

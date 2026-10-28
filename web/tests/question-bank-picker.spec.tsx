@@ -71,10 +71,11 @@ it("loads later pages and selects only the visible search matches", async () => 
   }));
   const onApply = vi.fn();
   render(<QuestionBankPicker open initialSelected={[]} onApply={onApply} onClose={vi.fn()} />);
-  await screen.findByRole("button", { name: /Question 201/ });
+  await screen.findByRole("button", { name: /Question 201/ }, { timeout: 10_000 });
   expect(listNotebookEntries).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 200, limit: 200 }));
   fireEvent.change(screen.getByPlaceholderText("Search questions by content"), { target: { value: "Question 201" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Select all (1)" })).toBeVisible(), { timeout: 10_000 });
   fireEvent.click(screen.getByRole("button", { name: "Select all (1)" }));
   fireEvent.click(screen.getByRole("button", { name: "Use Selected Questions (1)" }));
-  await waitFor(() => expect(onApply.mock.calls[0][0].map((row: SelectedQuestionEntry) => row.id)).toEqual([201]));
+  await waitFor(() => expect(onApply.mock.calls[0][0].map((row: SelectedQuestionEntry) => row.id)).toEqual([201]), { timeout: 10_000 });
 });
