@@ -304,6 +304,30 @@ def _resolve_book_or_404(
     return resolved
 
 
+def _page_chat_sessions(resolved: ResolvedBook, book: Any) -> dict[str, Any]:
+    """The caller's page -> chat session map for ``book``.
+
+    Shared books keep it in the reader's own learning overlay; own books in
+    the book's metadata.
+    """
+    if resolved.is_shared:
+        sessions = resolved.learning.load_page_chat_sessions(book.id)
+    else:
+        metadata = book.metadata if isinstance(book.metadata, dict) else {}
+        sessions = metadata.get("page_chat_sessions")
+    return sessions if isinstance(sessions, dict) else {}
+
+
+def _page_chat_session_id(resolved: ResolvedBook, book: Any, page_id: str) -> str:
+    """The chat session bound to ``page_id``; own books fall back to the legacy
+    book-wide session in ``inputs``."""
+    session_id = str(_page_chat_sessions(resolved, book).get(page_id) or "").strip()
+    if not session_id and not resolved.is_shared:
+        inputs = resolved.engine.storage.load_inputs(book.id)
+        session_id = str(inputs.chat_session_id if inputs is not None else "").strip()
+    return session_id
+
+
 def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
     data = book.model_dump(mode="json")
     data.update(resolved.capabilities())
@@ -312,8 +336,9 @@ def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
         if resolved.record is not None else list(book.knowledge_bases)
     )
     if resolved.is_shared:
+        # Own books already carry their sessions in the metadata dumped above.
         metadata = dict(data.get("metadata") or {})
-        metadata["page_chat_sessions"] = resolved.learning.load_page_chat_sessions(book.id)
+        metadata["page_chat_sessions"] = _page_chat_sessions(resolved, book)
         data["metadata"] = metadata
     return data
 
@@ -1470,18 +1495,7 @@ async def quiz_attempt(req: QuizAttemptRequest) -> dict[str, Any]:
             from deeptutor.services.session import get_sqlite_session_store
 
             store = get_sqlite_session_store()
-            metadata = book.metadata if isinstance(book.metadata, dict) else {}
-            page_sessions = (
-                resolved.learning.load_page_chat_sessions(book.id)
-                if resolved.is_shared else metadata.get("page_chat_sessions")
-            )
-            session_id = str(
-                (page_sessions.get(req.page_id) if isinstance(page_sessions, dict) else "")
-                or ""
-            ).strip()
-            if not session_id and not resolved.is_shared:
-                inputs = resolved.engine.storage.load_inputs(book.id)
-                session_id = str(inputs.chat_session_id if inputs is not None else "").strip()
+            session_id = _page_chat_session_id(resolved, book, req.page_id)
             has_session = bool(session_id and await store.get_session(session_id) is not None)
             from deeptutor.learning.assessment import (
                 AssessmentRecord,
