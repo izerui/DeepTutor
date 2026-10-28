@@ -34,6 +34,9 @@ function installColorScheme(initialDark: boolean) {
     dispatchEvent() {
       return false;
     },
+    listenerCount() {
+      return listeners.size;
+    },
     setDark(next: boolean) {
       dark = next;
       const event = { matches: next, media: query };
@@ -94,7 +97,12 @@ describe("system theme follows the OS", () => {
   it("keeps an explicit theme when the OS scheme changes", () => {
     const media = installColorScheme(true);
 
+    // Subscribe first, the way the app shell does, then pick a palette.
+    // setTheme alone never attaches a listener, so this is what proves detach.
+    initializeTheme();
+    expect(media.listenerCount()).toBe(1);
     setTheme("glass");
+    expect(media.listenerCount()).toBe(0);
 
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("glass");
     expect(document.documentElement.classList.contains("theme-glass")).toBe(true);
