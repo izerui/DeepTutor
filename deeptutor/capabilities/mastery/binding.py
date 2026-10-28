@@ -103,7 +103,8 @@ async def rebind_active_path(
     )
 
     target = sanitize_mastery_path_id(path_id)
-    store = LearningStore()
+    # Construction may open and migrate the database: never on the loop.
+    store = await asyncio.to_thread(LearningStore)
     if require_existing and not await asyncio.to_thread(store.exists, target):
         raise PathBindingError(
             f"No mastery path {path_id!r} exists. Call mastery_paths for the "
@@ -191,7 +192,8 @@ async def leave_active_path(
         # unbound mastery turn resolves it, so deleting the conversation takes
         # the scratch path with it instead of leaving an empty orphan behind.
         # Ownership is sticky in the store, so this can only ever add it.
-        await asyncio.to_thread(LearningStore().bind_session, resolved, session_id, owns_path=True)
+        store = await asyncio.to_thread(LearningStore)
+        await asyncio.to_thread(store.bind_session, resolved, session_id, owns_path=True)
     # Clear the stored association so the next turn resolves the fallback for
     # itself rather than being pinned to a scratch id that may be renamed.
     await _remember_on_session(session_id, "")
