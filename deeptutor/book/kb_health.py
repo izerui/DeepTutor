@@ -460,17 +460,48 @@ def refresh_book_fingerprints(
     return book
 
 
-def mark_drift_on_book(
+@dataclass
+class DriftPlan:
+    """What a drift check wants written, computed without touching the manifest.
+
+    ``baseline`` is the new ``(kb_document_fingerprints, kb_fingerprints)``
+    pair, or ``None`` when the stored baseline already matches. ``created_at``
+    pins the book the plan was computed for, so a deleted-and-recreated book
+    under the same id is never patched with a stale plan.
+    """
+
+    book_id: str
+    created_at: float
+    report: KBDriftReport
+    # Pages this check newly found stale (the report also echoes those the
+    # manifest already listed when the plan was computed).
+    new_stale_page_ids: list[str] = field(default_factory=list)
+    baseline: tuple[dict[str, dict[str, str]], dict[str, str]] | None = None
+
+
+def plan_drift(
     book_id: str,
     storage: BookStorage | None = None,
     manager: KnowledgeBaseManager | None = None,
-) -> KBDriftReport | None:
+) -> DriftPlan | None:
+    """The slow half of a drift check (hashing every raw document). Never writes.
+
+    Safe to run in a worker thread; hand the plan to :func:`apply_drift_plan`
+    on the event loop, where the engine's own book writers run.
+    """
     store = storage or get_book_storage()
     book = store.load_book(book_id)
     if book is None:
         return None
     report = detect_kb_drift(book, storage=store, manager=manager)
-    dirty = False
+    plan = DriftPlan(
+        book_id=book.id,
+        created_at=book.created_at,
+        report=report,
+        new_stale_page_ids=[
+            page_id for page_id in report.stale_page_ids if page_id not in book.stale_page_ids
+        ],
+    )
 
     # Self-heal: when there's no drift but the book is missing a baseline
     # fingerprint (legacy book / new book whose first compile hasn't finished)
@@ -489,16 +520,42 @@ def mark_drift_on_book(
             new_fingerprints != dict(book.kb_fingerprints or {})
             or new_documents != dict(book.kb_document_fingerprints or {})
         ):
-            book.kb_document_fingerprints = new_documents
-            book.kb_fingerprints = new_fingerprints
-            dirty = True
+            plan.baseline = (new_documents, new_fingerprints)
+    return plan
 
+
+def apply_drift_plan(plan: DriftPlan, storage: BookStorage | None = None) -> bool:
+    """Merge a plan's fields into the *current* manifest; ``True`` when saved.
+
+    Synchronous with no I/O beyond one manifest read/write: call it on the
+    event loop (no await between load and save), like every other engine
+    writer. The book is reloaded so a status/pause/revision written while the
+    plan was hashing survives, and a book deleted (renamed away) meanwhile is
+    left gone instead of being recreated by ``save_book``/``append_log``.
+    """
+    store = storage or get_book_storage()
+    book = store.load_book(plan.book_id)
+    if book is None or book.created_at != plan.created_at:
+        return False
+    report = plan.report
+    dirty = False
+    if plan.baseline is not None and (
+        not book.kb_fingerprints or _scheme_changed(book.kb_fingerprints)
+    ):
+        book.kb_document_fingerprints, book.kb_fingerprints = plan.baseline
+        dirty = True
     if report.has_drift:
-        book.stale_page_ids = report.stale_page_ids
+        book.stale_page_ids = list(
+            dict.fromkeys([*book.stale_page_ids, *plan.new_stale_page_ids])
+        )
         book.stale_detected_at = time.time()
         dirty = True
+    if not dirty:
+        return False
+    store.save_book(book)
+    if report.has_drift:
         store.append_log(
-            book_id,
+            plan.book_id,
             (
                 f"detected kb drift: changed={report.changed_kbs} "
                 f"new={report.new_kbs} removed={report.removed_kbs} "
@@ -506,10 +563,21 @@ def mark_drift_on_book(
             ),
             op="kb_health",
         )
+    return True
 
-    if dirty:
-        store.save_book(book)
-    return report
+
+def mark_drift_on_book(
+    book_id: str,
+    storage: BookStorage | None = None,
+    manager: KnowledgeBaseManager | None = None,
+) -> KBDriftReport | None:
+    """Plan and apply in one call, for callers already on the writers' thread."""
+    store = storage or get_book_storage()
+    plan = plan_drift(book_id, storage=store, manager=manager)
+    if plan is None:
+        return None
+    apply_drift_plan(plan, storage=store)
+    return plan.report
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -587,12 +655,15 @@ def scan_log_health(book_id: str, storage: BookStorage | None = None) -> LogHeal
 
 
 __all__ = [
+    "DriftPlan",
     "KBDriftReport",
     "LogHealthReport",
     "detect_kb_drift",
     "fingerprint_kb",
     "fingerprint_kbs",
+    "apply_drift_plan",
     "mark_drift_on_book",
+    "plan_drift",
     "refresh_book_fingerprints",
     "scan_log_health",
     "unavailable_kbs",

@@ -8,6 +8,8 @@ health report must list it under ``unavailable_kbs``, keep it out of
 
 from __future__ import annotations
 
+from collections.abc import Callable  # noqa: F401  (annotation)
+
 import pytest
 
 from deeptutor.knowledge import registry as kb_registry
@@ -123,7 +125,7 @@ def test_health_drift_runs_off_the_event_loop(
 
     _tinas_book(as_account, toms_public_kb.ref, public=False)
     on_loop: list[bool] = []
-    real = kb_health.mark_drift_on_book
+    real = kb_health.plan_drift
 
     def recording(*args, **kwargs):
         try:
@@ -133,7 +135,7 @@ def test_health_drift_runs_off_the_event_loop(
             on_loop.append(False)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(kb_health, "mark_drift_on_book", recording)
+    monkeypatch.setattr(kb_health, "plan_drift", recording)
     response = teaching_http.client.get("/api/books/bk_lens/health", headers=_auth("tina"))
     assert response.status_code == 200, response.text
     assert on_loop == [False]
@@ -321,3 +323,81 @@ def test_polling_with_every_kb_unavailable_does_not_rewrite_the_book(
         assert response.status_code == 200, response.text
         assert response.json()["kb_drift"]["unavailable_kbs"] == [toms_public_kb.ref]
     assert saves == []
+
+
+# ── Final review I1: the worker thread only computes; the event loop applies ──
+
+
+def _during_hashing(monkeypatch, action: "Callable[[], None]") -> list[bool]:
+    """Run ``action`` (an event-loop book writer stand-in) once, mid-hash."""
+    from deeptutor.book import kb_health
+
+    real = kb_health.fingerprint_kb_documents_batch
+    fired: list[bool] = []
+
+    def hashing(*args, **kwargs):
+        result = real(*args, **kwargs)
+        if not fired:
+            fired.append(True)
+            action()
+        return result
+
+    monkeypatch.setattr(kb_health, "fingerprint_kb_documents_batch", hashing)
+    return fired
+
+
+def test_status_written_during_hashing_is_not_overwritten(
+    toms_public_kb, as_account, teaching_http, monkeypatch,
+):
+    from deeptutor.book.models import BookStatus
+    from deeptutor.book.storage import get_book_storage
+
+    _tinas_book(as_account, toms_public_kb.ref, public=False)
+    with as_account("tina"):
+        store = get_book_storage()
+        book = store.load_book("bk_lens")
+        book.status = BookStatus.COMPILING
+        store.save_book(book)
+
+    def finalize() -> None:
+        current = store.load_book("bk_lens")
+        current.status = BookStatus.READY
+        store.save_book(current)
+
+    fired = _during_hashing(monkeypatch, finalize)
+    response = teaching_http.client.get("/api/books/bk_lens/health", headers=_auth("tina"))
+    assert response.status_code == 200, response.text
+    assert fired
+    with as_account("tina"):
+        saved = get_book_storage().load_book("bk_lens")
+    assert saved.status == BookStatus.READY
+    assert saved.kb_fingerprints[toms_public_kb.ref]  # the baseline was still merged in
+
+
+@pytest.mark.parametrize("drift", [False, True])
+def test_book_deleted_during_hashing_is_not_recreated(
+    toms_public_kb, as_account, teaching_http, monkeypatch, tmp_path, drift,
+):
+    import shutil
+
+    from deeptutor.book.storage import get_book_storage
+
+    _tinas_book(as_account, toms_public_kb.ref, public=False)
+    client = teaching_http.client
+    if drift:
+        assert client.get("/api/books/bk_lens/health", headers=_auth("tina")).status_code == 200
+        _kb_doc(toms_public_kb).write_text("new lenses", encoding="utf-8")
+    with as_account("tina"):
+        store = get_book_storage()
+        root = store.book_root("bk_lens")
+
+    def delete() -> None:
+        shutil.move(str(root), str(tmp_path / "staged-delete"))
+
+    fired = _during_hashing(monkeypatch, delete)
+    response = client.get("/api/books/bk_lens/health", headers=_auth("tina"))
+    assert response.status_code == 200, response.text
+    assert fired
+    assert not root.exists()
+    with as_account("tina"):
+        assert "bk_lens" not in get_book_storage().list_book_ids()

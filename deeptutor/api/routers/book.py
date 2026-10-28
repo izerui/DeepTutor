@@ -1640,14 +1640,19 @@ async def export_book(book_id: str) -> Response:
 
 @router.get("/books/{book_id}/health")
 async def book_health(book_id: str) -> dict[str, Any]:
-    # The reader polls this endpoint and drift detection hashes every raw
-    # document of every bound KB: all of it runs off the event loop.
-    def compute() -> dict[str, Any]:
-        from deeptutor.book.kb_health import unavailable_kbs
+    from deeptutor.book.kb_health import apply_drift_plan, plan_drift, unavailable_kbs
 
+    # The reader polls this endpoint and drift detection hashes every raw
+    # document of every bound KB: that runs off the event loop and never
+    # writes. The resulting fields are merged back here, on the loop, into a
+    # freshly loaded manifest — the engine's book writers (compile status,
+    # pause, deletion) all run on the loop and must not be overwritten or
+    # resurrected by a stale copy saved from a worker thread.
+    def compute() -> tuple[Any, Any, dict[str, Any]]:
         resolved = _resolve_book_or_404(book_id)
         bare_id = book_registry.strip_ref(book_id)
         engine = resolved.engine
+        plan = None
         if not resolved.can_edit:
             # Drift detection persists stale-page state on the canonical Book. A
             # read-only collaborator may inspect it, but must not mutate it merely
@@ -1655,7 +1660,7 @@ async def book_health(book_id: str) -> dict[str, Any]:
             # registry's revocation records only (no source reads).
             book = engine.load_book(bare_id)
             stale_page_ids = list(book.stale_page_ids) if book is not None else []
-            drift = {
+            drift: dict[str, Any] = {
                 "book_id": bare_id,
                 "has_drift": bool(stale_page_ids),
                 "new_kbs": [],
@@ -1668,12 +1673,20 @@ async def book_health(book_id: str) -> dict[str, Any]:
                 "cached": True,
             }
         else:
-            drift = engine.kb_drift_report(bare_id)
+            plan = plan_drift(bare_id, storage=engine.storage)
+            drift = (
+                plan.report.to_dict()
+                if plan is not None
+                else {"book_id": bare_id, "has_drift": False, "missing": True}
+            )
         log = engine.log_health(bare_id)
         generation = engine.generation_summary(bare_id)
-        return {"kb_drift": drift, "log_health": log, "generation": generation}
+        return engine, plan, {"kb_drift": drift, "log_health": log, "generation": generation}
 
-    return await asyncio.to_thread(compute)
+    engine, plan, payload = await asyncio.to_thread(compute)
+    if plan is not None:
+        apply_drift_plan(plan, storage=engine.storage)
+    return payload
 
 
 @router.post("/books/{book_id}/refresh-fingerprints")
