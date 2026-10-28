@@ -503,8 +503,6 @@ def test_unregister_relocate_and_transfer(tmp_path):
     moved = registry.relocate_kb(lonely.kb_id, tmp_path / "elsewhere")
     assert moved.kb_id == lonely.kb_id
     assert moved.base_dir == str((tmp_path / "elsewhere").resolve())
-    assert registry.relocate_base_dir(tmp_path / "elsewhere", tmp_path / "third") == 1
-    assert registry.get_kb(lonely.kb_id).base_dir == str((tmp_path / "third").resolve())
 
     transferred = registry.transfer_ownership("gone", "local-admin")
     assert {record.kb_id for record in transferred} == {shared.kb_id, referenced.kb_id}

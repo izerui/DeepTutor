@@ -49,10 +49,20 @@ REGISTRY_FILENAME = "kb_registry.sqlite3"
 CONNECTOR_KINDS: frozenset[str] = frozenset(CONNECTED_KB_TYPES)
 #: The only referrers that may point at a connector: the owner's own partners.
 CONNECTOR_REFERRER_KINDS: frozenset[str] = frozenset({"partner"})
+#: Referrer kind of a book; must equal ``deeptutor.book.registry.KB_REFERRER_KIND``.
+BOOK_REFERRER_KIND = "book"
+#: Referrer kind of a teacher path; must equal ``deeptutor.teaching.kb.REFERRER_KIND``.
+MASTERY_TEMPLATE_REFERRER_KIND = "mastery_template"
 #: Referrers whose withdrawal needs the owner's explicit confirmation (rule
 #: R1): published teacher paths. Every other referrer (partners, books, ...)
 #: simply records a revocation and shows the material as unavailable.
-CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({"mastery_template"})
+CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({MASTERY_TEMPLATE_REFERRER_KIND})
+#: Referrers whose ``created_by`` follows a hand-over of the referring entity
+#: itself (books in ``book.sharing``'s joint writer, teacher paths in the
+#: teaching store's joint writer), never a KB owner's account transfer.
+ENTITY_TRANSFERRED_REFERRER_KINDS: frozenset[str] = frozenset(
+    {BOOK_REFERRER_KIND, MASTERY_TEMPLATE_REFERRER_KIND}
+)
 #: KB kinds that need the deployment's embedding model.
 INDEXED_KINDS: frozenset[str] = frozenset({UPLOADED_KIND, "linked"})
 #: Synthetic user id prefix of partner runtimes (``services/partners/scope.py``).
@@ -197,7 +207,9 @@ def teacher_path_referrers(references: Sequence[KbReference]) -> set[str]:
     lose the whole book. Reads the book registry (lock order KB -> Book).
     """
     paths = {ref.referrer_id for ref in references if ref.referrer_kind in CONFIRM_REFERRER_KINDS}
-    book_ids = sorted({ref.referrer_id for ref in references if ref.referrer_kind == "book"})
+    book_ids = sorted({
+        ref.referrer_id for ref in references if ref.referrer_kind == BOOK_REFERRER_KIND
+    })
     if book_ids:
         from deeptutor.book import registry as books
 
@@ -787,6 +799,19 @@ def guarded_deletion(
             conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
 
 
+def normalize_location_created_by(base_dir: Path | str, created_by: str) -> int:
+    """Set ``created_by`` on every record stored in ``base_dir``; returns rows changed.
+
+    Idempotent: rows that already carry ``created_by`` are untouched.
+    """
+    with _write() as conn:
+        return conn.execute(
+            "UPDATE kb_registry SET created_by = ?, updated_at = ? "
+            "WHERE base_dir = ? AND created_by != ?",
+            (created_by, _now(), _location(base_dir), created_by),
+        ).rowcount
+
+
 def adopt_partner_copy(kb_id: str, *, partner_id: str, owner_id: str) -> KbRecord:
     """Claim one synthetic legacy copy without replacing its ID or consumers."""
     with _write() as conn:
@@ -826,24 +851,6 @@ def relocate_kb(kb_id: str, base_dir: Path | str) -> KbRecord:
     if not updated or record is None:
         raise KbRegistryError(f"Knowledge base {kb_id} is not registered.")
     return record
-
-
-def relocate_base_dir(old_base_dir: Path | str, new_base_dir: Path | str) -> int:
-    """Follow a whole catalog moved to another root; returns the number of records moved."""
-    try:
-        with _write() as conn:
-            from deeptutor.multi_user.paths import get_admin_path_service
-
-            if _location(old_base_dir) == _location(
-                get_admin_path_service().get_knowledge_bases_root()
-            ):
-                _retain_admin_legacy_names(conn)
-            return conn.execute(
-                "UPDATE kb_registry SET base_dir = ?, updated_at = ? WHERE base_dir = ?",
-                (_location(new_base_dir), _now(), _location(old_base_dir)),
-            ).rowcount
-    except sqlite3.IntegrityError as exc:
-        raise KbRegistryError("The destination already has registered knowledge bases.") from exc
 
 
 def set_visibility(
@@ -933,14 +940,14 @@ def transfer_ownership(from_user_id: str, to_user_id: str) -> list[KbRecord]:
         )
         # Keep the old owner's own consumers same-owner after hand-over.
         # Foreign consumers retain their identity and visibility safeguards.
-        # Book refs follow actual book transfers in book.sharing's joint writer,
-        # and teacher-path ("mastery_template") refs follow the template in the
-        # teaching store's joint writer; updating them here would survive a
-        # failed hand-over of the book or the path.
+        # ENTITY_TRANSFERRED_REFERRER_KINDS follow their own entity's transfer;
+        # updating them here would survive a failed hand-over of the book or path.
+        excluded = sorted(ENTITY_TRANSFERRED_REFERRER_KINDS)
+        placeholders = ", ".join("?" for _ in excluded)
         conn.executemany(
             "UPDATE kb_references SET created_by = ? WHERE kb_id = ? AND created_by = ? "
-            "AND referrer_kind NOT IN ('book', 'mastery_template')",
-            [(to_user_id, row["kb_id"], from_user_id) for row in rows],
+            f"AND referrer_kind NOT IN ({placeholders})",
+            [(to_user_id, row["kb_id"], from_user_id, *excluded) for row in rows],
         )
     return [record for row in rows if (record := get_kb(row["kb_id"])) is not None]
 
@@ -1169,14 +1176,21 @@ class MigrationItem:
         return {"kind": self.kind, "key": self.key, "data": self.data, "created_at": self.created_at}
 
 
+def _add_migration_item(
+    conn: sqlite3.Connection, kind: str, key: str, data: Mapping[str, Any]
+) -> None:
+    """:func:`add_migration_item` inside the caller's existing writer."""
+    conn.execute(
+        "INSERT INTO migration_items (kind, item_key, data, created_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(kind, item_key) DO UPDATE SET data = excluded.data",
+        (kind, key, json.dumps(dict(data), ensure_ascii=False), _now()),
+    )
+
+
 def add_migration_item(kind: str, key: str, data: Mapping[str, Any]) -> None:
     """Record (or refresh) one migration result; the first timestamp is kept."""
     with _write() as conn:
-        conn.execute(
-            "INSERT INTO migration_items (kind, item_key, data, created_at) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(kind, item_key) DO UPDATE SET data = excluded.data",
-            (kind, key, json.dumps(dict(data), ensure_ascii=False), _now()),
-        )
+        _add_migration_item(conn, kind, key, data)
 
 
 def list_migration_items() -> list[MigrationItem]:

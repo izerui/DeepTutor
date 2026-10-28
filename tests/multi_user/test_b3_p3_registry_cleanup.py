@@ -76,3 +76,64 @@ def test_grant_census_skips_only_normalized_admins(mu_isolated_root, monkeypatch
     ])
     snapshot = json.loads(registry.get_meta(registry_backfill._INVENTORY_KEY))
     assert snapshot["grants"] == {"physics": ["Cap", "ann", "bob"]}
+
+
+# ── B3-14: dead code and hard-coded referrer kinds ──
+
+
+def test_relocate_base_dir_has_no_product_callers_and_is_gone():
+    assert not hasattr(registry, "relocate_base_dir")
+
+
+def test_referrer_kind_constants_follow_their_owners():
+    from deeptutor.book.registry import KB_REFERRER_KIND
+    from deeptutor.teaching.kb import REFERRER_KIND
+
+    assert registry.ENTITY_TRANSFERRED_REFERRER_KINDS == frozenset(
+        {KB_REFERRER_KIND, REFERRER_KIND}
+    )
+    assert registry.CONFIRM_REFERRER_KINDS == frozenset({REFERRER_KIND})
+
+
+def test_transfer_ownership_leaves_entity_transferred_references(tmp_path):
+    record = registry.register_kb(
+        base_dir=tmp_path, name="shared", kind="uploaded", created_by="gone", visibility="public"
+    )
+    for kind in ("partner", *sorted(registry.ENTITY_TRANSFERRED_REFERRER_KINDS)):
+        registry.add_reference(
+            record.kb_id, referrer_kind=kind, referrer_id="r1", created_by="gone"
+        )
+    registry.transfer_ownership("gone", "heir")
+    owners = {ref.referrer_kind: ref.created_by for ref in registry.list_references(record.kb_id)}
+    assert owners == {"partner": "heir", "book": "gone", "mastery_template": "gone"}
+
+
+# ── B3-14: shared migration-item writer and owner normalization ──
+
+
+def test_migration_items_share_one_writer():
+    with registry._write() as conn:
+        registry._add_migration_item(conn, "kb_dir_missing_skipped", "k1", {"n": 1})
+    registry.add_migration_item("kb_dir_missing_skipped", "k1", {"n": 2})
+    registry.add_migration_item("kb_made_public", "k2", {"n": 3})
+    items = {(item.kind, item.key): item.data for item in registry.list_migration_items()}
+    assert items == {
+        ("kb_dir_missing_skipped", "k1"): {"n": 2},
+        ("kb_made_public", "k2"): {"n": 3},
+    }
+
+
+def test_admin_root_owner_normalization_lives_in_the_registry(tmp_path, mu_isolated_root):
+    from deeptutor.multi_user.paths import get_admin_path_service
+
+    admin_root = get_admin_path_service().get_knowledge_bases_root()
+    stray = registry.register_kb(
+        base_dir=admin_root, name="a", kind="uploaded", created_by="admin-7"
+    )
+    other = registry.register_kb(
+        base_dir=tmp_path / "teacher", name="b", kind="uploaded", created_by="t1"
+    )
+    assert registry.normalize_location_created_by(admin_root, LOCAL_ADMIN_ID) == 1
+    assert registry.normalize_location_created_by(admin_root, LOCAL_ADMIN_ID) == 0
+    assert registry.get_kb(stray.kb_id).created_by == LOCAL_ADMIN_ID
+    assert registry.get_kb(other.kb_id).created_by == "t1"

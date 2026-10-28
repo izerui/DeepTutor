@@ -175,14 +175,9 @@ def normalize_admin_root_created_by() -> int:
     from deeptutor.multi_user.models import LOCAL_ADMIN_ID
     from deeptutor.multi_user.paths import get_admin_path_service
 
-    admin_root = str(get_admin_path_service().get_knowledge_bases_root().resolve())
-    with registry._write() as conn:
-        cursor = conn.execute(
-            "UPDATE kb_registry SET created_by = ?, updated_at = ? "
-            "WHERE base_dir = ? AND created_by != ?",
-            (LOCAL_ADMIN_ID, registry._now(), admin_root, LOCAL_ADMIN_ID),
-        )
-        return cursor.rowcount
+    return registry.normalize_location_created_by(
+        get_admin_path_service().get_knowledge_bases_root(), LOCAL_ADMIN_ID
+    )
 
 
 def _sync_root(root: Path, *, created_by: str) -> int:
@@ -405,22 +400,15 @@ def _record_dir_missing(
 ) -> None:
     """Record a migration skip for a registered KB whose directory no longer exists.
 
-    Uses ``conn`` directly instead of ``registry.add_migration_item`` because
-    the caller is already inside a ``_write()`` transaction — opening a second
-    writer would deadlock under BEGIN IMMEDIATE.
+    Writes through ``conn`` because the caller is already inside a
+    ``_write()`` transaction — opening a second writer would deadlock under
+    BEGIN IMMEDIATE.
     """
-    conn.execute(
-        "INSERT INTO migration_items (kind, item_key, data, created_at) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(kind, item_key) DO UPDATE SET data = excluded.data",
-        (
-            "kb_dir_missing_skipped",
-            kb_id,
-            json.dumps(
-                {"kb_id": kb_id, "name": name, "dir_name": dir_name, "users": users},
-                ensure_ascii=False,
-            ),
-            registry._now(),
-        ),
+    registry._add_migration_item(
+        conn,
+        "kb_dir_missing_skipped",
+        kb_id,
+        {"kb_id": kb_id, "name": name, "dir_name": dir_name, "users": users},
     )
 
 
