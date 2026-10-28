@@ -138,6 +138,38 @@ def fingerprint_kb_documents(
     return result
 
 
+def unavailable_kbs(
+    book: Book,
+    manager: KnowledgeBaseManager | None = None,
+    *,
+    check_readable: bool = True,
+) -> list[str]:
+    """The book's bound KBs it can no longer read (withdrawn, revoked or gone).
+
+    A binding counts when the KB registry recorded a revocation of this book's
+    reference (B2-19), or — with ``check_readable`` — when the reference no
+    longer resolves for the caller. Such a KB fingerprints as empty, which is
+    not evidence that its content changed. An injected ``manager`` names an
+    explicit catalog with no registry semantics, so nothing is reported there.
+    """
+    if manager is not None or not book.knowledge_bases:
+        return []
+    from deeptutor.book import registry as book_registry
+    from deeptutor.knowledge import registry as kb_registry
+
+    revoked = {
+        row.kb_id
+        for row in kb_registry.list_unavailable_references(book_registry.KB_REFERRER_KIND, book.id)
+    }
+    links = book_registry.book_kb_links(book.id) if revoked else {}
+    return [
+        name
+        for name in dict.fromkeys(book.knowledge_bases)
+        if (links.get(name) and links[name] in revoked)
+        or (check_readable and _locate_kb(name, None) is None)
+    ]
+
+
 def fingerprint_kb_documents_batch(
     kb_names: list[str], manager: KnowledgeBaseManager | None = None
 ) -> dict[str, dict[str, str]]:
@@ -156,6 +188,7 @@ class KBDriftReport:
     new_kbs: list[str] = field(default_factory=list)
     removed_kbs: list[str] = field(default_factory=list)
     changed_kbs: list[str] = field(default_factory=list)
+    unavailable_kbs: list[str] = field(default_factory=list)
     changed_documents: dict[str, list[str]] = field(default_factory=dict)
     current_fingerprints: dict[str, str] = field(default_factory=dict)
     stale_page_ids: list[str] = field(default_factory=list)
@@ -168,6 +201,7 @@ class KBDriftReport:
             "new_kbs": self.new_kbs,
             "removed_kbs": self.removed_kbs,
             "changed_kbs": self.changed_kbs,
+            "unavailable_kbs": self.unavailable_kbs,
             "changed_documents": self.changed_documents,
             "current_fingerprints": self.current_fingerprints,
             "stale_page_ids": self.stale_page_ids,
@@ -194,6 +228,9 @@ def detect_kb_drift(
     # per-document map rather than recomputed from disk.
     current_documents = fingerprint_kb_documents_batch(book.knowledge_bases, manager=manager)
     current = {name: digest_documents(docs) for name, docs in current_documents.items()}
+    # A withdrawn or unreadable KB fingerprints as empty; that is lost access,
+    # not changed content, so it is reported apart and never marks pages stale.
+    unavailable = unavailable_kbs(book, manager=manager)
     stored = dict(book.kb_fingerprints or {})
     stored_documents = dict(book.kb_document_fingerprints or {})
 
@@ -206,15 +243,22 @@ def detect_kb_drift(
         return KBDriftReport(
             book_id=book.id,
             has_drift=False,
+            unavailable_kbs=unavailable,
             current_fingerprints=current,
         )
 
     # Only flag *new* KBs that were actually selected for this book — we do
     # not care about KBs the user added to their workspace but never linked
     # to the book.
-    new_kbs = [k for k in current if k not in stored and k in book.knowledge_bases]
+    new_kbs = [
+        k for k in current
+        if k not in stored and k in book.knowledge_bases and k not in unavailable
+    ]
     removed_kbs = [k for k in stored if k not in current and k in book.knowledge_bases]
-    changed_kbs = [k for k, v in current.items() if k in stored and stored[k] and stored[k] != v]
+    changed_kbs = [
+        k for k, v in current.items()
+        if k in stored and stored[k] and stored[k] != v and k not in unavailable
+    ]
 
     has_drift = bool(new_kbs or removed_kbs or changed_kbs)
     changed_documents: dict[str, list[str]] = {}
@@ -303,6 +347,7 @@ def detect_kb_drift(
         new_kbs=new_kbs,
         removed_kbs=removed_kbs,
         changed_kbs=changed_kbs,
+        unavailable_kbs=unavailable,
         changed_documents=changed_documents,
         current_fingerprints=current,
         stale_page_ids=stale_pages,
@@ -502,4 +547,5 @@ __all__ = [
     "mark_drift_on_book",
     "refresh_book_fingerprints",
     "scan_log_health",
+    "unavailable_kbs",
 ]

@@ -1288,6 +1288,7 @@
   "Your knowledge bases changed since this book was generated.": "Your knowledge bases changed since this book was generated.",
   "Newly added": "Newly added",
   "Removed": "Removed",
+  "No longer available": "No longer available",
   "{{count}} previously-compiled page may be out of date.": "{{count}} previously-compiled page may be out of date.",
   "{{count}} previously-compiled pages may be out of date.": "{{count}} previously-compiled pages may be out of date.",
   "Recompile first stale page": "Recompile first stale page",

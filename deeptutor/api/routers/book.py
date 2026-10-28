@@ -1640,29 +1640,40 @@ async def export_book(book_id: str) -> Response:
 
 @router.get("/books/{book_id}/health")
 async def book_health(book_id: str) -> dict[str, Any]:
-    resolved = _resolve_book_or_404(book_id)
-    book_id = book_registry.strip_ref(book_id)
-    engine = resolved.engine
-    if not resolved.can_edit:
-        # Drift detection persists stale-page state on the canonical Book. A
-        # read-only collaborator may inspect it, but must not mutate it merely
-        # by opening the health banner.
-        book = engine.load_book(book_id)
-        stale_page_ids = list(book.stale_page_ids) if book is not None else []
-        drift = {
-            "book_id": book_id,
-            "has_drift": bool(stale_page_ids),
-            "new_kbs": [],
-            "removed_kbs": [],
-            "changed_kbs": [],
-            "stale_page_ids": stale_page_ids,
-            "cached": True,
-        }
-    else:
-        drift = engine.kb_drift_report(book_id)
-    log = engine.log_health(book_id)
-    generation = engine.generation_summary(book_id)
-    return {"kb_drift": drift, "log_health": log, "generation": generation}
+    # The reader polls this endpoint and drift detection hashes every raw
+    # document of every bound KB: all of it runs off the event loop.
+    def compute() -> dict[str, Any]:
+        from deeptutor.book.kb_health import unavailable_kbs
+
+        resolved = _resolve_book_or_404(book_id)
+        bare_id = book_registry.strip_ref(book_id)
+        engine = resolved.engine
+        if not resolved.can_edit:
+            # Drift detection persists stale-page state on the canonical Book. A
+            # read-only collaborator may inspect it, but must not mutate it merely
+            # by opening the health banner. Withdrawn bindings come from the
+            # registry's revocation records only (no source reads).
+            book = engine.load_book(bare_id)
+            stale_page_ids = list(book.stale_page_ids) if book is not None else []
+            drift = {
+                "book_id": bare_id,
+                "has_drift": bool(stale_page_ids),
+                "new_kbs": [],
+                "removed_kbs": [],
+                "changed_kbs": [],
+                "unavailable_kbs": (
+                    unavailable_kbs(book, check_readable=False) if book is not None else []
+                ),
+                "stale_page_ids": stale_page_ids,
+                "cached": True,
+            }
+        else:
+            drift = engine.kb_drift_report(bare_id)
+        log = engine.log_health(bare_id)
+        generation = engine.generation_summary(bare_id)
+        return {"kb_drift": drift, "log_health": log, "generation": generation}
+
+    return await asyncio.to_thread(compute)
 
 
 @router.post("/books/{book_id}/refresh-fingerprints")

@@ -1250,6 +1250,7 @@
   "Your knowledge bases changed since this book was generated.": "Ваші бази знань змінилися після генерації цієї книги.",
   "Newly added": "Нещодавно додано",
   "Removed": "Видалено",
+  "No longer available": "Більше недоступні",
   "{{count}} previously-compiled page may be out of date.": "{{count}} раніше скомпільована сторінка може бути застарілою.",
   "{{count}} previously-compiled pages may be out of date.": "{{count}} раніше скомпільованих сторінок можуть бути застарілими.",
   "Recompile first stale page": "Перекомпілювати першу застарілу сторінку",

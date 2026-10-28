@@ -1723,6 +1723,7 @@
   "Your knowledge bases changed since this book was generated.": "Vos bases de connaissances ont changé depuis la génération de ce livre.",
   "Newly added": "Ajouts récents",
   "Removed": "Supprimés",
+  "No longer available": "Plus disponibles",
   "{{count}} previously-compiled page may be out of date.": "{{count}} page déjà compilée est peut-être obsolète.",
   "{{count}} previously-compiled pages may be out of date.": "{{count}} pages déjà compilées sont peut-être obsolètes.",
   "Recompile first stale page": "Recompiler la première page obsolète",

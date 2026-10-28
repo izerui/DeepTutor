@@ -1287,6 +1287,7 @@
   "Your knowledge bases changed since this book was generated.": "Deine Knowledge Bases haben sich geändert, seit dieses Buch generiert wurde.",
   "Newly added": "Neu hinzugefügt",
   "Removed": "Entfernt",
+  "No longer available": "Nicht mehr verfügbar",
   "{{count}} previously-compiled page may be out of date.": "{{count}} bereits erzeugte Seite könnte veraltet sein.",
   "{{count}} previously-compiled pages may be out of date.": "{{count}} bereits erzeugte Seiten könnten veraltet sein.",
   "Recompile first stale page": "Erste veraltete Seite neu kompilieren",

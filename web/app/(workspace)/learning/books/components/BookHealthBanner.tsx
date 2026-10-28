@@ -23,6 +23,9 @@ interface KbDrift {
   new_kbs?: string[];
   removed_kbs?: string[];
   changed_kbs?: string[];
+  /** Bound KBs the book can no longer read (withdrawn or revoked). Lost
+   *  access, not changed content: never counted as drift. */
+  unavailable_kbs?: string[];
   stale_page_ids?: string[];
 }
 
@@ -93,6 +96,8 @@ export default function BookHealthBanner({
   if (!bookId || dismissed) return null;
 
   const hasDrift = !!kbDrift?.has_drift;
+  const unavailableKbs = kbDrift?.unavailable_kbs ?? [];
+  const hasUnavailable = unavailableKbs.length > 0;
   // Filter out repeated failures that are already represented elsewhere
   // (kb_health drift logs are surfaced via the kb-drift section above).
   const repeated = (logHealth?.repeated_failures || [])
@@ -144,6 +149,7 @@ export default function BookHealthBanner({
 
   if (
     !hasDrift &&
+    !hasUnavailable &&
     !hasLogIssues &&
     !explorationFailed &&
     !hasSourceIssues &&
@@ -294,6 +300,15 @@ export default function BookHealthBanner({
                   )}
                 </div>
               ) : null}
+            </div>
+          )}
+          {hasUnavailable && (
+            <div>
+              {t("No longer available")}:{" "}
+              <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
+                {unavailableKbs.join(", ")}
+              </code>
+              .
             </div>
           )}
           {hasLogIssues && (

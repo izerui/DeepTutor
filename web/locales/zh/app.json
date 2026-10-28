@@ -1403,6 +1403,7 @@
   "Your knowledge bases changed since this book was generated.": "自本书生成后，你的知识库发生了变化。",
   "Newly added": "新增",
   "Removed": "已移除",
+  "No longer available": "已不可用",
   "{{count}} previously-compiled page may be out of date.": "{{count}} 个已编译页面可能已过期。",
   "{{count}} previously-compiled pages may be out of date.": "{{count}} 个已编译页面可能已过期。",
   "Recompile first stale page": "重新编译第一个过期页面",
