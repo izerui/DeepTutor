@@ -249,7 +249,7 @@ function GateBar({ report }: { report: ObjectiveReport }) {
           )}
         </p>
       )}
-      {qualitative && !report.mastered && report.attempts.length > 0 && (
+      {qualitative && !report.mastered && countedAttemptTotal(report) > 0 && (
         <p className="mt-1.5 text-[11px] leading-4 text-[var(--muted-foreground)]">
           {t(
             "Practice questions do not open this gate — it opens when you explain the idea in your own words and your tutor records that. Your answers here still count as practice.",
