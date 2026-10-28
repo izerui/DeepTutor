@@ -5,6 +5,8 @@ import StarterSuggestions from '@/components/chat/home/StarterSuggestions'
 const fetcher = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/api', () => ({ apiFetch: fetcher, apiUrl: (path: string) => path }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+// Standard account: the B3-P13 learner gate resolves without touching apiFetch.
+vi.mock('@/lib/learning-shell', () => ({ learningShellActive: async () => false }))
 const response = (payload: object) => ({ ok: true, json: async () => payload })
 beforeEach(() => fetcher.mockReset())
 afterEach(() => vi.useRealTimers())

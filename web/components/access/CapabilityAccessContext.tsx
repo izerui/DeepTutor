@@ -11,6 +11,7 @@ import {
 
 import type { Capability } from "@/lib/capability-routes";
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 import { listLLMOptions } from "@/lib/llm-options";
 
 type CapabilityAccessValue = {
@@ -57,6 +58,14 @@ export function CapabilityAccessProvider({
 
   const refresh = useCallback(async () => {
     try {
+      // A learning account is never an admin and cannot read /api/settings
+      // (403); its grant-filtered model list alone decides access.
+      if (await learningShellActive()) {
+        setIsAdmin(false);
+        const { options } = await listLLMOptions();
+        setHasLlm(options.length > 0);
+        return;
+      }
       // The settings payload only exposes the catalog to admins, so its
       // presence is our admin signal — admins are never gated.
       const res = await apiFetch(apiUrl("/api/settings"));

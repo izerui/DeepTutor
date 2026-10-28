@@ -5,6 +5,7 @@ import { browserStorage } from "@/shared/storage";
 import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 
 // Three-state autoplay model:
 //   • global default — persisted per-user (Settings › Voice → ui.voice_autoplay)
@@ -22,8 +23,10 @@ let inflight: Promise<boolean> | null = null;
 function fetchGlobalDefault(): Promise<boolean> {
   if (cachedGlobal !== null) return Promise.resolve(cachedGlobal);
   if (!inflight) {
-    inflight = apiFetch(apiUrl("/api/settings"))
-      .then((r) => (r.ok ? r.json() : null))
+    // Learning accounts cannot read /api/settings (403): keep the default.
+    inflight = learningShellActive()
+      .then((learner) => (learner ? null : apiFetch(apiUrl("/api/settings"))))
+      .then((r) => (r?.ok ? r.json() : null))
       .then((payload) => {
         cachedGlobal = Boolean(payload?.ui?.voice_autoplay);
         return cachedGlobal;

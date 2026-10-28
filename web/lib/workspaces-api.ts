@@ -1,5 +1,6 @@
 import { apiFetch, apiUrl } from '@/lib/api'
 import { invalidateClientCache, withClientCache } from '@/lib/client-cache'
+import { learningShellActive } from '@/lib/learning-shell'
 import { notifySessionsChanged } from '@/lib/session-events'
 
 export interface WorkspaceResources {
@@ -24,7 +25,10 @@ export interface WorkspaceResourceOption {
 }
 export type WorkspaceResourceCatalog = Record<keyof WorkspaceResources, WorkspaceResourceOption[]>
 
-export function getWorkspaceResources(workspaceId = ''): Promise<WorkspaceResourceCatalog> {
+export async function getWorkspaceResources(workspaceId = ''): Promise<WorkspaceResourceCatalog> {
+  // A learning account cannot read the resource catalog (403); it has nothing
+  // to narrow a conversation to, so answer with the empty catalog instead.
+  if (await learningShellActive()) return { skills: [], mcp: [], knowledge_bases: [] }
   return request(
     `/api/settings/workspace/resources?workspace_id=${encodeURIComponent(workspaceId)}`
   )
@@ -57,6 +61,8 @@ export function listWorkspaces(force = false): Promise<ChatWorkspaceRegistration
   return withClientCache(
     'workspaces:list',
     async () => {
+      // Learning accounts cannot list registrations (403): no workspace to file under.
+      if (await learningShellActive()) return []
       const result = await request<{ workspaces: ChatWorkspaceRegistration[] }>(endpoint)
       return result.workspaces
     },

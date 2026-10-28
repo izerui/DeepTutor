@@ -1,4 +1,5 @@
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 
 export interface ToolSettingsResponse {
   enabled_optional_tools: string[];
@@ -7,6 +8,9 @@ export interface ToolSettingsResponse {
 let cached: Promise<string[]> | null = null;
 
 async function fetchEnabledOptionalTools(): Promise<string[]> {
+  // Learning accounts run with tools stripped server-side and cannot read
+  // /api/tools (403).
+  if (await learningShellActive()) return [];
   const res = await apiFetch(apiUrl("/api/tools"));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const payload = (await res.json()) as ToolSettingsResponse;

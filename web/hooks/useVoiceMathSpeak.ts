@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 
 const GLOBAL_EVENT = "deeptutor:voice-math-speak";
 
@@ -12,8 +13,10 @@ let inflight: Promise<boolean> | null = null;
 function fetchPreference(): Promise<boolean> {
   if (cached !== null) return Promise.resolve(cached);
   if (!inflight) {
-    inflight = apiFetch(apiUrl("/api/settings"))
-      .then((r) => (r.ok ? r.json() : null))
+    // Learning accounts cannot read /api/settings (403): keep the default.
+    inflight = learningShellActive()
+      .then((learner) => (learner ? null : apiFetch(apiUrl("/api/settings"))))
+      .then((r) => (r?.ok ? r.json() : null))
       .then((payload) => {
         const next = payload?.ui?.voice_math_speak !== false;
         cached = next;

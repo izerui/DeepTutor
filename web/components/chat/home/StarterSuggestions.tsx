@@ -6,6 +6,7 @@ import Tooltip from "@/shared/ui/Tooltip";
 import { Loader2, Sparkles } from "lucide-react";
 import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
 import { apiFetch } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 
 interface Suggestion {
   /** The line the learner reads — names the specific thing worth doing next. */
@@ -39,6 +40,8 @@ const REFRESH_TIMEOUT_MS = 40000;
 /** Empty material and failed generation are different, actionable states. */
 type View =
   | { kind: "loading" }
+  /** Learning accounts cannot read suggestions (403); the slot stays empty. */
+  | { kind: "hidden" }
   | { kind: "ready"; items: Suggestion[] }
   | { kind: "working" }
   | { kind: "idle"; note?: "no-material" | "error" };
@@ -113,6 +116,11 @@ export default function StarterSuggestions({
       setView(current => current.kind === "ready" || current.kind === "idle" ? current : { kind: "idle", note: "error" });
     }, REFRESH_TIMEOUT_MS);
     void (async () => {
+      if (await learningShellActive()) {
+        clearTimeout(deadline);
+        if (generation === generationRef.current) setView({ kind: "hidden" });
+        return;
+      }
       const payload = await load(controller.signal);
       if (controller.signal.aborted || generation !== generationRef.current) return;
       if (payload?.suggestions.length) {
@@ -178,7 +186,7 @@ export default function StarterSuggestions({
 
   // Only the very first read renders nothing: lines appearing a beat late is
   // calmer than a control that flashes and is immediately replaced.
-  if (view.kind === "loading") return null;
+  if (view.kind === "loading" || view.kind === "hidden") return null;
 
   return (
     // max-w-[768px] + px-6 mirrors ChatComposer's own empty-state container, so

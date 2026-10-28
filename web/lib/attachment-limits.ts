@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 import {
   DEFAULT_MAX_ATTACHMENT_BYTES,
   DEFAULT_MAX_TOTAL_ATTACHMENT_BYTES,
@@ -40,9 +41,14 @@ let inflight: Promise<AttachmentLimits> | null = null;
 function loadAttachmentLimits(): Promise<AttachmentLimits> {
   if (cached) return Promise.resolve(cached);
   if (!inflight) {
-    inflight = apiFetch(apiUrl("/api/settings/chat-attachments"))
+    // Learning accounts cannot read system settings (403); the defaults
+    // already match the backend's own.
+    inflight = learningShellActive()
+      .then((learner) =>
+        learner ? null : apiFetch(apiUrl("/api/settings/chat-attachments")),
+      )
       .then(async (response) => {
-        if (!response.ok) return DEFAULT_ATTACHMENT_LIMITS;
+        if (!response?.ok) return DEFAULT_ATTACHMENT_LIMITS;
         const data = (await response.json().catch(() => null)) as {
           effective?: { max_file_bytes?: number; max_total_bytes?: number };
         } | null;

@@ -1,6 +1,7 @@
 /** Typed client for first-class Partner Groups. */
 
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 import { browserStorage } from "@/shared/storage";
 import type { PartnerInfo } from "@/lib/partners-api";
 import type { StreamEvent } from "@/features/chat/model/protocol";
@@ -99,6 +100,8 @@ async function json<T>(response: Response): Promise<T> {
 }
 
 export async function listPartnerGroups(): Promise<PartnerGroup[]> {
+  // Partner groups are outside the learner surface (403); a learner has none.
+  if (await learningShellActive()) return [];
   return json(
     await apiFetch(apiUrl("/api/partner-groups"), { cache: "no-store" }),
   );

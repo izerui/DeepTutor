@@ -10,6 +10,7 @@ import { watchingRoute } from "@/lib/learning-routes";
 
 import { useChatWorkspaces } from "@/hooks/useChatWorkspaces";
 import { useComposerResources } from "@/hooks/useComposerResources";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { useWorkspaceBinding } from "@/hooks/useWorkspaceBinding";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -264,6 +265,11 @@ export default function ChatWorkspace() {
     isLoading: isCapabilityCatalogLoading,
   } = useCapabilityCatalog();
   const { setActiveSessionId, language: appLanguage } = useAppShell();
+  // Learning accounts cannot reach partners or partner groups (the backend
+  // strips partner_id from their turns and 403s the lists), so the composer
+  // does not offer them (B3-P13).
+  const { learningPolicy } = useAuthStatus();
+  const partnersOffered = learningPolicy === null;
 
   const {
     state,
@@ -2712,9 +2718,9 @@ export default function ChatWorkspace() {
                 selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
                 onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}
         selectedPartnerGroup={selectedPartnerGroup}
-        onSelectPartnerGroup={handleSelectPartnerGroup}
+        onSelectPartnerGroup={partnersOffered ? handleSelectPartnerGroup : undefined}
         selectedPartner={selectedPartner}
-        onSelectPartner={handleSelectPartner}
+        onSelectPartner={partnersOffered ? handleSelectPartner : undefined}
                 subagentBudget={subagentBudget}
                 onSubagentBudgetChange={setSubagentBudget}
                 llmOptions={llmOptions}

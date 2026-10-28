@@ -1,6 +1,7 @@
 /** Typed client for the /api/partners backend. */
 
 import { apiFetch, apiUrl } from "@/lib/api";
+import { learningShellActive } from "@/lib/learning-shell";
 import type { LLMSelection } from "@/features/chat/model/protocol";
 import type { ChatWorkspaceRegistration } from "@/lib/workspaces-api";
 
@@ -205,6 +206,8 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export async function listPartners(): Promise<PartnerInfo[]> {
+  // Partners are outside the learner surface (403); a learner has none.
+  if (await learningShellActive()) return [];
   return json(await apiFetch(apiUrl("/api/partners"), { cache: "no-store" }));
 }
 
