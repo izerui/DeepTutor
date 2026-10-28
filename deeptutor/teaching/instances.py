@@ -531,10 +531,12 @@ def apply_pending_revision(
     assignment = teaching.get_assignment(template.id, user_id)
     if assignment is None or assignment.status != "active":
         return None
+    if assignment.applied_revision < origin.revision:
+        # A migration committed but its record did not: repair it first, even
+        # when the next move has to wait, so the retained materials follow the
+        # revision the copy is actually on.
+        _record_applied(teaching, template.id, user_id, path_id, store)
     if template.current_revision <= origin.revision:
-        if assignment.applied_revision < origin.revision:
-            # A migration committed but its record did not: repair it.
-            _record_applied(teaching, template.id, user_id, path_id, store)
         return None
     if respect_lease and _lease_blocks(store, path_id, lease_turn_id):
         return None
