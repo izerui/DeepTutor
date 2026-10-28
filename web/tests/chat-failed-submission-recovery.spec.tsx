@@ -8,6 +8,7 @@ import {
 import { buildVisiblePath } from "@/lib/message-branches";
 import { initI18n } from "@/i18n/init";
 import { updateRecoveryPrincipal } from "@/lib/recovery-principal";
+import * as notifications from "@/lib/notifications";
 import {
   resetReadingTurnState, setReadingMaterial, setReadingViewport,
   setReadingWorkspace,
@@ -967,6 +968,7 @@ it("restores the failed draft when /chat remounts under the same provider", () =
 });
 
 it("keeps a start_turn_rejected submission as an unsent user row across reload", async () => {
+  const notify = vi.spyOn(notifications, "notify");
   fixture.connected = true;
   fixture.session = completedServerSession();
   const firstView = render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
@@ -983,6 +985,7 @@ it("keeps a start_turn_rejected submission as an unsent user row across reload",
     role: "user", content: "Hello offline", failed: true,
   });
   expect(readFailedSubmissions("s1")).toHaveLength(1);
+  expect(notify).toHaveBeenCalledWith("Turn rejected", expect.objectContaining({ tone: "error" }));
   firstView.unmount();
   render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
   await act(async () => { fireEvent.click(screen.getByText("Load")); });
@@ -990,6 +993,53 @@ it("keeps a start_turn_rejected submission as an unsent user row across reload",
     role: "user", content: "Hello offline", failed: true,
   });
   expect(screen.getByTestId("lastTurnFailed").textContent).toBe("true");
+});
+
+it("retries the original wire request after reload even when the transcript advances", async () => {
+  fixture.connected = true;
+  fixture.session = completedServerSession();
+  const first = render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => fireEvent.click(screen.getByText("Load")));
+  await act(async () => fireEvent.click(screen.getByText("Send")));
+  const original = structuredClone(fixture.sent.find(message => message.type === "start_turn")!);
+  expect(original.parent_message_id).toBe(2);
+  expect(readFailedSubmissions("s1")[0].requestSnapshot).toMatchObject({ submissionRequest: original });
+  first.unmount();
+  const messages = fixture.session.messages as Array<Record<string, unknown>>;
+  messages.push(
+    { ...messages[0], id: 3, content: "Another tab's question", parent_message_id: 2 },
+    { ...messages[1], id: 4, content: "Another answer", parent_message_id: 3 },
+  );
+  fixture.sent = [];
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => fireEvent.click(screen.getByText("Load")));
+  await act(async () => fireEvent.click(screen.getByText("Retry first unsent")));
+  expect(fixture.sent.find(message => message.type === "start_turn")).toEqual(original);
+  expect(fixture.replacementCalls).toHaveLength(0);
+});
+
+it.each(["Hello offline", ""])("recovers legacy draft %j by fencing its old ID before retrying", async (content) => {
+  fixture.connected = true;
+  fixture.session = completedServerSession();
+  storeFailedSubmission("s1", { content, requestSnapshot: {
+    content, capability: "chat", enabledTools: [], knowledgeBases: [], language: "en",
+    attachments: [{ type: "image", base64: "YWJj", filename: "source.png" }],
+  } });
+  const originalId = readFailedSubmissions("s1")[0].submissionId;
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => fireEvent.click(screen.getByText("Load")));
+  await act(async () => fireEvent.click(screen.getByText("Retry first unsent")));
+  expect(fixture.replacementCalls).toHaveLength(1);
+  expect(fixture.replacementCalls[0].original).toBe(originalId);
+  expect(fixture.replacementCalls[0].request.content).toBe(content);
+  expect(fixture.replacementCalls[0].request.attachments).toEqual([
+    { type: "image", base64: "YWJj", filename: "source.png" },
+  ]);
+  expect(fixture.replacementCalls[0].request.client_submission_id).not.toBe(originalId);
+  expect(fixture.sent).toEqual([{ type: "subscribe_turn", turn_id: "edited-turn", after_seq: 0 }]);
+  expect(readFailedSubmissions("s1").map(record => record.submissionId)).toEqual([
+    fixture.replacementCalls[0].request.client_submission_id,
+  ]);
 });
 
 it("keeps both unsent messages when a second direct send fails", async () => {

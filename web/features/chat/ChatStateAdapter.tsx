@@ -272,6 +272,8 @@ export interface MessageAttachment {
 }
 
 export interface MessageRequestSnapshot {
+  /** Exact first-send command: retry identities must never acquire new inputs. */
+  submissionRequest?: Record<string, unknown>;
   /** Durable edit intent; replay the exact reserved wire request after a lost acknowledgement. */
   replacesSubmissionId?: string;
   replacementRootSubmissionId?: string;
@@ -2225,6 +2227,8 @@ export function ChatStateAdapterProvider({
       // placeholder empty so STREAM_END can flag the optimistic user row.
       if (!submissionRejected) {
         dispatch({ type: "STREAM_EVENT", key: effectiveKey, event });
+      } else {
+        notify(event.content, { tone: "error", durationMs: 10_000 });
       }
       if (terminalError) {
         // Pre-flight regenerate rejections never mutate server state, so we
@@ -3086,7 +3090,6 @@ export function ChatStateAdapterProvider({
           capability: effectiveCapability,
         });
       };
-      if (!replacesSubmissionId) showSubmission();
       const {
         _persist_user_message: legacyPersistUserMessage,
         _course_id: _legacyCourseId,
@@ -3103,26 +3106,8 @@ export function ChatStateAdapterProvider({
         legacyPersistUserMessage === false
           ? false
           : undefined;
-      // Persist before attempting the socket, including a first turn that
-      // has no server session yet. Replays reuse their original identity.
+      // Capture the complete command before persisting or displaying its snapshot.
       const submissionStorageKey = session.sessionId ?? draftFailedSubmissionKey();
-      if (persistSubmission && submissionId && !replacesSubmissionId) {
-        const saved = storeFailedSubmission(submissionStorageKey, {
-          content,
-          capability: effectiveCapability,
-          requestSnapshot,
-          submissionId,
-        });
-        dispatch({
-          type: "SET_SUBMISSION_PERSISTENCE", key, submissionId,
-          saved: saved !== null,
-        });
-        if (!saved) {
-          notify(i18n.t(
-            "This unsent message could not be saved in your browser. Copy it before leaving this page.",
-          ), { tone: "error", durationMs: 10_000 });
-        }
-      }
       if (submissionId) {
         pendingSubmissionIdsRef.current.set(key, {
           storageKey: submissionStorageKey,
@@ -3221,6 +3206,30 @@ export function ChatStateAdapterProvider({
         // the latest persisted row.
         parentMessageId: wireParentId,
         });
+      const originalRequest = replaySnapshot?.submissionRequest;
+      if (!replacesSubmissionId && submissionId &&
+          originalRequest?.client_submission_id === submissionId) {
+        // Only the assigned session can change; it is excluded from the
+        // server's submission digest. Preserve even omitted/null fields.
+        command = { ...originalRequest,
+          session_id: session.sessionId ?? originalRequest.session_id,
+        } as typeof command;
+      }
+      requestSnapshot.submissionRequest = { ...command };
+      if (!replacesSubmissionId) showSubmission();
+      // Persist before attempting the socket, including a first turn that
+      // has no server session yet. Replays reuse their original identity.
+      if (persistSubmission && submissionId && !replacesSubmissionId) {
+        const saved = storeFailedSubmission(submissionStorageKey, {
+          content, capability: effectiveCapability, requestSnapshot, submissionId,
+        });
+        dispatch({ type: "SET_SUBMISSION_PERSISTENCE", key, submissionId, saved: saved !== null });
+        if (!saved) {
+          notify(i18n.t(
+            "This unsent message could not be saved in your browser. Copy it before leaving this page.",
+          ), { tone: "error", durationMs: 10_000 });
+        }
+      }
       if (replacesSubmissionId && submissionId) {
         command = (replaySnapshot?.replacementRequest ?? command) as typeof command;
         requestSnapshot.replacesSubmissionId = replacesSubmissionId;
@@ -3821,6 +3830,18 @@ export function ChatStateAdapterProvider({
       return (snapshot?.replacementRootSubmissionId ?? snapshot?.replacesSubmissionId) === rootId;
     });
     if (pending && pending.submissionId !== message.failedSubmissionId) return editMessage(messageId, pending.content);
+    // Older recovery records did not retain the actual wire request. Reusing
+    // their ID can conflict with an already-reserved digest after a reload.
+    // Fence that ID before starting anew, including attachment-only drafts.
+    if (!message.requestSnapshot.submissionRequest && !message.requestSnapshot.replacementRequest) {
+      return sendMessage(message.content, undefined, undefined, undefined, undefined, {
+        requestSnapshotOverride: message.requestSnapshot,
+        replacesSubmissionId: message.failedSubmissionId,
+        replacementRootSubmissionId: rootId,
+        replacedMessageId: messageId,
+        parentMessageId: message.parentMessageId != null && message.parentMessageId > 0 ? message.parentMessageId : null,
+      });
+    }
     // Move this exact local row to the active tail while retaining its causal
     // ID; retrying an older draft must never resend the newest row instead.
     dispatch({ type: "DISCARD_FAILED_SUBMISSION", key, messageId, submissionId: message.failedSubmissionId });
