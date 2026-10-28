@@ -119,6 +119,11 @@ async def get_learning_index():
         if not learning_surface_allowed(surface):
             continue
         result[kind], unavailable = await read_workspace_indexes(reader)
+        if kind == "books":
+            from deeptutor.multi_user.book_access import dedupe_account_book_rows
+
+            # B3-P16: an own public book in another workspace is listed once.
+            result[kind] = dedupe_account_book_rows(result[kind])
         if unavailable:
             failed.append(kind)
     return {"sources": result, "failed": failed}
@@ -221,6 +226,11 @@ async def get_learning_library(kind: str):
     if kind not in {"books", "mastery", "reading", "materials", "practice", "watching"}:
         raise HTTPException(status_code=404, detail="Unknown learning library")
     rows, unavailable = await read_workspace_indexes(read)
+    if kind == "books":
+        from deeptutor.multi_user.book_access import dedupe_account_book_rows
+
+        # B3-P16: an own public book in another workspace is listed once.
+        rows = dedupe_account_book_rows(rows)
     return {"items": rows, "unavailable_workspaces": unavailable, "can_create": can_create}
 
 

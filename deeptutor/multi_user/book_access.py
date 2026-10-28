@@ -354,6 +354,21 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
     return results
 
 
+def dedupe_account_book_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop a shared row whose registry ref another workspace lists as its own.
+
+    B3-P16: the account library merges every workspace's ``/books`` index.
+    General also lists public registry records, which include the caller's own
+    public books from other workspaces; that workspace already lists the same
+    record locally with edit capabilities. Rows without a ref are kept.
+    """
+    own_refs = {row.get("ref") for row in rows if row.get("source") == "own" and row.get("ref")}
+    return [
+        row for row in rows
+        if not (row.get("source") == "shared" and row.get("ref") in own_refs)
+    ]
+
+
 def readable_book_storage(book_id: str) -> BookStorage | None:
     """Resolve the requested identity before stripping its canonical prefix."""
     resolved = resolve_book(book_id)
