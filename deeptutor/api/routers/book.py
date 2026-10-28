@@ -959,14 +959,18 @@ def _record_matches_storage(resolved: ResolvedBook, record: book_registry.BookRe
     ).resolve()
 
 
-def _registered_writable(book_id: str) -> tuple[ResolvedBook, book_registry.BookRecord]:
+def _registered_writable(
+    book_id: str, *, unpublish: bool = False,
+) -> tuple[ResolvedBook, book_registry.BookRecord]:
+    """``unpublish``: the request may only make the book private (B3-12)."""
     resolved = _resolve_book_or_404(book_id)
     record = resolved.record
     if record is None or not _record_matches_storage(resolved, record):
         raise HTTPException(
             status_code=409, detail="This location has no registered book identity. Reload and retry.",
         )
-    if not resolved.can_edit or not book_registry.can_write_book(record, get_current_user()):
+    editable = resolved.can_edit or (unpublish and resolved.admin_may_unpublish())
+    if not editable or not book_registry.can_write_book(record, get_current_user()):
         raise HTTPException(
             status_code=403, detail="Only the book's creator or an admin can manage its sharing.",
         )
@@ -975,12 +979,15 @@ def _registered_writable(book_id: str) -> tuple[ResolvedBook, book_registry.Book
 
 def _locked_writable(
     conn: sqlite3.Connection, resolved: ResolvedBook, record: book_registry.BookRecord,
-    *, content_ok: bool | None = None,
+    *, content_ok: bool | None = None, unpublish: bool = False,
 ) -> book_registry.BookRecord:
     """Final identity (409), owner (403) and source (403) checks, in that order.
 
     ``content_ok`` is ``content_writable`` computed before a read snapshot: it
     scans account directories, which must not run while holding SHARED locks.
+    ``unpublish`` (the request may only make the book private): an admin
+    skips the source check for a book that is public under this lock, since
+    visibility is registry metadata (B3-12); an archived source stays frozen.
     """
     current = book_registry._get_book(conn, record.book_id)
     if current is None or not _record_matches_storage(resolved, current) or (
@@ -989,6 +996,8 @@ def _locked_writable(
         raise HTTPException(status_code=409, detail="Book location or identity changed; reload and retry.")
     if not book_registry._can_write(conn, current, get_current_user()):
         raise HTTPException(status_code=403, detail="Only the book's creator or an admin may manage it.")
+    if unpublish and current.visibility == "public" and get_current_user().is_admin:
+        return current
     if not (content_writable(resolved.engine.storage) if content_ok is None else content_ok):
         raise HTTPException(status_code=403, detail="This book's source is read-only.")
     return current
@@ -996,7 +1005,7 @@ def _locked_writable(
 
 @contextmanager
 def _sharing_snapshot(
-    resolved: ResolvedBook, expected: book_registry.BookRecord,
+    resolved: ResolvedBook, expected: book_registry.BookRecord, *, unpublish: bool = False,
 ) -> Iterator[tuple[sqlite3.Connection, book_registry.BookRecord]]:
     """Read-only joint snapshot for the sharing GETs; never waits on writers.
 
@@ -1009,16 +1018,19 @@ def _sharing_snapshot(
                 status_code=409,
                 detail="This location has no registered book identity. Reload and retry.",
             )
-        yield conn, _locked_writable(conn, resolved, expected, content_ok=content_ok)
+        yield conn, _locked_writable(
+            conn, resolved, expected, content_ok=content_ok, unpublish=unpublish,
+        )
 
 
 @router.get("/books/{book_id}/sharing")
 async def get_book_sharing(book_id: str) -> dict[str, Any]:
     def read() -> dict[str, Any]:
-        resolved, expected = _registered_writable(book_id)
+        # Read-only views: an admin who may still make the book private sees them.
+        resolved, expected = _registered_writable(book_id, unpublish=True)
         capabilities = resolved.capabilities()
         try:
-            with _sharing_snapshot(resolved, expected) as (conn, record):
+            with _sharing_snapshot(resolved, expected, unpublish=True) as (conn, record):
                 return {
                     "book_id": record.book_id,
                     "ref": record.ref,
@@ -1039,7 +1051,8 @@ async def get_book_sharing(book_id: str) -> dict[str, Any]:
 async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[str, Any]:
     from deeptutor.multi_user.roles import is_teacher_or_admin
 
-    resolved, record = _registered_writable(book_id)
+    unpublish = req.visibility == "private"
+    resolved, record = _registered_writable(book_id, unpublish=unpublish)
     user = get_current_user()
     if req.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
@@ -1047,7 +1060,7 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
         raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
     def apply(confirmed: frozenset[str] | None) -> tuple[book_registry.BookRecord, dict[str, Any]]:
         with book_sharing.shared_write() as conn:
-            current = _locked_writable(conn, resolved, record)
+            current = _locked_writable(conn, resolved, record, unpublish=unpublish)
             changed = book_sharing.change_visibility(
                 conn, current, req.visibility, force=req.force, kb_choices=req.kb_choices,
                 confirm=confirmed is not None, confirmed_referrers=confirmed,
@@ -1090,9 +1103,10 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 @router.get("/books/{book_id}/references")
 async def get_book_references(book_id: str) -> dict[str, Any]:
     def read() -> dict[str, Any]:
-        resolved, expected = _registered_writable(book_id)
+        # Read-only views: an admin who may still make the book private sees them.
+        resolved, expected = _registered_writable(book_id, unpublish=True)
         try:
-            with _sharing_snapshot(resolved, expected) as (conn, record):
+            with _sharing_snapshot(resolved, expected, unpublish=True) as (conn, record):
                 return {
                     "book_id": record.book_id, "ref": record.ref,
                     **_reference_summary(record, book_registry._references_of(conn, record.book_id)),

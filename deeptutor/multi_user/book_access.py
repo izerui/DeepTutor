@@ -162,6 +162,18 @@ class ResolvedBook:
     def is_shared(self) -> bool:
         return self.source == "shared"
 
+    def admin_may_unpublish(self) -> bool:
+        """B3-12: an admin may make a public book private despite a read-only source.
+
+        Visibility is registry metadata, so an archived source workspace does
+        not block it; making public and content edits still need ``can_edit``.
+        Whether the caller may write the record itself is checked separately.
+        """
+        record = self.record
+        return bool(
+            record is not None and record.visibility == "public" and get_current_user().is_admin
+        )
+
     def capabilities(self) -> dict[str, Any]:
         from .roles import is_teacher_or_admin
 
@@ -170,10 +182,11 @@ class ResolvedBook:
         owned = self.source == "own" or (
             record is not None and record.created_by in _my_owner_ids(user)
         )
-        manageable = bool(record and self.can_edit and (
+        registry_ok = bool(record and (
             self.registry_writable if self.registry_writable is not None
             else registry.can_write_book(record, user)
         ))
+        manageable = registry_ok and self.can_edit
         return {
             "source": self.source,
             "permission": self.permission,
@@ -183,9 +196,9 @@ class ResolvedBook:
             "visibility": record.visibility if record else "private",
             "owner_id": record.created_by if record else "",
             "group": "mine" if owned else "public",
-            "can_set_visibility": manageable and (
+            "can_set_visibility": (manageable and (
                 is_teacher_or_admin() or (owned and record.visibility == "public")
-            ),
+            )) or (registry_ok and self.admin_may_unpublish()),
             "can_make_public": manageable and is_teacher_or_admin(),
         }
 
