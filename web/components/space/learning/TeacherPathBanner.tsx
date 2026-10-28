@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { AlertTriangle, BookOpen, GraduationCap, Megaphone, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { useAuthStatus } from '@/hooks/useAuthStatus'
 import { acknowledgeTeacherUpdate, type MasteryTopic } from '@/lib/learning-api'
 import { bookRoute } from '@/lib/learning-routes'
 import { withMasteryTemplate } from '@/lib/mastery-template-scope'
@@ -34,6 +35,7 @@ export function TeacherPathBanner({
   compact?: boolean
 }) {
   const { t } = useTranslation()
+  const { learningPolicy } = useAuthStatus()
   // Keyed by the revision it announced: a later update shows again.
   const [hiddenRevision, setHiddenRevision] = useState<number | null>(null)
   const origin = topic.origin
@@ -42,7 +44,10 @@ export function TeacherPathBanner({
     origin.update_notice && origin.update_notice.to_revision !== hiddenRevision
       ? origin.update_notice
       : null
-  const books = courseBooks(topic)
+  // A learning policy without the `books` surface makes the library a 403;
+  // the link is absent rather than offered and then rejected (B3-P15).
+  const booksAllowed = !learningPolicy || learningPolicy.allowedSurfaces.includes('books')
+  const books = booksAllowed ? courseBooks(topic) : []
   const changes = notice
     ? [
         notice.added && t('{{count}} knowledge points added', { count: notice.added }),
