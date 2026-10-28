@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 import contextvars
 import sqlite3
 import threading
@@ -137,3 +138,42 @@ async def test_sharing_read_still_denies_strangers(owned, as_user):
         with pytest.raises(HTTPException) as hidden:
             await router.get_book_sharing("bk_one")
         assert hidden.value.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["sharing", "references"])
+async def test_archive_check_runs_before_the_snapshot_opens(owned, as_user, monkeypatch, endpoint):
+    """content_writable scans account directories: never while holding SHARED."""
+    open_snapshots: list[bool] = []
+    during_check: list[bool] = []
+    real_read, real_check = sharing.shared_read, router.content_writable
+
+    @contextmanager
+    def tracking_read():
+        with real_read() as conn:
+            open_snapshots.append(True)
+            try:
+                yield conn
+            finally:
+                open_snapshots.pop()
+
+    def recording_check(storage):
+        during_check.append(bool(open_snapshots))
+        return real_check(storage)
+
+    monkeypatch.setattr(sharing, "shared_read", tracking_read)
+    monkeypatch.setattr(router, "content_writable", recording_check)
+    call = router.get_book_sharing if endpoint == "sharing" else router.get_book_references
+    with as_user("owner", role="teacher"):
+        assert (await call("bk_one"))["book_id"] == "bk_one"
+    assert during_check == [False]
+
+
+@pytest.mark.asyncio
+async def test_read_only_source_is_still_refused_after_the_identity_checks(owned, as_user, monkeypatch):
+    monkeypatch.setattr(router, "content_writable", lambda _storage: False)
+    with as_user("owner", role="teacher"):
+        for call in (router.get_book_sharing, router.get_book_references):
+            with pytest.raises(HTTPException) as denied:
+                await call("bk_one")
+            assert denied.value.status_code == 403
