@@ -34,9 +34,24 @@ from deeptutor.teaching.models import (
     TemplateSources,
 )
 
+#: A plain Lock on purpose: an RLock would let a nested writer in, only for it
+#: to wait 30 s on SQLite's own RESERVED lock. Nesting is refused instead.
 _write_lock = threading.Lock()
-#: Set while this thread holds :meth:`TeachingStore.material_lock`.
+#: ``material_lock`` is set while this thread holds
+#: :meth:`TeachingStore.material_lock`; ``writer`` while it holds any teaching
+#: writer (:func:`_write` or :func:`_joint_write`).
 _held = threading.local()
+
+
+def _refuse_nested_writer() -> None:
+    """Fail fast where a nested teaching writer would wait on itself forever."""
+    if getattr(_held, "material_lock", False):
+        # The lock is this very writer; a nested write would wait on itself.
+        raise RuntimeError("Teaching store writes are not allowed inside material_lock().")
+    if getattr(_held, "writer", False):
+        raise RuntimeError("Teaching store writers cannot be nested in one thread.")
+
+
 _DB_FILENAME = "teaching.sqlite3"
 _JOINT_SCHEMAS = ("main", "kb", "books")
 
@@ -140,12 +155,11 @@ def _read(path: Path) -> Iterator[sqlite3.Connection | None]:
 @contextmanager
 def _write(path: Path) -> Iterator[sqlite3.Connection]:
     """Exclusive writer: creates the DB and runs schema on first use."""
-    if getattr(_held, "material_lock", False):
-        # The lock is this very writer; a nested write would wait on itself.
-        raise RuntimeError("Teaching store writes are not allowed inside material_lock().")
+    _refuse_nested_writer()
     path.parent.mkdir(parents=True, exist_ok=True)
     with _write_lock:
         conn = _open(path)
+        _held.writer = True
         try:
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -156,6 +170,7 @@ def _write(path: Path) -> Iterator[sqlite3.Connection]:
                     conn.execute("ROLLBACK")
                 raise
         finally:
+            _held.writer = False
             conn.close()
 
 
@@ -171,12 +186,16 @@ def _joint_write(path: Path) -> Iterator[sqlite3.Connection]:
     attach order. Multi-file atomicity needs on-disk rollback journals, so a
     database that is not in DELETE mode is refused after locking, before any
     write. Nothing here awaits; callers keep the block short.
+
+    Same shape as ``deeptutor.book.sharing.shared_write`` (attach, lock order,
+    DELETE-journal check, writer flag): a change to one must be checked
+    against the other. They stay separate on purpose: main database, lock
+    set, error types and recovery hooks all differ.
     """
     from deeptutor.book import registry as books
     from deeptutor.knowledge import registry as kbs
 
-    if getattr(_held, "material_lock", False):
-        raise RuntimeError("Teaching store writes are not allowed inside material_lock().")
+    _refuse_nested_writer()
     if getattr(books._writer_state, "active", False):
         raise books.BookRegistryError("Cannot enter the teaching writer from an active book writer.")
     teaching_path = path.resolve()
@@ -193,6 +212,7 @@ def _joint_write(path: Path) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(teaching_path, timeout=30, isolation_level=None)
         conn.row_factory = sqlite3.Row
         books._writer_state.active = True
+        _held.writer = True
         try:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("ATTACH DATABASE ? AS kb", (str(kb_path),))
@@ -215,6 +235,7 @@ def _joint_write(path: Path) -> Iterator[sqlite3.Connection]:
                     conn.execute("ROLLBACK")
                 raise
         finally:
+            _held.writer = False
             books._writer_state.active = False
             conn.close()
 
