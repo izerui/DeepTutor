@@ -198,25 +198,6 @@ def run_confirmed_withdrawal(
 WITHDRAWAL_ROUNDS = 3
 
 
-def withdrawal_refusal(
-    template_ids: Iterable[str],
-    *,
-    confirm: bool,
-    expected_paths: int | None,
-    expected_students: int | None,
-    resource: str,
-) -> dict[str, Any] | None:
-    """The counts-only 409 detail, or ``None`` to proceed bound to these paths.
-
-    Proceed when no published path is affected, or when the owner confirmed
-    and the counts they saw (if sent) still hold. Read only (teaching store).
-    """
-    return _refusal(
-        withdrawal_confirmation_detail(template_ids, resource=resource),
-        confirm=confirm, expected_paths=expected_paths, expected_students=expected_students,
-    )
-
-
 def _refusal(
     detail: dict[str, Any] | None,
     *,
