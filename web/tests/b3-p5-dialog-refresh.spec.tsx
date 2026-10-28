@@ -1,24 +1,13 @@
 /**
- * B3-7 red test: the assignment-management dialog sees fresh template state
- * after `loadTemplates()` re-fetches, even though `managing` is the snapshot
- * taken when the dialog opened.
+ * B3-7 test: the `currentTemplate` PRODUCT function in mastery/page.tsx
+ * resolves the freshest version of a template from the live list.
  *
- * The fix in mastery/page.tsx is:
- *   template={templates.find(t => t.id === managing.id) ?? managing}
- *
- * We test the derivation logic directly: a parent component holds `managing`
- * (stale) and `templates` (fresh); the child receives the derived prop and
- * must reflect the updated status.
- *
- * NOTE: This test verifies the derivation pattern, not page.tsx itself.
- * The Harness replicates the `templates.find` expression independently;
- * a revert in page.tsx would not be caught here. That trade-off is
- * accepted because rendering the full mastery page in a unit test is
- * not practical given its dependency depth.
+ * Red proof: making `currentTemplate` always return `managing` (ignoring the
+ * list) causes the "picks the updated template" test to fail.
  */
-import { useState } from "react";
-import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { currentTemplate } from "@/app/(workspace)/learning/mastery/page";
 
 interface MinimalTemplate {
   id: string;
@@ -26,97 +15,59 @@ interface MinimalTemplate {
   current_revision: number;
 }
 
-/**
- * Minimal stand-in for the page's managing/templates interaction.
- * `DerivedChild` renders whichever template value it receives.
- */
-function Harness({
-  initialManaging,
-  initialTemplates,
-  updater,
-}: {
-  initialManaging: MinimalTemplate;
-  initialTemplates: MinimalTemplate[];
-  /** Called with setTemplates so the test can push a fresh list. */
-  updater: (setTemplates: (ts: MinimalTemplate[]) => void) => void;
-}) {
-  const [templates, setTemplates] = useState(initialTemplates);
-  const managing = initialManaging; // snapshot — never updated
-
-  // Expose the setter so the test can simulate `loadTemplates()`.
-  updater(setTemplates);
-
-  // The B3-7 fix: derive the prop from the latest templates list.
-  const derived = templates.find((t) => t.id === managing.id) ?? managing;
-
-  return (
-    <div>
-      <span data-testid="status">{derived.status}</span>
-      <span data-testid="revision">{derived.current_revision}</span>
-    </div>
-  );
-}
-
-describe("B3-7 dialog refresh", () => {
-  it("shows archived status after templates list updates", () => {
+describe("currentTemplate (product function)", () => {
+  it("picks the updated template from the list over the stale snapshot", () => {
     const stale: MinimalTemplate = {
       id: "tpl_1",
       status: "published",
       current_revision: 2,
     };
-    const initialList = [{ ...stale }];
+    const fresh: MinimalTemplate = {
+      id: "tpl_1",
+      status: "archived",
+      current_revision: 2,
+    };
 
-    let setTemplates!: (ts: MinimalTemplate[]) => void;
+    const result = currentTemplate([fresh], stale);
 
-    render(
-      <Harness
-        initialManaging={stale}
-        initialTemplates={initialList}
-        updater={(setter) => {
-          setTemplates = setter;
-        }}
-      />,
-    );
-
-    // Before update: dialog sees the published template.
-    expect(screen.getByTestId("status").textContent).toBe("published");
-
-    // Simulate `onChanged` → `loadTemplates()` returning the archived version.
-    act(() => {
-      setTemplates([
-        { id: "tpl_1", status: "archived", current_revision: 2 },
-      ]);
-    });
-
-    // After update: dialog must now show 'archived'.
-    expect(screen.getByTestId("status").textContent).toBe("archived");
+    expect(result.status).toBe("archived");
+    expect(result).toBe(fresh); // identity: the list entry, not the snapshot
   });
 
-  it("falls back to managing snapshot when template disappears from list", () => {
+  it("falls back to the managing snapshot when the template is not in the list", () => {
     const stale: MinimalTemplate = {
       id: "tpl_1",
       status: "published",
       current_revision: 2,
     };
 
-    let setTemplates!: (ts: MinimalTemplate[]) => void;
+    const result = currentTemplate([], stale);
 
-    render(
-      <Harness
-        initialManaging={stale}
-        initialTemplates={[{ ...stale }]}
-        updater={(setter) => {
-          setTemplates = setter;
-        }}
-      />,
-    );
+    expect(result).toBe(stale);
+    expect(result.status).toBe("published");
+  });
 
-    // Template is removed from the list entirely.
-    act(() => {
-      setTemplates([]);
-    });
+  it("returns the matching entry even when the list has multiple templates", () => {
+    const stale: MinimalTemplate = {
+      id: "tpl_2",
+      status: "draft",
+      current_revision: 0,
+    };
+    const other: MinimalTemplate = {
+      id: "tpl_1",
+      status: "published",
+      current_revision: 3,
+    };
+    const updated: MinimalTemplate = {
+      id: "tpl_2",
+      status: "published",
+      current_revision: 1,
+    };
 
-    // The ?? fallback means managing itself is used.
-    expect(screen.getByTestId("status").textContent).toBe("published");
+    const result = currentTemplate([other, updated], stale);
+
+    expect(result).toBe(updated);
+    expect(result.status).toBe("published");
+    expect(result.current_revision).toBe(1);
   });
 });

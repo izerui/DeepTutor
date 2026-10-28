@@ -36,6 +36,21 @@ import {
 } from "@/lib/mastery-mode";
 import { setPendingPrompt } from "@/lib/pending-prompt";
 
+/**
+ * Resolve the freshest version of a template the user is managing.
+ *
+ * `managing` is the snapshot taken when the dialog opened; `templates` is the
+ * live list that `loadTemplates()` keeps current. Picking from the list means
+ * the dialog sees status changes (archive, new revision) without the parent
+ * having to push them through a second piece of state.
+ */
+export function currentTemplate<T extends { id: string }>(
+  templates: readonly T[],
+  managing: T,
+): T {
+  return templates.find((t) => t.id === managing.id) ?? managing;
+}
+
 function MasteryPathRoute() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -195,7 +210,7 @@ function MasteryPathRoute() {
       )}
       {managing && (
         <TemplateAssignmentsDialog
-          template={templates.find(t => t.id === managing.id) ?? managing}
+          template={currentTemplate(templates, managing)}
           returnFocusRef={teacherTriggerRef}
           onClose={() => setManaging(null)}
           onChanged={() => void loadTemplates()}

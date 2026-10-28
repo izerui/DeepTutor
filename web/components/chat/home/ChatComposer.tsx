@@ -92,7 +92,7 @@ type SpaceSelectionCounts = {
 };
 import type { ContextTreeItem } from "./ContextReferenceTree";
 import SelectedResources from "./SelectedResources";
-import { knowledgeBaseMatches } from "@/lib/knowledge-helpers";
+import { knowledgeBaseMatches, resolveKnowledgeBaseLabel } from "@/lib/knowledge-helpers";
 import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { CapabilityDef } from "@/features/capabilities/presentation";
@@ -797,7 +797,7 @@ export default memo(function ChatComposer({
   // One selection summary for files, references, and conversation resources.
   const contextTreeItems: ContextTreeItem[] = [
     ...attachments.map((file, index): ContextTreeItem => ({key:`file-${index}`, icon:Paperclip, kind:t("Attach files"),label:file.filename,thumbnailUrl:file.type === "image" ? file.previewUrl : undefined,onClick:()=>onPreviewAttachment?.(index),onRemove:()=>onRemoveAttachment(index)})),
-    ...selectedKnowledgeBases.map((id): ContextTreeItem => ({key:`kb-${id}`,icon:Database,kind:t("Knowledge"),label:knowledgeBases.find(kb=>knowledgeBaseMatches(kb,id))?.name || knowledgeBaseLabels?.[id] || id,onRemove:()=>onToggleKB(id)})),
+    ...selectedKnowledgeBases.map((id): ContextTreeItem => ({key:`kb-${id}`,icon:Database,kind:t("Knowledge"),label:resolveKnowledgeBaseLabel(id, knowledgeBases, knowledgeBaseLabels),onRemove:()=>onToggleKB(id)})),
     ...(personaSelection ? [{key:"persona-scope",icon:UserRound,kind:t("Response style"),label:personaSelection,onRemove:()=>onPersonaSelectionChange?.("")}] : []),
     ...(selectedPartner ? [{ key: "partner-current", icon: UserRound, kind: t("Ask partner"), label: partnerName!, onRemove: () => onSelectPartner?.(null) }] : []),
     ...(selectedPartnerGroup ? [{ key: "partner-group-current", icon: Users, kind: t("Organize partner discussion"), label: partnerGroupName!, onRemove: () => onSelectPartnerGroup?.(null) }] : []),

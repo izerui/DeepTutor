@@ -617,3 +617,21 @@ export function canCreateKnowledgeBases(
 ): boolean {
   return policy?.allow_private_kb ?? true;
 }
+
+/**
+ * Resolve the display label for a knowledge-base ref.
+ *
+ * Priority: catalog name (the user's own KB list) → caller-supplied label map
+ * (e.g. teacher-path source labels a student cannot look up) → raw ref as-is.
+ */
+export function resolveKnowledgeBaseLabel(
+  id: string,
+  knowledgeBases: ReadonlyArray<KnowledgeBaseRefSource & { name: string }>,
+  knowledgeBaseLabels?: Record<string, string>,
+): string {
+  return (
+    knowledgeBases.find((kb) => knowledgeBaseMatches(kb, id))?.name ||
+    knowledgeBaseLabels?.[id] ||
+    id
+  );
+}
