@@ -177,18 +177,21 @@ def run_confirmed_withdrawal(
     fresh counts to show.
     """
     bound: frozenset[str] | None = None
+    last: dict[str, Any] | None = None
     for _round in range(WITHDRAWAL_ROUNDS):
         try:
             return attempt(bound)
         except needs_confirmation as exc:
             bound = frozenset(getattr(exc, "referrer_ids", ()))
-            refusal = withdrawal_refusal(
-                bound, confirm=confirm, expected_paths=expected_paths,
-                expected_students=expected_students, resource=resource,
+            detail = withdrawal_confirmation_detail(bound, resource=resource)
+            refusal = _refusal(
+                detail, confirm=confirm, expected_paths=expected_paths,
+                expected_students=expected_students,
             )
             if refusal is not None:
                 raise WithdrawalConsentRequired(refusal) from exc
-    raise WithdrawalConsentRequired(withdrawal_unsettled(resource))
+            last = detail or last
+    raise WithdrawalConsentRequired(withdrawal_unsettled(resource, last=last))
 
 
 #: Confirmed rounds before giving up while paths keep appearing.
@@ -208,7 +211,19 @@ def withdrawal_refusal(
     Proceed when no published path is affected, or when the owner confirmed
     and the counts they saw (if sent) still hold. Read only (teaching store).
     """
-    detail = withdrawal_confirmation_detail(template_ids, resource=resource)
+    return _refusal(
+        withdrawal_confirmation_detail(template_ids, resource=resource),
+        confirm=confirm, expected_paths=expected_paths, expected_students=expected_students,
+    )
+
+
+def _refusal(
+    detail: dict[str, Any] | None,
+    *,
+    confirm: bool,
+    expected_paths: int | None,
+    expected_students: int | None,
+) -> dict[str, Any] | None:
     if detail is None:
         return None
     if (
@@ -223,14 +238,21 @@ def withdrawal_refusal(
     return detail
 
 
-def withdrawal_unsettled(resource: str) -> dict[str, Any]:
+def withdrawal_unsettled(
+    resource: str, *, last: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The 409 detail after the referring paths kept changing every round.
+
+    ``last`` is the most recent counts-only detail the rounds computed; its
+    counts are what the owner is asked to confirm next (without it 0/0).
+    """
     return {
         "code": WITHDRAWAL_CONFIRMATION_CODE,
         "requires_confirmation": True,
         "changed": True,
         "resource": resource,
-        "affected_paths": 0,
-        "affected_students": 0,
+        "affected_paths": int(last["affected_paths"]) if last else 0,
+        "affected_students": int(last["affected_students"]) if last else 0,
         "message": f"The teacher paths citing this {resource} keep changing; try again.",
     }
 
