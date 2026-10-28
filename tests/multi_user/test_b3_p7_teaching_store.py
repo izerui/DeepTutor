@@ -65,16 +65,26 @@ def _joint_then_write(path):
     return body
 
 
+def _nesting_then_retry(nesting_fn, path):
+    """Run a nesting that raises, then prove the same thread can write again."""
+
+    def body() -> None:
+        with pytest.raises(RuntimeError, match="nested|material_lock"):
+            nesting_fn(path)()
+        # Same thread: the flag is cleared, so the next writer succeeds.
+        with teaching_store._write(path) as conn:
+            conn.execute("SELECT 1")
+        with teaching_store._joint_write(path) as conn:
+            conn.execute("SELECT 1")
+
+    return body
+
+
 @pytest.mark.parametrize("nesting", [_nested_write, _write_then_joint, _joint_then_write])
 def test_a_nested_teaching_writer_raises_instead_of_hanging(nesting, fresh_write_lock):
     path = teaching_store.teaching_db_path()
-    error = _in_thread(nesting(path))
-    assert isinstance(error, RuntimeError)
-    # The flag is cleared again: the same thread's next writer works.
-    with teaching_store._write(path) as conn:
-        conn.execute("SELECT 1")
-    with teaching_store._joint_write(path) as conn:
-        conn.execute("SELECT 1")
+    error = _in_thread(_nesting_then_retry(nesting, path))
+    assert error is None  # pytest.raises caught RuntimeError; retry succeeded
 
 
 def test_writers_in_other_threads_still_wait_rather_than_raise(fresh_write_lock):

@@ -48,9 +48,18 @@ def test_a_pdf_whose_lookup_fails_is_unavailable(broken_lookup, caplog):
     )
 
 
-def test_a_non_pdf_whose_lookup_fails_keeps_the_text_route(broken_lookup):
+def test_a_non_pdf_whose_lookup_fails_keeps_the_text_route(broken_lookup, caplog):
     topic, progress = _topic("kb_x", "notes/lesson.md", "doc_1")
-    assert selected_scope(topic, progress, "kp1") == {}
+    with caplog.at_level(logging.WARNING, logger="deeptutor.learning.lesson_evidence"):
+        assert selected_scope(topic, progress, "kp1") == {}
+    # Prove the lookup actually failed and fell back to the captured path
+    # (not simply skipped): the warning proves _document_key tried the registry.
+    assert any(
+        r.levelno == logging.WARNING
+        and "doc_1" in r.getMessage()
+        and r.name == "deeptutor.learning.lesson_evidence"
+        for r in caplog.records
+    )
 
 
 def test_a_moved_pdf_is_found_by_doc_id_in_the_real_registry(
