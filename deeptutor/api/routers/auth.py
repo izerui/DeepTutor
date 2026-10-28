@@ -1584,7 +1584,7 @@ async def put_current_learner_profile(
         profile = normalize_profile(body.model_dump(exclude_none=True))
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     updated = set_learner_profile(current.username, profile)
     log_usage(
@@ -1631,7 +1631,7 @@ async def put_learner_profile(
         profile = normalize_profile(body.model_dump(exclude_none=True))
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     updated = set_learner_profile(username, profile)
     log_admin_action(
@@ -1790,7 +1790,7 @@ async def admin_import_users(
     expected = ["username", "password", "preset"]
     if fieldnames != expected:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="CSV header must be exactly: username,password,preset",
         )
     # DictReader keeps the original header spelling as dictionary keys.
@@ -1801,7 +1801,7 @@ async def admin_import_users(
     rows = list(reader)
     if not rows:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="User import file contains no user rows.",
         )
     if len(rows) > _USER_IMPORT_MAX_ROWS:

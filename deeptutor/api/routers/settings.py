@@ -1317,7 +1317,7 @@ async def diff_settings_profile(payload: SettingsProfileImportPayload):
     try:
         return review_settings_profile_import(payload.model_dump())
     except SettingsProfileError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from None
 
 
 @router.get("/presets")
