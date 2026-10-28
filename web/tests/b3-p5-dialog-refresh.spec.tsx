@@ -9,6 +9,12 @@
  * We test the derivation logic directly: a parent component holds `managing`
  * (stale) and `templates` (fresh); the child receives the derived prop and
  * must reflect the updated status.
+ *
+ * NOTE: This test verifies the derivation pattern, not page.tsx itself.
+ * The Harness replicates the `templates.find` expression independently;
+ * a revert in page.tsx would not be caught here. That trade-off is
+ * accepted because rendering the full mastery page in a unit test is
+ * not practical given its dependency depth.
  */
 import { useState } from "react";
 import { act, render, screen } from "@testing-library/react";
