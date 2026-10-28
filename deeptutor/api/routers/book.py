@@ -51,6 +51,7 @@ from deeptutor.multi_user.audit import log_admin_action, log_usage
 from deeptutor.multi_user.book_access import (
     ResolvedBook,
     accessible_books,
+    admin_may_retire,
     can_create_book,
     resolve_book,
 )
@@ -940,6 +941,14 @@ async def _delete_book(
     if force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
     references = []
+    # B3-12 (a): an archived source is never touched. An admin's deletion of
+    # a book that is public there only retires its registry identity (checked
+    # again under the writer); the files stay frozen until a restore, after
+    # which the owner's book is re-registered as a private local book.
+    if not await asyncio.to_thread(content_writable, resolved.engine.storage):
+        return await _retire_archived_book(
+            resolved, book_id, force=force, confirmed=confirmed,
+        )
     # Recovery stays inside the writer: failures rename the book back before
     # ROLLBACK; success finalizes runtimes/buses only after COMMIT.
     recovery = ExitStack()
@@ -972,6 +981,40 @@ async def _delete_book(
                 "forced_references": len(references),
             },
         )
+    return {"deleted": True, "book_id": book_id}
+
+
+async def _retire_archived_book(
+    resolved: ResolvedBook, book_id: str, *, force: bool, confirmed: frozenset[str] | None,
+) -> dict[str, Any]:
+    """Unregister-only deletion of a public book whose source is archived (admins).
+
+    Revocation (``book_deleted``), row and intent removal commit together in
+    one writer with no file I/O: nothing is renamed, staged or purged. The
+    runtime/bus release runs on the event loop after COMMIT and writes no file.
+    """
+    if resolved.record is None:
+        raise HTTPException(status_code=403, detail="This book's source is read-only.")
+    with book_sharing.shared_write() as conn:
+        record = _locked_writable(
+            conn, resolved, resolved.record, content_ok=False, registry_only=True,
+        )
+        references = book_registry._references_of(conn, record.book_id)
+        if not force:
+            book_registry.require_withdrawal_confirmation(
+                references, confirm=confirmed is not None, confirmed_referrers=confirmed,
+            )
+        book_registry._unregister(conn, record.book_id)
+        book_sharing.sync_protection(conn, record.book_id)
+    resolved.engine.finish_book_deletion(book_id)
+    log_admin_action(
+        "book_delete",
+        summary={
+            "book_id": book_id,
+            "forced_references": len(references),
+            "unregister_only": True,
+        },
+    )
     return {"deleted": True, "book_id": book_id}
 
 
@@ -1012,15 +1055,16 @@ def _registered_writable(
 
 def _locked_writable(
     conn: sqlite3.Connection, resolved: ResolvedBook, record: book_registry.BookRecord,
-    *, content_ok: bool | None = None, unpublish: bool = False,
+    *, content_ok: bool | None = None, registry_only: bool = False,
 ) -> book_registry.BookRecord:
     """Final identity (409), owner (403) and source (403) checks, in that order.
 
     ``content_ok`` is ``content_writable`` computed before a read snapshot: it
     scans account directories, which must not run while holding SHARED locks.
-    ``unpublish`` (the request may only make the book private): an admin
-    skips the source check for a book that is public under this lock, since
-    visibility is registry metadata (B3-12); an archived source stays frozen.
+    ``registry_only`` (the request only changes registry metadata: making the
+    book private, or the unregister-only deletion of an archived book): an
+    admin skips the source check for a book that is public under this lock
+    (B3-12); an archived source stays frozen.
     """
     current = book_registry._get_book(conn, record.book_id)
     if current is None or not _record_matches_storage(resolved, current) or (
@@ -1029,7 +1073,7 @@ def _locked_writable(
         raise HTTPException(status_code=409, detail="Book location or identity changed; reload and retry.")
     if not book_registry._can_write(conn, current, get_current_user()):
         raise HTTPException(status_code=403, detail="Only the book's creator or an admin may manage it.")
-    if unpublish and current.visibility == "public" and get_current_user().is_admin:
+    if registry_only and admin_may_retire(current, get_current_user()):
         return current
     if not (content_writable(resolved.engine.storage) if content_ok is None else content_ok):
         raise HTTPException(status_code=403, detail="This book's source is read-only.")
@@ -1052,7 +1096,7 @@ def _sharing_snapshot(
                 detail="This location has no registered book identity. Reload and retry.",
             )
         yield conn, _locked_writable(
-            conn, resolved, expected, content_ok=content_ok, unpublish=unpublish,
+            conn, resolved, expected, content_ok=content_ok, registry_only=unpublish,
         )
 
 
@@ -1093,7 +1137,7 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
         raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
     def apply(confirmed: frozenset[str] | None) -> tuple[book_registry.BookRecord, dict[str, Any]]:
         with book_sharing.shared_write() as conn:
-            current = _locked_writable(conn, resolved, record, unpublish=unpublish)
+            current = _locked_writable(conn, resolved, record, registry_only=unpublish)
             changed = book_sharing.change_visibility(
                 conn, current, req.visibility, force=req.force, kb_choices=req.kb_choices,
                 confirm=confirmed is not None, confirmed_referrers=confirmed,

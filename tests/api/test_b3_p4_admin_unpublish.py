@@ -61,7 +61,9 @@ def test_admin_makes_archived_public_book_private(archive_env):
     listed = next(book for book in listing if book["id"] == record.book_id)
     assert listed["can_set_visibility"] is True
     assert listed["can_make_public"] is False
-    assert listed["can_edit"] is False and listed["can_delete"] is False
+    assert listed["can_edit"] is False
+    # B3-12 (a): the admin may delete it (unregister only; see test_b3_p12_*).
+    assert listed["can_delete"] is True
     sharing = client.get("/api/books/book:bk_archive/sharing", headers=headers("root"))
     assert sharing.status_code == 200, sharing.text
     assert sharing.json()["can_set_visibility"] is True

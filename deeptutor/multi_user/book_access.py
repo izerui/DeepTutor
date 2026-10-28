@@ -43,6 +43,16 @@ def _my_owner_ids(user: CurrentUser) -> set[str]:
     return {user.id, LOCAL_ADMIN_ID} if user.is_admin else {user.id}
 
 
+def admin_may_retire(record: registry.BookRecord | None, user: CurrentUser) -> bool:
+    """B3-12 (a): an admin may delete a public book despite a read-only source.
+
+    Deleting such a book only retires its registry identity (the router's
+    unregister-only path); the archived files stay frozen. Whether the caller
+    may write the record itself is checked separately.
+    """
+    return bool(record is not None and record.visibility == "public" and user.is_admin)
+
+
 def storage_for(record: registry.BookRecord) -> BookStorage:
     return BookStorage(path_service=PathService(workspace_root=Path(record.base_dir).parents[2]))
 
@@ -169,10 +179,7 @@ class ResolvedBook:
         not block it; making public and content edits still need ``can_edit``.
         Whether the caller may write the record itself is checked separately.
         """
-        record = self.record
-        return bool(
-            record is not None and record.visibility == "public" and get_current_user().is_admin
-        )
+        return admin_may_retire(self.record, get_current_user())
 
     def capabilities(self) -> dict[str, Any]:
         from .roles import is_teacher_or_admin
@@ -250,14 +257,15 @@ def resolve_book(book_id: str) -> ResolvedBook | None:
         if book is None:
             return None
         writable = content_writable(own_storage)
+        own_record = ensure_book_registered(book, own_storage)
         return ResolvedBook(
             engine=get_book_engine(),
             source="own",
             permission="edit" if writable else "read",
             can_edit=writable,
-            can_delete=writable,
+            can_delete=writable or admin_may_retire(own_record, user),
             learning=own_storage,
-            record=ensure_book_registered(book, own_storage),
+            record=own_record,
         )
     record = record if explicit else registry.get_book(book_id)
     if record is None or not registry.can_read_book(record, user):
@@ -285,7 +293,7 @@ def _located(
         source="shared",
         permission="edit" if writable else "read",
         can_edit=writable,
-        can_delete=writable,
+        can_delete=writable or (registry_writable and admin_may_retire(record, user)),
         learning=BookLearningOverlay(get_current_path_service()),
         record=record,
         registry_writable=registry_writable,
@@ -322,7 +330,7 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
                     source="own",
                     permission="edit" if writable else "read",
                     can_edit=writable,
-                    can_delete=writable,
+                    can_delete=writable or admin_may_retire(record, get_current_user()),
                     learning=own_storage,
                     record=record,
                 ),
@@ -406,6 +414,7 @@ def public_book_catalog() -> list[dict[str, Any]]:
 
 __all__ = [
     "ResolvedBook",
+    "admin_may_retire",
     "accessible_books",
     "public_book_catalog",
     "book_reading_scope",
