@@ -83,8 +83,13 @@ async def enter_mastery_template_scope(request: Request) -> None:
     each request runs in its own task, so they end with it. A ``yield``
     dependency resetting them on exit could hit "token created in a different
     Context". The constraint this relies on: no route this dependency scopes
-    may run work after the response (``BackgroundTasks``), which would still
-    see them — guarded by ``tests/multi_user/test_b3_p6_turns_and_logs.py``.
+    may run work after the response or outside its own request task — no
+    ``BackgroundTasks``, no ``Response(background=...)``, no
+    ``StreamingResponse`` generator that reads them after the endpoint
+    returned, no ``asyncio.create_task`` (a task copies the context) — which
+    would still see them. The ``BackgroundTasks`` dependency is guarded
+    mechanically by ``tests/multi_user/test_b3_p6_turns_and_logs.py``; the
+    others are held by review.
     """
     template_id = str(
         request.query_params.get(MASTERY_TEMPLATE_PARAM)

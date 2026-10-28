@@ -131,8 +131,14 @@ async def _ask_model(diff: OutlineDiff, language: str) -> dict[str, Any] | None:
             timeout=_TIMEOUT_SECONDS,
         )
         data = parse_json_response(str(raw or ""), fallback=None)
-    except Exception:
-        logger.debug("teacher change suggestion failed", exc_info=True)
+    except Exception as exc:
+        # One line, no stack: a provider outage or timeout is not a bug here,
+        # and the publish preview falls back to the default verdicts.
+        logger.warning(
+            "teacher change suggestion failed: %s: %s",
+            type(exc).__name__,
+            " ".join(str(exc).split())[:_MAX_REASON_LEN],
+        )
         return None
     return data if isinstance(data, dict) else None
 

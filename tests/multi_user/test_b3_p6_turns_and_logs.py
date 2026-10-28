@@ -123,6 +123,30 @@ async def test_a_raising_change_model_warns_and_falls_back_to_the_defaults(
     assert warnings[0].exc_info and warnings[0].exc_info[0] is RuntimeError
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", [RuntimeError("provider down"), asyncio.TimeoutError()], ids=["error", "timeout"]
+)
+async def test_a_failing_model_call_warns_in_one_line_without_a_stack(
+    failure, monkeypatch, caplog
+):
+    async def _complete(**_kwargs):
+        raise failure
+
+    monkeypatch.setattr("deeptutor.services.llm.complete", _complete)
+    caplog.set_level(logging.DEBUG, logger=changes.logger.name)
+
+    assert await changes._ask_model(_diff(), "en") is None
+
+    records = [r for r in caplog.records if r.name == changes.logger.name]
+    assert [r.levelno for r in records] == [logging.WARNING]
+    assert records[0].exc_info is None
+    message = records[0].getMessage()
+    assert "\n" not in message
+    assert type(failure).__name__ in message
+    assert str(failure) in message
+
+
 def test_change_reasons_are_cut_at_one_named_length():
     assert changes._MAX_REASON_LEN == 200
     long = "x" * (changes._MAX_REASON_LEN + 50)
