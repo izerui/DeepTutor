@@ -414,6 +414,11 @@ def get_book(book_id: str) -> BookRecord | None:
 def resolve_book_ref(ref: str) -> BookRecord | None:
     """Look up canonical refs; lazily register unknown bare IDs in this scope.
 
+    Registry first: a bare id resolves to the registered identity even when
+    the caller's own scope holds a local book with the same id (no local
+    collision check). Callers needing local-first semantics use
+    ``multi_user.book_access.resolve_book`` or ``teaching.books.resolve``.
+
     This does not authorize the returned record. In particular, a local
     collision's edit permission never confers authority on this identity.
     """
@@ -654,7 +659,7 @@ def list_revoked_book_references(book_id: str) -> list[RevokedBookReference]:
         return [_revoked(row) for row in rows]
 
 
-def _book_registry_schema(conn: sqlite3.Connection) -> str:
+def _book_registry_schema(conn: sqlite3.Connection) -> Literal["main", "books"]:
     """Return the schema name (``main`` or ``books``) that holds ``book_registry``."""
     rows = conn.execute(
         "SELECT name FROM pragma_database_list WHERE name = 'books'"
@@ -663,6 +668,8 @@ def _book_registry_schema(conn: sqlite3.Connection) -> str:
 
 
 def _unregister(conn: sqlite3.Connection, book_id: str) -> None:
+    # Revocation, row deletion and intent removal all run in the caller's one
+    # write transaction, so they commit (or roll back) atomically together.
     record = _get_book(conn, book_id)
     if record is not None:
         from deeptutor.core.visibility_intent import remove_choice
