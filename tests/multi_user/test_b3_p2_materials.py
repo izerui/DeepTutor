@@ -11,12 +11,106 @@ import sqlite3
 
 import pytest
 
-from deeptutor.learning.models import PendingQuestion
+from deeptutor.knowledge import registry as kb_registry
+from deeptutor.learning.models import PendingQuestion, TopicSource, TopicSourceKind
 from deeptutor.learning.storage import LearningStore
 from deeptutor.teaching import access
 from deeptutor.teaching.instances import apply_pending_revision
 from deeptutor.teaching.models import KpDecision
 from deeptutor.teaching.store import TeachingStore
+
+def _auth(name: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {name}"}
+
+
+# ---- B3-19: a withdrawn KB shows as unavailable on the student's copy ----------
+
+
+@pytest.fixture
+def toms_kbs(teaching_users, as_account, make_kb):
+    """Tom's (teacher, not admin) two public KBs in his account library."""
+    from deeptutor.knowledge.manager import KnowledgeBaseManager
+    from deeptutor.multi_user.paths import get_account_path_service
+
+    records = {}
+    with as_account("tom"):
+        root = get_account_path_service().get_knowledge_bases_root()
+        root.mkdir(parents=True, exist_ok=True)
+        manager = KnowledgeBaseManager(base_dir=str(root))
+        for name in ("algebra", "geometry"):
+            make_kb(manager, name)
+            record = kb_registry.ensure_registered(
+                root, name, created_by=teaching_users["tom"]["id"]
+            )
+            kb_registry.set_visibility(record.kb_id, "public")
+            records[name] = kb_registry.get_kb(record.kb_id)
+    return records
+
+
+def test_withdrawn_kb_source_is_reported_unavailable_on_the_teacher_path(
+    toms_kbs, teacher_draft, publish_template, teaching_http, as_account
+):
+    teacher_draft(
+        sources=(
+            TopicSource(
+                id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE,
+                source_id=toms_kbs["algebra"].ref, label="Algebra notes", position=0,
+            ),
+            TopicSource(
+                id="s1", kind=TopicSourceKind.KNOWLEDGE_BASE,
+                source_id=toms_kbs["geometry"].ref, label="Geometry notes", position=1,
+            ),
+        )
+    )
+    publish_template(students=("sara",))
+    client = teaching_http.client
+    [row] = client.get("/api/mastery-paths/topics", headers=_auth("sara")).json()["topics"]
+    path_id = row["path_id"]
+
+    before = client.get(f"/api/mastery-paths/topics/{path_id}", headers=_auth("sara")).json()
+    assert before["origin"]["materials_available"] is True
+    assert {s["label"]: s["available"] for s in before["sources"]} == {
+        "Algebra notes": True,
+        "Geometry notes": True,
+    }
+
+    withdrawn = client.put(
+        f"/api/knowledge-bases/{toms_kbs['algebra'].ref}/visibility",
+        json={"visibility": "private", "confirm": True}, headers=_auth("tom"),
+    )
+    assert withdrawn.status_code == 200, withdrawn.text
+
+    after = client.get(f"/api/mastery-paths/topics/{path_id}", headers=_auth("sara")).json()
+    assert after["origin"]["materials_available"] is False
+    assert {s["label"]: s["available"] for s in after["sources"]} == {
+        "Algebra notes": False,
+        "Geometry notes": True,
+    }
+    # Response only: the stored copy is not rewritten.
+    with as_account("sara"):
+        stored = LearningStore().get_topic(path_id).sources
+    assert {source.label: source.available for source in stored} == {
+        "Algebra notes": True,
+        "Geometry notes": True,
+    }
+
+
+def test_a_learners_own_path_keeps_its_stored_availability(teaching_http, teacher_draft):
+    teacher_draft(
+        "sara",
+        path_id="topic_own",
+        sources=(
+            TopicSource(
+                id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE,
+                source_id="kb:does-not-exist", label="Gone", position=0,
+            ),
+        ),
+    )
+    payload = teaching_http.client.get(
+        "/api/mastery-paths/topics/topic_own", headers=_auth("sara")
+    ).json()
+    assert payload.get("origin") is None
+    assert [s["available"] for s in payload["sources"]] == [True]
 
 
 # ---- T10-M2: a stale applied_revision is repaired even when the move waits ------

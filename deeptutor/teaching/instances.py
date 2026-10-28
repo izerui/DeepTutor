@@ -343,20 +343,27 @@ def ensure_outline_mutable(path_id: str, store: LearningStore) -> None:
         raise OutlineLockedError(OUTLINE_LOCKED)
 
 
-def describe_instance(path_id: str, store: LearningStore) -> dict[str, Any] | None:
+def describe_instance_materials(
+    path_id: str, store: LearningStore
+) -> tuple[dict[str, Any] | None, frozenset[str]]:
+    """The teacher path's origin payload and the ids of its unavailable sources.
+
+    ``(None, frozenset())`` for a learner's own path. Storage-bound.
+    """
     if store.load_origin(path_id) is None:
-        return None
+        return None, frozenset()
     progress = store.load(path_id)
     if progress is None or progress.origin is None:
-        return None
+        return None, frozenset()
     template = TeachingStore().get_template(progress.origin.template_id)
     if template is None:
-        return None
+        return None, frozenset()
     from deeptutor.teaching.access import studying_template
 
     with studying_template(template.id):
-        missing = unavailable_materials(path_id, store)
-    return origin_payload(progress, template, materials_available=not missing)
+        missing = unavailable_source_ids(path_id, store)
+    payload = origin_payload(progress, template, materials_available=not missing)
+    return payload, frozenset(missing)
 
 
 # ---- the path's materials (spec 7.4, R8) -------------------------------------
@@ -428,6 +435,22 @@ def _book_source_available(source: TopicSource, user: Any) -> bool:
 def unavailable_materials(path_id: str, store: LearningStore) -> list[str]:
     """Labels of the path's libraries and books the current user cannot use now.
 
+    See :func:`unavailable_sources`. Storage-bound.
+    """
+    return list(dict.fromkeys(source.label for source in unavailable_sources(path_id, store)))
+
+
+def unavailable_source_ids(path_id: str, store: LearningStore) -> list[str]:
+    """Ids of the path's library and book sources the current user cannot use now.
+
+    See :func:`unavailable_sources`. Storage-bound.
+    """
+    return [source.id for source in unavailable_sources(path_id, store)]
+
+
+def unavailable_sources(path_id: str, store: LearningStore) -> list[TopicSource]:
+    """The path's library and book sources the current user cannot use now.
+
     Reads the copy's own sources, i.e. the revision it is on (an instance
     waiting on an old-revision question keeps that revision's materials).
     Call inside ``studying_template(<template id>)``: reference-only materials
@@ -441,7 +464,7 @@ def unavailable_materials(path_id: str, store: LearningStore) -> list[str]:
     if topic is None:
         return []
     user = get_current_user()
-    missing: list[str] = []
+    missing: list[TopicSource] = []
     for source in topic.sources:
         if source.kind == TopicSourceKind.BOOK:
             check = _book_source_available
@@ -455,8 +478,8 @@ def unavailable_materials(path_id: str, store: LearningStore) -> list[str]:
             logger.warning("Could not check material %r of %s", source.label, path_id, exc_info=True)
             available = False
         if not available:
-            missing.append(source.label)
-    return list(dict.fromkeys(missing))
+            missing.append(source)
+    return missing
 
 
 # ---- teacher updates (spec 5.3) ---------------------------------------------

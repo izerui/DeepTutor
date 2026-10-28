@@ -684,7 +684,7 @@ async def create_topic(body: ConfirmTopicRequest):
 @router.get("/topics/{path_id}")
 async def get_topic(path_id: str):
     _validate_book_id(path_id)
-    from deeptutor.teaching.instances import apply_pending_revision, describe_instance
+    from deeptutor.teaching.instances import apply_pending_revision, describe_instance_materials
 
     def read() -> dict:
         store = LearningStore()
@@ -692,9 +692,14 @@ async def get_topic(path_id: str):
         # here unless a question is open or a tutoring turn is running.
         apply_pending_revision(path_id, store, respect_lease=True)
         payload = _topic_payload(store, path_id)
-        described = describe_instance(path_id, store)
+        described, unavailable = describe_instance_materials(path_id, store)
         if described is not None:
             payload["origin"] = described
+            # A teacher path's withdrawn materials show as unavailable in this
+            # response only; the copy's stored sources are not rewritten.
+            for source in payload["sources"]:
+                if source.get("id") in unavailable:
+                    source["available"] = False
         return payload
 
     return await asyncio.to_thread(read)
