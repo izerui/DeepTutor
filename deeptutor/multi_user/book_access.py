@@ -86,7 +86,10 @@ def _initialize_links(book: Book, record: registry.BookRecord) -> bool:
             learning_source_kbs.reset(token)
 
 
-def _retry_links(book: Book, record: registry.BookRecord) -> None:
+def _retry_links(book: Book, record: registry.BookRecord, *, initialized: bool = False) -> None:
+    """``initialized`` is a fresh snapshot's completion; skips the re-check read."""
+    if initialized:
+        return
     try:
         _initialize_links(book, record)
     except Exception:
@@ -152,6 +155,8 @@ class ResolvedBook:
     can_delete: bool
     learning: BookStorage | BookLearningOverlay
     record: registry.BookRecord | None = None
+    #: ``can_write_book`` already decided for ``record`` during resolution.
+    registry_writable: bool | None = None
 
     @property
     def is_shared(self) -> bool:
@@ -161,9 +166,14 @@ class ResolvedBook:
         from .roles import is_teacher_or_admin
 
         record = self.record
+        user = get_current_user()
         owned = self.source == "own" or (
-            record is not None and record.created_by in _my_owner_ids(get_current_user())
+            record is not None and record.created_by in _my_owner_ids(user)
         )
+        manageable = bool(record and self.can_edit and (
+            self.registry_writable if self.registry_writable is not None
+            else registry.can_write_book(record, user)
+        ))
         return {
             "source": self.source,
             "permission": self.permission,
@@ -173,14 +183,10 @@ class ResolvedBook:
             "visibility": record.visibility if record else "private",
             "owner_id": record.created_by if record else "",
             "group": "mine" if owned else "public",
-            "can_set_visibility": bool(
-                record and self.can_edit and registry.can_write_book(record, get_current_user())
-                and (is_teacher_or_admin() or (owned and record.visibility == "public"))
+            "can_set_visibility": manageable and (
+                is_teacher_or_admin() or (owned and record.visibility == "public")
             ),
-            "can_make_public": bool(
-                record and self.can_edit and registry.can_write_book(record, get_current_user())
-                and is_teacher_or_admin()
-            ),
+            "can_make_public": manageable and is_teacher_or_admin(),
         }
 
     def load_progress(self, book_id: str) -> Progress:
@@ -243,17 +249,25 @@ def resolve_book(book_id: str) -> ResolvedBook | None:
     record = record if explicit else registry.get_book(book_id)
     if record is None or not registry.can_read_book(record, user):
         return None
-    return _located(record, user)
+    located = _located(record, user)
+    return located[1] if located is not None else None
 
 
-def _located(record: registry.BookRecord, user: CurrentUser) -> ResolvedBook | None:
+def _located(
+    record: registry.BookRecord, user: CurrentUser, *,
+    access: registry.BookAccess | None = None,
+) -> tuple[Book, ResolvedBook] | None:
+    """The canonical book with its resolution; ``access`` is a batch snapshot."""
     engine = engine_for(record)
     book = engine.load_book(record.book_id)
     if book is None:
         return None
-    _retry_links(book, record)
-    writable = registry.can_write_book(record, user) and content_writable(engine.storage)
-    return ResolvedBook(
+    _retry_links(book, record, initialized=access is not None and access.links_initialized)
+    registry_writable = (
+        access.writable if access is not None else registry.can_write_book(record, user)
+    )
+    writable = registry_writable and content_writable(engine.storage)
+    return book, ResolvedBook(
         engine=engine,
         source="shared",
         permission="edit" if writable else "read",
@@ -261,6 +275,7 @@ def _located(record: registry.BookRecord, user: CurrentUser) -> ResolvedBook | N
         can_delete=writable,
         learning=BookLearningOverlay(get_current_path_service()),
         record=record,
+        registry_writable=registry_writable,
     )
 
 
@@ -306,15 +321,14 @@ def accessible_books() -> list[tuple[Book, ResolvedBook]]:
         candidates = registry.list_book_records(visibility="public")
         for owner in sorted(_my_owner_ids(user)):
             candidates.extend(registry.list_transferred_books(owner))
-        for record in candidates:
-            if record.book_id in own_ids or not registry.can_read_book(record, user):
+        # One registry snapshot decides every candidate (same rules as one by one).
+        for record, access in zip(candidates, registry.book_access_batch(candidates, user)):
+            if record.book_id in own_ids or not access.readable:
                 continue
             own_ids.add(record.book_id)
-            resolved = _located(record, user)
-            if resolved is not None:
-                book = resolved.engine.load_book(record.book_id)
-                if book is not None:
-                    results.append((book, resolved))
+            located = _located(record, user, access=access)
+            if located is not None:
+                results.append(located)
     results.sort(key=lambda item: item[0].updated_at, reverse=True)
     return results
 

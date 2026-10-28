@@ -818,6 +818,31 @@ def can_write_book(record: BookRecord, user: CurrentUser) -> bool:
         return conn is not None and _can_write(conn, record, user)
 
 
+@dataclass(frozen=True)
+class BookAccess:
+    readable: bool
+    writable: bool
+    links_initialized: bool
+
+
+def book_access_batch(records: Sequence[BookRecord], user: CurrentUser) -> list[BookAccess]:
+    """Read/write/link-binding decisions for many records in one read snapshot.
+
+    Same rules as :func:`can_read_book`, :func:`can_write_book` and
+    :func:`kb_links_initialized`, aligned with ``records``.
+    """
+    with _read() as conn:
+        if conn is None:
+            return [BookAccess(False, False, False) for _ in records]
+        return [
+            BookAccess(
+                _can_read(conn, record, user), _can_write(conn, record, user),
+                _links_initialized(conn, record.book_id),
+            )
+            for record in records
+        ]
+
+
 def _set_kb_links(conn: sqlite3.Connection, book_id: str, links: Mapping[str, str]) -> None:
     record = _target(conn, book_id)
     conn.execute("DELETE FROM book_kb_links WHERE book_id = ?", (record.book_id,))
@@ -905,18 +930,20 @@ def initialize_book_kb_links(
     return initialize_links(book_id, refs, confirmed_missing=confirmed_missing)
 
 
+def _links_initialized(conn: sqlite3.Connection, book_id: str) -> bool:
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'book_kb_binding_state' AND type = 'table'"
+    ).fetchone() is None:
+        return False
+    row = conn.execute(
+        "SELECT complete FROM book_kb_binding_state WHERE book_id = ?", (strip_ref(book_id),)
+    ).fetchone()
+    return row is not None and bool(row["complete"])
+
+
 def kb_links_initialized(book_id: str) -> bool:
     with _read() as conn:
-        if conn is None:
-            return False
-        if conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = 'book_kb_binding_state' AND type = 'table'"
-        ).fetchone() is None:
-            return False
-        row = conn.execute(
-            "SELECT complete FROM book_kb_binding_state WHERE book_id = ?", (strip_ref(book_id),)
-        ).fetchone()
-        return row is not None and bool(row["complete"])
+        return conn is not None and _links_initialized(conn, book_id)
 
 
 def plan_book_kbs(book_id: str) -> BookKbPlan:
