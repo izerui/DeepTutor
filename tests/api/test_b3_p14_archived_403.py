@@ -85,3 +85,35 @@ def test_admin_listing_shows_source_workspace_name(archive_env):
     assert ws_name == "P14 Source", (
         f"Expected 'P14 Source' workspace name, got {ws_name!r}"
     )
+
+
+def test_single_book_workspace_lookup_off_event_loop(archive_env, monkeypatch):
+    """B3-P14 R1: _source_workspace_name must not run on the event-loop thread."""
+    import asyncio
+
+    from deeptutor.api.routers import book as book_module
+
+    client, _ = archive_env
+    _, _, record = _archived_public_book()
+
+    on_loop: list[bool] = []
+    real = book_module._source_workspace_name
+
+    def recording(*args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(book_module, "_source_workspace_name", recording)
+    response = client.get(
+        f"/api/books/book:{record.book_id}",
+        headers=headers("root"),
+    )
+    assert response.status_code == 200, response.text
+    if on_loop:
+        assert all(not v for v in on_loop), (
+            "_source_workspace_name ran on the event loop"
+        )

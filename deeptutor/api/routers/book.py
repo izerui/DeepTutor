@@ -12,6 +12,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 import hashlib
+import json
 import logging
 from pathlib import Path
 import sqlite3
@@ -329,20 +330,21 @@ def _page_chat_session_id(resolved: ResolvedBook, book: Any, page_id: str) -> st
     return session_id
 
 
-def _source_workspace_name(record: book_registry.BookRecord | None) -> str:
+def _source_workspace_name(
+    record: book_registry.BookRecord | None,
+    _cache: dict[str, str] | None = None,
+) -> str:
     """Best-effort display name for the workspace a shared book's files live in.
 
     The book owner's workspace catalog is at a predictable path under their
     account root.  We query it by matching the workspace path derived from the
     book's ``base_dir``.  Returns ``""`` on any failure — the frontend falls
     back to ``"Default workspace"`` which is acceptable for own books.
+    Pass a ``_cache`` dict to avoid repeated SQLite opens for the same
+    workspace path across multiple books in a listing (M1 fix).
     """
     if record is None:
         return ""
-    import json
-    import sqlite3
-    from pathlib import Path as _Path
-
     from deeptutor.multi_user.paths import USERS_ROOT
 
     # The owner's catalog stores their workspace registrations.
@@ -353,9 +355,11 @@ def _source_workspace_name(record: book_registry.BookRecord | None) -> str:
     # managed workspaces; the workspace catalog stores <ws_content_root> as the
     # workspace path.  That is parents[4] of base_dir.
     try:
-        ws_content_root = str(_Path(record.base_dir).parents[4].resolve())
+        ws_content_root = str(Path(record.base_dir).parents[4].resolve())
     except (IndexError, ValueError):
         return ""
+    if _cache is not None and ws_content_root in _cache:
+        return _cache[ws_content_root]
     try:
         conn = sqlite3.connect(str(owner_catalog), timeout=5)
         try:
@@ -366,17 +370,25 @@ def _source_workspace_name(record: book_registry.BookRecord | None) -> str:
         finally:
             conn.close()
     except sqlite3.Error:
-        return ""
-    if row is None:
-        return ""
-    try:
-        data = json.loads(row[0])
-        return str(data.get("display_name") or "")
-    except (ValueError, KeyError):
-        return ""
+        result = ""
+    else:
+        if row is None:
+            result = ""
+        else:
+            try:
+                data = json.loads(row[0])
+                result = str(data.get("display_name") or "")
+            except (ValueError, KeyError):
+                result = ""
+    if _cache is not None:
+        _cache[ws_content_root] = result
+    return result
 
 
-def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
+def _book_payload(
+    book: Any, resolved: ResolvedBook,
+    _ws_cache: dict[str, str] | None = None,
+) -> dict[str, Any]:
     data = book.model_dump(mode="json")
     data.update(resolved.capabilities())
     data["kb_refs"] = (
@@ -391,7 +403,7 @@ def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
         # B3-P14 item 4: shared books from another user's workspace (possibly
         # archived) carry the source workspace name so the library card shows
         # the real origin instead of "Default workspace".
-        ws_name = _source_workspace_name(resolved.record)
+        ws_name = _source_workspace_name(resolved.record, _cache=_ws_cache)
         if ws_name:
             data["content_workspace_name"] = ws_name
     return data
@@ -707,8 +719,9 @@ async def block_types() -> dict[str, list[dict[str, str | bool]]]:
 async def list_books() -> dict[str, Any]:
     def _collect() -> list[dict[str, Any]]:
         books: list[dict[str, Any]] = []
+        ws_cache: dict[str, str] = {}
         for book, resolved in accessible_books():
-            data = _book_payload(book, resolved)
+            data = _book_payload(book, resolved, _ws_cache=ws_cache)
             # Lets the library card say "continue reading" and show how far in
             # the reader is, instead of treating every book as untouched.
             data["reading"] = resolved.reading_summary(book)
@@ -887,17 +900,21 @@ async def get_book(book_id: str, include_blocks: bool = True) -> dict[str, Any]:
         await engine.maybe_resume_on_open(book_id)
     book = engine.load_book(book_id) or book
 
-    def _read() -> tuple[Any, list[Any], Any]:
+    def _read() -> tuple[dict[str, Any], Any, list[Any], Any]:
+        # B3-P14 R1: _book_payload → _source_workspace_name does SQLite I/O,
+        # so it must run off the event loop together with the other reads.
+        payload = _book_payload(book, resolved)
         return (
+            payload,
             engine.load_spine(book_id),
             engine.list_pages(book_id),
             resolved.load_progress(book_id),
         )
 
     # A compiled book is hundreds of KB across one file per page.
-    spine, pages, progress = await asyncio.to_thread(_read)
+    book_data, spine, pages, progress = await asyncio.to_thread(_read)
     return {
-        "book": _book_payload(book, resolved),
+        "book": book_data,
         "spine": spine.model_dump(mode="json") if spine else None,
         "pages": [
             (p.model_dump(mode="json") if include_blocks else _page_summary(p)) for p in pages
