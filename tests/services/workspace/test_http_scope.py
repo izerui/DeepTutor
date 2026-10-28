@@ -83,8 +83,11 @@ def test_http_lists_direct_access_and_uploads_are_isolated(account, scoped_clien
                 f"/api/book/books/{ref}", headers={"X-DeepTutor-Workspace": wid},
             )
             assert response.status_code == 200, response.text
-            assert response.json()["book"]["title"] == "Private Book"
-            assert response.json()["book"]["ref"] == "book:bk_scope"
+            book_data = response.json()["book"]
+            assert book_data["title"] == "Private Book"
+            assert book_data["ref"] == "book:bk_scope"
+            assert book_data["source"] == "shared"
+            assert book_data["can_edit"] is True
         with workspace_context(wid):
             assert get_book_storage().load_book("bk_scope") is None
     assert client.get("/api/reading/materials", headers={"X-DeepTutor-Workspace": b}).json() == []
