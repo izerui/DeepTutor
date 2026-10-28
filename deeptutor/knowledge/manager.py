@@ -2079,6 +2079,10 @@ class KnowledgeBaseManager:
         tree = detached.staged_dir or detached.in_place_dir
         if tree is not None:
             self._remove_kb_tree(tree, detached.name)
+        from deeptutor.knowledge import registry
+
+        # Entries are otherwise kept until the process exits.
+        registry.forget_config_payload(self.base_dir)
 
     def _delete_unclaimed_marginnote4_store(self, name: str, entry: dict) -> None:
         """Delete the store unless a library registered since the commit uses it."""

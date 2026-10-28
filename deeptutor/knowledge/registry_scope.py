@@ -53,8 +53,11 @@ def is_retired_source(base_dir: str | Path) -> bool:
 
 
 # Parsed ``workspaces.sqlite3`` locations, re-validated per use (see file_snapshot):
-# an archive commit by any process is seen by the next admission check.
+# an archive commit by any process is seen by the next admission check. The
+# catalogs use SQLite's default DELETE journal, so a commit rewrites the file
+# itself; should one ever hold a ``-wal`` sidecar, it is read afresh instead.
 _CATALOG_LOCATIONS = FileSnapshotCache()
+_CATALOG_SIDECARS = ("-wal",)
 
 
 def _catalog_locations(catalog: Path) -> dict[str, bool]:
@@ -94,22 +97,28 @@ def archived_source_roots(
     target = str(Path(base_dir).resolve()) if base_dir is not None else None
     resolved = False
     failures = []
+    visited = []
     for account_root in account_roots:
         paths = PathService(workspace_root=account_root)
         if target == str(paths.get_knowledge_bases_root().resolve()):
             # Account libraries cannot be archived as content workspaces.
             resolved = True
         catalog = paths.get_runtime_state_dir() / "workspaces.sqlite3"
+        visited.append(catalog)
         try:
             if not catalog.is_file():
                 continue
             # Unchanged catalogs are not reopened; every account is still
             # consulted because any catalog may list (and archive) this root.
-            locations = _CATALOG_LOCATIONS.load(catalog, _catalog_locations)
+            locations = _CATALOG_LOCATIONS.load(
+                catalog, _catalog_locations, sidecars=_CATALOG_SIDECARS
+            )
             resolved = resolved or target in locations
             archived.update(location for location, frozen in locations.items() if frozen)
         except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, AttributeError) as exc:
             failures.append(exc)
+    # Forget catalogs of accounts (or partners) that no longer exist.
+    _CATALOG_LOCATIONS.retain(visited)
     if failures and not resolved:
         raise WorkspaceError("The source workspace registry could not be read.") from failures[0]
     if require_resolved and not resolved:

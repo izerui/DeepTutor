@@ -24,6 +24,22 @@ def _age(path: Path) -> None:
     os.utime(path, (old, old))
 
 
+@pytest.fixture(autouse=True)
+def _an_hour_later(monkeypatch):
+    """``utime`` cannot age ctime, which the racy check also honors (B3-17).
+
+    Read every file "an hour later" so aged files count as settled; the
+    fingerprint (which includes ctime) still detects every rewrite.
+    """
+    from types import SimpleNamespace
+
+    from deeptutor.knowledge import file_snapshot
+
+    monkeypatch.setattr(
+        file_snapshot, "time", SimpleNamespace(time_ns=lambda: time.time_ns() + 3600 * 10**9)
+    )
+
+
 def _accounts_with_catalogs(as_user) -> list[Path]:
     catalogs = []
     for index in range(ACCOUNTS):

@@ -415,6 +415,11 @@ def kind_of(entry: Any) -> str:
 _CONFIG_PAYLOADS = FileSnapshotCache()
 
 
+def forget_config_payload(base_dir: Path | str) -> None:
+    """Drop the cached ``kb_config.json`` of ``base_dir`` (e.g. after a KB deletion)."""
+    _CONFIG_PAYLOADS.discard(Path(_location(base_dir)) / "kb_config.json")
+
+
 def _parse_config(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
