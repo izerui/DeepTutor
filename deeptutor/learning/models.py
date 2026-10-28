@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 _KNOWLEDGE_TYPE_LEGACY: dict[str, str] = {
     "记忆型": "memory",
@@ -292,7 +292,7 @@ class ReviewStrategyTemplate(BaseModel):
     #: Optional recall target applied when the strategy is bound to a path.
     #: ``None`` keeps the path's existing ``desired_retention``.
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.99, allow_inf_nan=False)
-    intervals: dict[KnowledgeType, list[int]]
+    intervals: dict[KnowledgeType, list[StrictInt]]
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)
 
@@ -345,7 +345,7 @@ class ReviewStrategyBinding(BaseModel):
     name: str
     builtin: bool = False
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.99, allow_inf_nan=False)
-    intervals: dict[KnowledgeType, list[int]]
+    intervals: dict[KnowledgeType, list[StrictInt]]
     bound_at: float = Field(default_factory=time.time)
 
     @field_validator("intervals")

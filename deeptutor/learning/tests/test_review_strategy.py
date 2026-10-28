@@ -503,3 +503,53 @@ def test_binding_unknown_template_or_path_fails(client, path_id):
         ).status_code
         == 404
     )
+
+
+@pytest.mark.parametrize("value", [True, False, "1", 1.0])
+def test_intervals_require_json_integers(value):
+    intervals = _valid_intervals()
+    intervals["concept"] = [value]
+    with pytest.raises(ValidationError):
+        _template(intervals=intervals)
+
+
+def test_switch_preserves_legacy_reviews_without_evidence():
+    from deeptutor.learning.models import RepetitionState
+
+    progress = LearningProgress(book_id="legacy", name="Legacy")
+    state = RepetitionState(
+        review_count=7,
+        last_review_at=1000,
+        last_scheduled_at=1000,
+        next_review_at=2000,
+        stability=12,
+        difficulty=0.4,
+    )
+    progress.repetition_states["kp"] = state
+    progress.knowledge_types["kp"] = KnowledgeType.CONCEPT
+    progress.review_strategy = _template().as_binding()
+    scheduler_for_progress(progress).rebuild_from_evidence(progress, now=1500)
+    assert state.review_count == 7
+    assert state.last_review_at == 1000
+    assert state.stability == 12
+    assert state.next_review_at == pytest.approx(1000 + 28 * 86400)
+    assert progress.learning_evidence == []
+
+
+def test_rebinding_identical_strategy_is_idempotent(client, app, path_id):
+    url = f"/api/mastery-paths/topics/{path_id}/review-strategy"
+    payload = {"template_id": "preset-exam-cramming"}
+    assert client.put(url, json=payload).status_code == 200
+    store = LearningStore(root=app.state.learning_root)
+    before = store.load(path_id).model_dump()
+    assert client.put(url, json=payload).status_code == 200
+    assert store.load(path_id).model_dump() == before
+
+
+def test_strategy_api_rejects_boolean_intervals(client):
+    intervals = _valid_intervals()
+    intervals["concept"] = [True]
+    response = client.post(
+        "/api/mastery-paths/review-strategies", json={"name": "Invalid", "intervals": intervals}
+    )
+    assert response.status_code == 422

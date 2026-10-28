@@ -12,7 +12,7 @@ import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 from pydantic import ValidationError as PydanticValidationError
 
 from deeptutor.learning import policy as learning_policy
@@ -295,7 +295,7 @@ class ReviewStrategyRequest(BaseModel):
     description: str = Field(default="", max_length=500)
     #: Optional recall target applied when the strategy is bound to a path.
     desired_retention: float | None = Field(default=None, ge=0.7, le=0.99, allow_inf_nan=False)
-    intervals: dict[KnowledgeType, list[int]]
+    intervals: dict[KnowledgeType, list[StrictInt]]
 
 
 class DuplicateReviewStrategyRequest(BaseModel):
@@ -978,9 +978,14 @@ async def update_path_review_strategy(path_id: str, body: PathReviewStrategyRequ
         def update(tx):
             from deeptutor.learning.review_strategy import scheduler_for_progress
 
-            retention = None
-            replacement = template.as_binding() if template is not None else None
-            if tx.progress.review_strategy == replacement and (
+            retention = template.desired_retention if template is not None else None
+            current = tx.progress.review_strategy
+            replacement = (
+                template.as_binding(bound_at=current.bound_at if current is not None else None)
+                if template is not None
+                else None
+            )
+            if current == replacement and (
                 retention is None or retention == tx.progress.desired_retention
             ):
                 return

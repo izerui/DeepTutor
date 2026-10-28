@@ -554,11 +554,20 @@ class SpacedRepetitionScheduler:
                     desired_retention=desired,
                 )
             else:
-                progress.repetition_states[kp_id] = self.get_initial_state(
-                    knowledge_type,
-                    now=moment,
-                    desired_retention=desired,
-                )
+                # Legacy imports can have review history without durable evidence.
+                # A settings edit must not turn those reviews into a fresh item.
+                state = self.hydrate(progress.repetition_states[kp_id], knowledge_type)
+                state.desired_retention = desired
+                anchor = state.last_scheduled_at
+                if anchor is None:
+                    anchor = state.last_review_at
+                if anchor is not None:
+                    interval = self._scheduled_interval_days(state, knowledge_type)
+                    state.next_review_at = anchor + interval * self._seconds_per_unit()
+                    rounds = self._rounds(knowledge_type)
+                    state.interval_index = _snap_interval_index(rounds, interval, len(rounds) - 1)
+                # Without any historical anchor, retain the stored due time.
+
         progress.review_queue = self.build_review_queue(progress, now=moment)
 
     def replay(
