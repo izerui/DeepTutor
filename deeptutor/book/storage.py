@@ -22,7 +22,7 @@ Layout (relative to ``data/user/workspace/book/``)::
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 import json
 import logging
@@ -50,6 +50,19 @@ logger = logging.getLogger(__name__)
 
 #: Hidden sibling holding a book while its deletion is pending or uncleaned.
 DELETION_STAGING_PREFIX = ".book-delete-"
+#: Marker inside a staging directory: book id, location and deletion state.
+DELETION_MARKER = ".deletion.json"
+
+
+def _write_deletion_marker(staging: Path, marker: dict[str, Any], state: str) -> None:
+    _atomic_write_json(staging / DELETION_MARKER, {**marker, "state": state})
+
+
+def _discard_staging(staging: Path) -> None:
+    """Remove a staging directory that holds no book; never masks the caller's error."""
+    with suppress(OSError):
+        (staging / DELETION_MARKER).unlink(missing_ok=True)
+        staging.rmdir()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -393,6 +406,11 @@ class BookStorage:
         every lock with :meth:`purge_deletion` (a worker thread in async
         routes). No awaits may occur in this scope: the engine's local writers
         share the event loop.
+
+        The staging directory's marker (:data:`DELETION_MARKER`) records the
+        state: ``pending`` while the transaction runs, ``committed`` once the
+        caller succeeded (garbage), ``restore_failed`` when renaming the book
+        back failed (the only copy of a book that is still registered).
         """
         root = self.book_root(book_id)
         if not root.exists():
@@ -402,10 +420,15 @@ class BookStorage:
             raise OSError("Cannot stage deletion of a symlinked book directory.")
         staging = Path(tempfile.mkdtemp(prefix=DELETION_STAGING_PREFIX, dir=root.parent))
         staged = staging / "original"
+        marker = {
+            "book_id": book_id, "base_dir": str(root.parent), "dir_name": root.name,
+            "detached_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
         try:
+            _write_deletion_marker(staging, marker, "pending")
             root.rename(staged)
         except BaseException:
-            staging.rmdir()
+            _discard_staging(staging)
             raise
         try:
             yield staging
@@ -414,23 +437,83 @@ class BookStorage:
                 staged.rename(root)
             except OSError:
                 # Never destroy the only copy when restoration failed.
-                logger.error("Book deletion recovery retained at %s", staging, exc_info=True)
+                with suppress(Exception):
+                    _write_deletion_marker(staging, marker, "restore_failed")
+                logger.error(
+                    "Book deletion rollback could not restore %s; the only copy is retained at %s",
+                    root, staged, exc_info=True,
+                )
             else:
-                staging.rmdir()
+                _discard_staging(staging)
             raise
+        try:
+            _write_deletion_marker(staging, marker, "committed")
+        except Exception:
+            # Already committed: a missing mark only keeps the leftover from the sweep.
+            logger.warning("Could not mark book deletion %s as committed", staging, exc_info=True)
 
-    @staticmethod
-    def purge_deletion(staging: Path) -> None:
-        """Remove a committed deletion's staging directory; failures only log.
+    def purge_deletion(self, staging: Path) -> None:
+        """Remove a committed deletion's staging directory, then earlier committed leftovers.
 
-        Slow (a whole book tree): call after COMMIT, outside every lock and off
-        the event loop. A leftover ``.book-delete-*`` directory holds the
-        deleted book under ``original/`` and is skipped by book listings.
+        Slow (whole book trees): call after COMMIT, outside every lock and off
+        the event loop. Failures only log; see :meth:`purge_committed_deletions`.
         """
         try:
             shutil.rmtree(staging)
         except OSError:
             logger.warning("Book deletion staging cleanup deferred: %s", staging, exc_info=True)
+        try:
+            self.purge_committed_deletions()
+        except Exception:
+            logger.warning("Could not clean up earlier book deletions", exc_info=True)
+
+    def purge_committed_deletions(self) -> list[Path]:
+        """Remove ``.book-delete-*`` leftovers whose marker says ``committed``.
+
+        Never follows symlinks; leaves every other leftover in place with a
+        WARNING (``restore_failed`` ones name how to restore the book by hand).
+        Call outside every lock: removal may be slow. Returns the removed paths.
+        """
+        parent = self.path_service.get_book_dir()
+        if not parent.exists():
+            return []
+        removed = []
+        for leftover in sorted(parent.glob(f"{DELETION_STAGING_PREFIX}*")):
+            if leftover.is_symlink():
+                logger.warning("Not removing %s: a book deletion never stages a symlink.", leftover)
+                continue
+            if not leftover.is_dir():
+                continue
+            try:
+                marker = json.loads((leftover / DELETION_MARKER).read_text(encoding="utf-8"))
+                state = marker["state"]
+            except Exception:
+                logger.warning(
+                    "Unfinished book deletion without a readable marker (not removed): %s", leftover,
+                )
+                continue
+            if state == "committed":
+                try:
+                    shutil.rmtree(leftover)
+                except OSError:
+                    logger.warning("Could not remove committed book deletion %s", leftover, exc_info=True)
+                else:
+                    removed.append(leftover)
+            elif state == "restore_failed":
+                target = Path(str(marker.get("base_dir") or parent)) / str(
+                    marker.get("dir_name") or f"book_{marker.get('book_id')}"
+                )
+                logger.warning(
+                    "Book %s was not restored after a failed deletion; its only copy is %s. "
+                    "Move it back to %s to restore it (not removed automatically).",
+                    marker.get("book_id"), leftover / "original", target,
+                )
+            else:
+                logger.warning(
+                    "Unfinished book deletion of %s (state %s, not removed): %s",
+                    marker.get("book_id"), state, leftover,
+                )
+        return removed
 
     def delete_book(self, book_id: str) -> bool:
         root = self.book_root(book_id)
