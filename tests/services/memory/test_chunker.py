@@ -19,7 +19,11 @@ def test_empty_input_returns_no_chunks() -> None:
     )
     assert (
         chunk_with_boundary(
-            "    \n\n", budget=5, overlap_ratio=0.1, min_chunk_chars=100, max_chunk_chars=1000
+            "    \n\n",
+            budget=5,
+            overlap_ratio=0.1,
+            min_chunk_chars=100,
+            max_chunk_chars=1000,
         )
         == []
     )
@@ -27,7 +31,11 @@ def test_empty_input_returns_no_chunks() -> None:
 
 def test_short_input_yields_one_chunk_covering_everything() -> None:
     chunks = chunk_with_boundary(
-        "Hello world.", budget=5, overlap_ratio=0.1, min_chunk_chars=100, max_chunk_chars=1000
+        "Hello world.",
+        budget=5,
+        overlap_ratio=0.1,
+        min_chunk_chars=100,
+        max_chunk_chars=1000,
     )
     assert len(chunks) == 1
     assert chunks[0].start == 0
@@ -118,14 +126,20 @@ def test_max_chunk_chars_protects_against_huge_chunks() -> None:
     )
     # 1 chunk is impossible if max=5000 and input=100k; multiple chunks expected.
     assert len(chunks) > 1
-    assert all(c.end - c.start <= 5000 * 2 for c in chunks)  # boundary extension may push over
+    assert all(
+        c.end - c.start <= 5000 * 2 for c in chunks
+    )  # boundary extension may push over
 
 
 @pytest.mark.parametrize("budget", [1, 5, 20, 100])
 def test_no_data_loss_chunks_cover_full_text(budget: int) -> None:
     text = "\n\n".join(f"para {i}: " + "x" * 50 for i in range(50))
     chunks = chunk_with_boundary(
-        text, budget=budget, overlap_ratio=0.1, min_chunk_chars=100, max_chunk_chars=2000
+        text,
+        budget=budget,
+        overlap_ratio=0.1,
+        min_chunk_chars=100,
+        max_chunk_chars=2000,
     )
     assert chunks[0].start == 0
     assert chunks[-1].end == len(text)
