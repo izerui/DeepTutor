@@ -19,6 +19,8 @@ const CODE_MESSAGES: Record<string, string> = {
     "This book changed while you were working on it. The latest version is loaded — try again.",
   book_revision_required: "Refresh this shared book before editing it.",
   book_paused: "Generation is paused. Continue generating, then try again.",
+  source_archived:
+    "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.",
 };
 
 /** The message to show for a failed book operation. */

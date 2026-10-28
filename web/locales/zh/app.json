@@ -5695,5 +5695,7 @@
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "所有者已将该知识库设为私有——请移除此引用，或改为添加其他资源。",
   "Delete anyway": "仍然删除",
   "Its owner made this book private — remove the reference, or attach another resource.": "所有者已将这本书设为私有——请移除此引用，或改为添加其他资源。",
-  "The tutor has not asked about you yet. It will at the start of your first session.": "导师还没问过你的情况。它会在你第一次会话开始时询问。"
+  "The tutor has not asked about you yet. It will at the start of your first session.": "导师还没问过你的情况。它会在你第一次会话开始时询问。",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "只有书的拥有者和管理员可以打开私有书，以及任何引用它的内容。",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "这本书的源工作区已归档，内容为只读。管理员仍可更改其可见性。"
 }

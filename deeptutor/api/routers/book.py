@@ -329,6 +329,53 @@ def _page_chat_session_id(resolved: ResolvedBook, book: Any, page_id: str) -> st
     return session_id
 
 
+def _source_workspace_name(record: book_registry.BookRecord | None) -> str:
+    """Best-effort display name for the workspace a shared book's files live in.
+
+    The book owner's workspace catalog is at a predictable path under their
+    account root.  We query it by matching the workspace path derived from the
+    book's ``base_dir``.  Returns ``""`` on any failure — the frontend falls
+    back to ``"Default workspace"`` which is acceptable for own books.
+    """
+    if record is None:
+        return ""
+    import json
+    import sqlite3
+    from pathlib import Path as _Path
+
+    from deeptutor.multi_user.paths import USERS_ROOT
+
+    # The owner's catalog stores their workspace registrations.
+    owner_catalog = USERS_ROOT / record.created_by / "user" / ".runtime" / "workspaces.sqlite3"
+    if not owner_catalog.exists():
+        return ""
+    # base_dir is <ws_content_root>/.deeptutor/data/user/workspace/book for
+    # managed workspaces; the workspace catalog stores <ws_content_root> as the
+    # workspace path.  That is parents[4] of base_dir.
+    try:
+        ws_content_root = str(_Path(record.base_dir).parents[4].resolve())
+    except (IndexError, ValueError):
+        return ""
+    try:
+        conn = sqlite3.connect(str(owner_catalog), timeout=5)
+        try:
+            row = conn.execute(
+                "SELECT payload FROM workspaces WHERE json_extract(payload, '$.path') = ?",
+                (ws_content_root,),
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return ""
+    if row is None:
+        return ""
+    try:
+        data = json.loads(row[0])
+        return str(data.get("display_name") or "")
+    except (ValueError, KeyError):
+        return ""
+
+
 def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
     data = book.model_dump(mode="json")
     data.update(resolved.capabilities())
@@ -341,6 +388,12 @@ def _book_payload(book: Any, resolved: ResolvedBook) -> dict[str, Any]:
         metadata = dict(data.get("metadata") or {})
         metadata["page_chat_sessions"] = _page_chat_sessions(resolved, book)
         data["metadata"] = metadata
+        # B3-P14 item 4: shared books from another user's workspace (possibly
+        # archived) carry the source workspace name so the library card shows
+        # the real origin instead of "Default workspace".
+        ws_name = _source_workspace_name(resolved.record)
+        if ws_name:
+            data["content_workspace_name"] = ws_name
     return data
 
 
@@ -1061,7 +1114,19 @@ def _registered_writable(
             status_code=409, detail="This location has no registered book identity. Reload and retry.",
         )
     editable = resolved.can_edit or (unpublish and resolved.admin_may_unpublish())
-    if not editable or not book_registry.can_write_book(record, get_current_user()):
+    user = get_current_user()
+    if not editable or not book_registry.can_write_book(record, user):
+        # B3-P14 item 2: when the owner is the creator but the source workspace
+        # is archived, say so instead of claiming they lack permission.
+        if book_registry.can_write_book(record, user) and not resolved.can_edit:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "This book's source workspace is archived and its content is read-only. "
+                    "An admin can still change its visibility.",
+                    "code": "source_archived",
+                },
+            )
         raise HTTPException(
             status_code=403, detail="Only the book's creator or an admin can manage its sharing.",
         )
@@ -1697,6 +1762,29 @@ async def export_book(book_id: str) -> Response:
     )
 
 
+def _resolve_kb_labels(book_id: str) -> dict[str, str]:
+    """Map KB refs to human-readable names for the health banner (B3-P14 item 1).
+
+    Uses the book's KB links (registry) to look up the KB ID, then reads the
+    KB name from the knowledge registry. Returns only entries where a name
+    differs from the ref; the frontend falls back to the raw ref otherwise.
+    Runs inside a worker thread (no async).
+    """
+    from deeptutor.knowledge import registry as kb_registry
+
+    links = book_registry.book_kb_links(book_id)
+    labels: dict[str, str] = {}
+    for ref, kb_id in links.items():
+        if not kb_id:
+            continue
+        kb = kb_registry.get_kb(kb_id)
+        if kb is not None and kb.name and kb.name != ref:
+            labels[f"kb:{kb_id}"] = kb.name
+            if ref != f"kb:{kb_id}":
+                labels[ref] = kb.name
+    return labels
+
+
 @router.get("/books/{book_id}/health")
 async def book_health(book_id: str) -> dict[str, Any]:
     from deeptutor.book.kb_health import apply_drift_plan, plan_drift, unavailable_kbs
@@ -1740,7 +1828,13 @@ async def book_health(book_id: str) -> dict[str, Any]:
             )
         log = engine.log_health(bare_id)
         generation = engine.generation_summary(bare_id)
-        return engine, plan, {"kb_drift": drift, "log_health": log, "generation": generation}
+        # B3-P14 item 1: resolve display names for every KB ref mentioned in the
+        # drift report so the banner can show human-readable labels.
+        kb_labels = _resolve_kb_labels(bare_id)
+        return engine, plan, {
+            "kb_drift": drift, "log_health": log, "generation": generation,
+            "kb_labels": kb_labels,
+        }
 
     engine, plan, payload = await asyncio.to_thread(compute)
     if plan is not None:

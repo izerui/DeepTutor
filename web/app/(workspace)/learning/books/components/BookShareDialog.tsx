@@ -107,7 +107,9 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     <div className="space-y-3 text-sm">
       <p>{makingPublic
         ? t("Every signed-in account can read a public book. Each reader keeps their own progress.")
-        : t("Only you and admins can open a private book, plus anything that references it.")}</p>
+        : isAdmin && book.group !== "mine"
+          ? t("Only the book's owner and admins can open a private book, plus anything that references it.")
+          : t("Only you and admins can open a private book, plus anything that references it.")}</p>
       {!sharing && !error && <p role="status">{t("Loading…")}</p>}
       {makingPublic && !!sharing?.kbs.private_kbs.length && <fieldset className="space-y-2">
         <legend className="mb-2 font-medium">{t("Private knowledge bases this book uses")}</legend>

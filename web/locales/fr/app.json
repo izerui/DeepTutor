@@ -6085,5 +6085,7 @@
   "{{count}} connection_many": "{{count}} connexions",
   "{{count}} pages_many": "{{count}} pages",
   "{{count}} resources selected_many": "{{count}} ressources sélectionnées",
-  "{{count}} round_many": "{{count}} tours"
+  "{{count}} round_many": "{{count}} tours",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "Seuls le propriétaire du livre et les administrateurs peuvent ouvrir un livre privé, ainsi que tout ce qui le référence.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "L'espace de travail source de ce livre est archivé et son contenu est en lecture seule. Un administrateur peut tout de même modifier sa visibilité."
 }

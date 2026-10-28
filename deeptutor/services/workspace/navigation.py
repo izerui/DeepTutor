@@ -32,7 +32,13 @@ async def read_workspace_indexes(
                     {
                         **row,
                         "content_workspace_id": workspace_id,
-                        "content_workspace_name": names.get(workspace_id, ""),
+                        # B3-P14 item 4: preserve a source workspace name already
+                        # set by the reader (e.g. shared books from another user's
+                        # archived workspace) instead of overwriting it with "".
+                        "content_workspace_name": (
+                            row.get("content_workspace_name")
+                            or names.get(workspace_id, "")
+                        ),
                     }
                     for row in await reader()
                 )

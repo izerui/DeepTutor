@@ -5741,5 +5741,7 @@
   "{{count}} round_few": "{{count}} раунди",
   "{{count}} round_many": "{{count}} раундів",
   "{{count}} videos_few": "{{count}} відео",
-  "{{count}} videos_many": "{{count}} відео"
+  "{{count}} videos_many": "{{count}} відео",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "Лише власник книги та адміністратори можуть відкрити приватну книгу, а також все, що на неї посилається.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Робочий простір-джерело цієї книги заархівовано, і її вміст доступний лише для читання. Адміністратор все ще може змінити її видимість."
 }

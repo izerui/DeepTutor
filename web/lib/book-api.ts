@@ -494,6 +494,8 @@ export const bookApi = {
         repeated_failures?: { signature: string; count: number }[];
       };
       generation: GenerationSummary;
+      /** B3-P14: ref-to-name map so the banner can show KB display names. */
+      kb_labels?: Record<string, string>;
     }>(`/books/${encodeURIComponent(book_id)}/health`),
 
   /** Mark the current KB state as seen. Rejected with 409 while pages the last

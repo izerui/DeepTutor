@@ -5695,5 +5695,7 @@
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Its owner made this knowledge base private — remove the reference, or attach another resource.",
   "Delete anyway": "Delete anyway",
   "Its owner made this book private — remove the reference, or attach another resource.": "Its owner made this book private — remove the reference, or attach another resource.",
-  "The tutor has not asked about you yet. It will at the start of your first session.": "The tutor has not asked about you yet. It will at the start of your first session."
+  "The tutor has not asked about you yet. It will at the start of your first session.": "The tutor has not asked about you yet. It will at the start of your first session.",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "Only the book's owner and admins can open a private book, plus anything that references it.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "This book's source workspace is archived and its content is read-only. An admin can still change its visibility."
 }

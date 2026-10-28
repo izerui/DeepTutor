@@ -5695,5 +5695,7 @@
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Die Person, der diese Knowledge Base gehört, hat sie privat gemacht – entferne den Verweis oder hänge eine andere Ressource an.",
   "Delete anyway": "Trotzdem löschen",
   "Its owner made this book private — remove the reference, or attach another resource.": "Die Person, der dieses Buch gehört, hat es privat gemacht – entferne den Verweis oder hänge eine andere Ressource an.",
-  "The tutor has not asked about you yet. It will at the start of your first session.": "Der Tutor hat dich noch nicht nach dir gefragt. Er wird es zu Beginn deiner ersten Sitzung tun."
+  "The tutor has not asked about you yet. It will at the start of your first session.": "Der Tutor hat dich noch nicht nach dir gefragt. Er wird es zu Beginn deiner ersten Sitzung tun.",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "Nur die Person, der das Buch gehört, und Admins können ein privates Buch öffnen, sowie alles, was darauf verweist.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Der Quell-Workspace dieses Buchs ist archiviert und der Inhalt ist schreibgeschützt. Ein Admin kann die Sichtbarkeit trotzdem ändern."
 }

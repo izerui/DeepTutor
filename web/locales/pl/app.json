@@ -5741,5 +5741,7 @@
   "{{count}} round_few": "{{count}} rundy",
   "{{count}} round_many": "{{count}} rund",
   "{{count}} videos_few": "{{count}} filmy",
-  "{{count}} videos_many": "{{count}} filmów"
+  "{{count}} videos_many": "{{count}} filmów",
+  "Only the book's owner and admins can open a private book, plus anything that references it.": "Tylko właściciel książki i administratorzy mogą otworzyć prywatną książkę, a także wszystko, co się do niej odwołuje.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Źródłowy obszar roboczy tej książki jest zarchiwizowany, a jej treść jest tylko do odczytu. Administrator nadal może zmienić jej widoczność."
 }

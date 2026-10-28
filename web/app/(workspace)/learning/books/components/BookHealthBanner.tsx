@@ -29,6 +29,10 @@ interface KbDrift {
   stale_page_ids?: string[];
 }
 
+/** Map from KB ref (e.g. "kb:abc") to human-readable display name.
+ *  Populated by the health endpoint (B3-P14 item 1). */
+type KbLabels = Record<string, string>;
+
 /** Classifier slug → what to tell the reader. See `_generation_error_category`. */
 const FAILURE_CAUSES: Record<string, string> = {
   quota: "Your model credit or quota ran out.",
@@ -57,6 +61,7 @@ export default function BookHealthBanner({
 }: BookHealthBannerProps) {
   const { t } = useTranslation();
   const [kbDrift, setKbDrift] = useState<KbDrift | null>(null);
+  const [kbLabels, setKbLabels] = useState<KbLabels>({});
   const [logHealth, setLogHealth] = useState<LogHealth | null>(null);
   const [generation, setGeneration] = useState<GenerationSummary | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -68,6 +73,7 @@ export default function BookHealthBanner({
     let cancelled = false;
     if (!bookId) {
       setKbDrift(null);
+      setKbLabels({});
       setLogHealth(null);
       setGeneration(null);
       return;
@@ -82,6 +88,7 @@ export default function BookHealthBanner({
         const data = await bookApi.health(bookId);
         if (cancelled) return;
         setKbDrift(data.kb_drift);
+        setKbLabels(data.kb_labels ?? {});
         setLogHealth(data.log_health);
         setGeneration(data.generation);
       } catch {
@@ -156,6 +163,9 @@ export default function BookHealthBanner({
     !hasGenerationIssues
   )
     return null;
+
+  /** Resolve a KB ref to its display name, falling back to the raw ref. */
+  const kbLabel = (ref: string): string => kbLabels[ref] ?? ref;
 
   // Convert technical signatures into a short human label.
   const humanizeSignature = (sig: string): string => {
@@ -250,7 +260,7 @@ export default function BookHealthBanner({
                   <>
                     {t("Newly added")}:{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
-                      {kbDrift.new_kbs.join(", ")}
+                      {kbDrift.new_kbs.map(kbLabel).join(", ")}
                     </code>
                     .{" "}
                   </>
@@ -259,7 +269,7 @@ export default function BookHealthBanner({
                   <>
                     {t("Updated")}:{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
-                      {kbDrift.changed_kbs.join(", ")}
+                      {kbDrift.changed_kbs.map(kbLabel).join(", ")}
                     </code>
                     .{" "}
                   </>
@@ -268,7 +278,7 @@ export default function BookHealthBanner({
                   <>
                     {t("Removed")}:{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
-                      {kbDrift.removed_kbs.join(", ")}
+                      {kbDrift.removed_kbs.map(kbLabel).join(", ")}
                     </code>
                     .{" "}
                   </>
@@ -306,7 +316,7 @@ export default function BookHealthBanner({
             <div>
               {t("No longer available")}:{" "}
               <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
-                {unavailableKbs.join(", ")}
+                {unavailableKbs.map(kbLabel).join(", ")}
               </code>
               .
             </div>
