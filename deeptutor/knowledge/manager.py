@@ -1982,7 +1982,8 @@ class KnowledgeBaseManager:
     def interrupted_deletions(self) -> list[Path]:
         """Detached folders still on disk (in progress, failed to purge, or crashed).
 
-        They are never removed automatically: a crash before the caller's
+        Only :meth:`purge_committed_deletions` removes any of them, and only
+        those whose deletion provably committed: a crash before the caller's
         commit leaves a folder whose registration still exists.
         """
         if not self.base_dir.exists():
@@ -1992,6 +1993,54 @@ class KnowledgeBaseManager:
             for path in self.base_dir.iterdir()
             if path.name.startswith(DELETION_STAGING_PREFIX) and path.is_dir()
         )
+
+    def _deletion_committed(self, path: Path, config_names: set[str]) -> bool:
+        """Whether ``path`` is the leftover of a deletion that committed.
+
+        True only when the marker is readable, names a ``kb_id`` the registry no
+        longer lists, and its name is not in ``kb_config.json``. An unreadable
+        marker or a still-registered ``kb_id`` may be an uncommitted (or
+        in-progress) detach that must stay restorable.
+        """
+        from deeptutor.knowledge import registry
+
+        try:
+            marker = json.loads((Path(path) / DELETION_MARKER).read_text(encoding="utf-8"))
+            name, kb_id = marker["name"], marker["kb_id"]
+        except Exception:
+            return False
+        if not isinstance(name, str) or not isinstance(kb_id, str) or not kb_id:
+            return False
+        return name not in config_names and registry.get_kb(kb_id) is None
+
+    def purge_committed_deletions(self) -> list[Path]:
+        """Remove leftovers of committed deletions; only log the others.
+
+        Reads the registry (never writes it). Call after the caller's own
+        deletion committed and outside every lock: removal may be slow.
+        Returns the folders removed.
+        """
+        leftovers = self.interrupted_deletions()
+        if not leftovers:
+            return []
+        config_names = set(self._load_config().get("knowledge_bases", {}))
+        removed = []
+        for leftover in leftovers:
+            try:
+                committed = self._deletion_committed(leftover, config_names)
+            except Exception:
+                logger.warning("Could not classify %s", leftover, exc_info=True)
+                committed = False
+            if not committed:
+                logger.warning(
+                    "Unfinished knowledge-base deletion (not removed automatically): %s",
+                    self.describe_interrupted_deletion(leftover),
+                )
+                continue
+            logger.info("Removing leftover of a committed knowledge-base deletion: %s", leftover)
+            self._remove_kb_tree(leftover, leftover.name)
+            removed.append(leftover)
+        return removed
 
     def describe_interrupted_deletion(self, path: Path) -> str:
         """A log line naming the KB behind ``path`` and how to restore it by hand."""
@@ -2026,10 +2075,36 @@ class KnowledgeBaseManager:
         detached.purged = True
         entry = detached.entry or {}
         if entry.get("type") == MARGINNOTE4_KB_TYPE:
-            self._delete_marginnote4_store(detached.name, entry)
+            self._delete_unclaimed_marginnote4_store(detached.name, entry)
         tree = detached.staged_dir or detached.in_place_dir
         if tree is not None:
             self._remove_kb_tree(tree, detached.name)
+
+    def _delete_unclaimed_marginnote4_store(self, name: str, entry: dict) -> None:
+        """Delete the store unless a library registered since the commit uses it."""
+        with self._catalog_lock:
+            try:
+                current = self._load_config().get("knowledge_bases", {})
+                claimed_by = self._marginnote4_store_owner(
+                    name, str(entry.get("db_path") or ""), current
+                )
+            except Exception:
+                logger.warning(
+                    "Could not check whether the MarginNote store of deleted KB '%s' "
+                    "was reclaimed; keeping it.",
+                    name,
+                    exc_info=True,
+                )
+                return
+            if claimed_by:
+                logger.info(
+                    "Keeping the MarginNote store of deleted KB '%s': "
+                    "knowledge base '%s' now uses it.",
+                    name,
+                    claimed_by,
+                )
+                return
+            self._delete_marginnote4_store(name, entry)
 
     def _drop_config_entry(self, name: str) -> None:
         """Remove ``name`` from the loaded config and persist it; hold ``_catalog_lock``."""

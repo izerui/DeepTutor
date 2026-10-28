@@ -3779,11 +3779,6 @@ def _detach_kb_once(kb_name: str, *, force: bool, confirmed: frozenset[str] | No
         raise HTTPException(status_code=403, detail="Only admins can force deletion.")
     try:
         manager, resolved_name, base_dir = _writable_kb(kb_name)
-        for leftover in manager.interrupted_deletions():
-            logger.warning(
-                "Unfinished knowledge-base deletion (not removed automatically): %s",
-                manager.describe_interrupted_deletion(leftover),
-            )
         with document_mutation_or_busy(base_dir, resolved_name):
             detached = None
             try:
@@ -3837,6 +3832,19 @@ def _purge_detached_kb(detached) -> None:
         )
 
 
+def _purge_after_commit(detached) -> None:
+    """Remove the committed deletion's files, then leftovers of earlier committed ones.
+
+    Runs after the registry commit and outside every lock (a worker thread
+    for the async routes): both removals may be slow.
+    """
+    _purge_detached_kb(detached)
+    try:
+        detached.manager.purge_committed_deletions()
+    except Exception:
+        logger.warning("Could not clean up earlier knowledge-base deletions", exc_info=True)
+
+
 def _delete_kb(
     kb_name: str,
     *,
@@ -3846,7 +3854,7 @@ def _delete_kb(
     expected_students: int | None = None,
 ) -> dict[str, str]:
     """Delete ``kb_name`` synchronously (worker threads and direct callers)."""
-    _purge_detached_kb(_detach_kb(
+    _purge_after_commit(_detach_kb(
         kb_name, force=force, confirm=confirm,
         expected_paths=expected_paths, expected_students=expected_students,
     ))
@@ -3866,7 +3874,7 @@ async def _delete_kb_off_loop(
         _detach_kb, kb_name, force=force, confirm=confirm,
         expected_paths=expected_paths, expected_students=expected_students,
     ))
-    await asyncio.to_thread(_purge_detached_kb, detached)
+    await asyncio.to_thread(_purge_after_commit, detached)
     return {"message": f"Knowledge base '{kb_name}' deleted successfully"}
 
 
