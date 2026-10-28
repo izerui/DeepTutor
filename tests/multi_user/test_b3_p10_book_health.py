@@ -401,3 +401,30 @@ def test_book_deleted_during_hashing_is_not_recreated(
     assert not root.exists()
     with as_account("tina"):
         assert "bk_lens" not in get_book_storage().list_book_ids()
+
+
+def test_mark_seen_during_hashing_wins_over_the_stale_plan(
+    toms_public_kb, as_account, teaching_http, monkeypatch,
+):
+    """m1: the plan compared against a baseline the user replaced mid-hash; drop it."""
+    from deeptutor.book.kb_health import refresh_book_fingerprints
+    from deeptutor.book.storage import get_book_storage
+
+    _tinas_book(as_account, toms_public_kb.ref, public=False)
+    client = teaching_http.client
+    assert client.get("/api/books/bk_lens/health", headers=_auth("tina")).status_code == 200
+    _kb_doc(toms_public_kb).write_text("new lenses", encoding="utf-8")
+    with as_account("tina"):
+        store = get_book_storage()
+
+    def mark_seen() -> None:
+        with as_account("tina"):
+            refresh_book_fingerprints("bk_lens", storage=store, force=True)
+
+    fired = _during_hashing(monkeypatch, mark_seen)
+    response = client.get("/api/books/bk_lens/health", headers=_auth("tina"))
+    assert response.status_code == 200, response.text
+    assert fired
+    assert response.json()["kb_drift"]["changed_kbs"] == [toms_public_kb.ref]
+    saved = store.load_book("bk_lens")
+    assert saved.stale_page_ids == [] and not saved.stale_detected_at

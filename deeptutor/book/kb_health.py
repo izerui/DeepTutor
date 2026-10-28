@@ -476,6 +476,11 @@ class DriftPlan:
     # Pages this check newly found stale (the report also echoes those the
     # manifest already listed when the plan was computed).
     new_stale_page_ids: list[str] = field(default_factory=list)
+    # The manifest state the plan was compared against. If any of it changed
+    # while hashing (e.g. "mark as seen", a re-bound KB), the plan is stale.
+    compared_fingerprints: dict[str, str] = field(default_factory=dict)
+    compared_documents: dict[str, dict[str, str]] = field(default_factory=dict)
+    compared_kbs: list[str] = field(default_factory=list)
     baseline: tuple[dict[str, dict[str, str]], dict[str, str]] | None = None
 
 
@@ -501,6 +506,9 @@ def plan_drift(
         new_stale_page_ids=[
             page_id for page_id in report.stale_page_ids if page_id not in book.stale_page_ids
         ],
+        compared_fingerprints=dict(book.kb_fingerprints or {}),
+        compared_documents=dict(book.kb_document_fingerprints or {}),
+        compared_kbs=list(book.knowledge_bases),
     )
 
     # Self-heal: when there's no drift but the book is missing a baseline
@@ -535,13 +543,22 @@ def apply_drift_plan(plan: DriftPlan, storage: BookStorage | None = None) -> boo
     """
     store = storage or get_book_storage()
     book = store.load_book(plan.book_id)
-    if book is None or book.created_at != plan.created_at:
+    if book is None:
+        logger.debug("kb drift plan for %s dropped: book is gone", plan.book_id)
+        return False
+    if book.created_at and plan.created_at and book.created_at != plan.created_at:
+        logger.debug("kb drift plan for %s dropped: book was recreated", plan.book_id)
+        return False
+    if (
+        dict(book.kb_fingerprints or {}) != plan.compared_fingerprints
+        or dict(book.kb_document_fingerprints or {}) != plan.compared_documents
+        or list(book.knowledge_bases) != plan.compared_kbs
+    ):
+        logger.debug("kb drift plan for %s dropped: baseline changed meanwhile", plan.book_id)
         return False
     report = plan.report
     dirty = False
-    if plan.baseline is not None and (
-        not book.kb_fingerprints or _scheme_changed(book.kb_fingerprints)
-    ):
+    if plan.baseline is not None:
         book.kb_document_fingerprints, book.kb_fingerprints = plan.baseline
         dirty = True
     if report.has_drift:
