@@ -1,5 +1,5 @@
 /**
- * B3-7 test: the `currentTemplate` PRODUCT function in mastery/page.tsx
+ * B3-7 test: the `currentTemplate` PRODUCT function in mastery-templates.ts
  * resolves the freshest version of a template from the live list.
  *
  * Red proof: making `currentTemplate` always return `managing` (ignoring the
@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { currentTemplate } from "@/app/(workspace)/learning/mastery/page";
+import { currentTemplate } from "@/lib/mastery-templates";
 
 interface MinimalTemplate {
   id: string;
