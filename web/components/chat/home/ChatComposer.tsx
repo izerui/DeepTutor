@@ -221,6 +221,7 @@ export default memo(function ChatComposer({
   attachmentProcessing = [],
   activeCap,
   knowledgeBases,
+  knowledgeBaseLabels,
   connectedAgents = [],
   selectedPartner = null,
   onSelectPartner,
@@ -336,6 +337,8 @@ export default memo(function ChatComposer({
   attachmentProcessing?: AttachmentProcessingItem[];
   activeCap: CapabilityDef;
   knowledgeBases: KnowledgeBase[];
+  /** Fallback display names for KB refs the catalog does not list. */
+  knowledgeBaseLabels?: Record<string, string>;
   /** Connected local subagents (Claude Code / Codex) selectable for this turn. */
   connectedAgents?: { name: string; kind?: string }[];
   /** The connected agent selected for this turn, if any (single-select). */
@@ -794,7 +797,7 @@ export default memo(function ChatComposer({
   // One selection summary for files, references, and conversation resources.
   const contextTreeItems: ContextTreeItem[] = [
     ...attachments.map((file, index): ContextTreeItem => ({key:`file-${index}`, icon:Paperclip, kind:t("Attach files"),label:file.filename,thumbnailUrl:file.type === "image" ? file.previewUrl : undefined,onClick:()=>onPreviewAttachment?.(index),onRemove:()=>onRemoveAttachment(index)})),
-    ...selectedKnowledgeBases.map((id): ContextTreeItem => ({key:`kb-${id}`,icon:Database,kind:t("Knowledge"),label:knowledgeBases.find(kb=>knowledgeBaseMatches(kb,id))?.name || id,onRemove:()=>onToggleKB(id)})),
+    ...selectedKnowledgeBases.map((id): ContextTreeItem => ({key:`kb-${id}`,icon:Database,kind:t("Knowledge"),label:knowledgeBases.find(kb=>knowledgeBaseMatches(kb,id))?.name || knowledgeBaseLabels?.[id] || id,onRemove:()=>onToggleKB(id)})),
     ...(personaSelection ? [{key:"persona-scope",icon:UserRound,kind:t("Response style"),label:personaSelection,onRemove:()=>onPersonaSelectionChange?.("")}] : []),
     ...(selectedPartner ? [{ key: "partner-current", icon: UserRound, kind: t("Ask partner"), label: partnerName!, onRemove: () => onSelectPartner?.(null) }] : []),
     ...(selectedPartnerGroup ? [{ key: "partner-group-current", icon: Users, kind: t("Organize partner discussion"), label: partnerGroupName!, onRemove: () => onSelectPartnerGroup?.(null) }] : []),

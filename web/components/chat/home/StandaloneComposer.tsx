@@ -203,6 +203,12 @@ interface StandaloneComposerProps {
   resourceCatalog?: ComposerResourceCatalog;
   resourceSelection?: ResourceSelection;
   onResourceSelectionChange?: (selection: ResourceSelection) => void;
+  /**
+   * Fallback display names for knowledge-base refs the fetched catalog does
+   * not list (e.g. teacher-path `kb:<id>` references). Threaded to
+   * ChatComposer's context-tree label resolution.
+   */
+  knowledgeBaseLabels?: Record<string, string>;
   /** Hide the My Agents reference entry. */
   agentsAvailable?: boolean;
   /** Receives a function that drops text into the textarea (ask_user chips). */
@@ -237,6 +243,7 @@ function StandaloneComposerImpl({
   resourceCatalog,
   resourceSelection,
   onResourceSelectionChange,
+  knowledgeBaseLabels,
   agentsAvailable = false,
   prefillInputRef,
   contextBudget = null,
@@ -896,6 +903,7 @@ function StandaloneComposerImpl({
         attachmentError={attachmentError}
         activeCap={activeCap}
         knowledgeBases={kbOptions}
+        knowledgeBaseLabels={knowledgeBaseLabels}
         connectedAgents={agentOptions}
         selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
         onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}

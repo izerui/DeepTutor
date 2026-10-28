@@ -43,6 +43,7 @@ export function MasteryComposer({
   askHint,
   disabled,
   prefillInputRef,
+  knowledgeBaseLabels,
 }: {
   placeholder: string;
   /** A question the tutor suggests asking here; Tab takes it. "" for none. */
@@ -51,6 +52,8 @@ export function MasteryComposer({
   disabled?: boolean;
   /** Lets the screen drop a handed-off opening line into the textarea. */
   prefillInputRef?: React.MutableRefObject<((text: string) => void) | null>;
+  /** Fallback display names for KB refs the catalog does not list (e.g. teacher-path references). */
+  knowledgeBaseLabels?: Record<string, string>;
 }) {
   const {
     state,
@@ -134,6 +137,7 @@ export function MasteryComposer({
   return (
     <StandaloneComposer
       showCapabilityChip={false}
+      knowledgeBaseLabels={knowledgeBaseLabels}
       hasMessages={state.messages.length > 0}
       isStreaming={state.isStreaming}
       awaitingUserReply={awaitingUserReply}

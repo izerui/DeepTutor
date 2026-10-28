@@ -892,6 +892,7 @@ export function MasteryStudy({
                 askHint={askHint}
                 disabled={sessionLoading}
                 prefillInputRef={prefillInputRef}
+                knowledgeBaseLabels={kbDisplayNames}
               />
             </div>
           )}
