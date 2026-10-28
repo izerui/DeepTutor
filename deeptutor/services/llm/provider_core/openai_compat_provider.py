@@ -88,6 +88,26 @@ def _get(obj: Any, key: str) -> Any:
     return getattr(obj, key, None)
 
 
+def _tool_call_slot(buffers: dict[int, dict[str, Any]], tc_delta: Any) -> int:
+    """Buffer slot for a streamed tool-call delta.
+
+    Providers that send no ``index`` (Gemini's and Mistral's compatible
+    endpoints) are told apart by ``id``: a new one starts the next call, a
+    delta without one continues the last.
+    """
+    index = _get(tc_delta, "index")
+    if index is not None:
+        return int(index)
+    if not buffers:
+        return 0
+    last = max(buffers)
+    tc_id = _get(tc_delta, "id")
+    last_id = buffers[last]["id"]
+    if tc_id and last_id and str(tc_id) != last_id:
+        return last + 1
+    return last
+
+
 def _accumulate_streamed_tool_call(
     buffers: dict[int, dict[str, str]],
     tc_delta: Any,
@@ -100,7 +120,7 @@ def _accumulate_streamed_tool_call(
     stream index so a provider that streams arguments before an id still
     yields something a consumer can correlate previews by.
     """
-    index = int(_get(tc_delta, "index") or 0)
+    index = _tool_call_slot(buffers, tc_delta)
     buffer = buffers.setdefault(index, {"id": "", "name": "", "arguments": ""})
     tc_id = _get(tc_delta, "id")
     if tc_id:
@@ -875,8 +895,8 @@ class OpenAICompatProvider(LLMProvider):
         finish_reason = "stop"
         usage: dict[str, int] = {}
 
-        def _accum_tc(tc: Any, idx_hint: int) -> None:
-            tc_index: int = _get(tc, "index") if _get(tc, "index") is not None else idx_hint
+        def _accum_tc(tc: Any) -> None:
+            tc_index = _tool_call_slot(tc_bufs, tc)
             buf = tc_bufs.setdefault(
                 tc_index,
                 {
@@ -929,7 +949,7 @@ class OpenAICompatProvider(LLMProvider):
                 if reasoning:
                     reasoning_parts.append(reasoning)
             for tc in (delta.tool_calls or []) if delta else []:
-                _accum_tc(tc, getattr(tc, "index", 0))
+                _accum_tc(tc)
 
         content = "".join(content_parts) or None
         reasoning_content = "".join(reasoning_parts) or None
