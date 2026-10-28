@@ -169,3 +169,25 @@ def test_delete_routes_unregister_connected_kbs(knowledge, as_user, tmp_path, ki
         # A MarginNote library's store is DeepTutor's own data and is removed.
         assert not data.exists()
     assert manager.interrupted_deletions() == []
+
+
+# ── review minor 6: a symlinked leftover is never followed or removed ──
+
+
+def test_symlinked_leftover_is_skipped(knowledge, as_user, make_kb, tmp_path):
+    outside = tmp_path / "outside"
+    (outside / "raw").mkdir(parents=True)
+    (outside / "raw" / "doc.md").write_text("precious", encoding="utf-8")
+    (outside / manager_module.DELETION_MARKER).write_text(
+        json.dumps({"name": "gone", "kb_id": "d" * 32}), encoding="utf-8"
+    )
+    with as_user("t1", role="teacher"):
+        manager, _, physics = _kb(make_kb, "physics")
+        link = Path(manager.base_dir) / f"{manager_module.DELETION_STAGING_PREFIX}link"
+        link.symlink_to(outside, target_is_directory=True)
+        knowledge._delete_kb(physics.ref)
+        # Classified as "not removable" rather than handed to rmtree (whose error
+        # handler would chmod the link's target outside base_dir).
+        assert manager.purge_committed_deletions() == []
+    assert link.is_symlink()
+    assert (outside / "raw" / "doc.md").read_text(encoding="utf-8") == "precious"

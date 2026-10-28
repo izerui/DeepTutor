@@ -630,7 +630,7 @@ def admin_legacy_refs(kb_id: str) -> list[str]:
     return [f"admin:kb:{row['name']}" for row in rows]
 
 
-def _retain_admin_legacy_names(conn: sqlite3.Connection, *, kb_id: str | None = None) -> None:
+def _retain_admin_legacy_names(conn: sqlite3.Connection, *, kb_id: str) -> None:
     from deeptutor.multi_user.paths import get_admin_path_service
 
     root = _location(get_admin_path_service().get_knowledge_bases_root())
@@ -638,8 +638,8 @@ def _retain_admin_legacy_names(conn: sqlite3.Connection, *, kb_id: str | None = 
     # aliases remain in their existing account-private runtime files.
     conn.execute(
         "INSERT OR IGNORE INTO kb_admin_legacy_names (name, kb_id) "
-        "SELECT dir_name, kb_id FROM kb_registry WHERE base_dir = ? "
-        "AND (? IS NULL OR kb_id = ?)", (root, kb_id, kb_id),
+        "SELECT dir_name, kb_id FROM kb_registry WHERE base_dir = ? AND kb_id = ?",
+        (root, kb_id),
     )
 
 

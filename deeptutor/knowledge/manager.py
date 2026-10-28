@@ -2027,6 +2027,12 @@ class KnowledgeBaseManager:
         config_names = set(self._load_config().get("knowledge_bases", {}))
         removed = []
         for leftover in leftovers:
+            if leftover.is_symlink():
+                # Never follow a link out of base_dir: detach only creates real folders.
+                logger.warning(
+                    "Not removing %s: a symlink is never a detached knowledge base.", leftover
+                )
+                continue
             try:
                 committed = self._deletion_committed(leftover, config_names)
             except Exception:
