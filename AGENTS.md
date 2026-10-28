@@ -33,6 +33,82 @@ of functionality already covered by `main`.
   Document any remaining differences; a conflict-free Git merge alone does not
   prove functional compatibility.
 
+### HKUDS Source Synchronization and Backport Tracking
+
+本项目的远程分支职责如下：
+
+- `upstream`（`https://github.com/HKUDS/DeepTutor.git`）是港大源仓库，包含
+  fork 之前港大提交的功能，是需要持续跟踪的上游来源。
+- `origin` 是本项目自己的远程仓库，承载本项目的 `develop` 等本地分支。
+- `main` 只用于同步和保留港大源的上游基线，不在 `main` 中承载本项目独有的
+  `develop` 改动。
+- `develop` 是本项目的长期维护分支。它已经包含大量本地改动，不能把港大源的
+  更新直接当作可以无条件覆盖 `develop` 的实现。
+
+初始同步锚点（记录于 2026-10-27）：
+
+```text
+HKUDS source baseline / local main: a31d82624c27d75f4e771d4fcb78dce16470b383
+Commit: release: v1.6.15
+```
+
+后续每次同步都必须维护一个“港大提交处理进度”记录。当前首次记录以
+`a31d82624c27d75f4e771d4fcb78dce16470b383` 为起点；完成后续同步后，将处理到的
+港大源提交完整 SHA、日期、范围和在 `develop` 中的处理结果追加到本节或单独的
+同步记录文件中。不能只依赖 `develop` 的 HEAD，因为 `develop` 的提交历史包含
+本地功能和修复。
+
+当前已处理到的港大源提交：
+
+```text
+a31d82624c27d75f4e771d4fcb78dce16470b383
+```
+
+标准同步流程：
+
+1. 同步远程引用：
+   ```bash
+   git fetch upstream
+   git fetch origin
+   ```
+2. 在确认工作区没有待提交改动后，检查 `upstream/main` 相对“上次已处理提交”
+   的提交范围和文件变化：
+   ```bash
+   git log --oneline --decorate <last-processed-hkuds-sha>..upstream/main
+   git diff --stat <last-processed-hkuds-sha>..upstream/main
+   git diff <last-processed-hkuds-sha>..upstream/main -- Dockerfile
+   ```
+3. 将 `main` 快进或按仓库既有约定同步到 `upstream/main`，保留完整的港大提交
+   历史；不得把 `origin/main` 当作港大源的替代品。
+4. 以提交为单位检查每个港大变更：确认它解决的问题、涉及的公共接口、数据和
+   配置兼容性、权限与安全行为，以及它是否已经通过此前的本地修改间接存在。
+   对每个需要同步的功能，在 `develop` 中采用港大实现或做最小范围的适配；不要
+   机械地整段覆盖本地实现，也不要保留已经被港大实现取代的重复代码。
+5. 在 `develop` 上验证港大更新和本地扩展。至少运行受影响的测试、必要的构建和
+   IDE/静态检查；涉及路径、Dockerfile、部署或运行时行为时，遵守本文件对应的
+   专项检查规则。
+6. 只有在某个港大提交已经完成评估、实现或明确记录为无需同步，并完成验证后，
+   才能把“已处理到的港大提交”推进到该提交。若中间提交尚未处理，不能跳过它
+   直接把进度记到更晚的提交。
+7. 记录本次同步的起止 SHA、已同步/无需同步/暂缓的提交、`develop` 中对应的
+   本地提交或适配说明、验证命令及剩余风险。发生冲突时先理解双方行为，再解决
+   冲突；不能以“能够合并”作为功能兼容的证明。
+
+进度记录示例：
+
+```text
+HKUDS processed through:
+- <full-sha> <date> <subject>
+- Result in develop: adopted directly / locally adapted / already covered / deferred
+- Develop commit(s): <sha>
+- Validation: <commands>
+- Notes: <compatibility or remaining risk>
+```
+
+每次从 `main` 合并或同步后，重新检查现有本地扩展是否已被港大源覆盖；如果已经
+覆盖，应在 `develop` 中移除重复实现，同时保留港大尚未提供的兼容性、安全性和部署
+保护。不得因为 `main` 更新成功就直接重置、覆盖或强制改写 `develop`。
+
 ### CI / Docker Workflow Maintenance
 
 本项目是从上游 clone 过来的独立部署实例。上游的正式发布流程（`docker-release.yml`、
