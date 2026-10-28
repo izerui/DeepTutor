@@ -232,7 +232,9 @@ def _references(
     return result
 
 
-def _restorable(accesses: dict[str, set[str]], owner_id: str) -> Callable[[Any], bool]:
+def _restorable(
+    accesses: dict[str, set[str]], owner_id: str, key: Callable[[Any], str]
+) -> Callable[[Any], bool]:
     """Whether a released KB or book may be referenced again as it was published.
 
     Judged by the registries on the fresh record inside their write
@@ -240,13 +242,16 @@ def _restorable(accesses: dict[str, set[str]], owner_id: str) -> Callable[[Any],
     reference only must still be the template owner's own. (An admin's
     force-private of an owner's already-private material writes no
     revocation, so it does not block this; the registry has no such state.)
+    ``key`` reads the record's id: ``kb_id`` for a KB, ``book_id`` for a book.
     """
 
     def check(record: Any) -> bool:
         if record.visibility == "public":
             return True
-        key = getattr(record, "kb_id", None) or record.book_id
-        return "reference_only" in accesses.get(key, set()) and record.created_by == owner_id
+        return (
+            "reference_only" in accesses.get(key(record), set())
+            and record.created_by == owner_id
+        )
 
     return check
 
@@ -254,7 +259,10 @@ def _restorable(accesses: dict[str, set[str]], owner_id: str) -> Callable[[Any],
 def sync_material_references(
     template_id: str, *, store: TeachingStore | None = None, restore: bool = False
 ) -> None:
-    """Release references no entitled instance needs any more; never add any.
+    """Release references no entitled instance needs any more.
+
+    It only releases, except that ``restore`` may ask back what a revoke
+    released (below).
 
     Call it after an instance's revision migration commits (Task 10) or after
     an assignment is revoked. Archived and unpublished templates are left
@@ -296,7 +304,7 @@ def sync_material_references(
             created_by=owner,
             retain_revoked_kb_ids=refs.retain_revoked_kb_ids,
             restore_kb_ids=sorted(refs.restore_kbs),
-            restorable=_restorable(refs.restore_kbs, owner),
+            restorable=_restorable(refs.restore_kbs, owner, lambda r: r.kb_id),
         )
         if refs.restore_books or set(refs.book_ids) != book_access.referenced_book_ids(
             template_id
@@ -306,7 +314,7 @@ def sync_material_references(
                 refs.book_ids,
                 created_by=owner,
                 restore_book_ids=sorted(refs.restore_books),
-                restorable=_restorable(refs.restore_books, owner),
+                restorable=_restorable(refs.restore_books, owner, lambda r: r.book_id),
             )
 
 
