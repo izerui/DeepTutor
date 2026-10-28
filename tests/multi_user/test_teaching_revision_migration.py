@@ -271,14 +271,26 @@ def test_a_revoked_or_archived_course_is_not_migrated(
 def test_a_lost_applied_revision_record_is_repaired(
     sara_instance, as_account, edit_calculus_draft, publish_template, teaching_users
 ):
+    import sqlite3
+
     sara = teaching_users["sara"]["id"]
     _publish_edit(edit_calculus_draft, publish_template)
     with as_account("sara"):
         apply_pending_revision(sara_instance.path_id, LearningStore(), respect_lease=True)
     # The copy committed revision 2, but the teaching record was not updated.
-    TeachingStore().record_instance(
-        sara_instance.template_id, sara, instance_path_id=sara_instance.path_id, applied_revision=1
-    )
+    # record_instance is monotonic (B2-14), so roll back via direct SQL.
+    conn = sqlite3.connect(TeachingStore().db_path)
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE mastery_assignments SET applied_revision = 1 "
+                "WHERE template_id = ? AND student_user_id = ?",
+                (sara_instance.template_id, sara),
+            )
+    finally:
+        conn.close()
+    assert TeachingStore().get_assignment(sara_instance.template_id, sara).applied_revision == 1
+    # No new revision to apply, but the repair branch notices the mismatch.
     with as_account("sara"):
         assert apply_pending_revision(sara_instance.path_id, LearningStore(), respect_lease=True) is None
     assignment = TeachingStore().get_assignment(sara_instance.template_id, sara)
