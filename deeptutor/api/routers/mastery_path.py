@@ -45,9 +45,20 @@ logger = logging.getLogger(__name__)
 
 
 def _check_instance_access(path_id: str) -> None:
-    from deeptutor.teaching.instances import ensure_instance_access
+    from deeptutor.teaching.instances import (
+        ensure_instance_access,
+        instance_path_id,
+        sync_assigned_instances,
+    )
 
-    ensure_instance_access(path_id, LearningStore())
+    store = LearningStore()
+    # B3-P16: a direct link to a teacher path must not depend on the list
+    # having been read first. The same sync the list runs creates only copies
+    # of open assignments (students, default workspace); a closed or missing
+    # assignment still has no copy and answers 404 as before.
+    if path_id.startswith(instance_path_id("")) and not store.exists(path_id):
+        sync_assigned_instances(store)
+    ensure_instance_access(path_id, store)
 
 
 async def require_instance_access(request: Request) -> None:
