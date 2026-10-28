@@ -185,6 +185,7 @@ function Harness() {
         const draft = state.messages.find((message) => message.failedSubmission);
         if (typeof draft?.id === "number") void editMessage(draft.id, "Second edit");
       }}>Edit second version</button>
+      <button onClick={() => void editMessage(1, "Edited saved")}>Edit saved message</button>
       <button onClick={() => {
         const draft = state.messages.find((message) => message.failedSubmission);
         if (typeof draft?.id === "number") void retryFailedSubmission(draft.id);
@@ -874,6 +875,116 @@ it("retries a failed draft with its original settings after live settings change
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("edits a saved message with the current model and reply language, keeping its context", async () => {
+  const session = completedServerSession() as unknown as {
+    messages: Array<Record<string, unknown>>;
+    preferences: Record<string, unknown>;
+  };
+  session.messages[0].attachments = [
+    { type: "image", filename: "figure.png", url: "https://files.example/figure.png" },
+  ];
+  session.messages[0].metadata = {
+    request_snapshot: {
+      content: "hi",
+      capability: "chat",
+      enabledTools: ["reason"],
+      knowledgeBases: ["kb-1"],
+      language: "en",
+      llmSelection: { model_id: "model-a", profile_id: "profile-a" },
+      notebookReferences: [{ notebook_id: "nb-1", record_ids: ["r1"] }],
+    },
+  };
+  fixture.session = session;
+  fixture.connected = true;
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => { fireEvent.click(screen.getByText("Load")); });
+  // The server echoes the persisted reply-language preference.
+  session.preferences.reply_language_override = "zh";
+  await act(async () => { fireEvent.click(screen.getByText("Change live settings")); });
+  await act(async () => { fireEvent.click(screen.getByText("Edit saved message")); });
+  expect(fixture.sent.at(-1)).toMatchObject({
+    type: "start_turn", content: "Edited saved",
+    llm_selection: { model_id: "other-model", profile_id: "other-profile" },
+    language: "zh",
+    capability: "chat", tools: ["reason"], knowledge_bases: ["kb-1"],
+    notebook_references: [{ notebook_id: "nb-1", record_ids: ["r1"] }],
+    attachments: [{ type: "image", filename: "figure.png", url: "https://files.example/figure.png" }],
+    persona: "",
+    parent_message_id: null,
+  });
+});
+
+it("resends a saved failed turn with the model and reply language selected now", async () => {
+  fixture.session = {
+    ...completedServerSession(),
+    status: "failed",
+    messages: [{
+      id: 3,
+      session_id: "s1",
+      role: "user",
+      content: "B",
+      events: [],
+      attachments: [],
+      created_at: 3,
+      parent_message_id: null,
+      metadata: {
+        request_snapshot: {
+          content: "B",
+          capability: "chat",
+          language: "en",
+          llmSelection: { model_id: "model-a", profile_id: "profile-a" },
+        },
+      },
+    }, {
+      id: 4,
+      session_id: "s1",
+      role: "assistant",
+      content: "the turn failed",
+      events: [],
+      attachments: [],
+      created_at: 4,
+      parent_message_id: 3,
+    }],
+  };
+  fixture.connected = true;
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => { fireEvent.click(screen.getByText("Load")); });
+  // The server echoes the persisted reply-language preference.
+  (fixture.session.preferences as Record<string, unknown>).reply_language_override = "zh";
+  await act(async () => { fireEvent.click(screen.getByText("Change live settings")); });
+  await act(async () => { fireEvent.click(screen.getByText("Resend")); });
+  expect(fixture.sent.at(-1)).toMatchObject({
+    type: "regenerate",
+    session_id: "s1",
+    overrides: {
+      replay_snapshot: true,
+      llm_selection: { model_id: "other-model", profile_id: "other-profile" },
+      language: "zh",
+    },
+  });
+});
+
+it("keeps the original settings when an unsent message is edited", async () => {
+  fixture.session = completedServerSession();
+  fixture.connected = true;
+  storeFailedSubmission("s1", { submissionId: "original-edit", content: "Original", requestSnapshot: {
+    content: "Original", capability: "chat", language: "en",
+    llmSelection: { model_id: "model-a", profile_id: "profile-a" },
+    enabledTools: [], knowledgeBases: [],
+  } });
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => { fireEvent.click(screen.getByText("Load")); });
+  await act(async () => { fireEvent.click(screen.getByText("Change live settings")); });
+  await act(async () => { fireEvent.click(screen.getByText("Edit first unsent")); });
+  expect(fixture.replacementCalls).toHaveLength(1);
+  // An unsent submission keeps its own parameters: its submission id may
+  // already be reserved, and a changed request would no longer match it.
+  expect(fixture.replacementCalls[0].request).toMatchObject({
+    llm_selection: { model_id: "model-a", profile_id: "profile-a" },
+    language: "en",
+  });
 });
 
 it("retries the original reading viewport after the live document changes", async () => {

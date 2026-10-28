@@ -531,6 +531,26 @@ function createSessionEntry(
   };
 }
 
+/**
+ * A replayed snapshot keeps the turn's context (attachments, references,
+ * parent, capability, config) but must not freeze the generation settings:
+ * the user may have switched model or reply language since the original send.
+ */
+function withCurrentGenerationSettings(
+  snapshot: MessageRequestSnapshot,
+  session: Pick<
+    SessionEntry,
+    "llmSelection" | "language" | "replyLanguageOverride"
+  >,
+): MessageRequestSnapshot {
+  return {
+    ...snapshot,
+    llmSelection: session.llmSelection,
+    language: session.replyLanguageOverride ?? session.language,
+    replyLanguageOverride: session.replyLanguageOverride,
+  };
+}
+
 function draftFailedSubmissionKey(): string {
   return `draft:${activeWorkspaceId() || "general"}`;
 }
@@ -1590,8 +1610,11 @@ interface ChatContextValue {
   ) => Promise<boolean>;
   regenerateLastMessage: () => void;
   /** Re-send the last user message after a failed turn, preserving the
-   *  original request snapshot (attachments, capability, tools, KB, etc.)
-   *  so the new turn runs with the same context as the failed one. */
+   *  original request context (attachments, capability, tools, KB, etc.)
+   *  so the new turn runs with the same context as the failed one. A saved
+   *  failed turn is regenerated with the model and reply language selected
+   *  now; an unconfirmed submission is replayed with its own parameters so
+   *  its idempotency key still matches. */
   resendLastMessage: () => void;
   deleteTurn: (messageId: number) => Promise<void>;
   /** Forget only this browser's unsent recovery copy; never mutate a server turn. */
@@ -3392,7 +3415,13 @@ export function ChatStateAdapterProvider({
       type: "regenerate",
       session_id: session.sessionId,
       overrides: replaySnapshot
-        ? { replay_snapshot: true }
+        ? {
+            replay_snapshot: true,
+            // The failed turn's context is replayed, but the model and the
+            // reply language are the ones selected right now (#2105).
+            llm_selection: session.llmSelection ?? null,
+            language: session.replyLanguageOverride ?? session.language,
+          }
         : { language: readStoredResponseLanguage() },
     });
   }, [sendThroughRunner]);
@@ -3414,7 +3443,9 @@ export function ChatStateAdapterProvider({
       .find((m) => m.role === "user" && m.requestSnapshot);
     if (!lastUser?.requestSnapshot) return;
     // Retry the failed tail as a new turn, keeping the existing optimistic
-    // user row visible (its snapshot is replayed verbatim).
+    // user row visible. An unconfirmed submission is replayed with its own
+    // parameters: the server may already hold that submission id, and a
+    // changed request would no longer match it (#2105).
     const retryUnsavedTail = () => {
       const live = stateRef.current;
       const liveSession = live.sessions[key];
@@ -3806,8 +3837,18 @@ export function ChatStateAdapterProvider({
         undefined,
         { parentMessageId: parentId,
           requestSnapshotOverride: (local?.requestSnapshot ?? original.requestSnapshot)
-            ? { ...(local?.requestSnapshot ?? original.requestSnapshot)!, content: trimmed,
-                replacesSubmissionId: undefined, replacementRequest: undefined } : undefined },
+            ? withCurrentGenerationSettings(
+                {
+                  ...(local?.requestSnapshot ?? original.requestSnapshot)!,
+                  content: trimmed,
+                  // An edit is a new turn under the current settings; it does
+                  // not inherit the failed submission's replacement identity.
+                  replacesSubmissionId: undefined,
+                  replacementRequest: undefined,
+                },
+                session,
+              )
+            : undefined },
         undefined,
         undefined,
         undefined,
