@@ -1,6 +1,6 @@
 "use client";
 
-import { knowledgeBaseMatches, knowledgeBaseRef, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
+import { KB_DETAIL_SECTIONS, knowledgeBaseMatches, knowledgeBaseRef, type KbDetailSection, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
 import {
@@ -61,6 +61,11 @@ export default function KnowledgePage() {
   const searchParams = useSearchParams();
   const initialKb = decodeResourceSegment(routeParams.kbName);
   const initialEngine = searchParams.get("engine");
+  const tabParam = searchParams.get("tab");
+  const initialDetailTab: KbDetailSection =
+    (KB_DETAIL_SECTIONS as readonly string[]).includes(tabParam ?? "")
+      ? (tabParam as KbDetailSection)
+      : "files";
   const initialHomeSection: KnowledgeHomeSection =
     initialEngine || searchParams.get("section") === "engines"
       ? "knowledge-engines"
@@ -125,6 +130,10 @@ export default function KnowledgePage() {
   );
   const [homeSection, setHomeSection] =
     useState<KnowledgeHomeSection>(initialHomeSection);
+  // The detail tab lives in the URL (`?tab=`): a remount (the canonical-ref
+  // route replace below, a reload) restores it instead of falling back to
+  // Files and discarding what the user opened (B3-P15).
+  const [detailTab, setDetailTab] = useState<KbDetailSection>(initialDetailTab);
   const [createOpen, setCreateOpen] = useState(false);
   const [kiwixOpen, setKiwixOpen] = useState(false);
   const [createPreset, setCreatePreset] = useState<{
@@ -166,6 +175,7 @@ export default function KnowledgePage() {
 
   const openKb = useCallback((name: string) => {
     setHomeSection("knowledge-bases");
+    setDetailTab("files");
     setExplicitSelection(name);
     setView("kb");
   }, []);
@@ -237,12 +247,18 @@ export default function KnowledgePage() {
   const urlEngine = view === "engine" ? (selectedProvider?.id ?? null) : null;
   const urlSection =
     view === "home" && homeSection === "knowledge-engines" ? "engines" : null;
+  const urlTab = view === "kb" && detailTab !== "files" ? detailTab : null;
+  // A dynamic-segment change remounts this page (Next keys each segment by its
+  // param). While the URL still names an alias of the selected KB, the detail
+  // is not shown, so nothing the user does there is lost to that remount.
+  const canonicalRoutePending = view === "kb" && urlKb !== null && initialKb !== urlKb;
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (
       initialKb === urlKb &&
       searchParams.get("engine") === urlEngine &&
-      searchParams.get("section") === urlSection
+      searchParams.get("section") === urlSection &&
+      searchParams.get("tab") === urlTab
     ) {
       return;
     }
@@ -252,12 +268,14 @@ export default function KnowledgePage() {
     else params.delete("engine");
     if (urlSection) params.set("section", urlSection);
     else params.delete("section");
+    if (urlTab) params.set("tab", urlTab);
+    else params.delete("tab");
     const search = params.toString();
     const pathname = knowledgeBaseRoute(urlKb);
     router.replace(search ? `${pathname}?${search}` : pathname, {
       scroll: false,
     });
-  }, [initialKb, router, searchParams, urlKb, urlEngine, urlSection]);
+  }, [initialKb, router, searchParams, urlKb, urlEngine, urlSection, urlTab]);
 
   const handleCreate = useCallback(
     async (params: {
@@ -465,7 +483,7 @@ export default function KnowledgePage() {
         </div>
       )}
 
-      {loading ? (
+      {loading || canonicalRoutePending ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
         </div>
@@ -510,6 +528,8 @@ export default function KnowledgePage() {
           ) : (
             <KnowledgeBaseDetail
               kb={selectedKb}
+              section={detailTab}
+              onSectionChange={setDetailTab}
               uploadPolicy={uploadPolicy}
               task={
                 selectedKb ? tasksByKb[knowledgeBaseRef(selectedKb)] : undefined

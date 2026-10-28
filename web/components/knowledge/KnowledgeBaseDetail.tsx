@@ -92,6 +92,12 @@ interface KnowledgeBaseDetailProps {
   ) => Promise<void>;
   onClearHistory: (kbName: string) => void;
   onBack?: () => void;
+  /**
+   * Controlled tab. The page keeps it in the URL (`?tab=`) so a remount —
+   * e.g. the canonical-ref route replace — cannot drop the user's choice.
+   */
+  section?: KbDetailSection;
+  onSectionChange?: (section: KbDetailSection) => void;
 }
 
 const SECTION_CHROME: Record<
@@ -130,9 +136,16 @@ export default function KnowledgeBaseDetail({
   onVisibilityChange,
   onClearHistory,
   onBack,
+  section: controlledSection,
+  onSectionChange,
 }: KnowledgeBaseDetailProps) {
   const { t } = useTranslation();
-  const [section, setSection] = useState<KbDetailSection>("files");
+  const [localSection, setLocalSection] = useState<KbDetailSection>("files");
+  const section = controlledSection ?? localSection;
+  const setSection = (next: KbDetailSection) => {
+    setLocalSection(next);
+    onSectionChange?.(next);
+  };
   const [retrySubmitting, setRetrySubmitting] = useState(false);
 
   if (!kb) {

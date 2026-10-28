@@ -114,11 +114,18 @@ it("ignores late authorized detail responses after navigating to another selecti
 
 it("resolves an old direct alias without requiring a catalog row", async () => {
   fixture.params = { kbName: "account:kb:old-name" };
+  const { unmount } = render(<KnowledgePage />);
+  await waitFor(() => expect(fixture.router.replace).toHaveBeenCalledWith(
+    "/knowledge-bases/kb%3Aprivate", { scroll: false },
+  ));
+  // B3-P15: the detail waits for the canonical URL (the replace remounts it).
+  expect(screen.queryByText("Authorized private")).toBeNull();
+  // Next remounts the page for the new param; it fetches the detail afresh.
+  unmount();
+  fixture.params = { kbName: "kb:private" };
+  fixture.fetch.mockImplementation(async () => Response.json(detail));
   render(<KnowledgePage />);
   expect(await screen.findByText("Authorized private")).toBeTruthy();
-  expect(fixture.router.replace).toHaveBeenCalledWith(
-    "/knowledge-bases/kb%3Aprivate", { scroll: false },
-  );
   expect(fixture.kbs).toEqual([]);
 });
 
