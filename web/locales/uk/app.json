@@ -5725,5 +5725,20 @@
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Недоступно: власник зробив цю базу знань приватною або видалив її. Вилучіть її з цього партнера.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Власник зробив цю базу знань приватною — вилучіть посилання або додайте інший ресурс.",
   "Delete anyway": "Усе одно видалити",
-  "Its owner made this book private — remove the reference, or attach another resource.": "Власник зробив цю книгу приватною — вилучіть посилання або додайте інший ресурс."
+  "Its owner made this book private — remove the reference, or attach another resource.": "Власник зробив цю книгу приватною — вилучіть посилання або додайте інший ресурс.",
+  "The tutor has not asked about you yet. It will at the start of your first session.": "Тьютор ще не запитував про вас. Він зробить це на початку вашої першої сесії.",
+  "{{count}} books_few": "{{count}} книги",
+  "{{count}} books_many": "{{count}} книг",
+  "{{count}} connection_few": "{{count}} з'єднання",
+  "{{count}} connection_many": "{{count}} з'єднань",
+  "{{count}} pages_few": "{{count}} сторінки",
+  "{{count}} pages_many": "{{count}} сторінок",
+  "{{count}} paths_few": "{{count}} шляхи",
+  "{{count}} paths_many": "{{count}} шляхів",
+  "{{count}} resources selected_few": "Вибрано {{count}} ресурси",
+  "{{count}} resources selected_many": "Вибрано {{count}} ресурсів",
+  "{{count}} round_few": "{{count}} раунди",
+  "{{count}} round_many": "{{count}} раундів",
+  "{{count}} videos_few": "{{count}} відео",
+  "{{count}} videos_many": "{{count}} відео"
 }

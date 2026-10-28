@@ -5725,5 +5725,20 @@
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Niedostępna: właściciel ustawił tę bazę wiedzy jako prywatną lub ją usunął. Usuń ją z tego partnera.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Właściciel ustawił tę bazę wiedzy jako prywatną — usuń odwołanie lub dołącz inny zasób.",
   "Delete anyway": "Usuń mimo to",
-  "Its owner made this book private — remove the reference, or attach another resource.": "Właściciel ustawił tę książkę jako prywatną — usuń odwołanie lub dołącz inny zasób."
+  "Its owner made this book private — remove the reference, or attach another resource.": "Właściciel ustawił tę książkę jako prywatną — usuń odwołanie lub dołącz inny zasób.",
+  "The tutor has not asked about you yet. It will at the start of your first session.": "Tutor jeszcze Cię o to nie zapytał. Zrobi to na początku Twojej pierwszej sesji.",
+  "{{count}} books_few": "{{count}} książki",
+  "{{count}} books_many": "{{count}} książek",
+  "{{count}} connection_few": "{{count}} połączenia",
+  "{{count}} connection_many": "{{count}} połączeń",
+  "{{count}} pages_few": "{{count}} strony",
+  "{{count}} pages_many": "{{count}} stron",
+  "{{count}} paths_few": "{{count}} ścieżki",
+  "{{count}} paths_many": "{{count}} ścieżek",
+  "{{count}} resources selected_few": "Wybrano {{count}} zasoby",
+  "{{count}} resources selected_many": "Wybrano {{count}} zasobów",
+  "{{count}} round_few": "{{count}} rundy",
+  "{{count}} round_many": "{{count}} rund",
+  "{{count}} videos_few": "{{count}} filmy",
+  "{{count}} videos_many": "{{count}} filmów"
 }

@@ -349,15 +349,15 @@ export default function MasteryTopicPage() {
             {t("Learning topics")}
           </Link>
           <div className="flex items-center gap-2">
-{!teacherLocked && (
-            <button
-              type="button"
-              onClick={(event) => openEditor(event.currentTarget)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-[12px] font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40"
-            >
-              <PencilRuler className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t("Edit modules")}</span>
-            </button>
+            {!teacherLocked && (
+              <button
+                type="button"
+                onClick={(event) => openEditor(event.currentTarget)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-[12px] font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40"
+              >
+                <PencilRuler className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("Edit modules")}</span>
+              </button>
             )}
             <details className="relative">
               <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] transition hover:text-[var(--foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40">
@@ -374,16 +374,16 @@ export default function MasteryTopicPage() {
                 >
                   <RotateCcw className="h-3.5 w-3.5" /> {t("Reset progress")}
                 </button>
-{!teacherLocked && (
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    openConfirmation("delete", event.currentTarget)
-                  }
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-red-600 hover:bg-red-500/10"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> {t("Delete topic")}
-                </button>
+                {!teacherLocked && (
+                  <button
+                    type="button"
+                    onClick={(event) =>
+                      openConfirmation("delete", event.currentTarget)
+                    }
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-red-600 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> {t("Delete topic")}
+                  </button>
                 )}
               </div>
             </details>
@@ -654,7 +654,7 @@ export default function MasteryTopicPage() {
             </div>
           )}
           <div className="flex min-h-0 flex-col gap-5 lg:h-full">
-            <LearnerProfileCard profile={topic.learner_profile} />
+            <LearnerProfileCard profile={topic.learner_profile} teacherPath={teacherLocked} />
             <SessionCamp
               pathId={pathId}
               sessions={sessions}

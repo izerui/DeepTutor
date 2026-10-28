@@ -6070,5 +6070,19 @@
   "Unavailable: its owner made this knowledge base private or deleted it. Remove it from this partner.": "Indisponible : son propriétaire a rendu cette base de connaissances privée ou l’a supprimée. Retirez-la de ce partenaire.",
   "Its owner made this knowledge base private — remove the reference, or attach another resource.": "Son propriétaire a rendu cette base de connaissances privée — retirez la référence ou joignez une autre ressource.",
   "Delete anyway": "Supprimer quand même",
-  "Its owner made this book private — remove the reference, or attach another resource.": "Son propriétaire a rendu ce livre privé — retirez la référence ou joignez une autre ressource."
+  "Its owner made this book private — remove the reference, or attach another resource.": "Son propriétaire a rendu ce livre privé — retirez la référence ou joignez une autre ressource.",
+  "The tutor has not asked about you yet. It will at the start of your first session.": "Le tuteur ne vous a pas encore posé de questions. Il le fera au début de votre première session.",
+  "{{count}} books_one": "{{count}} livre",
+  "{{count}} books_many": "{{count}} livres",
+  "{{count}} books_other": "{{count}} livres",
+  "{{count}} paths_one": "{{count}} parcours",
+  "{{count}} paths_many": "{{count}} parcours",
+  "{{count}} paths_other": "{{count}} parcours",
+  "{{count}} videos_one": "{{count}} vidéo",
+  "{{count}} videos_many": "{{count}} vidéos",
+  "{{count}} videos_other": "{{count}} vidéos",
+  "{{count}} connection_many": "{{count}} connexions",
+  "{{count}} pages_many": "{{count}} pages",
+  "{{count}} resources selected_many": "{{count}} ressources sélectionnées",
+  "{{count}} round_many": "{{count}} tours"
 }
