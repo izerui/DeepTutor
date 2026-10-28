@@ -960,28 +960,43 @@ async def _delete_book(
         elif current is not None and _record_matches_storage(resolved, current):
             record = _locked_writable(conn, resolved, current)
         if record is not None:
-            references = book_registry._references_of(conn, record.book_id)
-            if not force:
-                book_registry.require_withdrawal_confirmation(
-                    references, confirm=confirmed is not None, confirmed_referrers=confirmed,
-                )
+            references = _deletion_references(conn, record, force=force, confirmed=confirmed)
         staging = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
         if staging is None:
             raise HTTPException(status_code=404, detail="Book not found")
         if record is not None:
-            book_registry._unregister(conn, book_id)
-            book_sharing.sync_protection(conn, book_id)
+            _unregister_deleted(conn, book_id)
     # Committed: the slow tree removal runs outside both writers, off the loop.
     await asyncio.to_thread(resolved.engine.storage.purge_deletion, staging)
     if user.is_admin:
-        log_admin_action(
-            "book_delete",
-            summary={
-                "book_id": book_id,
-                "forced_references": len(references),
-            },
-        )
+        _log_book_delete(book_id, references)
     return {"deleted": True, "book_id": book_id}
+
+
+def _deletion_references(
+    conn: sqlite3.Connection, record: book_registry.BookRecord, *,
+    force: bool, confirmed: frozenset[str] | None,
+) -> list[book_registry.BookReference]:
+    """The references a deletion revokes; rule R1 unless an admin forces it."""
+    references = book_registry._references_of(conn, record.book_id)
+    if not force:
+        book_registry.require_withdrawal_confirmation(
+            references, confirm=confirmed is not None, confirmed_referrers=confirmed,
+        )
+    return references
+
+
+def _unregister_deleted(conn: sqlite3.Connection, book_id: str) -> None:
+    """Revoke (``book_deleted``), drop the row and intent, release KB protection."""
+    book_registry._unregister(conn, book_id)
+    book_sharing.sync_protection(conn, book_id)
+
+
+def _log_book_delete(book_id: str, references: list[Any], **extra: Any) -> None:
+    log_admin_action(
+        "book_delete",
+        summary={"book_id": book_id, "forced_references": len(references), **extra},
+    )
 
 
 async def _retire_archived_book(
@@ -995,26 +1010,26 @@ async def _retire_archived_book(
     """
     if resolved.record is None:
         raise HTTPException(status_code=403, detail="This book's source is read-only.")
-    with book_sharing.shared_write() as conn:
-        record = _locked_writable(
-            conn, resolved, resolved.record, content_ok=False, registry_only=True,
-        )
-        references = book_registry._references_of(conn, record.book_id)
-        if not force:
-            book_registry.require_withdrawal_confirmation(
-                references, confirm=confirmed is not None, confirmed_referrers=confirmed,
+    expected = resolved.record
+
+    def retire() -> list[book_registry.BookReference]:
+        with book_sharing.shared_write() as conn:
+            # content_ok=False: the source was found read-only just before this
+            # writer, and no directory scan runs under the lock. Only an admin
+            # on a book still public here passes (registry_only); everyone else
+            # already has can_delete False while the source is archived.
+            record = _locked_writable(
+                conn, resolved, expected, content_ok=False, registry_only=True,
             )
-        book_registry._unregister(conn, record.book_id)
-        book_sharing.sync_protection(conn, record.book_id)
+            references = _deletion_references(conn, record, force=force, confirmed=confirmed)
+            _unregister_deleted(conn, record.book_id)
+            return references
+
+    # The registry writer runs off the loop (no runtime is bound to it here);
+    # BookWithdrawalNeedsConfirmation propagates to delete_book's R1 loop.
+    references = await asyncio.to_thread(retire)
     resolved.engine.finish_book_deletion(book_id)
-    log_admin_action(
-        "book_delete",
-        summary={
-            "book_id": book_id,
-            "forced_references": len(references),
-            "unregister_only": True,
-        },
-    )
+    _log_book_delete(book_id, references, unregister_only=True)
     return {"deleted": True, "book_id": book_id}
 
 

@@ -10,6 +10,7 @@ registration. Non-admins (the owner included) keep their refusal.
 from __future__ import annotations
 
 import hashlib
+import threading
 
 from deeptutor.book import registry as book_registry
 from deeptutor.services.workspace import ContentWorkspaceService
@@ -101,6 +102,62 @@ def test_admin_delete_of_private_archived_book_is_still_refused(archive_env):
     assert tree_hashes(source) == before
 
 
+def test_registry_write_runs_off_the_event_loop(archive_env, monkeypatch):
+    from deeptutor.book.engine import BookEngine
+
+    client, _ = archive_env
+    archived_public_book()
+    threads: dict[str, int] = {}
+    unregister = book_registry._unregister
+    finish = BookEngine.finish_book_deletion
+
+    def spy_unregister(conn, book_id):
+        threads["unregister"] = threading.get_ident()
+        return unregister(conn, book_id)
+
+    def spy_finish(self, book_id):
+        threads["finish"] = threading.get_ident()
+        return finish(self, book_id)
+
+    monkeypatch.setattr(book_registry, "_unregister", spy_unregister)
+    monkeypatch.setattr(BookEngine, "finish_book_deletion", spy_finish)
+    response = client.delete("/api/books/book:bk_archive", headers=headers("root"))
+    assert response.status_code == 200, response.text
+    # finish_book_deletion stays on the event loop; the registry writer does not.
+    assert set(threads) == {"unregister", "finish"}
+    assert threads["unregister"] != threads["finish"]
+
+
+def test_owner_listing_during_archive_re_registers_a_private_book(archive_env):
+    """Pinned behavior: listing the archived workspace re-registers early, harmlessly."""
+    client, _ = archive_env
+    source_id, source, record = archived_public_book()
+    before = tree_hashes(source)
+    assert client.delete("/api/books/book:bk_archive", headers=headers("root")).status_code == 200
+    assert book_registry.get_book(record.book_id) is None
+
+    early = listed(client, "teacher", record.book_id, source_id)
+    assert early is not None and early["visibility"] == "private"
+    assert early["can_edit"] is False and early["can_make_public"] is False
+    fresh = book_registry.get_book(record.book_id)
+    assert fresh is not None and fresh.visibility == "private"
+    assert fresh.created_by == record.created_by
+    assert tree_hashes(source) == before
+    # Old references stay revoked; the book cannot be made public while archived.
+    assert [r.reason for r in book_registry.list_unavailable_book_references("course", "c1")] == [
+        "book_deleted"
+    ]
+    for actor, workspace in (("teacher", source_id), ("teacher", ""), ("root", "")):
+        response = client.put("/api/books/book:bk_archive/visibility",
+                              headers=headers(actor, workspace), json={"visibility": "public"})
+        assert response.status_code in {403, 404}, (actor, workspace, response.text)
+    assert book_registry.get_book(record.book_id).visibility == "private"
+    # Private now: the admin's unregister-only deletion no longer applies.
+    assert client.delete("/api/books/book:bk_archive", headers=headers("root")).status_code == 404
+    assert book_registry.get_book(record.book_id) is not None
+    assert tree_hashes(source) == before
+
+
 def test_admin_delete_of_archived_book_needs_the_teacher_path_confirmation(
     archived_cited_book, teaching_http, teaching_users,
 ):
@@ -133,3 +190,24 @@ def test_admin_delete_of_archived_book_needs_the_teacher_path_confirmation(
     [revoked] = book_registry.list_unavailable_book_references("mastery_template", template_id)
     assert revoked.reason == "book_deleted"
     assert tree_hashes(store) == before
+
+
+def test_admin_force_delete_of_archived_book_is_unregister_only(
+    archived_cited_book, teaching_http,
+):
+    template_id, store = archived_cited_book
+    client = teaching_http.client
+    before = tree_hashes(store)
+
+    owner = client.delete("/api/books/book:bk_tom?force=true", headers=_auth("tom"))
+    assert owner.status_code in {403, 404}, owner.text
+    assert book_registry.get_book("bk_tom") is not None
+
+    forced = client.delete("/api/books/book:bk_tom?force=true", headers=_auth("adam"))
+    assert forced.status_code == 200, forced.text
+    assert book_registry.get_book("bk_tom") is None
+    [revoked] = book_registry.list_unavailable_book_references("mastery_template", template_id)
+    assert revoked.reason == "book_deleted"
+    assert tree_hashes(store) == before
+    book_dir = store.path_service.get_book_dir()
+    assert not [p for p in book_dir.iterdir() if p.name.startswith(".book-delete-")]
