@@ -469,7 +469,8 @@ def _validate_kb_move_journal(row: dict) -> None:
     ):
         if not isinstance(row.get(key), bool):
             raise ValueError("Invalid knowledge move backup flag")
-    if row.get("kb_id") is not None and (
+    # Recovery reads ``row["kb_id"]``: the key is required, its value may be None.
+    if "kb_id" not in row or row["kb_id"] is not None and (
         not isinstance(row["kb_id"], str) or not row["kb_id"]
     ):
         raise ValueError("Invalid knowledge move registry identity")

@@ -407,7 +407,8 @@ def _doc_ids_json(doc_ids: Sequence[str] | None) -> str | None:
 def kind_of(entry: Any) -> str:
     """Registry kind of a ``kb_config.json`` entry: a connector type or ``uploaded``."""
     kind = entry.get("type") if isinstance(entry, dict) else None
-    return str(kind) if kind in CONNECTOR_KINDS else UPLOADED_KIND
+    # An unhashable ``type`` (list/dict) must not raise from the set lookup.
+    return kind if isinstance(kind, str) and kind in CONNECTOR_KINDS else UPLOADED_KIND
 
 
 # Parsed ``kb_config.json`` payloads, re-validated against the file on every

@@ -292,13 +292,14 @@ def _census_unchanged(root: Path) -> bool:
 
 def _freeze_grants(users: list[dict[str, Any]]) -> None:
     from deeptutor.multi_user.grants import load_grant
+    from deeptutor.multi_user.models import normalize_role
 
     snapshot = json.loads(registry.get_meta(_INVENTORY_KEY))
     if snapshot["grants"] is not None:
         return
     granted: dict[str, list[str]] = {}
     for info in users:
-        if str(info.get("role") or "") == "admin":
+        if normalize_role(str(info.get("role") or "user")) == "admin":
             continue
         username = str(info.get("username") or info["id"])
         # An unreadable grant is not a complete authorization census.
