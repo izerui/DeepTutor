@@ -25,6 +25,8 @@ from deeptutor.teaching.models import ChangeEntry, KpDecision
 logger = logging.getLogger(__name__)
 
 _TIMEOUT_SECONDS = 20.0
+#: Longest model-written reason kept on a suggestion.
+_MAX_REASON_LEN = 200
 
 _SYSTEM_PROMPT = (
     "You compare two versions of a course outline written by a teacher. "
@@ -160,7 +162,7 @@ def _merge_answer(
         suggestion.suggested = kind  # type: ignore[assignment]
         suggestion.from_id = old_id
         suggestion.from_name = removed[old_id].name
-        suggestion.reason = str(pair.get("reason") or "")[:200]
+        suggestion.reason = str(pair.get("reason") or "")[:_MAX_REASON_LEN]
     kept_ids = {new.id for _old, new in diff.kept}
     for item in answer.get("kept") or []:
         if not isinstance(item, dict):
@@ -168,7 +170,7 @@ def _merge_answer(
         kp_id, kind = str(item.get("id") or ""), str(item.get("kind") or "")
         if kp_id in kept_ids and kind in ("unchanged", "redefined"):
             by_id[kp_id].suggested = kind  # type: ignore[assignment]
-            by_id[kp_id].reason = str(item.get("reason") or "")[:200]
+            by_id[kp_id].reason = str(item.get("reason") or "")[:_MAX_REASON_LEN]
     return base
 
 
@@ -180,7 +182,7 @@ async def suggest_changes(diff: OutlineDiff, *, language: str = "en") -> list[Kp
     try:
         answer = await _ask_model(diff, language)
     except Exception:
-        logger.debug("_ask_model raised; falling back to defaults", exc_info=True)
+        logger.warning("_ask_model raised; falling back to defaults", exc_info=True)
         return base
     if not isinstance(answer, dict):
         return base
