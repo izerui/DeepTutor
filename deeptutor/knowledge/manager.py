@@ -1994,7 +1994,8 @@ class KnowledgeBaseManager:
             if path.name.startswith(DELETION_STAGING_PREFIX) and path.is_dir()
         )
 
-    def _deletion_committed(self, path: Path, config_names: set[str]) -> bool:
+    @staticmethod
+    def _deletion_committed(path: Path, config_names: set[str]) -> bool:
         """Whether ``path`` is the leftover of a deletion that committed.
 
         True only when the marker is readable, names a ``kb_id`` the registry no
