@@ -219,11 +219,18 @@ def test_duplicate_external_name_first_wins(monkeypatch) -> None:
 
 def test_active_loop_capabilities_includes_external(monkeypatch) -> None:
     from deeptutor.capabilities import registry
+    from deeptutor.capabilities.setup import binding as setup_binding
 
     def fake_entry_points(*, group: str):
         return [_ep("demo_loop", lambda: _DemoLoop)]
 
     monkeypatch.setattr(ep_module, "entry_points", fake_entry_points)
+    # Prevent the setup capability from activating via _intro_pending (which
+    # reads UI settings and install gaps) — without this the test is
+    # order-dependent: it passes when a prior test has already cached a
+    # "no gaps" result, but fails when run alone because the isolated data
+    # dir has no settings → blocking gaps → intro pending → setup active.
+    monkeypatch.setattr(setup_binding, "_intro_pending", lambda _ctx: False)
 
     idle = registry.active_loop_capabilities(UnifiedContext())
     assert all(cap.name != "demo_loop" for cap in idle)
