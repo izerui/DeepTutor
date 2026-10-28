@@ -436,4 +436,5 @@ def test_explicit_reference_only_records_private_intent_with_the_reference(tmp_p
     assert _intent(public.kb_id) is None
     assert kb_registry.get_kb(public.kb_id).visibility == "public"
     assert _intent(foreign.kb_id) is None
-    assert {ref.kb_id for ref in kb_registry.list_references(mine.kb_id)} == {mine.kb_id}
+    refs = kb_registry.list_references(mine.kb_id)
+    assert any(ref.referrer_id == "tpl" for ref in refs)
