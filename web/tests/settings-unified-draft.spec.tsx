@@ -129,7 +129,13 @@ function App({ page = "workspace" }: { page?: string }) {
   );
 }
 async function ready() {
-  await waitFor(() => expect(settings.settingsLoading).toBe(false), { timeout: 10_000 });
+  // The settings store makes two sequential fetches on mount (settings + draft),
+  // each resolved mock goes through the microtask queue and triggers a setState.
+  // Flushing act drains the pending microtask chain so the component exits its
+  // loading state without relying on waitFor polling under jsdom concurrency.
+  await act(async () => {});
+  await act(async () => {});
+  expect(settings.settingsLoading).toBe(false);
 }
 const writes = (endpoint: string) =>
   mocks.fetch.mock.calls.filter(

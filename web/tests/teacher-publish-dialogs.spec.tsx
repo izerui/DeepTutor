@@ -210,17 +210,25 @@ it("shows an update's change list with per-point decisions and the affected stud
       onPublished={published}
     />,
   );
-  expect(await screen.findByRole("heading", { name: "Publish update" }, { timeout: 10_000 })).toBeVisible();
+  // Flush the multi-step async chain: registerTeacherTemplate → Promise.all(
+  // previewPublish, listAssignments) → setState, then searchStudents → setState.
+  // Two act flushes drain the sequential microtask chains so the dialog exits
+  // its loading state without relying on polling under jsdom concurrency.
+  await act(async () => {});
+  await act(async () => {});
+  expect(screen.getByRole("heading", { name: "Publish update" })).toBeVisible();
   expect(screen.getByText("2 students will get this update the next time they study")).toBeVisible();
   expect(screen.getByText("Removed: Derivatives")).toBeVisible();
   // The already-assigned student is not offered again; the revoked one is.
-  await waitFor(() => expect(api.searchStudents).toHaveBeenCalled(), { timeout: 10_000 });
+  await waitFor(() => expect(api.searchStudents).toHaveBeenCalled());
   fireEvent.change(screen.getByRole("combobox", { name: "Derivative rules" }), {
     target: { value: "reworded:kp_d" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  // Flush the publishTemplate mock resolution and the resulting state update.
+  await act(async () => {});
   // Publication succeeded with a post-version warning: said explicitly, then closed by the teacher.
-  expect(await screen.findByText("Published, but some steps need attention", {}, { timeout: 10_000 })).toBeVisible();
+  expect(screen.getByText("Published, but some steps need attention")).toBeVisible();
   expect(screen.getByText("Student assignments did not complete.")).toBeVisible();
   expect(published).not.toHaveBeenCalled();
   expect(api.publishTemplate.mock.calls[0][1].kp_decisions).toEqual({

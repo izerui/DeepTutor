@@ -61,8 +61,10 @@ it("student owner of a public book can withdraw but not publish (B2-11)", async 
     kbs: { ...sharing.kbs, private_kbs: [] },
   });
   render(<BookShareDialog book={publicBook} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
-  const btn = await screen.findByRole("button", { name: "Make private" });
-  expect(btn).toBeEnabled();
+  // Flush the bookApi.sharing mock's resolved promise and the resulting
+  // setState so the dialog exits its loading state before we query the DOM.
+  await act(async () => {});
+  expect(screen.getByRole("button", { name: "Make private" })).toBeEnabled();
 });
 it("student owner blocked from publishing a private book when can_make_public is false (B2-11)", async () => {
   fixture.sharing.mockResolvedValue({
