@@ -205,7 +205,7 @@ def test_reference_reader_is_read_only_and_failure_is_closed(tmp_path, make_user
     assert not registry.can_read_book(book, student)
 
 
-def test_cached_builtin_hook_restores_reset_map_preserving_custom_reader(tmp_path, make_user, monkeypatch):
+def test_builtin_hook_reloads_after_loader_reset_preserving_custom_reader(tmp_path, make_user, monkeypatch):
     book = _register(tmp_path)
     student = make_user("s1", role="student")
     for kind in ("course", "partner"):
@@ -233,7 +233,8 @@ def test_cached_builtin_hook_restores_reset_map_preserving_custom_reader(tmp_pat
         assert registry.can_read_book(book, student)
         assert registry.can_read_book(book, student)
         assert registry._readers["course"] is custom
-    assert len(calls) >= 2
+    # Once per loader reset, not once per read (B3-4).
+    assert len(calls) == 2
 
 
 def test_revocation_retains_owner_references_and_never_grants_access(tmp_path, make_user):

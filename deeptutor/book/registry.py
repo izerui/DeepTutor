@@ -829,7 +829,9 @@ def book_access_batch(records: Sequence[BookRecord], user: CurrentUser) -> list[
     """Read/write/link-binding decisions for many records in one read snapshot.
 
     Same rules as :func:`can_read_book`, :func:`can_write_book` and
-    :func:`kb_links_initialized`, aligned with ``records``.
+    :func:`kb_links_initialized`, aligned with ``records``. The snapshot holds
+    a SHARED lock for the whole batch, so reference readers (only reached for
+    private, non-owned records) must stay read-only and free of slow I/O.
     """
     with _read() as conn:
         if conn is None:

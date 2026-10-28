@@ -451,7 +451,12 @@ async def test_fanout_rechecks_bound_authority_after_withdrawal(as_user, revoke,
             # The cached authorization expires after its TTL (B3-1).
             now[0] += router._STREAM_AUTH_TTL
             await stream.book_event("private", {})
-            await _forwarded()
+            # Forwarding returns on the failed re-check: wait for that, not a delay.
+            for _ in range(1000):
+                if all(task.done() for task in fanout._tasks.values()):
+                    break
+                await asyncio.sleep(0.005)
+            assert all(task.done() for task in fanout._tasks.values())
             assert [f["metadata"]["kind"] for f in frames] == ["before"]
         finally:
             await fanout.close()

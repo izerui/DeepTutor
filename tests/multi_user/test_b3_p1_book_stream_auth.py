@@ -50,9 +50,9 @@ async def _until(predicate, timeout=5.0):
     return True
 
 
-async def _settle(rounds=20):
-    for _ in range(rounds):
-        await asyncio.sleep(0.005)
+async def _stopped(fanout) -> bool:
+    """Forwarding returns once authorization fails: a deterministic sync point."""
+    return await _until(lambda: all(task.done() for task in fanout._tasks.values()))
 
 
 def _kinds(frames):
@@ -112,7 +112,7 @@ async def test_made_private_stops_forwarding_once_the_ttl_has_passed(
             clock.now += TTL + 0.01
             await stream.book_event("after", {})
             await stream.book_event("later", {})
-            await _settle()
+            assert await _stopped(fanout), "forwarding did not stop"
         finally:
             await fanout.close()
     assert _kinds(frames) == ["before"]
@@ -139,7 +139,7 @@ async def test_check_failure_stays_fail_closed(shared_book, as_user, clock, monk
             monkeypatch.setattr(registry, "get_book", broken)
             clock.now += TTL + 0.01
             await stream.book_event("after", {})
-            await _settle()
+            assert await _stopped(fanout), "forwarding did not stop"
         finally:
             await fanout.close()
     assert _kinds(frames) == ["before"]
