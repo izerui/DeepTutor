@@ -874,10 +874,13 @@ async def set_session_mode(path_id: str, session_id: str, body: SetSessionModeRe
     store = LearningStore()
     progress = await asyncio.to_thread(store.load, path_id)
 
-    if requested == "outline" and progress is not None and progress.origin is not None:
-        from deeptutor.teaching.instances import OUTLINE_LOCKED
+    if requested == "outline":
+        from deeptutor.teaching.instances import OutlineLockedError, ensure_outline_mutable
 
-        raise HTTPException(status_code=403, detail=OUTLINE_LOCKED)
+        try:
+            await asyncio.to_thread(ensure_outline_mutable, path_id, store)
+        except OutlineLockedError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     has_outline = progress is not None and any(
         module.knowledge_points for module in progress.modules
