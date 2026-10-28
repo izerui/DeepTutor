@@ -61,7 +61,7 @@ vi.mock("@/hooks/useMasteryPathActivity", () => ({
   }),
 }));
 
-const mockFetchTopic = vi.fn(() => new Promise(() => {}));
+const mockFetchTopic = vi.fn((..._args: unknown[]) => new Promise(() => {}));
 vi.mock("@/lib/learning-api", () => ({
   fetchMasteryTopic: (...args: unknown[]) => mockFetchTopic(...args),
   fetchMasteryTopicSessions: vi.fn(() => Promise.resolve([])),
