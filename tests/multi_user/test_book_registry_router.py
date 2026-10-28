@@ -287,8 +287,7 @@ async def test_final_locked_target_rejects_changes(owned, as_user, monkeypatch, 
     before = snapshot(resolved.engine.storage.book_root("bk_one"))
     original = sharing.shared_write
 
-    @contextmanager
-    def changed_before_lock(**kwargs):
+    def mutate():
         with original() as conn:
             if change == "owner":
                 conn.execute("UPDATE book_registry SET created_by='other' WHERE book_id='bk_one'")
@@ -296,10 +295,24 @@ async def test_final_locked_target_rejects_changes(owned, as_user, monkeypatch, 
                 conn.execute("UPDATE book_registry SET base_dir=base_dir || '/moved' WHERE book_id='bk_one'")
             else:
                 conn.execute("UPDATE book_registry SET created_at='replacement' WHERE book_id='bk_one'")
+
+    @contextmanager
+    def changed_before_lock(**kwargs):
+        mutate()
         with original(**kwargs) as conn:
             yield conn
 
+    original_read = sharing.shared_read
+
+    @contextmanager
+    def changed_before_read():
+        # The GETs read a snapshot (B3-3); the change commits just before it.
+        mutate()
+        with original_read() as conn:
+            yield conn
+
     monkeypatch.setattr(sharing, "shared_write", changed_before_lock)
+    monkeypatch.setattr(sharing, "shared_read", changed_before_read)
     with as_user("owner", role="teacher"):
         with pytest.raises(HTTPException) as denied:
             if operation == "visibility":

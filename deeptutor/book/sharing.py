@@ -36,6 +36,9 @@ def shared_write(
     same transaction, after the two registries in lock order. They are held to
     the same DELETE-journal / FULL-synchronous contract so one COMMIT covers
     every file.
+
+    Isomorphic to ``teaching.store._joint_write`` (lock order, DELETE/FULL
+    contract, recovery before ROLLBACK): when changing one, check the other.
     """
     if getattr(books._writer_state, "active", False):
         raise books.BookRegistryError("Cannot enter sharing from an active book writer.")
@@ -99,6 +102,34 @@ def shared_write(
         finally:
             books._writer_state.active = False
             conn.close()
+
+
+@contextmanager
+def shared_read() -> Iterator[sqlite3.Connection | None]:
+    """A consistent read-only snapshot over both registries, without writers.
+
+    Opens the KB database (main) and attaches the book database (``books``),
+    both ``mode=ro``, inside one deferred ``BEGIN``: no process-local writer
+    lock, no schema initialization, never creates a file. Yields ``None`` when
+    either database does not exist yet (nothing is registered there).
+
+    Under DELETE journals the read transaction holds SHARED locks, which keep
+    writers from committing: run only a few queries inside, no file I/O.
+    """
+    book_path, kb_path = books._db_path(), kbs._db_path()
+    if not (book_path.exists() and kb_path.exists()):
+        yield None
+        return
+    conn = sqlite3.connect(
+        f"{kb_path.resolve().as_uri()}?mode=ro", uri=True, timeout=30, isolation_level=None,
+    )
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("ATTACH DATABASE ? AS books", (f"{book_path.resolve().as_uri()}?mode=ro",))
+        conn.execute("BEGIN")
+        yield conn
+    finally:
+        conn.close()
 
 
 def transfer_ownership(from_user_id: str, to_user_id: str) -> list[books.BookRecord]:

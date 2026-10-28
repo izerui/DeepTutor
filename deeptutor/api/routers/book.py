@@ -9,8 +9,8 @@ create / confirm / compile / read / delete + a per-book event stream.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from contextlib import ExitStack
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import ExitStack, contextmanager
 import hashlib
 import logging
 from pathlib import Path
@@ -988,23 +988,41 @@ def _locked_writable(
     return current
 
 
+@contextmanager
+def _sharing_snapshot(
+    resolved: ResolvedBook, expected: book_registry.BookRecord,
+) -> Iterator[tuple[sqlite3.Connection, book_registry.BookRecord]]:
+    """Read-only joint snapshot for the sharing GETs; never waits on writers."""
+    with book_sharing.shared_read() as conn:
+        if conn is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This location has no registered book identity. Reload and retry.",
+            )
+        yield conn, _locked_writable(conn, resolved, expected)
+
+
 @router.get("/books/{book_id}/sharing")
 async def get_book_sharing(book_id: str) -> dict[str, Any]:
-    resolved, expected = _registered_writable(book_id)
-    try:
-        with book_sharing.shared_write() as conn:
-            record = _locked_writable(conn, resolved, expected)
-            return {
-                "book_id": record.book_id,
-                "ref": record.ref,
-                "visibility": record.visibility,
-                "can_set_visibility": resolved.capabilities()["can_set_visibility"],
-                "can_make_public": resolved.capabilities()["can_make_public"],
-                "kbs": book_sharing._plan(conn, record).to_dict(),
-                **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
-            }
-    except book_registry.BookRegistryError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    def read() -> dict[str, Any]:
+        resolved, expected = _registered_writable(book_id)
+        capabilities = resolved.capabilities()
+        try:
+            with _sharing_snapshot(resolved, expected) as (conn, record):
+                return {
+                    "book_id": record.book_id,
+                    "ref": record.ref,
+                    "visibility": record.visibility,
+                    "can_set_visibility": capabilities["can_set_visibility"],
+                    "can_make_public": capabilities["can_make_public"],
+                    "kbs": book_sharing._plan(conn, record).to_dict(),
+                    **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
+                }
+        except book_registry.BookRegistryError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # Registry reads and the manifest/archive checks stay off the event loop.
+    return await asyncio.to_thread(read)
 
 
 @router.put("/books/{book_id}/visibility")
@@ -1061,13 +1079,15 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 
 @router.get("/books/{book_id}/references")
 async def get_book_references(book_id: str) -> dict[str, Any]:
-    resolved, expected = _registered_writable(book_id)
-    with book_sharing.shared_write() as conn:
-        record = _locked_writable(conn, resolved, expected)
-        return {
-            "book_id": record.book_id, "ref": record.ref,
-            **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
-        }
+    def read() -> dict[str, Any]:
+        resolved, expected = _registered_writable(book_id)
+        with _sharing_snapshot(resolved, expected) as (conn, record):
+            return {
+                "book_id": record.book_id, "ref": record.ref,
+                **_reference_summary(record, book_registry._references_of(conn, record.book_id)),
+            }
+
+    return await asyncio.to_thread(read)
 
 
 @router.post("/books")
