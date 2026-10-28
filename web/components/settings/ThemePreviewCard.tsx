@@ -20,9 +20,21 @@ type Palette = {
   // True for translucent themes — adds a soft gradient/backdrop to convey
   // the "frosted glass" treatment visually.
   glass?: boolean;
+  // System: light page on the left, dark page on the right.
+  split?: boolean;
 };
 
 const PALETTES: Record<Theme, Palette> = {
+  // Follows the OS: snow on light systems, dark on dark systems.
+  system: {
+    bg: "#ffffff",
+    fg: "#0d0d0d",
+    card: "#242220",
+    primary: "#2563eb",
+    muted: "#f2f2f2",
+    border: "#e5e5e5",
+    split: true,
+  },
   // theme id "light" applies no class → :root Cream palette (warm parchment,
   // the default; renamed from generic "Light" to honestly signal its warmth)
   light: {
@@ -67,11 +79,12 @@ const PALETTES: Record<Theme, Palette> = {
 // text lines and an accent button. Pure SVG so it stays crisp at any
 // device pixel ratio without leaking real interactive controls.
 function MiniPreview({ palette }: { palette: Palette }) {
-  const { bg, fg, card, primary, muted, border, glass } = palette;
+  const { bg, fg, card, primary, muted, border, glass, split } = palette;
   return (
     <svg viewBox="0 0 160 96" className="block h-full w-full" aria-hidden>
       {/* Outer frame */}
       <rect x="0" y="0" width="160" height="96" rx="6" fill={bg} />
+      {split && <rect x="80" y="0" width="80" height="96" fill="#1a1918" />}
       {glass && (
         <>
           <defs>

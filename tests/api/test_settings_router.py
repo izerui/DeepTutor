@@ -1789,7 +1789,7 @@ async def test_update_ui_settings_persists_explicit_theme_and_language_defaults(
         }
     )
 
-    # When: the frontend explicitly provides the full-model default values.
+    # When: the frontend explicitly provides a palette and language.
     await settings_router.update_ui_settings(
         settings_router.UISettingsUpdate(theme="snow", language="en")
     )

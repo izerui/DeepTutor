@@ -90,7 +90,7 @@ export type {
 // ─── Domain types ─────────────────────────────────────────────────────────
 
 export type UiSettings = {
-  theme: "light" | "dark" | "glass" | "snow";
+  theme: "system" | "light" | "dark" | "glass" | "snow";
   language: AppLanguage;
   response_language: ResponseLanguage;
   code_block_theme: string;
@@ -639,7 +639,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   } = useAppShell();
 
   const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [theme, setTheme] = useState<UiSettings["theme"]>("snow");
+  const [theme, setTheme] = useState<UiSettings["theme"]>("system");
   const [language, setLanguage] = useState<UiSettings["language"]>("en");
   const [responseLanguage, setResponseLanguage] =
     useState<UiSettings["response_language"]>("en");

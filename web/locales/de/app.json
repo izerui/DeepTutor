@@ -5730,5 +5730,6 @@
   "Could not load review strategies. Try again.": "Wiederholungsstrategien konnten nicht geladen werden. Versuche es erneut.",
   "Could not save review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht gespeichert werden. Versuche es erneut.",
   "Could not duplicate review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht dupliziert werden. Versuche es erneut.",
-  "Could not delete review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht gelöscht werden. Versuche es erneut."
+  "Could not delete review strategy. Try again.": "Die Wiederholungsstrategie konnte nicht gelöscht werden. Versuche es erneut.",
+  "System follows the device's light or dark appearance.": "System folgt der hellen oder dunklen Darstellung des Geräts."
 }

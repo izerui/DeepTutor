@@ -5774,5 +5774,6 @@
   "Could not load review strategies. Try again.": "Не вдалося завантажити стратегії повторень. Спробуйте ще раз.",
   "Could not save review strategy. Try again.": "Не вдалося зберегти стратегію повторень. Спробуйте ще раз.",
   "Could not duplicate review strategy. Try again.": "Не вдалося дублювати стратегію повторень. Спробуйте ще раз.",
-  "Could not delete review strategy. Try again.": "Не вдалося видалити стратегію повторень. Спробуйте ще раз."
+  "Could not delete review strategy. Try again.": "Не вдалося видалити стратегію повторень. Спробуйте ще раз.",
+  "System follows the device's light or dark appearance.": "Система повторює світлий або темний вигляд пристрою."
 }
