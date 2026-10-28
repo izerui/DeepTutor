@@ -1,4 +1,5 @@
 import type { AuthStatus } from "@/lib/auth";
+import { isLearningShellStatus } from "@/lib/learning-shell";
 
 export interface SettingsAccess {
   /** False until the backend has resolved the runtime auth mode and account. */
@@ -9,6 +10,12 @@ export interface SettingsAccess {
   showLearnerOnly: boolean;
   /** Ordinary standard/custom accounts may act as authorized guardians. */
   showGuardianOnly: boolean;
+  /**
+   * A learning policy is in effect: the backend default-denies every settings
+   * route except the caller's own UI preferences, so only the pages that work
+   * on that surface are offered (B3-P13). Absent means no learning policy.
+   */
+  learningShell?: boolean;
 }
 
 export const PENDING_SETTINGS_ACCESS: SettingsAccess = {
@@ -16,6 +23,7 @@ export const PENDING_SETTINGS_ACCESS: SettingsAccess = {
   hideAdminOnly: true,
   showLearnerOnly: false,
   showGuardianOnly: false,
+  learningShell: false,
 };
 
 /** Convert the backend's account identity into the settings visibility model. */
@@ -37,5 +45,6 @@ export function settingsAccessFromAuthStatus(
     showGuardianOnly:
       ordinaryAuthenticatedUser &&
       (authStatus.preset === "standard" || authStatus.preset === "custom"),
+    learningShell: isLearningShellStatus(authStatus),
   };
 }

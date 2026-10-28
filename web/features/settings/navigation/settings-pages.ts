@@ -119,7 +119,21 @@ const extraPages: SettingsLeaf[] = [
   },
 ]
 
+/**
+ * The settings pages a learning account can actually use: interface/response
+ * language and appearance (saved through PUT /api/settings/ui, the one
+ * settings write on the learner surface), the self-service learner profile
+ * (/api/auth) and archived chats (/api/sessions). Every other page reads or
+ * writes routes the backend denies to learners (B3-P13).
+ */
+export const LEARNER_SETTINGS_PAGES = new Set(['general', 'appearance', 'learner-profile', 'archive'])
+
 export function visibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
+  const pages = allVisibleSettingsPages(access)
+  return access.learningShell ? pages.filter(page => LEARNER_SETTINGS_PAGES.has(page.key)) : pages
+}
+
+function allVisibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
   return [
     ...extraPages,
     ...SETTINGS_CATEGORIES.filter(category => isSettingsCategoryVisible(category, access))

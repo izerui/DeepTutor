@@ -43,6 +43,7 @@ import {
 } from "@/lib/knowledge-helpers";
 import { useKnowledgeProgress } from "@/hooks/useKnowledgeProgress";
 import { useKnowledgeHistory } from "@/hooks/useKnowledgeHistory";
+import { learningShellActive } from "@/lib/learning-shell";
 
 const DEFAULT_PROVIDER_FALLBACK: RagProviderSummary[] = [
   {
@@ -99,12 +100,20 @@ export function useKnowledgeBases() {
       if (showSpinner) setLoading(true);
       setError(null);
       try {
+        // Engine catalog and upload policy sit outside the learner surface
+        // (403); a learning account only reads shared knowledge bases, so it
+        // gets the read-only page without provider options (B3-P13).
+        const learner = await learningShellActive();
         const [kbList, providerList, policy] = await Promise.all([
           listKnowledgeBases({ force: opts?.force }),
-          listRagProviders({ force: opts?.force }),
-          getKnowledgeUploadPolicy({ force: opts?.force }).catch(
-            () => DEFAULT_UPLOAD_POLICY,
-          ),
+          learner
+            ? Promise.resolve(null)
+            : listRagProviders({ force: opts?.force }),
+          learner
+            ? Promise.resolve(DEFAULT_UPLOAD_POLICY)
+            : getKnowledgeUploadPolicy({ force: opts?.force }).catch(
+                () => DEFAULT_UPLOAD_POLICY,
+              ),
         ]);
         const typedKbs = kbList as KnowledgeBase[];
         setKbs(typedKbs);
@@ -112,9 +121,12 @@ export function useKnowledgeBases() {
         // Keep the array reference stable across the 4s indexing poll when
         // nothing changed, so consumers keyed on `providers` don't re-fire.
         setProviders((prev) => {
-          const next = providerList.length
-            ? providerList
-            : DEFAULT_PROVIDER_FALLBACK;
+          const next =
+            providerList === null
+              ? []
+              : providerList.length
+                ? providerList
+                : DEFAULT_PROVIDER_FALLBACK;
           return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
         });
 

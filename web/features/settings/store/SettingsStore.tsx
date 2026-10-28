@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 import type { CodeBlockThemeId } from "@/components/common/code-block-themes";
 import {
   normalizeCodeBlockTheme,
+  readStoredLanguage,
+  readStoredResponseLanguage,
   writeStoredCodeBlockShowLineNumbers,
   writeStoredCodeBlockTheme,
   writeStoredCodeBlockWrapLongLines,
@@ -29,7 +31,8 @@ import { asJsonOrThrow } from "@/shared/api/client";
 import { invalidateLLMOptionsCache } from "@/lib/llm-options";
 import { setModelReasoningEffort } from "@/lib/reasoning-effort";
 import { applyExtensionPayload } from "@/lib/settings-extensions";
-import { setTheme as applyThemePreference } from "@/lib/theme";
+import { getStoredTheme, setTheme as applyThemePreference } from "@/lib/theme";
+import { learningShellActive } from "@/lib/learning-shell";
 import {
   detachProfileConnection,
   modelTestKey,
@@ -756,6 +759,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // can re-run it without remounting the provider.
   const loadSettings = useCallback(async () => {
     setSettingsError(null);
+    // A learning account cannot read the settings document, its parked draft
+    // or system status (all 403). Its pages only edit its own interface
+    // preferences, which this browser already holds; saving still goes through
+    // PUT /api/settings/ui, the settings write the learner surface allows.
+    if (await learningShellActive()) {
+      setTheme(getStoredTheme() ?? "snow");
+      setLanguage(readStoredLanguage());
+      setResponseLanguage(readStoredResponseLanguage());
+      setCatalogEditable(false);
+      return;
+    }
     let settingsLoaded = false;
     try {
       const settingsResponse = await apiFetch(apiUrl("/api/settings"));

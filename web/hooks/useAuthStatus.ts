@@ -74,7 +74,11 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     authenticated: Boolean(status?.authenticated),
     isAdmin: status?.role === "admin",
     isTeacher: Boolean(status?.is_teacher) || status?.role === "admin",
-    allowPrivateKb: status?.role !== "student" || canCreateKnowledgeBases(status?.student_policy),
+    // Learning accounts cannot create knowledge bases (the KB write routes are
+    // outside their surface), so they get the read-only viewer (B3-P13).
+    allowPrivateKb:
+      !status?.learning_policy &&
+      (status?.role !== "student" || canCreateKnowledgeBases(status?.student_policy)),
     // A failed status read (null) hides nothing; the backend gate decides.
     allowPersonalMastery: status?.student_policy?.allow_personal_mastery !== false,
     userId:

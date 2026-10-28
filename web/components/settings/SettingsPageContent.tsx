@@ -231,7 +231,14 @@ export default function SettingsPageContent({ section }: { section: string }) {
         scroll: false,
       });
   }, [key, section, router]);
+  // Learning accounts are sent to a page they can use instead of an
+  // "unavailable" dead end (B3-P13).
+  const redirectLearner = access.resolved && access.learningShell && !page;
+  useEffect(() => {
+    if (redirectLearner) router.replace("/settings/general");
+  }, [redirectLearner, router]);
   if (!access.resolved) return loading();
+  if (redirectLearner) return loading();
   if (settingsLoading) return loading();
   if (!page)
     return (
