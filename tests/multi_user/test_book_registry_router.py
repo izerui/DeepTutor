@@ -150,7 +150,9 @@ async def test_local_collision_management_denied_but_delete_is_local(owned, as_u
             assert (await router.delete_book("bk_one"))["deleted"]
             assert local_bus._closed and not bus._closed
             await get_book_stream("bk_one", storage=canonical.engine.storage).book_event("live", {})
-            await asyncio.sleep(0)
+            # Socket authorization runs in a worker thread (B3-1).
+            for _ in range(20):
+                await asyncio.sleep(0.005)
             assert frames[-1]["metadata"]["kind"] == "live"
             assert (await router.get_book("book:bk_one"))["progress"]["current_page_id"] == "pg_one"
         finally:

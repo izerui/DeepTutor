@@ -30,6 +30,12 @@ def _write(book_id="bk_one", *, title="Canonical", refs=()):
     return book
 
 
+async def _forwarded():
+    """Socket authorization runs in a worker thread (B3-1); let forwarding settle."""
+    for _ in range(20):
+        await asyncio.sleep(0.005)
+
+
 def _choice(book_id):
     with registry._read() as conn:
         if conn is None or not explicit_choice(conn, book_id, schema="main"):
@@ -412,7 +418,7 @@ async def test_repaired_storage_creation_freezes_d22_without_scanning(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("revoke", ["visibility", "reference"])
-async def test_fanout_rechecks_bound_authority_after_withdrawal(as_user, revoke):
+async def test_fanout_rechecks_bound_authority_after_withdrawal(as_user, revoke, monkeypatch):
     with as_user("owner", role="teacher"):
         _write()
         record = book_access.resolve_book("bk_one").record
@@ -426,6 +432,8 @@ async def test_fanout_rechecks_bound_authority_after_withdrawal(as_user, revoke)
     async def send(frame):
         frames.append(frame)
 
+    now = [1000.0]
+    monkeypatch.setattr(router, "_stream_auth_clock", lambda: now[0])
     with as_user("reader"):
         resolved = book_access.resolve_book(record.ref)
         fanout = router._SocketFanout(send)
@@ -433,15 +441,17 @@ async def test_fanout_rechecks_bound_authority_after_withdrawal(as_user, revoke)
         stream = get_book_stream(record.book_id, storage=resolved.engine.storage)
         try:
             await stream.book_event("before", {})
-            await asyncio.sleep(0)
+            await _forwarded()
             assert [f["metadata"]["kind"] for f in frames] == ["before"]
             with as_user("owner", role="teacher"):
                 if revoke == "visibility":
                     registry.set_book_visibility(record.book_id, "private")
                 else:
                     registry.remove_book_references("course", "c1")
+            # The cached authorization expires after its TTL (B3-1).
+            now[0] += router._STREAM_AUTH_TTL
             await stream.book_event("private", {})
-            await asyncio.sleep(0)
+            await _forwarded()
             assert [f["metadata"]["kind"] for f in frames] == ["before"]
         finally:
             await fanout.close()
@@ -476,13 +486,13 @@ async def test_same_id_fanout_replay_and_engine_deletion_are_location_bound(as_u
         try:
             local_fanout.attach_book("bk_one", local)
             shared_fanout.attach_book("bk_one", shared)
-            await asyncio.sleep(0)
+            await _forwarded()
             assert [f["metadata"]["kind"] for f in local_frames] == ["local"]
             assert [f["metadata"]["kind"] for f in shared_frames] == ["canonical"]
             assert local.engine.delete_book("bk_one")
             assert local_bus._closed and not canonical_bus._closed
             await get_book_stream("bk_one", storage=canonical.engine.storage).book_event("still-live", {})
-            await asyncio.sleep(0)
+            await _forwarded()
             assert [f["metadata"]["kind"] for f in shared_frames] == ["canonical", "still-live"]
             assert canonical.engine.load_book("bk_one") is not None
         finally:

@@ -1785,6 +1785,12 @@ def _serialize_event(event) -> dict[str, Any]:
     }
 
 
+#: A socket re-checks a book's authority at most once per this many seconds;
+#: after a revocation it forwards events only until the cached result expires.
+_STREAM_AUTH_TTL = 1.0
+_stream_auth_clock: Callable[[], float] = time.monotonic
+
+
 class _SocketFanout:
     """Forwards several buses into one socket, at most one task per bus.
 
@@ -1803,7 +1809,7 @@ class _SocketFanout:
 
     def attach(
         self, bus: StreamBus, *, after_seq: int = 0,
-        authorized: Callable[[], bool] | None = None,
+        authorized: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         key = id(bus)
         existing = self._tasks.get(key)
@@ -1821,7 +1827,7 @@ class _SocketFanout:
         storage = getattr(resolved.engine, "storage", None) or resolved.learning
         location = str(storage.path_service.get_book_dir().resolve())
 
-        def authorized() -> bool:
+        def check() -> bool:
             try:
                 if record is not None:
                     current = book_registry.get_book(record.book_id)
@@ -1837,16 +1843,34 @@ class _SocketFanout:
                 logger.warning("Book stream authorization unavailable", exc_info=True)
                 return False
 
+        checked_at: float | None = None
+        allowed = False
+
+        async def authorized() -> bool:
+            # Hundreds of events per compile: reuse a check for the TTL and run
+            # the registry/manifest reads in a worker thread. Fails closed.
+            nonlocal checked_at, allowed
+            now = _stream_auth_clock()
+            if checked_at is not None and now - checked_at < _STREAM_AUTH_TTL:
+                return allowed
+            try:
+                allowed = await asyncio.to_thread(check)
+            except Exception:
+                logger.warning("Book stream authorization unavailable", exc_info=True)
+                allowed = False
+            checked_at = now
+            return allowed
+
         self.attach(
             get_book_bus(book_id, storage=storage), after_seq=after_seq, authorized=authorized,
         )
 
     async def _forward(
         self, bus: StreamBus, *, after_seq: int,
-        authorized: Callable[[], bool] | None = None,
+        authorized: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         async for event in bus.subscribe(after_seq=after_seq):
-            if authorized is not None and not authorized():
+            if authorized is not None and not await authorized():
                 return
             if event.source != BOOK_SOURCE:
                 continue
