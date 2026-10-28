@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import { apiFetch, apiUrl } from "@/lib/api";
-import { learningShellActive } from "@/lib/learning-shell";
 import {
   getStoredTheme,
   getSystemTheme,
@@ -139,9 +138,6 @@ export function AppShellProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) setLanguageReady(true);
       }, 1_500);
       try {
-        // Learning accounts cannot read saved UI settings (403): keep the
-        // browser's own default, as for an offline backend (B3-P13).
-        if (await learningShellActive()) return;
         const response = await apiFetch(apiUrl("/api/settings/ui"), {
           signal: controller.signal,
           skipAuthRedirect: true,

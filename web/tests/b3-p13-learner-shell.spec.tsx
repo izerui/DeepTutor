@@ -228,7 +228,6 @@ describe("B3-P13 learner shell", () => {
     await flush();
     expect(deniedRequests()).toEqual([]);
     expect(requested).toContain("/api/auth/status");
-    expect(deniedRequests()).toEqual([]);
     expect(container).toBeEmptyDOMElement();
   });
 

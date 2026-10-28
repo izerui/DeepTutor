@@ -267,9 +267,10 @@ export default function ChatWorkspace() {
   const { setActiveSessionId, language: appLanguage } = useAppShell();
   // Learning accounts cannot reach partners or partner groups (the backend
   // strips partner_id from their turns and 403s the lists), so the composer
-  // does not offer them (B3-P13).
-  const { learningPolicy } = useAuthStatus();
-  const partnersOffered = learningPolicy === null;
+  // does not offer them (B3-P13). Held back until the account is known so a
+  // learner never sees the entries flash in and out.
+  const { learningPolicy, loading: authStatusLoading } = useAuthStatus();
+  const partnersOffered = !authStatusLoading && learningPolicy === null;
 
   const {
     state,

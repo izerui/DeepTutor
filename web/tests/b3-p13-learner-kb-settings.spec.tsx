@@ -2,10 +2,14 @@
  * B3-P13 follow-up: the knowledge-base page and the settings surface must not
  * request routes the learner surface denies (auth.py require_learning_surface):
  * GET /api/knowledge-bases/rag-providers and /supported-file-types (not in
- * _LEARNER_KB_READ_ROUTES), GET /api/settings, GET /api/settings/draft,
- * GET /api/settings/ui, GET /api/system/status. Settings stays reachable for
- * the sections a learner can use (language, appearance, learner profile,
- * archived chats); everything else is hidden and redirected.
+ * _LEARNER_KB_READ_ROUTES), GET /api/settings, GET /api/settings/draft and
+ * GET /api/system/status. GET /api/settings/ui is on the public router and is
+ * NOT denied, so the app shell keeps reading it for learners too. Settings
+ * stays reachable for the sections a learner can use (language, appearance,
+ * learner profile, archived chats); everything else is hidden and redirected.
+ *
+ * The real learner gate (@/lib/learning-shell) is exercised: only the HTTP
+ * layer is mocked, and /api/auth/status carries the learning_policy.
  */
 import { act, cleanup, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,12 +18,6 @@ const fixture = vi.hoisted(() => ({
   learner: false,
   calls: [] as string[],
   replace: vi.fn(),
-}));
-
-vi.mock("@/lib/learning-shell", () => ({
-  isLearningShellStatus: (status: { learning_policy?: unknown } | null | undefined) =>
-    Boolean(status?.learning_policy),
-  learningShellActive: async () => fixture.learner,
 }));
 
 function json(body: unknown, status = 200): Response {
@@ -52,6 +50,8 @@ vi.mock("@/lib/api", () => ({
         preset: fixture.learner ? "learner" : "standard",
         learning_policy: fixture.learner ? LEARNER_POLICY : null,
       });
+    // Public router: answered for everyone, learners included.
+    if (path === "/api/settings/ui") return json({ language: "uk", response_language: "uk" });
     if (fixture.learner && path !== "/api/knowledge-bases" && path !== "/api/knowledge-bases/list")
       return json({ detail: "denied" }, 403);
     if (path === "/api/knowledge-bases" || path === "/api/knowledge-bases/list") return json([]);
@@ -61,7 +61,6 @@ vi.mock("@/lib/api", () => ({
     if (path === "/api/settings")
       return json({ ui: { theme: "dark", language: "en", response_language: "en" } });
     if (path === "/api/settings/draft") return json({ draft: null });
-    if (path === "/api/settings/ui") return json({ language: "uk", response_language: "uk" });
     return json({});
   }),
 }));
@@ -87,7 +86,7 @@ beforeEach(async () => {
 afterEach(() => cleanup());
 
 const DENIED_KB = ["/api/knowledge-bases/rag-providers", "/api/knowledge-bases/supported-file-types"];
-const DENIED_SETTINGS = ["/api/settings", "/api/settings/draft", "/api/settings/ui", "/api/system/status"];
+const DENIED_SETTINGS = ["/api/settings", "/api/settings/draft", "/api/system/status"];
 
 describe("B3-P13 knowledge-base page", () => {
   it("a learner loads knowledge bases without provider or upload-policy requests", async () => {
@@ -194,7 +193,7 @@ describe("B3-P13 settings surface", () => {
     vi.doUnmock("@/features/settings/store/SettingsStore");
   });
 
-  it("the app shell does not fetch saved UI settings for a learner", async () => {
+  it("the app shell still adopts the public saved UI language for a learner", async () => {
     fixture.learner = true;
     vi.doUnmock("@/context/AppShellContext");
     const { AppShellProvider, useAppShell } = await import("@/context/AppShellContext");
@@ -210,6 +209,9 @@ describe("B3-P13 settings surface", () => {
     await waitFor(() =>
       expect(screen.getByTestId("language")).toHaveAttribute("data-ready", "true"),
     );
-    expect(fixture.calls).not.toContain("/api/settings/ui");
+    expect(fixture.calls).toContain("/api/settings/ui");
+    expect(screen.getByTestId("language")).toHaveTextContent("uk");
+    // No auth-status round-trip in front of it: the shell asks exactly as before.
+    expect(fixture.calls).not.toContain("/api/auth/status");
   });
 });
