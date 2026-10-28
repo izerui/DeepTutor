@@ -46,6 +46,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 import logging
+from pathlib import Path
 import time
 from typing import Any
 
@@ -406,12 +407,17 @@ class BookEngine:
         return deleted
 
     @contextmanager
-    def recoverable_deletion(self, book_id: str) -> Iterator[bool]:
-        """Finalize runtime effects only after the enclosing registry commit."""
+    def recoverable_deletion(self, book_id: str) -> Iterator[Path | None]:
+        """Stage the book aside; finalize runtimes only after the enclosing commit.
+
+        Yields the staging directory (``None``: no such book). Runtime
+        finalization stays on the event loop; the caller purges the staging
+        directory with ``storage.purge_deletion`` outside every lock.
+        """
         require_content_writable(self.storage)
-        with self.storage.recoverable_deletion(book_id) as deleted:
-            yield deleted
-        if deleted:
+        with self.storage.recoverable_deletion(book_id) as staging:
+            yield staging
+        if staging is not None:
             self.finish_book_deletion(book_id)
 
     def finish_book_deletion(self, book_id: str) -> None:

@@ -876,28 +876,34 @@ async def delete_book(
     published teacher path cites the book, the first request answers a
     counts-only 409 and nothing changes; a confirmation only covers the paths
     whose counts were shown (``expected_*``), otherwise fresh counts return.
-    The deletion stays on the event loop (its runtime finalization is bound
-    to it); only the teaching-store counting runs in a worker thread.
+    The registry transaction and the rename aside stay on the event loop
+    (runtime finalization is bound to it); the teaching-store counting and
+    the removal of the staged tree run in worker threads.
     """
     from deeptutor.teaching.access import (
-        WITHDRAWAL_ROUNDS, withdrawal_refusal, withdrawal_unsettled,
+        WITHDRAWAL_ROUNDS, _refusal, withdrawal_confirmation_detail, withdrawal_unsettled,
     )
 
     if force:
         return await _delete_book(book_id, force=True, confirmed=None)
     confirmed: frozenset[str] | None = None
+    last: dict[str, Any] | None = None
     for _round in range(WITHDRAWAL_ROUNDS):
         try:
             return await _delete_book(book_id, force=False, confirmed=confirmed)
         except book_registry.BookWithdrawalNeedsConfirmation as exc:
             confirmed = frozenset(exc.referrer_ids)
-            refusal = await asyncio.to_thread(
-                withdrawal_refusal, confirmed, confirm=confirm, expected_paths=expected_paths,
-                expected_students=expected_students, resource="book",
+            detail = await asyncio.to_thread(
+                withdrawal_confirmation_detail, confirmed, resource="book",
+            )
+            refusal = _refusal(
+                detail, confirm=confirm, expected_paths=expected_paths,
+                expected_students=expected_students,
             )
             if refusal is not None:
                 raise HTTPException(status_code=409, detail=refusal) from exc
-    raise HTTPException(status_code=409, detail=withdrawal_unsettled("book"))
+            last = detail or last
+    raise HTTPException(status_code=409, detail=withdrawal_unsettled("book", last=last))
 
 
 async def _delete_book(
@@ -909,8 +915,8 @@ async def _delete_book(
     if force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
     references = []
-    # Recovery stays inside the writer: failures restore before ROLLBACK;
-    # success finalizes runtimes/buses only after COMMIT.
+    # Recovery stays inside the writer: failures rename the book back before
+    # ROLLBACK; success finalizes runtimes/buses only after COMMIT.
     recovery = ExitStack()
     with book_sharing.shared_write(recovery=recovery) as conn:
         current = book_registry._get_book(conn, book_id)
@@ -925,12 +931,14 @@ async def _delete_book(
                 book_registry.require_withdrawal_confirmation(
                     references, confirm=confirmed is not None, confirmed_referrers=confirmed,
                 )
-        deleted = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
-        if not deleted:
+        staging = recovery.enter_context(resolved.engine.recoverable_deletion(book_id))
+        if staging is None:
             raise HTTPException(status_code=404, detail="Book not found")
         if record is not None:
             book_registry._unregister(conn, book_id)
             book_sharing.sync_protection(conn, book_id)
+    # Committed: the slow tree removal runs outside both writers, off the loop.
+    await asyncio.to_thread(resolved.engine.storage.purge_deletion, staging)
     if user.is_admin:
         log_admin_action(
             "book_delete",

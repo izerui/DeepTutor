@@ -48,6 +48,9 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+#: Hidden sibling holding a book while its deletion is pending or uncleaned.
+DELETION_STAGING_PREFIX = ".book-delete-"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Atomic JSON helpers
@@ -379,50 +382,55 @@ class BookStorage:
     # ── Delete ───────────────────────────────────────────────────────────
 
     @contextmanager
-    def recoverable_deletion(self, book_id: str) -> Iterator[bool]:
-        """Retain original bytes until the caller's database COMMIT succeeds.
+    def recoverable_deletion(self, book_id: str) -> Iterator[Path | None]:
+        """Move the book aside until the caller's database COMMIT succeeds.
 
-        The normal delete operates on a disposable copy. Even partial rmtree
-        failure cannot damage the original, which is restored by rename on
-        any exception (including one from the caller's COMMIT). No awaits may
-        occur in this scope: the engine's local writers share the event loop.
+        Inside the caller's transaction the book directory is only renamed to
+        a hidden sibling (``.book-delete-*/original``, O(1)); any exception
+        (including one from the caller's COMMIT) renames it back. Yields the
+        staging directory, or ``None`` when the book does not exist. After a
+        successful COMMIT the caller removes the staging directory outside
+        every lock with :meth:`purge_deletion` (a worker thread in async
+        routes). No awaits may occur in this scope: the engine's local writers
+        share the event loop.
         """
         root = self.book_root(book_id)
         if not root.exists():
-            yield False
+            yield None
             return
         if root.is_symlink():
             raise OSError("Cannot stage deletion of a symlinked book directory.")
-        staging = Path(tempfile.mkdtemp(prefix=".book-delete-", dir=root.parent))
-        backup = staging / "original"
-        committed = False
+        staging = Path(tempfile.mkdtemp(prefix=DELETION_STAGING_PREFIX, dir=root.parent))
+        staged = staging / "original"
         try:
-            root.rename(backup)
+            root.rename(staged)
+        except BaseException:
+            staging.rmdir()
+            raise
+        try:
+            yield staging
+        except BaseException:
             try:
-                shutil.copytree(backup, root, symlinks=True)
-                deleted = self.delete_book(book_id)
-                if not deleted:
-                    if root.exists():
-                        root.rename(staging / "partial")
-                    backup.rename(root)
-                yield deleted
-                committed = True
-            except BaseException:
-                if backup.exists():
-                    if root.exists():
-                        root.rename(staging / "partial")
-                    backup.rename(root)
-                raise
-        finally:
-            # Never destroy the only recoverable original if restoration failed.
-            # On successful COMMIT the backup is garbage, not a live book.
-            if backup.exists() and not committed:
-                logger.error("Book deletion recovery retained at %s", staging)
+                staged.rename(root)
+            except OSError:
+                # Never destroy the only copy when restoration failed.
+                logger.error("Book deletion recovery retained at %s", staging, exc_info=True)
             else:
-                try:
-                    shutil.rmtree(staging)
-                except OSError:
-                    logger.warning("Book deletion staging cleanup deferred: %s", staging, exc_info=True)
+                staging.rmdir()
+            raise
+
+    @staticmethod
+    def purge_deletion(staging: Path) -> None:
+        """Remove a committed deletion's staging directory; failures only log.
+
+        Slow (a whole book tree): call after COMMIT, outside every lock and off
+        the event loop. A leftover ``.book-delete-*`` directory holds the
+        deleted book under ``original/`` and is skipped by book listings.
+        """
+        try:
+            shutil.rmtree(staging)
+        except OSError:
+            logger.warning("Book deletion staging cleanup deferred: %s", staging, exc_info=True)
 
     def delete_book(self, book_id: str) -> bool:
         root = self.book_root(book_id)

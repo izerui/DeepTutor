@@ -164,7 +164,7 @@ async def test_local_collision_management_denied_but_delete_is_local(owned, as_u
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["false", "partial", "commit", "kb_cleanup"])
+@pytest.mark.parametrize("failure", ["commit", "kb_cleanup"])
 async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_user, monkeypatch, failure):
     resolved, _kb = owned
     store = resolved.engine.storage
@@ -175,7 +175,6 @@ async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_
     record, refs = registry.get_book("bk_one"), registry.list_book_references("bk_one")
     kb_refs = kbs.list_referenced("book", "bk_one")
     bus = get_book_bus("bk_one", storage=store)
-    original_delete = store.delete_book
     original_sync = sharing.sync_protection
     if failure == "commit":
         # A deferred FK violation fails real COMMIT after physical deletion.
@@ -188,20 +187,12 @@ async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_
                 CREATE TRIGGER reject_deletion AFTER DELETE ON book_registry
                 BEGIN INSERT INTO deletion_failure VALUES (1); END
             """)
-    elif failure == "kb_cleanup":
+    else:
         def failed_sync(conn, book_id, **kwargs):
             original_sync(conn, book_id, **kwargs)
             raise RuntimeError("synthetic KB cleanup failure")
 
         monkeypatch.setattr(sharing, "sync_protection", failed_sync)
-    else:
-        def fail_delete(_book_id):
-            (root / "manifest.json").unlink()
-            if failure == "partial":
-                raise OSError("synthetic partial deletion")
-            return False
-
-        monkeypatch.setattr(store, "delete_book", fail_delete)
     worker = asyncio.create_task(asyncio.Event().wait())
     runtime = _BookRuntime(worker=worker)
     resolved.engine._runtimes["bk_one"] = runtime
@@ -233,7 +224,6 @@ async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_
         if failure == "commit":
             with registry._write() as conn:
                 conn.execute("DROP TRIGGER reject_deletion")
-        monkeypatch.setattr(store, "delete_book", original_delete)
         monkeypatch.setattr(sharing, "sync_protection", original_sync)
         with as_user("root", role="admin"):
             assert (await router.delete_book("book:bk_one", force=True))["deleted"]
@@ -265,17 +255,19 @@ def assert_writers_locked():
 
 
 @pytest.mark.asyncio
-async def test_delete_holds_both_writers_until_filesystem_success(owned, as_user, monkeypatch):
+async def test_delete_stages_the_book_while_holding_both_writers(owned, as_user, monkeypatch):
     resolved, _kb = owned
-    original = resolved.engine.storage.delete_book
+    root = resolved.engine.storage.book_root("bk_one")
+    original = Path.rename
     checked = []
 
-    def guarded_delete(book_id):
-        assert_writers_locked()
-        checked.append(True)
-        return original(book_id)
+    def guarded_rename(path, target):
+        if path == root:
+            assert_writers_locked()
+            checked.append(True)
+        return original(path, target)
 
-    monkeypatch.setattr(resolved.engine.storage, "delete_book", guarded_delete)
+    monkeypatch.setattr(Path, "rename", guarded_rename)
     with as_user("owner", role="teacher"):
         await router.delete_book("bk_one")
     assert checked == [True]
@@ -377,10 +369,7 @@ async def test_new_reference_before_delete_lock_blocks_deletion(owned, as_user, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("phase", ["rename", "copy"])
-async def test_staging_failure_keeps_original(owned, as_user, monkeypatch, phase):
-    from deeptutor.book import storage
-
+async def test_staging_failure_keeps_original(owned, as_user, monkeypatch):
     resolved, _kb = owned
     root = resolved.engine.storage.book_root("bk_one")
     before = snapshot(root)
@@ -391,15 +380,7 @@ async def test_staging_failure_keeps_original(owned, as_user, monkeypatch, phase
             raise OSError("synthetic rename failure")
         return original(path, target)
 
-    def fail_copy(_source, target, **_kwargs):
-        Path(target).mkdir()
-        (Path(target) / "incomplete").write_text("partial")
-        raise OSError("synthetic copy failure")
-
-    if phase == "rename":
-        monkeypatch.setattr(Path, "rename", fail_rename)
-    else:
-        monkeypatch.setattr(storage.shutil, "copytree", fail_copy)
+    monkeypatch.setattr(Path, "rename", fail_rename)
     with as_user("owner", role="teacher"):
         with pytest.raises(OSError, match="synthetic"):
             await router.delete_book("bk_one")
