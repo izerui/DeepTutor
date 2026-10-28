@@ -101,7 +101,7 @@ def test_read_endpoints_do_not_wait_for_a_held_joint_writer(owned, as_user, monk
 
 
 @pytest.mark.asyncio
-async def test_read_snapshot_opens_existing_files_read_only_and_creates_nothing(owned, tmp_path):
+async def test_read_snapshot_opens_existing_files_read_only_and_creates_nothing(owned):
     with sharing.shared_read() as conn:
         assert conn is not None
         assert registry._get_book(conn, "bk_one").title == "Waves"
