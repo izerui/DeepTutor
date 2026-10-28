@@ -137,4 +137,3 @@ def _expand_to_boundary(text: str, target_end: int, boundary: Boundary, *, limit
 
 
 __all__ = ["Boundary", "ChunkSpan", "chunk_with_boundary"]
-

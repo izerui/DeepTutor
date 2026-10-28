@@ -104,16 +104,22 @@ def _tool_call_slot(buffers: dict[int, dict[str, Any]], tc_delta: Any) -> int:
     delta without one continues the last.
     """
     index = _get(tc_delta, "index")
-    if index is not None:
-        return int(index)
-    if not buffers:
-        return 0
-    last = max(buffers)
     tc_id = _get(tc_delta, "id")
-    last_id = buffers[last]["id"]
-    if tc_id and last_id and str(tc_id) != last_id:
-        return last + 1
-    return last
+    if index is not None:
+        slot = int(index)
+    elif tc_id and any(buf["id"] == str(tc_id) for buf in buffers.values()):
+        slot = next(key for key, buf in buffers.items() if buf["id"] == str(tc_id))
+    elif not buffers:
+        slot = 0
+    else:
+        last = next(reversed(buffers))
+        slot = max(buffers) + 1 if tc_id and buffers[last]["id"] else last
+    # Recency is independent of the wire index: an id-less fragment continues
+    # the last addressed call, including a resumed earlier call. Final responses
+    # use sorted slots so this bookkeeping does not reorder calls.
+    if slot in buffers:
+        buffers[slot] = buffers.pop(slot)
+    return slot
 
 
 def _accumulate_streamed_tool_call(
@@ -141,9 +147,7 @@ def _accumulate_streamed_tool_call(
         fn_args = _get(fn, "arguments")
         if fn_args:
             buffer["arguments"] += str(fn_args)
-    if not buffer["id"]:
-        buffer["id"] = f"call_{index}"
-    return buffer
+    return {**buffer, "id": buffer["id"] or f"call_{index}"}
 
 
 def _coerce_dict(value: Any) -> dict[str, Any] | None:
@@ -1086,28 +1090,6 @@ class OpenAICompatProvider(LLMProvider):
         finish_reason = "stop"
         usage: dict[str, int] = {}
 
-        def _accum_tc(tc: Any) -> None:
-            tc_index = _tool_call_slot(tc_bufs, tc)
-            buf = tc_bufs.setdefault(
-                tc_index,
-                {
-                    "id": "",
-                    "name": "",
-                    "arguments": "",
-                },
-            )
-            tc_id = _get(tc, "id")
-            if tc_id:
-                buf["id"] = str(tc_id)
-            fn = _get(tc, "function")
-            if fn is not None:
-                fn_name = _get(fn, "name")
-                if fn_name:
-                    buf["name"] = str(fn_name)
-                fn_args = _get(fn, "arguments")
-                if fn_args:
-                    buf["arguments"] += str(fn_args)
-
         for chunk in chunks:
             if isinstance(chunk, str):
                 content_parts.append(chunk)
@@ -1140,7 +1122,7 @@ class OpenAICompatProvider(LLMProvider):
                 if reasoning:
                     reasoning_parts.append(reasoning)
             for tc in (delta.tool_calls or []) if delta else []:
-                _accum_tc(tc)
+                _accumulate_streamed_tool_call(tc_bufs, tc)
 
         content = "".join(content_parts) or None
         reasoning_content = "".join(reasoning_parts) or None
@@ -1153,7 +1135,7 @@ class OpenAICompatProvider(LLMProvider):
                     name=b["name"],
                     arguments=json_repair.loads(b["arguments"]) if b["arguments"] else {},
                 )
-                for b in tc_bufs.values()
+                for _, b in sorted(tc_bufs.items())
             ],
             finish_reason=finish_reason,
             usage=usage,

@@ -196,4 +196,3 @@ def test_no_data_loss_chunks_cover_full_text(budget: int) -> None:
     )
     assert chunks[0].start == 0
     assert chunks[-1].end == len(text)
-
