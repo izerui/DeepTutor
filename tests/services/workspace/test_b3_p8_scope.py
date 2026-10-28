@@ -1,78 +1,96 @@
-"""P8 item 5 — B2-4: non-lock sqlite3.OperationalError surfaces as 500.
+"""P8 item 5: Non-lock OperationalError in the joint-write phase of workspace
+migration propagates raw (-> 500), and is NOT converted to WorkspaceError (409).
 
-When the migration write phase hits a non-lock OperationalError (e.g.
-``disk I/O error``), the exception must NOT be mapped to a retryable 409
-WorkspaceError. It should propagate as an unhandled error (500).
+Supplements ``test_migration_busy_and_validation.py`` which covers only the
+snapshot-phase non-lock error.  This file covers BOTH phases for completeness.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 
 import pytest
 
-from deeptutor.services.workspace.migration import migrate_locations
 from deeptutor.services.workspace.models import WorkspaceError
+from tests.services.workspace.test_data_scope import account as account
 
 
-def test_non_lock_operational_error_is_not_wrapped_as_workspace_error(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    """A ``disk I/O error`` during registry snapshot must not become a 409."""
+# ── Write phase (the gap identified by B2-4) ─────────────────────────
+
+
+def test_non_lock_operational_error_in_write_phase_is_not_converted(
+    account, tmp_path, monkeypatch,
+):
+    """A non-lock ``sqlite3.OperationalError`` (e.g. ``disk I/O error``)
+    raised during the joint-write commit phase must propagate as-is (-> 500)
+    rather than being wrapped in ``WorkspaceError`` (-> 409).
+    """
     from deeptutor.services.workspace import migration
 
-    source = tmp_path / "source"
-    source.mkdir()
-    destination = tmp_path / "destination"
+    workspace = account.create_workspace("DiskError")
+    destination = tmp_path / "disk-error-move"
 
-    service_stub = type("S", (), {
-        "_assert_allowed_root": staticmethod(lambda _: None),
-        "_catalog_file": lambda self: tmp_path / "catalog.db",
-        "_catalog_connection": lambda self: _noop_ctx(),
-    })()
-
-    original_snapshot = migration._registry_snapshot
-
-    def exploding_snapshot(sources):
+    def disk_error(*_args, **_kwargs):
         raise sqlite3.OperationalError("disk I/O error")
 
-    monkeypatch.setattr(migration, "_registry_snapshot", exploding_snapshot)
-
-    row = {"path": str(source), "workspace_id": "ws_test"}
-    # A non-lock OperationalError must propagate raw — NOT as WorkspaceError.
+    monkeypatch.setattr(migration, "_relocate_registry_rows", disk_error)
     with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
-        migrate_locations(service_stub, [(row, destination)])
+        with account.maintenance():
+            account.migrate_workspace(workspace["workspace_id"], str(destination))
 
 
-def test_lock_error_during_snapshot_is_wrapped_as_workspace_error(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    """A ``database is locked`` during snapshot must become a retryable WorkspaceError."""
+def test_lock_error_in_write_phase_is_converted_to_workspace_error(
+    account, tmp_path, monkeypatch,
+):
+    """Counterpart: a lock/busy error in the same write phase IS converted."""
     from deeptutor.services.workspace import migration
 
-    source = tmp_path / "source"
-    source.mkdir()
-    destination = tmp_path / "destination"
+    workspace = account.create_workspace("BusyWrite")
+    destination = tmp_path / "busy-write-move"
 
-    service_stub = type("S", (), {
-        "_assert_allowed_root": staticmethod(lambda _: None),
-        "_catalog_file": lambda self: tmp_path / "catalog.db",
-        "_catalog_connection": lambda self: _noop_ctx(),
-    })()
-
-    def locked_snapshot(sources):
+    def locked(*_args, **_kwargs):
         raise sqlite3.OperationalError("database is locked")
 
-    monkeypatch.setattr(migration, "_registry_snapshot", locked_snapshot)
+    monkeypatch.setattr(migration, "_relocate_registry_rows", locked)
+    with pytest.raises(WorkspaceError, match="(?i)migration commit"):
+        with account.maintenance():
+            account.migrate_workspace(workspace["workspace_id"], str(destination))
 
-    row = {"path": str(source), "workspace_id": "ws_test"}
-    with pytest.raises(WorkspaceError, match="locked|in use"):
-        migrate_locations(service_stub, [(row, destination)])
+
+# ── Snapshot phase (same pattern, verifying both error kinds) ────────
 
 
-import contextlib
+def test_non_lock_operational_error_in_snapshot_phase_is_not_converted(
+    account, tmp_path, monkeypatch,
+):
+    """Non-lock OperationalError in snapshot -> raw propagation (-> 500)."""
+    from deeptutor.services.workspace import migration
 
-@contextlib.contextmanager
-def _noop_ctx():
-    yield
+    workspace = account.create_workspace("DiskSnapshot")
+    destination = tmp_path / "disk-snapshot-move"
+
+    def disk_error(_sources):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(migration, "_registry_snapshot", disk_error)
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
+        with account.maintenance():
+            account.migrate_workspace(workspace["workspace_id"], str(destination))
+
+
+def test_lock_error_in_snapshot_phase_is_converted_to_workspace_error(
+    account, tmp_path, monkeypatch,
+):
+    """Lock error in snapshot -> WorkspaceError (-> 409)."""
+    from deeptutor.services.workspace import migration
+
+    workspace = account.create_workspace("BusySnapshot")
+    destination = tmp_path / "busy-snapshot-move"
+
+    def locked(_sources):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(migration, "_registry_snapshot", locked)
+    with pytest.raises(WorkspaceError, match="(?i)snapshot"):
+        with account.maintenance():
+            account.migrate_workspace(workspace["workspace_id"], str(destination))

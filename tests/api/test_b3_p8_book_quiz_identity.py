@@ -216,3 +216,81 @@ def test_quiz_uses_real_book_inputs_session_when_no_page_chat(
     entry = entries["items"][0]
     assert entry["session_id"] == "real-session"
     assert entry["session_title"] == "Source session"
+
+
+# ── P8 item 1 (integration): transfer_book_ownership + full HTTP ─────
+
+
+from contextlib import contextmanager as _cm
+
+from tests.api.test_book_shared_access import shared_env  # noqa: F401, F811
+
+
+@_cm
+def _actor_ctx(actor: str):
+    from deeptutor.api.routers import auth as auth_router
+    from deeptutor.multi_user.context import reset_current_user
+    from deeptutor.services.session import get_sqlite_session_store
+
+    token = auth_router._install_current_user(auth_router.decode_token(actor))
+    try:
+        yield get_sqlite_session_store()
+    finally:
+        reset_current_user(token)
+
+
+@pytest.mark.parametrize("actor", ["alice", "root"])
+def test_transferred_book_quiz_via_full_resolution(shared_env, actor: str) -> None:
+    """Exercises the REAL ``transfer_book_ownership`` then submits a quiz
+    through the full HTTP stack (no ``_resolve_book_or_404`` monkeypatch).
+
+    After transfer, actor's quiz attempt must land in their own overlay.
+    The original author's session store must remain untouched.
+    """
+    from deeptutor.api.routers import auth as auth_mod
+    from deeptutor.book import registry as book_reg
+    from deeptutor.book.models import Block as Blk, BookInputs as BI
+
+    client, canonical = shared_env
+
+    # Add a quiz block + legacy inputs to the canonical book.
+    book = canonical.load_book("bk_shared")
+    book.metadata["page_chat_sessions"] = {"pg_1": "author-page-chat"}
+    canonical.save_book(book)
+    canonical.save_inputs("bk_shared", BI(chat_session_id="author-legacy"))
+    page = canonical.load_page("bk_shared", "pg_1")
+    page.blocks.append(Blk(
+        id="xfer_quiz", type="quiz", status="ready",
+        payload={"questions": [{
+            "question_id": "q_xfer", "question": "Transferred?",
+            "question_type": "choice", "options": {"A": "Yes", "B": "No"},
+            "correct_answer": "A",
+        }]},
+    ))
+    canonical.save_page(page)
+
+    # Perform the actual ownership transfer.
+    teacher_id = auth_mod.decode_token("teacher").user_id
+    alice_id = auth_mod.decode_token("alice").user_id
+    book_reg.transfer_book_ownership(teacher_id, alice_id)
+
+    headers = {"Authorization": f"Bearer {actor}"}
+    resp = client.post("/api/books/quiz-attempt", headers=headers, json={
+        "book_id": "book:bk_shared", "page_id": "pg_1", "block_id": "xfer_quiz",
+        "question_id": "q_xfer", "user_answer": "A", "is_correct": True,
+        "submission_id": "xfer-attempt",
+    })
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["progress"]["quiz_attempts"]) == 1
+
+    # Actor's session store has the evidence.
+    with _actor_ctx(actor) as store:
+        entries = asyncio.run(store.list_notebook_entries(source="book"))
+        assert entries["total"] == 1
+
+    # Teacher's session store is untouched.
+    with _actor_ctx("teacher") as store:
+        assert asyncio.run(store.list_notebook_entries(source="book"))["total"] == 0
+
+    # Canonical inputs unchanged.
+    assert canonical.load_inputs("bk_shared").chat_session_id == "author-legacy"
