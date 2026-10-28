@@ -794,6 +794,12 @@ class LearningProgress(BaseModel):
     qualitative_mastery: dict[str, bool] = Field(default_factory=dict)
     knowledge_types: dict[str, KnowledgeType] = Field(default_factory=dict)
     lesson_evidence: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    # Objective-scoped packets that authorize assessment, kept apart from the
+    # single ``lesson_evidence`` slot so a later focus/teaching preparation
+    # (which overwrites that slot) cannot invalidate an assessment-bound packet.
+    # Only objective-scoped packets are stored here; assessment falls back to
+    # ``lesson_evidence`` when no preserved packet exists.
+    assessment_evidence: dict[str, dict[str, Any]] = Field(default_factory=dict)
     source_grounded: bool = False
     # Exact pages authorized for learner display, kept with the native path.
     # A private retrieval or lesson packet is not a public exposure receipt.
