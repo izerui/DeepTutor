@@ -236,9 +236,9 @@ SEARCH_PROVIDERS: tuple[SearchProviderSpec, ...] = (
     SearchProviderSpec(
         name="you",
         label="You.com",
-        requires_api_key=False,
+        requires_api_key=True,
         env_keys=("YDC_API_KEY", "SEARCH_API_KEY"),
-        hint="free tier, no key · key for more",
+        hint="You.com Search API key",
     ),
     SearchProviderSpec(
         name="searxng",

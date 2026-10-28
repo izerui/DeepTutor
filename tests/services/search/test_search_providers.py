@@ -647,7 +647,7 @@ def test_serply_rejects_an_unknown_mode() -> None:
 
 
 # --------------------------------------------------------------------------
-# You.com: one provider with a keyless free endpoint and a keyed endpoint.
+# You.com: authenticated Search API.
 # --------------------------------------------------------------------------
 
 _YOUCOM_BODY: dict[str, Any] = {
@@ -686,21 +686,13 @@ def youcom_calls(monkeypatch):
     return captured
 
 
-def test_youcom_keyless_request_uses_free_agents_endpoint(youcom_calls, monkeypatch) -> None:
+def test_youcom_rejects_missing_key_before_network(youcom_calls, monkeypatch) -> None:
     from deeptutor.services.search.providers.youcom import YouComProvider
 
     monkeypatch.setattr(YouComProvider, "_get_api_key", lambda self: "")
-    provider = YouComProvider(proxy=PROXY)
-
-    assert provider.api_key == ""
-    provider.search("attention & focus", max_results=2)
-
-    call = youcom_calls[-1]
-    assert call["url"] == "https://api.you.com/v1/agents/search"
-    assert call["params"] == {"query": "attention & focus", "count": 2}
-    assert "X-API-Key" not in call["headers"]
-    assert call["headers"]["User-Agent"] == "deeptutor youdotcom-integration/hkuds-deeptutor"
-    assert call["proxies"] == {"http": PROXY, "https": PROXY}
+    with pytest.raises(ValueError, match="requires an API key"):
+        YouComProvider(proxy=PROXY).search("attention")
+    assert youcom_calls == []
 
 
 def test_youcom_keyed_request_uses_search_api_endpoint_and_header(youcom_calls) -> None:
@@ -753,7 +745,7 @@ def test_youcom_metadata_comes_from_the_spec_table() -> None:
     spec = SEARCH_PROVIDERS["you"]
     assert "you" in list_providers()
     assert YouComProvider.display_name == spec.label
-    assert YouComProvider.requires_api_key is False
+    assert YouComProvider.requires_api_key is True
     assert YouComProvider.supports_answer is False
     assert spec.soft_fallback is True
 

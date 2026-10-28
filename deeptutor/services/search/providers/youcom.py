@@ -15,12 +15,10 @@ from . import register_provider
 
 @register_provider("you")
 class YouComProvider(BaseSearchProvider):
-    """You.com web rows with a keyless free tier and an optional keyed API."""
+    """Authenticated You.com Search API results."""
 
     description = "You.com web search results"
-    FREE_BASE_URL = "https://api.you.com/v1/agents"
-    KEYED_BASE_URL = "https://ydc-index.io/v1"
-    BASE_URL = FREE_BASE_URL
+    BASE_URL = "https://ydc-index.io/v1"
     API_KEY_ENV_VARS = ("YDC_API_KEY", "SEARCH_API_KEY")
 
     def search(
@@ -31,9 +29,9 @@ class YouComProvider(BaseSearchProvider):
         **kwargs: Any,
     ) -> WebSearchResponse:
         """Search You.com and return its web rows as citations."""
-        root = str(
-            kwargs.get("base_url") or (self.KEYED_BASE_URL if self.api_key else self.FREE_BASE_URL)
-        ).rstrip("/")
+        if not self.api_key:
+            raise ValueError("You.com requires an API key in Settings > Catalog > Search.")
+        root = str(kwargs.get("base_url") or self.BASE_URL).rstrip("/")
         params = {"query": query, "count": max(1, min(int(max_results), 100))}
         headers = {
             "Accept": "application/json",

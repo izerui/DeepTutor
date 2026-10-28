@@ -95,7 +95,7 @@ SEARCH_PROVIDERS: dict[str, SearchProviderSpec] = {
         label="Google Browser Scraper", requires_base_url=True
     ),
     "duckduckgo": SearchProviderSpec(label="DuckDuckGo"),
-    "you": SearchProviderSpec(label="You.com"),
+    "you": SearchProviderSpec(label="You.com", requires_api_key=True),
     "perplexity": SearchProviderSpec(
         label="Perplexity",
         requires_api_key=True,
