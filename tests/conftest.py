@@ -335,6 +335,7 @@ def _isolate_book_registry(monkeypatch, tmp_path, _isolate_kb_registry):
 
     monkeypatch.setattr(registry, "DB_PATH_OVERRIDE", tmp_path / "book_registry.sqlite3")
     monkeypatch.setattr(registry, "_readers", dict(registry._readers))
+    monkeypatch.setattr(registry, "_builtin_readers_loaded", False)
     # Exercise the actual cached-module loader rather than preregistering a KB reader.
     monkeypatch.setattr(registry, "_reading_bindings", ContextVar("test_book_bindings", default=()))
     monkeypatch.setattr(registry, "active_books", ContextVar("test_active_books", default=frozenset()))

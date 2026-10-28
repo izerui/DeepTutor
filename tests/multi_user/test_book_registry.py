@@ -222,7 +222,9 @@ def test_cached_builtin_hook_restores_reset_map_preserving_custom_reader(tmp_pat
     monkeypatch.setitem(sys.modules, module.__name__, module)
     monkeypatch.setattr(registry, "BUILTIN_BOOK_READER_MODULES", (module.__name__,))
     for _ in range(2):
+        # A reset map is a fresh test copy: the loaded flag resets with it (B3-4).
         monkeypatch.setattr(registry, "_readers", {})
+        monkeypatch.setattr(registry, "_builtin_readers_loaded", False)
 
         def custom(_r, _u):
             return False

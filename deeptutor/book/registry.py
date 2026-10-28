@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS book_kb_pending (
 _write_lock = threading.RLock()
 _writer_state = threading.local()
 _reader_lock = threading.RLock()
+_builtin_readers_loaded = False
 _builtin_reader_state = threading.local()
 _readers: dict[str, Callable[[str, str], bool]] = {}
 
@@ -735,17 +736,25 @@ def register_book_reference_reader(referrer_kind: str, reader: Callable[[str, st
 
 
 def _load_builtin_readers() -> None:
-    """Import cached builtin modules and run their hooks on every load.
+    """Import cached builtin modules and run their hooks until all succeed once.
 
-    Mirrors plan B's loader contract (D2): no reader-map lock is held across
-    an import or a hook, so a module whose import registers eagerly can never
-    deadlock against a concurrent loader. Each hook's registrations are staged
-    on this thread and merged with ``setdefault`` only after it succeeds, so a
-    failing hook grants nothing and a concurrent explicit registration always
-    keeps precedence. Re-entrant calls (a hook that reads books) return at once.
+    Mirrors plan B's loader contract (D2, ``knowledge.registry``): no
+    reader-map lock is held across an import or a hook, so a module whose
+    import registers eagerly can never deadlock against a concurrent loader.
+    Each hook's registrations are staged on this thread and merged with
+    ``setdefault`` only after it succeeds, so a failing hook grants nothing and
+    a concurrent explicit registration always keeps precedence. The loaded
+    flag is set only when every hook succeeded; a failure is retried on the
+    next read. Concurrent loaders may repeat idempotent hooks. Re-entrant
+    calls (a hook that reads books) return at once.
     """
+    global _builtin_readers_loaded
     if getattr(_builtin_reader_state, "pending", None) is not None:
         return
+    with _reader_lock:
+        if _builtin_readers_loaded:
+            return
+    complete = True
     for name in BUILTIN_BOOK_READER_MODULES:
         pending: dict[str, Callable[[str, str], bool]] = {}
         _builtin_reader_state.pending = pending
@@ -755,6 +764,7 @@ def _load_builtin_readers() -> None:
             if callable(register):
                 register()
         except Exception:
+            complete = False
             logger.exception("Could not load book reference readers from %s", name)
         else:
             with _reader_lock:
@@ -762,6 +772,9 @@ def _load_builtin_readers() -> None:
                     _readers.setdefault(kind, reader)
         finally:
             _builtin_reader_state.pending = None
+    if complete:
+        with _reader_lock:
+            _builtin_readers_loaded = True
 
 
 def _bound_record(conn: sqlite3.Connection, record: BookRecord) -> BookRecord | None:
