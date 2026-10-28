@@ -80,6 +80,7 @@ export function useMasteryStudySession(
   useEffect(() => {
     let active = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the route-owned request state before fetching.
+    setTopic(null);
     setTopicError(null);
     setTopicClosed(false);
     void fetchMasteryTopic(pathId, { cache: "no-store" })
