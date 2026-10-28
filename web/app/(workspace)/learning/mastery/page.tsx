@@ -195,7 +195,7 @@ function MasteryPathRoute() {
       )}
       {managing && (
         <TemplateAssignmentsDialog
-          template={managing}
+          template={templates.find(t => t.id === managing.id) ?? managing}
           returnFocusRef={teacherTriggerRef}
           onClose={() => setManaging(null)}
           onChanged={() => void loadTemplates()}
