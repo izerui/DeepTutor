@@ -806,6 +806,12 @@ class TurnExecutor:
             # the same retrieval scope, opened before any of the path's
             # materials are read. A closed teacher path ends the turn here.
             mastery_turn = None
+            #: The conversation's earlier exchanges (``read_source`` archives):
+            #: merged into the topic index below, and kept by a path switch
+            #: only where the new path's scope allows.
+            history_sources: dict[str, str] = dict(
+                getattr(history_result, "history_sources", None) or {}
+            )
             if workspace_mode == WORKSPACE_MODE_MASTERY:
                 from deeptutor.capabilities.mastery.turn_scope import (
                     RefusalRecorder,
@@ -821,9 +827,7 @@ class TurnExecutor:
                 )
                 if mastery_turn is None:
                     raise refusals.unavailable()
-                # Merged into the index below; a path switch keeps them only
-                # where the new path's scope allows.
-                mastery_turn.admit_history(getattr(history_result, "history_sources", {}))
+                mastery_turn.admit_history(history_sources)
 
             mastery_topic_source_index: dict[str, str] = {}
             if workspace_mode == WORKSPACE_MODE_MASTERY and not source_index:
@@ -1056,7 +1060,7 @@ class TurnExecutor:
                     # explore_context's forced pre-pass.
                     "mastery_topic_source_index": {
                         **mastery_topic_source_index,
-                        **getattr(history_result, "history_sources", {}),
+                        **history_sources,
                     },
                 },
             )
@@ -1413,7 +1417,12 @@ class TurnExecutor:
                         retryable=resolved_retryable,
                     )
             else:
-                logger.error("Turn %s failed: %s", turn_id, exc, exc_info=True)
+                if getattr(exc, "expected_refusal", False) is True:
+                    # An expected refusal (e.g. a closed teacher path), not a
+                    # fault: one line, no stack. The events are the same.
+                    logger.info("Turn %s refused: %s", turn_id, exc)
+                else:
+                    logger.error("Turn %s failed: %s", turn_id, exc, exc_info=True)
                 await self._publish_live_event(
                     execution,
                     StreamEvent(

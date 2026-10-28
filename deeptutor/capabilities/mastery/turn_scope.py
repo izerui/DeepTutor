@@ -39,6 +39,9 @@ class MasteryPathUnavailable(RuntimeError):
     """A turn refused at admission; carries the turn runtime's failure contract."""
 
     retryable = False
+    #: An expected outcome, not a fault: the turn runtime logs it as one INFO
+    #: line without a stack (and needs no import of this package to tell).
+    expected_refusal = True
 
     def __init__(
         self,
@@ -268,7 +271,11 @@ class MasteryTurn:
             books = await asyncio.to_thread(_book_bindings, template_id, book_ids)
         return _Admission(path_id, template_id, refs, allowed, books)
 
-    def commit(self, admission: _Admission) -> None:
+    def commit(self, admission: _Admission, *, start: bool = False) -> None:
+        """Point the turn at ``admission``; ``start`` marks the turn's own
+        admission, the scope its history sources are admitted under."""
+        if start:
+            self._history_admission = admission
         self.path_id = admission.path_id
         self.template_id = admission.template_id
         self.refs = list(admission.refs)
@@ -303,8 +310,8 @@ class MasteryTurn:
         self._apply(context)
 
     def admit_history(self, sources: dict[str, str]) -> None:
-        """Record the history sources merged at turn start, under the turn's
-        current (start) admission."""
+        """Record the history sources merged at turn start; they were admitted
+        under the admission committed with ``start=True``."""
         self.history_sources = dict(sources or {})
 
     def _history_survives(self, admission: _Admission) -> bool:
@@ -406,8 +413,7 @@ async def open_mastery_turn(
     admission = await turn.admit(stream, store, path_id)
     if admission is None:
         return None
-    turn.commit(admission)
-    turn._history_admission = admission
+    turn.commit(admission, start=True)
     stack.enter_context(turn_path_gate(turn.switch))
     return turn
 
