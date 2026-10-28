@@ -301,3 +301,17 @@ def test_oversized_native_response_is_explicitly_omitted():
     assert row["evidence_context"] == ""
     assert row["evidence_tokens"] == 0
     assert row["error"] is None
+
+
+def test_invalid_reader_answer_keeps_reported_usage():
+    async def reader(context, query):
+        return ReaderResult("", {"input_tokens": 9, "output_tokens": 1})
+
+    report = asyncio.run(
+        evaluate(load_cases(FIXTURES)[:1], count_tokens=len, tokenizer="test-chars", reader=reader)
+    )
+    for row in report["rows"]:
+        assert row["error"] is not None
+        assert row["usage"] == {"input_tokens": 9, "output_tokens": 1}
+        assert row["answer"] == ""
+        assert row["exact_match"] is None

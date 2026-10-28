@@ -294,14 +294,13 @@ async def evaluate(
                 if reader is not None:
                     reading = time.perf_counter()
                     answer = await reader(context, case.input.query)
-                    exact, f1 = score_answer(answer.answer, case.answers)
                     row.update(
                         answer=answer.answer,
                         usage=dict(answer.usage or {}),
-                        exact_match=exact,
-                        token_f1=f1,
                         reader_seconds=time.perf_counter() - reading,
                     )
+                    exact, f1 = score_answer(answer.answer, case.answers)
+                    row.update(exact_match=exact, token_f1=f1)
             except Exception as exc:
                 row["error"] = f"{type(exc).__name__}: {exc}"
             row["seconds"] = time.perf_counter() - started
