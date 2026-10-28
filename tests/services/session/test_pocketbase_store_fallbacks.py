@@ -457,7 +457,7 @@ async def test_message_reads_fill_defaults_for_missing_fields(fake_pb) -> None:
     assert "parent_message_id" not in message
 
 
-async def test_json_loads_tolerates_missing_and_corrupt_values() -> None:
+async def test_json_loads_tolerates_missing_and_corrupt_values() -> None:  # no awaits: async only to satisfy module-level pytestmark
     assert _json_loads(None, []) == []
     assert _json_loads("", {}) == {}
     assert _json_loads("not json", {"a": 1}) == {"a": 1}
@@ -466,7 +466,7 @@ async def test_json_loads_tolerates_missing_and_corrupt_values() -> None:
     assert _json_loads([1, 2], []) == [1, 2]
 
 
-async def test_to_float_tolerates_missing_and_corrupt_values() -> None:
+async def test_to_float_tolerates_missing_and_corrupt_values() -> None:  # no awaits: async only to satisfy module-level pytestmark
     assert _to_float(None) == 0.0
     assert _to_float(None, 5.0) == 5.0
     assert _to_float("junk") == 0.0
