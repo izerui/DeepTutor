@@ -293,3 +293,31 @@ def test_single_user_deleted_kb_is_unavailable_without_injected_manager(tmp_path
     assert report is not None
     assert report.unavailable_kbs == ["solo"]
     assert report.changed_kbs == [] and not report.has_drift
+
+
+# ── Fix round 2 ─────────────────────────────────────────────────────────────
+
+
+def test_polling_with_every_kb_unavailable_does_not_rewrite_the_book(
+    toms_public_kb, as_account, teaching_http, monkeypatch,
+):
+    """No readable KB and no baseline: the self-heal has nothing new to store, so
+    repeated polls must not save the manifest (it would race real book edits)."""
+    from deeptutor.book.storage import BookStorage
+
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_public_kb.kb_id, "private")
+    _tinas_book(as_account, toms_public_kb.ref, public=False)
+    saves: list[str] = []
+    real_save = BookStorage.save_book
+
+    def counting(self, book):
+        saves.append(book.id)
+        return real_save(self, book)
+
+    monkeypatch.setattr(BookStorage, "save_book", counting)
+    for _ in range(3):
+        response = teaching_http.client.get("/api/books/bk_lens/health", headers=_auth("tina"))
+        assert response.status_code == 200, response.text
+        assert response.json()["kb_drift"]["unavailable_kbs"] == [toms_public_kb.ref]
+    assert saves == []

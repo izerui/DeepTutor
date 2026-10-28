@@ -481,10 +481,17 @@ def mark_drift_on_book(
         and (not book.kb_fingerprints or _scheme_changed(book.kb_fingerprints))
     ):
         documents = fingerprint_kb_documents_batch(book.knowledge_bases, manager=manager)
-        book.kb_document_fingerprints, book.kb_fingerprints = _baseline(
-            book, documents, report.unavailable_kbs
-        )
-        dirty = True
+        new_documents, new_fingerprints = _baseline(book, documents, report.unavailable_kbs)
+        # Only write when the baseline actually changes: with every KB
+        # unavailable there is nothing to capture, and rewriting the manifest
+        # on each poll would race (and could overwrite) a concurrent edit.
+        if (
+            new_fingerprints != dict(book.kb_fingerprints or {})
+            or new_documents != dict(book.kb_document_fingerprints or {})
+        ):
+            book.kb_document_fingerprints = new_documents
+            book.kb_fingerprints = new_fingerprints
+            dirty = True
 
     if report.has_drift:
         book.stale_page_ids = report.stale_page_ids
