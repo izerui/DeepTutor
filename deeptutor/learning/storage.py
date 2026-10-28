@@ -152,6 +152,14 @@ class LearningTransaction:
     def events(self) -> list[tuple[str, dict[str, Any], str, str]]:
         return list(self._events)
 
+    def lease_turn_id(self) -> str | None:
+        """The turn holding this path's lease, read inside the write transaction."""
+        row = self._conn.execute(
+            "SELECT turn_id FROM mastery_path_leases WHERE path_id = ?",
+            (self.progress.book_id,),
+        ).fetchone()
+        return None if row is None else str(row["turn_id"])
+
     def record_module_preview(self, payload: dict[str, Any], *, session_id: str) -> int:
         """Persist a draft without modifying progress or publishing a new revision."""
         cursor = self._conn.execute(

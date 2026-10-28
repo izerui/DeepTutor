@@ -556,11 +556,8 @@ def apply_pending_revision(
         # Re-check the lease inside the write transaction so a lease acquired
         # between the outer check and BEGIN IMMEDIATE is honoured.
         if respect_lease:
-            row = tx._conn.execute(
-                "SELECT turn_id FROM mastery_path_leases WHERE path_id = ?",
-                (path_id,),
-            ).fetchone()
-            if row is not None and (not lease_turn_id or row["turn_id"] != lease_turn_id):
+            holder = tx.lease_turn_id()
+            if holder is not None and (not lease_turn_id or holder != lease_turn_id):
                 return None
         earlier = current.update_notice
         totals = {
