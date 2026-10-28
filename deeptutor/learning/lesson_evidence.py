@@ -11,6 +11,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import math
 from pathlib import Path
 import time
@@ -32,6 +33,8 @@ from deeptutor.services.rag.source_pages import (
 SCHEMA = 1
 PREPARATION_VERSION = 2
 MAX_LESSON_PAGES = 6
+
+logger = logging.getLogger(__name__)
 
 
 class LessonUnavailable(CapabilityPrerequisiteError):
@@ -220,6 +223,8 @@ def _document_key(source: Any, kb: str) -> str:
 
     A source that carries a fixed document id (a teacher path's published
     snapshot) follows it: the captured path may since hold an unrelated file.
+    A failing registry lookup counts as a gone document, as in
+    ``topic_materials._file_document``.
     """
     captured = str(source.metadata.get("path") or source.source_id or "").replace("\\", "/")
     doc_id = str(source.metadata.get("doc_id") or "").strip()
@@ -227,7 +232,11 @@ def _document_key(source: Any, kb: str) -> str:
         return captured
     from deeptutor.multi_user.knowledge_access import live_document_path
 
-    live = live_document_path(kb, doc_id)
+    try:
+        live = live_document_path(kb, doc_id)
+    except Exception:
+        logger.warning("Could not locate document %s of %s", doc_id, kb, exc_info=True)
+        live = None
     if live is not None:
         return live
     if Path(captured).suffix.lower() != ".pdf":
