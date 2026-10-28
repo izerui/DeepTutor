@@ -7,6 +7,7 @@ import threading
 import pytest
 
 from deeptutor.teaching import store as teaching_store
+from deeptutor.teaching.store import TeachingStore
 
 
 @pytest.fixture
@@ -105,3 +106,40 @@ def test_writers_in_other_threads_still_wait_rather_than_raise(fresh_write_lock)
     first.join(2)
     second.join(2)
     assert not second.is_alive() and errors == []
+
+
+@pytest.fixture
+def joint_calls(monkeypatch):
+    calls: list[object] = []
+    real = teaching_store._joint_write
+
+    def counting(path):
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr(teaching_store, "_joint_write", counting)
+    return calls
+
+
+def test_deleting_an_account_without_templates_skips_the_joint_writer(joint_calls):
+    store = TeachingStore()
+    # No teaching DB yet.
+    assert store.transfer_owner("student-1", "admin-1") == 0
+    store.create_template(
+        owner_user_id="teacher-1", title="T", description="", draft_path_id="p",
+        draft_workspace_id="w",
+    )
+    assert store.transfer_owner("student-1", "admin-1") == 0
+    assert joint_calls == []
+
+
+def test_deleting_a_teacher_still_transfers_in_the_joint_writer(joint_calls):
+    store = TeachingStore()
+    created = store.create_template(
+        owner_user_id="teacher-1", title="T", description="", draft_path_id="p",
+        draft_workspace_id="w",
+    )
+    assert store.transfer_owner("teacher-1", "admin-1") == 1
+    assert len(joint_calls) == 1
+    moved = store.get_template(created.id)
+    assert moved.owner_user_id == "admin-1" and moved.draft_path_id == ""

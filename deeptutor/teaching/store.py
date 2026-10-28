@@ -418,6 +418,15 @@ class TeachingStore:
 
         if from_user_id == to_user_id:
             return 0
+        # Most deleted accounts own no template: skip locking all three
+        # databases. A deleted account creates no more templates, so nothing
+        # can appear between this read and the write.
+        with _read(self.db_path) as conn:
+            if conn is None or conn.execute(
+                "SELECT 1 FROM mastery_templates WHERE owner_user_id = ? LIMIT 1",
+                (from_user_id,),
+            ).fetchone() is None:
+                return 0
         with _joint_write(self.db_path) as conn:
             template_ids = [
                 row["id"]
