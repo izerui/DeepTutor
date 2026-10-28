@@ -156,3 +156,140 @@ def test_reader_sees_revoked_binding_without_drift(toms_public_kb, as_account, t
     assert drift["cached"] is True
     assert drift["unavailable_kbs"] == [toms_public_kb.ref]
     assert drift["changed_kbs"] == [] and drift["has_drift"] is False
+
+
+# ── Fix round 1 ─────────────────────────────────────────────────────────────
+
+
+def _kb_doc(record):
+    from pathlib import Path
+
+    return Path(record.base_dir) / record.dir_name / "raw" / "doc.md"
+
+
+@pytest.mark.parametrize("public_book", [False, True])
+def test_republished_kb_is_available_again_and_its_changes_count(
+    toms_public_kb, as_account, teaching_http, public_book,
+):
+    """A revocation record alone is not unavailability once the KB is readable again."""
+    from deeptutor.book.storage import get_book_storage
+
+    _tinas_book(as_account, toms_public_kb.ref, public=public_book)
+    client = teaching_http.client
+    assert client.get("/api/books/bk_lens/health", headers=_auth("tina")).status_code == 200
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_public_kb.kb_id, "private")
+    withdrawn = client.get("/api/books/bk_lens/health", headers=_auth("tina")).json()
+    assert withdrawn["kb_drift"]["unavailable_kbs"] == [toms_public_kb.ref]
+
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_public_kb.kb_id, "public")
+    if public_book:
+        # Nothing clears the book's revocation when the KB owner re-publishes.
+        assert kb_registry.list_unavailable_references("book", "bk_lens")
+        reader = client.get("/api/books/bk_lens/health", headers=_auth("sara")).json()
+        assert reader["kb_drift"]["unavailable_kbs"] == []
+    _kb_doc(toms_public_kb).write_text("new lenses", encoding="utf-8")
+
+    drift = client.get("/api/books/bk_lens/health", headers=_auth("tina")).json()["kb_drift"]
+    assert drift["unavailable_kbs"] == []
+    assert drift["changed_kbs"] == [toms_public_kb.ref]
+    assert drift["stale_page_ids"] == ["pg_lens"]
+    with as_account("tina"):
+        assert get_book_storage().load_book("bk_lens").stale_page_ids == ["pg_lens"]
+
+
+def test_mark_seen_keeps_the_baseline_of_an_unavailable_kb(
+    toms_public_kb, as_account, teaching_http, make_kb,
+):
+    from deeptutor.book.models import Book
+    from deeptutor.book.storage import get_book_storage
+    from deeptutor.multi_user.knowledge_access import (
+        current_kb_manager,
+        list_visible_knowledge_bases,
+    )
+
+    with as_account("tom"):
+        manager = current_kb_manager()
+        make_kb(manager, "waves", text="ripples")
+        list_visible_knowledge_bases()
+        waves = kb_registry.find_by_location(manager.base_dir, "waves")
+        kb_registry.set_visibility(waves.kb_id, "public")
+        waves = kb_registry.get_kb(waves.kb_id)
+    _tinas_book(as_account, toms_public_kb.ref, public=False)
+    with as_account("tina"):
+        store = get_book_storage()
+        book = store.load_book("bk_lens")
+        store.save_book(Book(**{**book.model_dump(), "knowledge_bases": [toms_public_kb.ref, waves.ref]}))
+    client = teaching_http.client
+    assert client.get("/api/books/bk_lens/health", headers=_auth("tina")).status_code == 200
+    with as_account("tina"):
+        assert set(get_book_storage().load_book("bk_lens").kb_fingerprints) == {
+            toms_public_kb.ref, waves.ref,
+        }
+
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_public_kb.kb_id, "private")
+    _kb_doc(waves).write_text("new ripples", encoding="utf-8")
+    drift = client.get("/api/books/bk_lens/health", headers=_auth("tina")).json()["kb_drift"]
+    assert drift["changed_kbs"] == [waves.ref]
+    assert drift["unavailable_kbs"] == [toms_public_kb.ref]
+    seen = client.post("/api/books/bk_lens/refresh-fingerprints?force=true", headers=_auth("tina"))
+    assert seen.status_code == 200, seen.text
+    with as_account("tina"):
+        assert get_book_storage().load_book("bk_lens").kb_fingerprints[toms_public_kb.ref]
+
+    with as_account("tom"):
+        kb_registry.set_visibility(toms_public_kb.kb_id, "public")
+    _kb_doc(toms_public_kb).write_text("new lenses", encoding="utf-8")
+    drift = client.get("/api/books/bk_lens/health", headers=_auth("tina")).json()["kb_drift"]
+    assert drift["changed_kbs"] == [toms_public_kb.ref]
+    assert drift["unavailable_kbs"] == []
+
+
+def test_owner_deleted_kb_is_unavailable_on_the_production_path(as_account, teaching_http, make_kb):
+    """Behavior lock (risk c): without an injected manager a deleted KB is "no longer
+    available" — not "updated" with stale pages — for its own owner too."""
+    from deeptutor.multi_user.knowledge_access import (
+        current_kb_manager,
+        list_visible_knowledge_bases,
+    )
+
+    with as_account("tina"):
+        manager = current_kb_manager()
+        make_kb(manager, "notes", text="mine")
+        list_visible_knowledge_bases()
+        record = kb_registry.find_by_location(manager.base_dir, "notes")
+    _tinas_book(as_account, record.ref, public=False)
+    client = teaching_http.client
+    assert client.get("/api/books/bk_lens/health", headers=_auth("tina")).status_code == 200
+    with as_account("tina"):
+        assert current_kb_manager().delete_knowledge_base("notes", confirm=True)
+        kb_registry.unregister_kb(record.ref)
+
+    drift = client.get("/api/books/bk_lens/health", headers=_auth("tina")).json()["kb_drift"]
+    assert drift["unavailable_kbs"] == [record.ref]
+    assert drift["changed_kbs"] == [] and drift["stale_page_ids"] == []
+
+
+def test_single_user_deleted_kb_is_unavailable_without_injected_manager(tmp_path, make_kb):
+    """Single-user (no account context) production path: same classification."""
+    from deeptutor.book.kb_health import mark_drift_on_book
+    from deeptutor.book.models import Book
+    from deeptutor.book.storage import BookStorage
+    from deeptutor.multi_user.knowledge_access import current_kb_manager
+    from deeptutor.services.path_service import PathService
+
+    manager = current_kb_manager()
+    make_kb(manager, "solo", text="alone")
+    storage = BookStorage(path_service=PathService(workspace_root=tmp_path / "books"))
+    storage.save_book(Book(id="bk_solo", knowledge_bases=["solo"]))
+    first = mark_drift_on_book("bk_solo", storage=storage)
+    assert first is not None and first.unavailable_kbs == []
+    assert storage.load_book("bk_solo").kb_fingerprints["solo"]
+
+    assert manager.delete_knowledge_base("solo", confirm=True)
+    report = mark_drift_on_book("bk_solo", storage=storage)
+    assert report is not None
+    assert report.unavailable_kbs == ["solo"]
+    assert report.changed_kbs == [] and not report.has_drift

@@ -146,14 +146,21 @@ def unavailable_kbs(
 ) -> list[str]:
     """The book's bound KBs it can no longer read (withdrawn, revoked or gone).
 
-    A binding counts when the KB registry recorded a revocation of this book's
-    reference (B2-19), or — with ``check_readable`` — when the reference no
-    longer resolves for the caller. Such a KB fingerprints as empty, which is
-    not evidence that its content changed. An injected ``manager`` names an
-    explicit catalog with no registry semantics, so nothing is reported there.
+    Such a KB fingerprints as empty, which is not evidence that its content
+    changed. With ``check_readable`` (the book's editor) a binding counts while
+    its reference does not resolve for the caller. Without it (a read-only
+    reader, no source reads) a binding counts while the KB registry holds a
+    revocation of this book's reference (B2-19) *and* the KB is still gone,
+    private or a connector — like ``teaching.books.unavailable_dependencies``,
+    a re-published KB is available again although nothing clears the record.
+    An injected ``manager`` names an explicit catalog with no registry
+    semantics, so nothing is reported there.
     """
     if manager is not None or not book.knowledge_bases:
         return []
+    names = list(dict.fromkeys(book.knowledge_bases))
+    if check_readable:
+        return [name for name in names if _locate_kb(name, None) is None]
     from deeptutor.book import registry as book_registry
     from deeptutor.knowledge import registry as kb_registry
 
@@ -161,13 +168,47 @@ def unavailable_kbs(
         row.kb_id
         for row in kb_registry.list_unavailable_references(book_registry.KB_REFERRER_KIND, book.id)
     }
-    links = book_registry.book_kb_links(book.id) if revoked else {}
+    if not revoked:
+        return []
+    links = book_registry.book_kb_links(book.id)
+
+    def withdrawn(kb_id: str) -> bool:
+        record = kb_registry.get_kb(kb_id)
+        return (
+            record is None
+            or record.visibility != "public"
+            or kb_registry.is_connector(record)
+        )
+
     return [
-        name
-        for name in dict.fromkeys(book.knowledge_bases)
-        if (links.get(name) and links[name] in revoked)
-        or (check_readable and _locate_kb(name, None) is None)
+        name for name in names
+        if links.get(name) in revoked and withdrawn(links[name])
     ]
+
+
+def _baseline(
+    book: Book, documents: dict[str, dict[str, str]], unavailable: list[str]
+) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """New fingerprint maps that keep an unavailable KB's last real baseline.
+
+    An unreadable KB fingerprints as ``""``; storing that would erase its
+    baseline, so its later changes could never be reported. Its stored
+    current-scheme fingerprint is kept instead, or — with none (or only an
+    old-scheme one, which would re-trigger rebaselining forever) — it is left
+    out, to be compared afresh once it is readable again.
+    """
+    stored = dict(book.kb_fingerprints or {})
+    stored_documents = dict(book.kb_document_fingerprints or {})
+    documents = dict(documents)
+    fingerprints = {name: digest_documents(docs) for name, docs in documents.items()}
+    for name in unavailable:
+        documents.pop(name, None)
+        fingerprints.pop(name, None)
+        previous = stored.get(name) or ""
+        if previous.startswith(f"{FINGERPRINT_SCHEME}:"):
+            fingerprints[name] = previous
+            documents[name] = dict(stored_documents.get(name) or {})
+    return documents, fingerprints
 
 
 def fingerprint_kb_documents_batch(
@@ -405,8 +446,9 @@ def refresh_book_fingerprints(
                 + ", ".join(not_recompiled)
             )
     documents = fingerprint_kb_documents_batch(book.knowledge_bases, manager=manager)
-    book.kb_document_fingerprints = documents
-    book.kb_fingerprints = {name: digest_documents(docs) for name, docs in documents.items()}
+    book.kb_document_fingerprints, book.kb_fingerprints = _baseline(
+        book, documents, unavailable_kbs(book, manager=manager)
+    )
     book.stale_page_ids = []
     book.stale_detected_at = 0.0
     store.save_book(book)
@@ -439,10 +481,9 @@ def mark_drift_on_book(
         and (not book.kb_fingerprints or _scheme_changed(book.kb_fingerprints))
     ):
         documents = fingerprint_kb_documents_batch(book.knowledge_bases, manager=manager)
-        book.kb_document_fingerprints = documents
-        book.kb_fingerprints = report.current_fingerprints or {
-            name: digest_documents(docs) for name, docs in documents.items()
-        }
+        book.kb_document_fingerprints, book.kb_fingerprints = _baseline(
+            book, documents, report.unavailable_kbs
+        )
         dirty = True
 
     if report.has_drift:
