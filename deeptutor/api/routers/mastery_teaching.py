@@ -7,6 +7,7 @@ the live role). Ownership is enforced by :class:`TeachingService`.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import inspect
 from typing import Any
 
@@ -75,6 +76,15 @@ async def enter_mastery_template_scope(request: Request) -> None:
     the body-addressed routes, by the request body's ``book_id``. Declared
     ``async`` so the context variables are set in the endpoint's own context,
     like ``require_auth`` sets the user.
+
+    The context variables it sets (``entitled_kb_id``,
+    ``active_mastery_template``, the book reading bindings,
+    ``original_document``, ``original_book``) are deliberately never reset:
+    each request runs in its own task, so they end with it. A ``yield``
+    dependency resetting them on exit could hit "token created in a different
+    Context". The constraint this relies on: no route this dependency scopes
+    may run work after the response (``BackgroundTasks``), which would still
+    see them — guarded by ``tests/multi_user/test_b3_p6_turns_and_logs.py``.
     """
     template_id = str(
         request.query_params.get(MASTERY_TEMPLATE_PARAM)
@@ -168,7 +178,7 @@ class AssignRequest(BaseModel):
     student_ids: list[str] = Field(..., min_length=1, max_length=500)
 
 
-async def _run(fn, *args: Any, **kwargs: Any) -> Any:
+async def _run(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run a service call off the event loop and map its errors to HTTP."""
     try:
         if inspect.iscoroutinefunction(fn):
