@@ -791,14 +791,21 @@ def _bound_record(conn: sqlite3.Connection, record: BookRecord) -> BookRecord | 
     return current
 
 
-def _can_read(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -> bool:
+def _read_decision(
+    conn: sqlite3.Connection, record: BookRecord, user: CurrentUser,
+) -> bool | list[BookReference]:
+    """A final decision, or the references still to consult with readers."""
     current = _bound_record(conn, record)
     if current is None:
         return False
     if user.is_admin or current.visibility == "public" or current.created_by == user.id:
         return True
+    return _references_of(conn, current.book_id)
+
+
+def _readers_grant(references: Sequence[BookReference], user: CurrentUser) -> bool:
     _load_builtin_readers()
-    for reference in _references_of(conn, current.book_id):
+    for reference in references:
         with _reader_lock:
             reader = _readers.get(reference.referrer_kind)
         if reader is not None:
@@ -810,9 +817,21 @@ def _can_read(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -
     return False
 
 
+def _settle(decision: bool | list[BookReference], user: CurrentUser) -> bool:
+    return decision if isinstance(decision, bool) else _readers_grant(decision, user)
+
+
+def _can_read(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -> bool:
+    """For callers already inside a registry transaction (e.g. shared_write)."""
+    return _settle(_read_decision(conn, record, user), user)
+
+
 def can_read_book(record: BookRecord, user: CurrentUser) -> bool:
+    # Readers consult other stores (teaching): call them after the book
+    # snapshot closes, keeping the global teaching -> KB -> Book lock order.
     with _read() as conn:
-        return conn is not None and _can_read(conn, record, user)
+        decision = False if conn is None else _read_decision(conn, record, user)
+    return _settle(decision, user)
 
 
 def _can_write(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -> bool:
@@ -836,20 +855,22 @@ def book_access_batch(records: Sequence[BookRecord], user: CurrentUser) -> list[
     """Read/write/link-binding decisions for many records in one read snapshot.
 
     Same rules as :func:`can_read_book`, :func:`can_write_book` and
-    :func:`kb_links_initialized`, aligned with ``records``. The snapshot holds
-    a SHARED lock for the whole batch, so reference readers (only reached for
-    private, non-owned records) must stay read-only and free of slow I/O.
+    :func:`kb_links_initialized`, aligned with ``records``. Reference readers
+    (only reached for private, non-owned records) run after the snapshot
+    closes, keeping the teaching -> KB -> Book lock order.
     """
     with _read() as conn:
         if conn is None:
             return [BookAccess(False, False, False) for _ in records]
-        return [
-            BookAccess(
-                _can_read(conn, record, user), _can_write(conn, record, user),
-                _links_initialized(conn, record.book_id),
-            )
+        gathered = [
+            (_read_decision(conn, record, user), _can_write(conn, record, user),
+             _links_initialized(conn, record.book_id))
             for record in records
         ]
+    return [
+        BookAccess(_settle(decision, user), writable, initialized)
+        for decision, writable, initialized in gathered
+    ]
 
 
 def _set_kb_links(conn: sqlite3.Connection, book_id: str, links: Mapping[str, str]) -> None:
