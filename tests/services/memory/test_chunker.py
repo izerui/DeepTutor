@@ -126,9 +126,7 @@ def test_max_chunk_chars_protects_against_huge_chunks() -> None:
     )
     # 1 chunk is impossible if max=5000 and input=100k; multiple chunks expected.
     assert len(chunks) > 1
-    assert all(
-        c.end - c.start <= 5000 * 2 for c in chunks
-    )  # boundary extension may push over
+    assert all(c.end - c.start <= 5000 * 2 for c in chunks)  # boundary extension may push over
 
 
 @pytest.mark.parametrize("budget", [1, 5, 20, 100])

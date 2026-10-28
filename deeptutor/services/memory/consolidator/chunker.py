@@ -120,9 +120,7 @@ def chunk_with_boundary(
 # ── Internals ───────────────────────────────────────────────────────────
 
 
-def _expand_to_boundary(
-    text: str, target_end: int, boundary: Boundary, *, limit: int
-) -> int:
+def _expand_to_boundary(text: str, target_end: int, boundary: Boundary, *, limit: int) -> int:
     """Push ``target_end`` forward to the next natural boundary.
 
     The search is bounded by ``limit`` (exclusive). If no boundary is
