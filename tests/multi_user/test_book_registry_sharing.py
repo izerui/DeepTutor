@@ -98,9 +98,11 @@ def test_connectors_and_foreign_private_block_force_skips_connector(library, as_
             books.replace_book_references("template", "one", [book.ref], created_by="t1")
     assert books.get_book(book.ref).visibility == "private"
     assert not books.list_book_references(book.ref) and not protected(book)
-    with as_user("root", role="admin"):
+    # spec 2026-10-29 D2/D10: only the owner may force-publish; t1 owns the book.
+    with as_user("t1", role="admin"):
         books.set_book_visibility(book.ref, "public", force=True)
-    assert protected(book) == {foreign.kb_id}
+    # spec 2026-10-29 D2: forcing cannot reach another account's private KB.
+    assert protected(book) == set()
     assert kbs.get_kb(vault.kb_id).visibility == "private"
 
 
@@ -468,7 +470,8 @@ def test_forced_public_connector_stays_unavailable_during_consumer_changes(libra
         base_dir=tmp_path / "kbs", name="vault", kind="obsidian", created_by="t1",
     )
     books.set_book_kb_links(book.ref, {"vault": connector.kb_id})
-    with as_user("root", role="admin"):
+    # spec 2026-10-29 D2/D10: only the owner may force-publish; t1 owns the book.
+    with as_user("t1", role="admin"):
         books.set_book_visibility(book.ref, "public", force=True)
     with as_user("s1", role="student"):
         books.replace_book_references("template", "one", [book.ref], created_by="s1")
@@ -500,7 +503,8 @@ def test_initial_resolution_holds_no_global_sqlite_writer(library, as_user, monk
     assert calls == [books._db_path(), kbs._db_path()]
 
 
-@pytest.mark.parametrize("actor,role", [("t1", "teacher"), ("root", "admin"), ("t1", "user")])
+# spec 2026-10-29 D2: an admin publishes only books they own, so the admin case is the owner.
+@pytest.mark.parametrize("actor,role", [("t1", "teacher"), ("t1", "admin"), ("t1", "user")])
 @pytest.mark.parametrize("operation", ["prepare", "publish"])
 def test_explicit_reference_only_records_only_actual_private_targets(
     library, as_user, tmp_path, actor, role, operation,
@@ -649,7 +653,8 @@ def test_force_skipped_reference_target_has_no_intent_or_access(library, as_user
         base_dir=tmp_path / "kbs", name="vault", kind="obsidian", created_by="t1",
     )
     books.set_book_kb_links(book.ref, {"answers": private.kb_id, "vault": connector.kb_id})
-    with as_user("root", role="admin"):
+    # spec 2026-10-29 D2/D10: only the owner may force-publish; t1 owns the book.
+    with as_user("t1", role="admin"):
         books.set_book_visibility(book.ref, "public", force=True, kb_choices={
             private.kb_id: "reference_only", connector.kb_id: "reference_only",
         })

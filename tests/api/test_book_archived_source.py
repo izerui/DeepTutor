@@ -114,6 +114,12 @@ def archived_book(owner):
     return source_id, source, record
 
 
+def assert_hidden(client, actor):
+    """Spec 2026-10-29 D2: an admin cannot open another account's private book."""
+    response = client.get("/api/books/book:bk_archive", headers=headers(actor))
+    assert response.status_code == 404, response.text
+
+
 def assert_read_only(client, actor, source, workspace=""):
     before = snapshot(source)
     response = client.get("/api/books/book:bk_archive", headers=headers(actor, workspace))
@@ -158,7 +164,7 @@ def test_owner_admin_archive_denial_and_restore(archive_env, owner):
     listed = next(book for book in listing if book["id"] == record.book_id)
     assert not listed["can_edit"] and not listed["can_delete"]
     if owner != "root":
-        assert_read_only(client, "root", source)
+        assert_hidden(client, "root")
     before = snapshot(source)
     assert client.post("/api/books/progress/visit", headers=headers(owner), json={
         "book_id": record.ref, "page_id": "pg_archive",
@@ -192,11 +198,14 @@ def test_local_collision_does_not_authorize_archived_canonical_book(archive_env,
     _, source, record = archived_book("teacher")
     with actor_scope(local_owner):
         local = seed_book()
+    if local_owner == "root":
+        assert_hidden(client, "root")
     before = snapshot(source)
     assert rest_edit(client, local_owner, ref="bk_archive").status_code == 200
     assert ws_edit(client, local_owner, ref="bk_archive", revision=2)["type"] == "confirm_spine_result"
     assert local.load_book(record.book_id).revision == 3
-    assert_read_only(client, local_owner, source)
+    if local_owner != "root":
+        assert_read_only(client, local_owner, source)
     assert snapshot(source) == before
     assert client.delete("/api/books/bk_archive", headers=headers(local_owner)).status_code == 200
     assert not local.book_exists(record.book_id)
@@ -250,8 +259,8 @@ def test_unavailable_source_catalog_denies_writes_but_preserves_reads(archive_en
         catalog.write_bytes(b"corrupt synthetic catalog")
     else:
         catalog.unlink()
-    for actor in ("alice", "root"):
-        assert_read_only(client, actor, source)
+    assert_read_only(client, "alice", source)
+    assert_hidden(client, "root")
     catalog.write_bytes(original)
     assert_read_only(client, "alice", source)
 

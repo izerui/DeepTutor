@@ -100,8 +100,9 @@ async def test_public_private_reference_and_admin_access(as_user):
     with as_user("other"):
         assert book_access.resolve_book("bk_private") is None
         assert (await router.get_book("bk_one"))["progress"]["current_page_id"] == ""
+    # spec 2026-10-29 D2: an admin does not bypass another account's private book.
     with as_user("root", role="admin"):
-        assert book_access.resolve_book("book:bk_private").can_delete
+        assert book_access.resolve_book("book:bk_private") is None
     with as_user("teacher", role="teacher"):
         assert (await router.get_book("bk_one"))["progress"]["current_page_id"] == ""
 
@@ -112,8 +113,9 @@ def test_student_owner_can_withdraw_admin_published_book(as_user):
     with as_user("student", role="student"):
         _write()
         book_access.accessible_books()
-    with as_user("root", role="admin"):
-        registry.set_book_visibility("bk_one", "public")
+    # Legacy state: published before spec 2026-10-29 D2, when admins could publish
+    # other accounts' books. System code (no request user) still may.
+    registry.set_book_visibility("bk_one", "public")
     # Student owner sees can_set_visibility=True on the public book.
     with as_user("student", role="student"):
         caps = book_access.resolve_book("bk_one").capabilities()

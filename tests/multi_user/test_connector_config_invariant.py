@@ -160,7 +160,8 @@ def test_stale_uploaded_kind_closes_direct_permissions_and_selection(
     assert not registry.classification_is_consistent(record)
     assert not registry.can_read(record, make_user("stranger"))
     assert registry.can_read(record, make_user("owner"))
-    assert registry.can_read(record, make_user("admin", role="admin"))
+    # spec 2026-10-29 D2: an admin does not bypass another account's private KB.
+    assert not registry.can_read(record, make_user("admin", role="admin"))
     for kind in ("course", "mastery_template", "book", "partner"):
         with pytest.raises(registry.KbReferenceError):
             registry.add_reference(

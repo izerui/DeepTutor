@@ -54,6 +54,12 @@ async def test_document_delete_follows_d18(knowledge, as_user, make_kb):
         assert [r["referrer_id"] for r in ask.value.detail["references"]] == ["whole"]
         assert (await knowledge.delete_kb_file("physics", "other.md", confirm=True))["status"] == "ok"
         assert registry.find_document(record.ref, "other.md").deleted
+    # spec 2026-10-29 D2 / D10: an admin cannot touch a private KB, only a published one.
+    with as_user("root", role="admin"):
+        with pytest.raises(HTTPException) as hidden:
+            await knowledge.delete_kb_file(record.ref, "doc.md", force=True)
+        assert hidden.value.status_code == 404
+    registry.set_visibility(record.ref, "public")
     with as_user("root", role="admin"):
         assert (await knowledge.delete_kb_file(record.ref, "doc.md", force=True))["status"] == "ok"
     assert registry.find_document(record.ref, "doc.md").deleted
@@ -1046,7 +1052,8 @@ async def test_config_provider_guard_uses_referenced_location(
         return kb_dir == expected
 
     monkeypatch.setattr(index_probe, "has_ready_provider_index", ready_index)
-    with as_user("root", role="admin"):
+    # spec 2026-10-29 D2: only the owner manages a private KB, so the owner drives the guard.
+    with as_user("t1", role="teacher"):
         with pytest.raises(HTTPException) as error:
             await knowledge.update_kb_config(result["ref"], {"rag_provider": "pageindex"})
         assert error.value.status_code == 409

@@ -334,16 +334,10 @@ def test_a_graded_quiz_answer_lands_in_the_students_own_question_bank(
     assert entries("tina") == []
 
 
-def test_an_admin_reader_keeps_state_in_their_own_overlay(ref_book, teaching_http, as_account):
-    """Review Minor 3: a non-owner who may read the book (admin) never writes the owner's dir."""
-    from deeptutor.book.learning_overlay import BookLearningOverlay
-    from deeptutor.multi_user.paths import get_current_path_service
-
+def test_an_admin_cannot_use_a_teachers_private_path_book(ref_book, teaching_http):
+    """Spec 2026-10-29 D2: an unassigned admin cannot read the teacher's private book."""
     before = _snapshot(ref_book.owner_dir)
     headers = {**_auth("adam"), "X-DeepTutor-Mastery-Template": ref_book.template_id}
     statuses = _write_all(teaching_http.client, headers)
-    with as_account("adam"):
-        admin_overlay = BookLearningOverlay(get_current_path_service()).book_root(BOOK_ID)
-    assert set(statuses.values()) == {200}
-    assert (admin_overlay / "progress.json").is_file()
+    assert set(statuses.values()) == {404}
     assert _snapshot(ref_book.owner_dir) == before

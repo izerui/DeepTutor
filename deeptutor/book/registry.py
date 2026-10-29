@@ -798,7 +798,9 @@ def _read_decision(
     current = _bound_record(conn, record)
     if current is None:
         return False
-    if user.is_admin or current.visibility == "public" or current.created_by == user.id:
+    from deeptutor.multi_user.ownership import owns
+
+    if current.visibility == "public" or owns(current.created_by, user):
         return True
     return _references_of(conn, current.book_id)
 
@@ -835,8 +837,13 @@ def can_read_book(record: BookRecord, user: CurrentUser) -> bool:
 
 
 def _can_write(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -> bool:
+    from deeptutor.multi_user.ownership import owns
+
     current = _bound_record(conn, record)
-    return current is not None and (user.is_admin or current.created_by == user.id)
+    # D10: administrators keep the fallback over published books only.
+    return current is not None and (
+        owns(current.created_by, user) or (user.is_admin and current.visibility == "public")
+    )
 
 
 def can_write_book(record: BookRecord, user: CurrentUser) -> bool:

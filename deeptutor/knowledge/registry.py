@@ -1530,7 +1530,9 @@ def _load_builtin_readers() -> None:
 
 
 def can_read(record: KbRecord, user: CurrentUser) -> bool:
-    if user.is_admin or record.created_by == user.id:
+    from deeptutor.multi_user.ownership import owns
+
+    if owns(record.created_by, user):
         return True
     if not classification_is_consistent(record):
         return False
@@ -1559,7 +1561,10 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
 
 
 def can_write(record: KbRecord, user: CurrentUser) -> bool:
-    return user.is_admin or record.created_by == user.id
+    from deeptutor.multi_user.ownership import owns
+
+    # D10: administrators keep the fallback over published items only.
+    return owns(record.created_by, user) or (user.is_admin and record.visibility == "public")
 
 
 @dataclass(frozen=True)

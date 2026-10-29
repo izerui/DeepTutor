@@ -164,6 +164,15 @@ async def test_noncreator_admin_routes_address_authoritative_job(
         repository=SQLiteWebSourceSyncRepository(tmp_path / "jobs.sqlite"),
     )
     monkeypatch.setattr(knowledge, "get_web_source_sync_scheduler", lambda: scheduler)
+    if owner != "local-admin":
+        # spec 2026-10-29 D2: another account's private KB is not the admin's to manage.
+        with as_user(actor["id"], role="admin"):
+            with pytest.raises(HTTPException) as hidden:
+                await knowledge.add_web_source(
+                    record.ref, knowledge.AddWebSourceRequest(url="https://example.com/docs/"),
+                )
+            assert hidden.value.status_code == 404
+        return
     with as_user(actor["id"], role="admin"):
         info = await knowledge.add_web_source(
             record.ref, knowledge.AddWebSourceRequest(url="https://example.com/docs/"),
@@ -310,7 +319,12 @@ async def test_admin_own_coincident_legacy_job_is_not_imported_into_users_kb(
     # The global legacy identity is ambiguous: retain it, without assigning its
     # private pairing data to either owner's registered KB.
     assert repo.list_pairings(*legacy)[0].pairing_id == "admin-private"
+    # spec 2026-10-29 D2: the admin cannot address the user's private KB; its owner can.
     with as_user(admin["id"], role="admin"):
+        with pytest.raises(HTTPException) as hidden:
+            await knowledge.cancel_web_source_sync(user_record.ref, source["id"])
+        assert hidden.value.status_code == 404
+    with as_user("u1"):
         await knowledge.cancel_web_source_sync(user_record.ref, source["id"])
     assert repo.get(("u1", user_record.ref, source["id"])).state == "cancelled"
     assert repo.get((admin["id"], admin_record.ref, source["id"])).state == "pending"

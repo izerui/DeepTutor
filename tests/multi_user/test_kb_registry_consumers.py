@@ -677,8 +677,9 @@ def test_course_legacy_deleted_identity_retains_revocation(
         assert len(registry.list_references(original.kb_id)) == 1
         assert registry.list_references(foreign.kb_id) == []
 
-    with as_user("admin", role="admin"):
-        _delete_kb(original.ref, force=True)
+    # spec 2026-10-29 D2: the owner, not an admin, deletes a private KB.
+    with as_user("u2"):
+        _delete_kb(original.ref, confirm=True)
     assert not (Path(original.base_dir) / original.dir_name).exists()
     assert registry.get_kb(original.kb_id) is None
     [revoked] = registry.list_unavailable_references("course", course.id)

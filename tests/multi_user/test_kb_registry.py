@@ -400,7 +400,8 @@ def test_read_and_write_rules(tmp_path, make_user):
     )
 
     assert registry.can_read(private, owner) and registry.can_write(private, owner)
-    assert registry.can_read(private, admin) and registry.can_write(private, admin)
+    # spec 2026-10-29 D2: an admin does not bypass another account's private KB.
+    assert not registry.can_read(private, admin) and not registry.can_write(private, admin)
     assert not registry.can_read(private, student)
     assert registry.can_read(public, student)
     assert not registry.can_write(public, student)

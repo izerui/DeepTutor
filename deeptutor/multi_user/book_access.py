@@ -40,7 +40,9 @@ def _owner_id() -> str:
 
 
 def _my_owner_ids(user: CurrentUser) -> set[str]:
-    return {user.id, LOCAL_ADMIN_ID} if user.is_admin else {user.id}
+    from .ownership import owner_ids
+
+    return set(owner_ids(user))
 
 
 def admin_may_retire(record: registry.BookRecord | None, user: CurrentUser) -> bool:

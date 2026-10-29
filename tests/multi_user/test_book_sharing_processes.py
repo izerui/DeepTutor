@@ -31,8 +31,9 @@ root, mode, book_id = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 books.DB_PATH_OVERRIDE = root / "books.sqlite3"
 kbs.DB_PATH_OVERRIDE = root / "kbs.sqlite3"
 set_current_user(CurrentUser(
-    id="root", username="root", role="admin",
-    scope=UserScope(kind="admin", user_id="root", root=root),
+    # spec 2026-10-29 D2: the publisher is the owner; admins no longer write others' private books.
+    id="owner", username="owner", role="admin",
+    scope=UserScope(kind="admin", user_id="owner", root=root),
 ))
 (root / (mode + ".started")).write_text(str(os.getpid()))
 original = sharing.sync_protection
@@ -119,7 +120,18 @@ def process_library(tmp_path, monkeypatch, mu_isolated_root):
         base_dir=tmp_path / "books", dir_name="book_waves", title="Waves", created_by="owner",
     )
     books.set_book_kb_links(book.ref, {"answers": kb.kb_id})
-    return tmp_path, book, kb
+    # spec 2026-10-29 D2: act as the owner here too, matching the workers.
+    from deeptutor.multi_user.context import reset_current_user, set_current_user
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    token = set_current_user(CurrentUser(
+        id="owner", username="owner", role="admin",
+        scope=UserScope(kind="admin", user_id="owner", root=tmp_path),
+    ))
+    try:
+        yield tmp_path, book, kb
+    finally:
+        reset_current_user(token)
 
 
 def start(root, mode, book_id):

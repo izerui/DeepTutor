@@ -52,8 +52,11 @@ def test_kb_ref_hides_other_accounts_private_kbs(as_user, make_kb):
         with pytest.raises(HTTPException) as hidden:
             resolve_kb(record.ref)
         assert hidden.value.status_code == 404
+    # spec 2026-10-29 D2: an admin does not bypass another account's private KB.
     with as_user("root", role="admin"):
-        assert resolve_kb(record.ref, require_write=True).read_only is False
+        with pytest.raises(HTTPException) as hidden_from_admin:
+            resolve_kb(record.ref)
+        assert hidden_from_admin.value.status_code == 404
 
 
 def test_kb_ref_to_a_vanished_kb_is_unavailable(as_user):

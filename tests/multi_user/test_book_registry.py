@@ -161,9 +161,9 @@ def test_read_and_write_rules_and_location_binding(tmp_path, make_user):
     student = make_user("s1", role="student")
     private = _register(tmp_path)
     public = _register(tmp_path, "bk_public", visibility="public")
-    for user in (admin, owner):
-        assert registry.can_read_book(private, user)
-        assert registry.can_write_book(private, user)
+    assert registry.can_read_book(private, owner) and registry.can_write_book(private, owner)
+    # spec 2026-10-29 D2: an admin does not bypass another account's private book.
+    assert not registry.can_read_book(private, admin) and not registry.can_write_book(private, admin)
     assert not registry.can_read_book(private, student)
     assert registry.can_read_book(public, student)
     assert not registry.can_write_book(public, student)

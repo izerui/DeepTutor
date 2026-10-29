@@ -207,7 +207,8 @@ async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_
 
     monkeypatch.setattr(Path, "rename", guarded_rename)
     try:
-        with as_user("root", role="admin"):
+        # spec 2026-10-29 D2: a forced delete of a private book needs its owner (here an admin).
+        with as_user("owner", role="admin"):
             with pytest.raises((HTTPException, OSError, sqlite3.IntegrityError, RuntimeError)):
                 await router.delete_book("book:bk_one", force=True)
         assert restored == [True]
@@ -225,7 +226,7 @@ async def test_delete_failure_restores_contents_refs_and_live_runtime(owned, as_
             with registry._write() as conn:
                 conn.execute("DROP TRIGGER reject_deletion")
         monkeypatch.setattr(sharing, "sync_protection", original_sync)
-        with as_user("root", role="admin"):
+        with as_user("owner", role="admin"):
             assert (await router.delete_book("book:bk_one", force=True))["deleted"]
         assert "bk_one" not in resolved.engine._runtimes
         assert worker.cancelling()
@@ -433,7 +434,8 @@ async def test_admin_collision_deletes_only_selected_location(owned, as_user, ex
         registry.replace_book_references("course", "c1", ["bk_one"], created_by="owner")
     canonical_before = snapshot(canonical.engine.storage.book_root("bk_one"))
     record = registry.get_book("bk_one")
-    with as_user("root", role="admin"):
+    # spec 2026-10-29 D2: the colliding admin owns the canonical book, else it is hidden.
+    with as_user("owner", role="admin"):
         store = get_book_storage()
         store.save_book(Book(id="bk_one", title="Admin collision"))
         local_before = snapshot(store.book_root("bk_one"))
