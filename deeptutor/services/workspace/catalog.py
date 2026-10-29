@@ -26,6 +26,7 @@ from deeptutor.services.workspace.models import (
     WorkspaceBinding,
     WorkspaceError,
 )
+from deeptutor.services.workspace.ownership import personal_root_error
 from deeptutor.utils.secret_files import ensure_private_directory
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,9 @@ class WorkspaceCatalogMixin:
         registered = {row["workspace_id"] for row in self._catalog()}
         for binding in legacy:
             if binding.workspace_id not in registered:
+                if personal_root_error(binding.root, _owner_id()):
+                    # Never adopt a folder another account can also use (S4).
+                    continue
                 self._save_registration(
                     {
                         "workspace_id": binding.workspace_id,
@@ -282,6 +286,13 @@ class WorkspaceCatalogMixin:
             if row.get("kind") == "session":
                 continue
             status = self.validate(row["path"])
+            blocked = (
+                personal_root_error(Path(row["path"]), _owner_id())
+                if row.get("kind") == "workspace"
+                else ""
+            )
+            if blocked:
+                status = {**status, "status": "invalid", "error": blocked}
             result.append(
                 {
                     "workspace_id": row["workspace_id"],
@@ -452,6 +463,10 @@ class WorkspaceCatalogMixin:
             )
         if row is None or row.get("kind") == "system" or (row["archived"] and not existing):
             raise WorkspaceError("Workspace not found or archived.")
+        if row.get("kind") == "workspace":
+            blocked = personal_root_error(Path(row["path"]), _owner_id())
+            if blocked:
+                raise WorkspaceError(blocked)
         binding = self.binding_by_id(workspace_id)
         self._ensure_ready(binding)
         return binding
