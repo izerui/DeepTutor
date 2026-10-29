@@ -367,7 +367,8 @@ export const kbDetailSections = (kb: KnowledgeBase): KbDetailSection[] => {
     : kb.metadata?.type === "kiwix"
       ? ["kiwix", "settings"]
     : KB_DETAIL_SECTIONS.filter(
-        (section) => section !== "devices" && section !== "kiwix" && (section !== "folders" || !kb.metadata?.type),
+        // P1c: linked server folders are retired for every KB.
+        (section) => section !== "devices" && section !== "kiwix" && section !== "folders",
       );
   return kb.read_only
     ? sections.filter((section) => !["add", "folders", "github", "web", "devices"].includes(section))

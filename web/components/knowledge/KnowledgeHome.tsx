@@ -144,15 +144,6 @@ export default function KnowledgeHome({
   const externalSources = useMemo(
     () => [
       {
-        id: "obsidian" as const,
-        name: t("Obsidian"),
-        description: t(
-          "A live Obsidian vault — browsed and edited in place, no index.",
-        ),
-        action: t("Connect vault"),
-        count: kbs.filter((kb) => kb.metadata?.type === "obsidian").length,
-      },
-      {
         id: "marginnote4" as const,
         name: t("MarginNote 4"),
         description: t(

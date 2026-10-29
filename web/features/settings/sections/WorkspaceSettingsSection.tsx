@@ -3,14 +3,14 @@
 import Tooltip from "@/shared/ui/Tooltip";
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Archive, ArchiveRestore, FileText, Folder, FolderInput, Globe2, Pencil, Plus, Settings2 } from 'lucide-react'
+import { Archive, ArchiveRestore, FileText, Folder, Globe2, Pencil, Plus, Settings2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SettingSection, SettingsPageHeader, inputClass, subPanelClass } from '@/components/settings/shared'
 import { WorkspaceResourcePicker } from '@/components/workspaces/WorkspaceResourcePicker'
 import { WorkspaceInstructionsField } from '@/components/workspaces/WorkspaceInstructionsField'
 import { SystemWorkspaceSnapshot } from '@/components/workspaces/SystemWorkspaceSnapshot'
 import {
-  getWorkspaceCatalog, saveWorkspace, migrateWorkspace, workspaceChatHref, inheritedWorkspaceResources,
+  getWorkspaceCatalog, saveWorkspace, workspaceChatHref, inheritedWorkspaceResources,
   type WorkspaceCatalog, type ChatWorkspaceRegistration,
 } from '@/lib/workspaces-api'
 
@@ -26,8 +26,6 @@ function WorkspaceRow({ row, run, busy }: { row: ChatWorkspaceRegistration; run:
   const [resources, setResources] = useState(row.resources ?? inheritedWorkspaceResources())
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(row.display_name)
-  const [moving, setMoving] = useState(false)
-  const [destination, setDestination] = useState('')
   const custom = row.kind === 'workspace'
   const Icon = row.kind === 'system' ? Settings2 : row.kind === 'general' ? Globe2 : Folder
   const label = row.kind === 'system' ? t('System workspace') : row.kind === 'general' ? t('Default workspace') : row.display_name
@@ -46,11 +44,8 @@ function WorkspaceRow({ row, run, busy }: { row: ChatWorkspaceRegistration; run:
           {row.kind !== 'system' && !row.archived && <button type="button" className={actionClass} onClick={() => { setResources(row.resources ?? inheritedWorkspaceResources()); setResourcesOpen(!resourcesOpen) }}><Settings2 size={14} />{t('Assigned resources')}</button>}
           {row.kind !== 'system' && !row.archived && <button type="button" className={actionClass} aria-expanded={instructionsOpen} onClick={() => { setInstructions(row.instructions ?? ''); setInstructionsOpen(!instructionsOpen) }}><FileText size={14} />{t('Workspace instructions')}</button>}
           {custom && <Tooltip label={t('Rename workspace')} side="top">
-            <button type="button" className={actionClass} aria-label={t('Rename workspace')} onClick={() => { setName(row.display_name); setEditing(!editing); setMoving(false) }}><Pencil size={14} /></button>
+            <button type="button" className={actionClass} aria-label={t('Rename workspace')} onClick={() => { setName(row.display_name); setEditing(!editing) }}><Pencil size={14} /></button>
           </Tooltip>}
-          <Tooltip label={t('Move folder')} side="top">
-            <button type="button" className={actionClass} aria-label={t('Move folder')}  onClick={() => { setMoving(!moving); setEditing(false); setDestination('') }}><FolderInput size={14} /></button>
-          </Tooltip>
           {custom && <Tooltip label={row.archived ? t('Restore workspace') : t('Archive workspace')} side="top">
             <button type="button" className={actionClass} aria-label={row.archived ? t('Restore workspace') : t('Archive workspace')} onClick={() => void run(() => saveWorkspace({ archived: !row.archived }, row.workspace_id))}>{row.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}</button>
           </Tooltip>}
@@ -80,14 +75,6 @@ function WorkspaceRow({ row, run, busy }: { row: ChatWorkspaceRegistration; run:
             <button className={actionClass} type="button" onClick={() => setEditing(false)}>{t('Cancel')}</button>
           </form>
         )}
-        {moving && (
-          <form className={`${subPanelClass} mt-3 space-y-3 p-4`} onSubmit={async event => { event.preventDefault(); if (await run(() => migrateWorkspace(destination.trim(), row.workspace_id))) setMoving(false) }}>
-            <p className="text-xs text-[var(--muted-foreground)]">{row.follows_root ? t('Follows root') : t('Custom location')}</p>
-            <label className="block text-xs">{t('New storage folder')}<input autoFocus className={`${inputClass} mt-1 font-mono`} value={destination} onChange={event => setDestination(event.target.value)} required placeholder={t('Enter a destination folder that does not exist yet')} /></label>
-            <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">{t('Copy and verify before switching. The workspace ID and conversation bindings stay unchanged; the old folder is kept as a backup.')}</p>
-            <div className="flex gap-2"><button type="submit" disabled={!destination.trim()} className={primaryClass}>{t('Start migration')}</button><button type="button" className={actionClass} onClick={() => setMoving(false)}>{t('Cancel')}</button></div>
-          </form>
-        )}
         {row.error && <p role="alert" className="mt-2 text-xs text-[var(--destructive)]">{t(row.error)}</p>}
         {row.kind === 'system' && <SystemWorkspaceSnapshot />}
       </div>
@@ -98,19 +85,16 @@ function WorkspaceRow({ row, run, busy }: { row: ChatWorkspaceRegistration; run:
 export default function WorkspaceSettingsSection() {
   const { t } = useTranslation()
   const [catalog, setCatalog] = useState<WorkspaceCatalog | null>(null)
-  const [root, setRoot] = useState('')
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [resources, setResources] = useState(inheritedWorkspaceResources)
   const [instructions, setInstructions] = useState('')
   const [name, setName] = useState('')
-  const [path, setPath] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const refresh = useCallback(async () => {
     const next = await getWorkspaceCatalog()
     setCatalog(next)
-    setRoot(next.root)
     setError('')
   }, [])
   useEffect(() => { void refresh().catch(err => setError(String(err.message))) }, [refresh])
@@ -134,17 +118,16 @@ export default function WorkspaceSettingsSection() {
         <button type="button" disabled={busy || !catalog} onClick={() => setCreating(!creating)} className={primaryClass}><Plus size={15} />{t('New workspace')}</button>
       } />
       {error && <div role="alert" className="mb-4 rounded-lg border border-[var(--destructive)] p-3 text-sm text-[var(--destructive)]">{error}{!catalog && <button className="ml-3 underline" onClick={() => void refresh().catch(err => setError(String(err.message)))}>{t('Retry')}</button>}</div>}
-      {(busy || notice) && <p role="status" className="mb-4 text-sm text-[var(--muted-foreground)]">{busy ? t('Working. Migration copies and verifies your files; please wait…') : notice}</p>}
+      {(busy || notice) && <p role="status" className="mb-4 text-sm text-[var(--muted-foreground)]">{busy ? t('Working…') : notice}</p>}
       {!catalog ? (!error && <div aria-busy="true" className="h-44 animate-pulse rounded-xl bg-[var(--muted)]" />) : (
         <fieldset disabled={busy} className="min-w-0 disabled:opacity-70">
           <SettingSection title={t('Custom workspaces')} description={t('Books, Mastery Path, Reading, Watching and conversations are isolated by workspace.')}>
             {creating && (
               <form className={`${subPanelClass} my-4 space-y-3 p-4 sm:p-5`} onSubmit={async event => {
                 event.preventDefault()
-                if (await run(() => saveWorkspace({ name: name.trim(), resources, ...(instructions.trim() ? { instructions } : {}), ...(path.trim() ? { path: path.trim() } : {}) }))) { setName(''); setPath(''); setInstructions(''); setResources(inheritedWorkspaceResources()); setCreating(false) }
+                if (await run(() => saveWorkspace({ name: name.trim(), resources, ...(instructions.trim() ? { instructions } : {}) }))) { setName(''); setInstructions(''); setResources(inheritedWorkspaceResources()); setCreating(false) }
               }}>
                 <label className="block text-sm">{t('Workspace name')}<input autoFocus className={`${inputClass} mt-1`} value={name} onChange={event => setName(event.target.value)} required maxLength={100} placeholder={t('e.g. Probability')} /></label>
-                <label className="block text-sm">{t('Existing folder path (optional)')}<input className={`${inputClass} mt-1 font-mono`} value={path} onChange={event => setPath(event.target.value)} placeholder={t('Leave empty to create under root')} /></label>
                 <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">{t('Place files in the folder for the agent to read. Generated files go into outputs/.')}</p>
                 <WorkspaceInstructionsField value={instructions} onChange={setInstructions} />
                 <WorkspaceResourcePicker value={resources} onChange={setResources} />
@@ -156,12 +139,6 @@ export default function WorkspaceSettingsSection() {
           </SettingSection>
           <SettingSection title={t('Built-in workspaces')}>
             {catalog.workspaces.filter(row => row.kind !== 'workspace').map(row => <WorkspaceRow key={row.workspace_id} row={row} run={run} busy={busy} />)}
-          </SettingSection>
-          <SettingSection title={t('Storage location')} description={t('Workspaces default to root / workspace ID. Changing root migrates folders that follow it; custom locations stay in place. Remote deployments use server folders.')}>
-            <form className="space-y-3 py-4" onSubmit={async event => { event.preventDefault(); await run(() => migrateWorkspace(root.trim())) }}>
-              <label className="block text-sm">{t('Workspace root folder')}<input className={`${inputClass} mt-2 font-mono`} value={root} onChange={event => setRoot(event.target.value)} required /></label>
-              {root.trim() !== catalog.root && <div className="flex flex-wrap items-center gap-3"><button type="submit" disabled={!root.trim()} className={primaryClass}>{t('Migrate to new root')}</button><p className="text-xs text-[var(--muted-foreground)]">{t('Old folders are kept as a backup. Finish running conversations before migrating.')}</p></div>}
-            </form>
           </SettingSection>
         </fieldset>
       )}

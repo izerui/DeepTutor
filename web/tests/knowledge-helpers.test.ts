@@ -296,10 +296,10 @@ test("an ordinary knowledge base has no devices section", () => {
     name: "Papers",
     statistics: { rag_provider: "llamaindex" },
   };
+  // Spec 2026-10-29 P1c: linked server folders are retired.
   assert.deepEqual(kbDetailSections(indexed), [
     "files",
     "add",
-    "folders",
     "github",
     "web",
     "versions",

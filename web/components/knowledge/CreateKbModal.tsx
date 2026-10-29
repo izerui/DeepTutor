@@ -153,7 +153,7 @@ export default function CreateKbModal({
     "",
   );
   // Link mode: the source is either an engine id or the Obsidian sentinel.
-  const [linkSource, setLinkSource] = useState(OBSIDIAN_SOURCE);
+  const [linkSource, setLinkSource] = useState(MARGINNOTE4_SOURCE);
   const [folderPath, setFolderPath] = useState("");
   const [probe, setProbe] = useState<LinkedFolderProbe | null>(null);
   const [probing, setProbing] = useState(false);
@@ -252,7 +252,6 @@ export default function CreateKbModal({
     };
   }, [isOpen]);
 
-  const firstLinkable = providers.find((p) => p.linkable)?.id;
 
   const handleClose = () => {
     imaConnection.reset();
@@ -288,7 +287,12 @@ export default function CreateKbModal({
     setProvider(
       initialProvider || createProviders(providers)[0]?.id || "llamaindex",
     );
-    setLinkSource(initialSource || firstLinkable || OBSIDIAN_SOURCE);
+    // P1c: only sources that need no server folder can be linked.
+    setLinkSource(
+      initialSource === IMA_PROVIDER || initialSource === MARGINNOTE4_SOURCE
+        ? initialSource
+        : providers.some((p) => p.id === IMA_PROVIDER) ? IMA_PROVIDER : MARGINNOTE4_SOURCE,
+    );
     setFolderPath("");
     setProbe(null);
     setProbing(false);
@@ -304,7 +308,7 @@ export default function CreateKbModal({
     setLightRagConfig(null);
     setLightRagConfigLoaded(false);
     setLightRagConfigError(false);
-  }, [isOpen, providers, firstLinkable, initialMode, initialSource]);
+  }, [isOpen, providers, initialMode, initialSource]);
 
   useEffect(() => {
     if (!isOpen || mode !== "new") return;
@@ -1470,7 +1474,8 @@ function LinkModeFields({
           {t("Source")}
         </label>
         <div className="grid gap-2 sm:grid-cols-2">
-          {providers.map((p) => {
+          {/* P1c: a local engine-index folder cannot be linked; only remote sources remain. */}
+          {providers.filter((p) => p.id === IMA_PROVIDER).map((p) => {
             const selected =
               !linkIsObsidian && !linkIsMarginNote && linkSource === p.id;
             const enabled = linkSourceEnabled(p);
@@ -1517,33 +1522,6 @@ function LinkModeFields({
               </Tooltip>
             );
           })}
-
-          {/* Obsidian — a live vault, no index. */}
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => setLinkSource(OBSIDIAN_SOURCE)}
-            className={`group flex flex-col gap-1 rounded-2xl border p-3 text-left transition-colors disabled:opacity-50 ${
-              linkIsObsidian
-                ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                : "border-[var(--border)] hover:border-[var(--ring)]"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--foreground)]">
-                <KnowledgeEngineIcon engine="obsidian" size={24} />
-                {t("Obsidian")}
-              </span>
-              {linkIsObsidian && (
-                <Check className="h-3.5 w-3.5 text-[var(--primary)]" />
-              )}
-            </div>
-            <span className="text-[11.5px] leading-snug text-[var(--muted-foreground)]">
-              {t(
-                "A live Obsidian vault — browsed and edited in place, no index.",
-              )}
-            </span>
-          </button>
 
           {/* MarginNote 4 — filled by its Add-on, not by a path on this disk. */}
           <button

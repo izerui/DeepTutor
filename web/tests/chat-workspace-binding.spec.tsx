@@ -118,7 +118,7 @@ it('keeps ownership on failure and disables moving a running turn', async () => 
   rerender(<BindingHarness />)
   expect(screen.getByRole('button', { name: 'Conversation workspace' })).toBeDisabled()
 })
-it('creates managed folders and registers existing folders from settings', async () => {
+it('creates managed workspaces without a server folder field', async () => {
   render(<WorkspaceSettingsSection />)
   await screen.findByText('/materials/algebra')
   fireEvent.click(screen.getByRole('button', { name: 'New workspace' }))
@@ -128,27 +128,17 @@ it('creates managed folders and registers existing folders from settings', async
   fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
   await waitFor(() => expect(fixtures.save).toHaveBeenCalledWith({ name: 'Geometry', resources: { skills: null, mcp: null, knowledge_bases: null } }))
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Create workspace' })).toBeNull())
+  // Spec 2026-10-29 P1c: no server folder can be entered.
   fireEvent.click(screen.getByRole('button', { name: 'New workspace' }))
-  fireEvent.change(screen.getByPlaceholderText('e.g. Probability'), {
-    target: { value: 'Research' },
-  })
-  fireEvent.change(screen.getByPlaceholderText('Leave empty to create under root'), {
-    target: { value: '/my/research' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
-  await waitFor(() =>
-    expect(fixtures.save).toHaveBeenCalledWith({ name: 'Research', path: '/my/research', resources: { skills: null, mcp: null, knowledge_bases: null } })
-  )
+  expect(screen.queryByPlaceholderText('Leave empty to create under root')).toBeNull()
 })
 
-it('migrates the root through the explicit location action', async () => {
+it('offers no storage-root or folder migration controls', async () => {
+  // Spec 2026-10-29 P1c: DeepTutor decides every storage location.
   render(<WorkspaceSettingsSection />)
-  await screen.findByText('/materials/algebra')
-  fireEvent.change(screen.getByLabelText('Workspace root folder'), {
-    target: { value: '/new-root' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Migrate to new root' }))
-  await waitFor(() => expect(fixtures.migrate).toHaveBeenCalledWith('/new-root'))
+  await screen.findByText('Algebra')
+  expect(screen.queryByLabelText('Workspace root folder')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Move folder' })).toBeNull()
 })
 
 it('hides system, general, archived and invalid workspaces as new chat destinations', () => {
@@ -190,19 +180,6 @@ it('renames and archives a workspace through its row actions', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Archive workspace' }))
   await waitFor(() => expect(fixtures.save).toHaveBeenCalledWith({ archived: true }, 'ws_a'))
 })
-
-it('keeps a failed migration form open with its destination and error', async () => {
-  fixtures.migrate.mockRejectedValue(new Error('Destination already exists'))
-  render(<WorkspaceSettingsSection />)
-  await screen.findByText('Algebra')
-  fireEvent.click(screen.getByRole('button', { name: 'Move folder' }))
-  fireEvent.change(screen.getByLabelText('New storage folder'), { target: { value: '/existing' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Start migration' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Destination already exists')
-  expect(screen.getByLabelText('New storage folder')).toHaveValue('/existing')
-  expect(fixtures.migrate).toHaveBeenCalledWith('/existing', 'ws_a')
-})
-
 
 it('saves an explicit empty resource selection without changing other resource types', async () => {
   render(<WorkspaceSettingsSection />)
