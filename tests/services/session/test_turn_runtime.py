@@ -134,6 +134,16 @@ class TestAssemblePersistedAnswer:
         assert _repair_chinese_emphasis_for_persistence("**“你好”**啊", "zh-CN") == "**“你好”** 啊"
         assert _repair_chinese_emphasis_for_persistence("中文*，重点*", "en") == "中文*，重点*"
 
+    def test_repairs_japanese_and_korean_emphasis_boundaries(self) -> None:
+        # Both set a bracket flush against the next word, exactly as Chinese does.
+        assert (
+            _repair_chinese_emphasis_for_persistence(
+                "つまり、**関連付けは「どの表を見るか」**です。", "ja"
+            )
+            == "つまり、**関連付けは「どの表を見るか」** です。"
+        )
+        assert _repair_chinese_emphasis_for_persistence("**“단어”**는", "ko") == "**“단어”** 는"
+
     def test_does_not_change_inner_whitespace_or_literal_stars(self) -> None:
         inputs = [
             "* 重点 *",

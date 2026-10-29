@@ -258,13 +258,20 @@ def _repair_chinese_emphasis_line(line: str) -> str:
     return line
 
 
+# Japanese and Korean set punctuation flush against the next word just as
+# Chinese does, so a closing marker after a bracket fails CommonMark's flanking
+# rule in all three. Mirrors ``CJK_EMPHASIS_LANGUAGES`` in the web client.
+_CJK_EMPHASIS_LANGUAGES = ("zh", "ja", "ko")
+
+
 def _repair_chinese_emphasis_for_persistence(content: str, language: str) -> str:
     """Normalize CJK Markdown emphasis before the assistant answer is stored.
 
-    This deliberately runs only for Chinese model output and leaves code and
-    mathematics literal, so the persisted source matches its valid rendering.
+    This deliberately runs only for Chinese, Japanese and Korean model output
+    and leaves code and mathematics literal, so the persisted source matches
+    its valid rendering.
     """
-    if not content or not str(language or "").lower().startswith("zh"):
+    if not content or not str(language or "").lower().startswith(_CJK_EMPHASIS_LANGUAGES):
         return content
     # NUL delimits the placeholders below; text that already has one is left as is.
     if "\x00" in content:
