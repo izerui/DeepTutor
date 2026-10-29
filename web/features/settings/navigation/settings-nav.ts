@@ -505,7 +505,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     },
     icon: Bot,
     href: "/settings#agents",
-    children: AGENT_CHILDREN,
+    // Spec 2026-10-29 P1c: connected local agents are closed, so the group has
+    // no pages and stays hidden. AGENT_CHILDREN keeps their routes resolvable.
+    children: [],
   },
   {
     key: "progress",

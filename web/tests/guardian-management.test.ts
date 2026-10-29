@@ -112,7 +112,8 @@ test("learner and guardian sections follow the resolved account type", () => {
   });
   assert.equal(isSettingsCategoryVisible(learner, localAdmin), false);
   assert.equal(isSettingsCategoryVisible(guardian, localAdmin), false);
-  assert.equal(isSettingsCategoryVisible(agents, localAdmin), true);
+  // Spec 2026-10-29 P1c: connected local agents are closed, even for admins.
+  assert.equal(isSettingsCategoryVisible(agents, localAdmin), false);
 
   const learnerAccount = settingsAccessFromAuthStatus({
     enabled: true,

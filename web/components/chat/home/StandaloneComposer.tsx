@@ -360,16 +360,8 @@ function StandaloneComposerImpl({
     () => knowledgeBases.filter((kb) => kb.metadata?.type !== "subagent"),
     [knowledgeBases],
   );
-  const agentOptions = useMemo(
-    () =>
-      knowledgeBases
-        .filter((kb) => kb.metadata?.type === "subagent" && kb.metadata?.agent_kind !== "partner")
-        .map((kb) => ({
-          name: kb.name,
-          kind: kb.metadata?.agent_kind as string | undefined,
-        })),
-    [knowledgeBases],
-  );
+  // Spec 2026-10-29 P1c: connected local agents are closed, so none is offered.
+  const agentOptions = useMemo<{ name: string; kind: string | undefined }[]>(() => [], []);
 
   useEffect(() => {
     let cancelled = false;
