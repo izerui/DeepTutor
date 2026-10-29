@@ -728,6 +728,13 @@ def test_llm_provider_choices_include_runcrate() -> None:
     assert llm["runcrate"]["base_url"] == "https://api.runcrate.ai/v1"
 
 
+def test_llm_provider_choices_include_cloudgpu() -> None:
+    llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
+
+    assert llm["cloudgpu"]["label"] == "CloudGPU"
+    assert llm["cloudgpu"]["base_url"] == "https://cloudgpu.app/v1"
+
+
 def test_llm_provider_choices_include_novita() -> None:
     llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
 
