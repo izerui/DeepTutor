@@ -201,7 +201,7 @@ P1a 实施中确定的细则：
 
 P1a 遗留：管理员对已公开内容仍能编辑正文（D10 只要求撤回和删除），在 P4 统一发布范围时收窄。
 
-**P1c 去掉自选目录（2026-10-29，排在 P1b 之前）：** 拒绝并去掉以下入口：用已有文件夹新建工作区、迁移工作区目录、修改根目录、设置工作区文件夹、连接 Obsidian 仓库、连接已有索引文件夹、知识库关联文件夹与同步、MarginNote 4 的自定义数据库路径。kaoyan 部署配置去掉 `/workspace` 挂载与 `DEEPTUTOR_WORKSPACE_ROOT`、`DEEPTUTOR_WORKSPACE_ALLOWED_ROOTS`。港大原版的 `docker-compose.yml`、`docker-compose.ghcr.yml` 未改。已经存在的 Obsidian / 关联文件夹类知识库如何处理，待用户决定。
+**P1c 去掉自选目录（2026-10-29，排在 P1b 之前）：** 拒绝并去掉以下入口：用已有文件夹新建工作区、迁移工作区目录、修改根目录、设置工作区文件夹、连接 Obsidian 仓库、连接已有索引文件夹、知识库关联文件夹与同步、MarginNote 4 的自定义数据库路径。kaoyan 部署配置去掉 `/workspace` 挂载与 `DEEPTUTOR_WORKSPACE_ROOT`、`DEEPTUTOR_WORKSPACE_ALLOWED_ROOTS`。港大原版的 `docker-compose.yml`、`docker-compose.ghcr.yml` 未改。已经存在的 Obsidian / 已有索引文件夹类知识库停用（不再读取所指目录，列表显示出错，由主人删除）。连接本地程序（Claude Code、Codex 等子代理）的入口对所有账号关闭，已连接的条目同样停用；伙伴不受影响（用户 2026-10-29 确认）。
 
 ## 12. 与港大上游的关系
 
@@ -231,6 +231,7 @@ P1a 遗留：管理员对已公开内容仍能编辑正文（D10 只要求撤回
 | D12 | 管理员共用目录里的旧数据全部归现有的唯一管理员 |
 | D13 | 所有数据放在 `/app/data` 一个目录，迁移时整个拷走 |
 | D14 | 用户不能自己选服务器文件夹；去掉共用 `/workspace` 目录和所有填写服务器路径的功能 |
+| D15 | 关闭连接本地程序（子代理）功能；已有的服务器文件夹类知识库停用 |
 
 ## 14. 待确认
 
