@@ -177,7 +177,7 @@ export default function AdminUsersPage() {
         prev.map((u) => (u.username === user.username ? { ...u, role } : u)),
       );
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : t("Failed to update role"));
+      setActionError(e instanceof Error ? t(e.message) : t("Failed to update role"));
     } finally {
       setRoleSavingUsername(null);
     }
@@ -211,7 +211,7 @@ export default function AdminUsersPage() {
       setConfirmTarget(null);
       setActionError(
         e instanceof Error
-          ? e.message
+          ? t(e.message)
           : confirmTarget.kind === "delete"
             ? t("Failed to delete user")
             : t("Failed to update role"),

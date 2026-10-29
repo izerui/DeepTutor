@@ -5569,7 +5569,7 @@
   "Make this book public?": "Make this book public?",
   "Make this book private?": "Make this book private?",
   "Every signed-in account can read a public book. Each reader keeps their own progress.": "Every signed-in account can read a public book. Each reader keeps their own progress.",
-  "Only you and admins can open a private book, plus anything that references it.": "Only you and admins can open a private book, plus anything that references it.",
+  "Only you can open a private book, plus anything that references it.": "Only you can open a private book, plus anything that references it.",
   "Private knowledge bases this book uses": "Private knowledge bases this book uses",
   "Readable through this book": "Readable through this book",
   "Personal connectors cannot be shared.": "Personal connectors cannot be shared.",
@@ -5696,6 +5696,10 @@
   "Delete anyway": "Delete anyway",
   "Its owner made this book private — remove the reference, or attach another resource.": "Its owner made this book private — remove the reference, or attach another resource.",
   "The tutor has not asked about you yet. It will at the start of your first session.": "The tutor has not asked about you yet. It will at the start of your first session.",
-  "Only the book's owner and admins can open a private book, plus anything that references it.": "Only the book's owner and admins can open a private book, plus anything that references it.",
-  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "This book's source workspace is archived and its content is read-only. An admin can still change its visibility."
+  "Only the book's owner can open a private book, plus anything that references it.": "Only the book's owner can open a private book, plus anything that references it.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.",
+  "This folder is the deployment's shared content folder and cannot store personal learning data.": "This folder is the deployment's shared content folder and cannot store personal learning data.",
+  "This folder belongs to another account.": "This folder belongs to another account.",
+  "The selected workspace folder does not exist.": "The selected workspace folder does not exist.",
+  "Only one administrator is supported until each administrator has separate data.": "Only one administrator is supported until each administrator has separate data."
 }

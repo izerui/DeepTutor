@@ -5569,7 +5569,7 @@
   "Make this book public?": "将这本书设为公开？",
   "Make this book private?": "将这本书设为私有？",
   "Every signed-in account can read a public book. Each reader keeps their own progress.": "所有登录账号都能阅读公开书籍，每位读者的进度各自独立。",
-  "Only you and admins can open a private book, plus anything that references it.": "私有书籍只有你和管理员能打开，引用它的内容仍可读取。",
+  "Only you can open a private book, plus anything that references it.": "私有书籍只有你能打开，引用它的内容仍可读取。",
   "Private knowledge bases this book uses": "这本书使用的私有知识库",
   "Readable through this book": "通过这本书可读",
   "Personal connectors cannot be shared.": "个人连接器不能共享。",
@@ -5696,6 +5696,10 @@
   "Delete anyway": "仍然删除",
   "Its owner made this book private — remove the reference, or attach another resource.": "所有者已将这本书设为私有——请移除此引用，或改为添加其他资源。",
   "The tutor has not asked about you yet. It will at the start of your first session.": "导师还没问过你的情况。它会在你第一次会话开始时询问。",
-  "Only the book's owner and admins can open a private book, plus anything that references it.": "只有书的拥有者和管理员可以打开私有书，以及任何引用它的内容。",
-  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "这本书的源工作区已归档，内容为只读。管理员仍可更改其可见性。"
+  "Only the book's owner can open a private book, plus anything that references it.": "只有书的拥有者可以打开私有书，以及任何引用它的内容。",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "这本书的源工作区已归档，内容为只读。管理员仍可更改其可见性。",
+  "This folder is the deployment's shared content folder and cannot store personal learning data.": "这是部署时挂载的共用内容文件夹，不能存放个人学习数据。",
+  "This folder belongs to another account.": "此文件夹属于其他账号。",
+  "The selected workspace folder does not exist.": "所选工作区文件夹不存在。",
+  "Only one administrator is supported until each administrator has separate data.": "在每个管理员拥有独立数据之前，暂时只允许一个管理员。"
 }

@@ -5585,7 +5585,7 @@
   "Make this book public?": "Upublicznić tę książkę?",
   "Make this book private?": "Ustawić tę książkę jako prywatną?",
   "Every signed-in account can read a public book. Each reader keeps their own progress.": "Każde zalogowane konto może czytać publiczną książkę. Każdy czytelnik ma własne postępy.",
-  "Only you and admins can open a private book, plus anything that references it.": "Prywatną książkę mogą otworzyć tylko Ty i administratorzy oraz elementy, które się do niej odwołują.",
+  "Only you can open a private book, plus anything that references it.": "Prywatną książkę możesz otworzyć tylko Ty oraz elementy, które się do niej odwołują.",
   "Private knowledge bases this book uses": "Prywatne bazy wiedzy używane przez tę książkę",
   "Readable through this book": "Dostępna przez tę książkę",
   "Personal connectors cannot be shared.": "Osobistych konektorów nie można udostępniać.",
@@ -5742,6 +5742,10 @@
   "{{count}} round_many": "{{count}} rund",
   "{{count}} videos_few": "{{count}} filmy",
   "{{count}} videos_many": "{{count}} filmów",
-  "Only the book's owner and admins can open a private book, plus anything that references it.": "Tylko właściciel książki i administratorzy mogą otworzyć prywatną książkę, a także wszystko, co się do niej odwołuje.",
-  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Źródłowy obszar roboczy tej książki jest zarchiwizowany, a jej treść jest tylko do odczytu. Administrator nadal może zmienić jej widoczność."
+  "Only the book's owner can open a private book, plus anything that references it.": "Tylko właściciel książki może otworzyć prywatną książkę, a także wszystko, co się do niej odwołuje.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Źródłowy obszar roboczy tej książki jest zarchiwizowany, a jej treść jest tylko do odczytu. Administrator nadal może zmienić jej widoczność.",
+  "This folder is the deployment's shared content folder and cannot store personal learning data.": "Ten folder jest wspólnym folderem treści wdrożenia i nie może przechowywać osobistych danych nauki.",
+  "This folder belongs to another account.": "Ten folder należy do innego konta.",
+  "The selected workspace folder does not exist.": "Wybrany folder przestrzeni roboczej nie istnieje.",
+  "Only one administrator is supported until each administrator has separate data.": "Dopóki każdy administrator nie ma własnych danych, możliwy jest tylko jeden administrator."
 }

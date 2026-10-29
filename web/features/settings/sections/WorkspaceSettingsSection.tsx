@@ -88,7 +88,7 @@ function WorkspaceRow({ row, run, busy }: { row: ChatWorkspaceRegistration; run:
             <div className="flex gap-2"><button type="submit" disabled={!destination.trim()} className={primaryClass}>{t('Start migration')}</button><button type="button" className={actionClass} onClick={() => setMoving(false)}>{t('Cancel')}</button></div>
           </form>
         )}
-        {row.error && <p role="alert" className="mt-2 text-xs text-[var(--destructive)]">{row.error}</p>}
+        {row.error && <p role="alert" className="mt-2 text-xs text-[var(--destructive)]">{t(row.error)}</p>}
         {row.kind === 'system' && <SystemWorkspaceSnapshot />}
       </div>
     </article>

@@ -5585,7 +5585,7 @@
   "Make this book public?": "Зробити цю книгу публічною?",
   "Make this book private?": "Зробити цю книгу приватною?",
   "Every signed-in account can read a public book. Each reader keeps their own progress.": "Кожен обліковий запис, що увійшов, може читати публічну книгу. Кожен читач зберігає власний прогрес.",
-  "Only you and admins can open a private book, plus anything that references it.": "Приватну книгу можете відкрити лише ви та адміністратори, а також елементи, що на неї посилаються.",
+  "Only you can open a private book, plus anything that references it.": "Приватну книгу можете відкрити лише ви, а також елементи, що на неї посилаються.",
   "Private knowledge bases this book uses": "Приватні бази знань, які використовує ця книга",
   "Readable through this book": "Доступна через цю книгу",
   "Personal connectors cannot be shared.": "Особисті конектори не можна поширювати.",
@@ -5742,6 +5742,10 @@
   "{{count}} round_many": "{{count}} раундів",
   "{{count}} videos_few": "{{count}} відео",
   "{{count}} videos_many": "{{count}} відео",
-  "Only the book's owner and admins can open a private book, plus anything that references it.": "Лише власник книги та адміністратори можуть відкрити приватну книгу, а також все, що на неї посилається.",
-  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Робочий простір-джерело цієї книги заархівовано, і її вміст доступний лише для читання. Адміністратор все ще може змінити її видимість."
+  "Only the book's owner can open a private book, plus anything that references it.": "Лише власник книги може відкрити приватну книгу, а також все, що на неї посилається.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Робочий простір-джерело цієї книги заархівовано, і її вміст доступний лише для читання. Адміністратор все ще може змінити її видимість.",
+  "This folder is the deployment's shared content folder and cannot store personal learning data.": "Ця папка є спільною папкою вмісту розгортання і не може зберігати особисті навчальні дані.",
+  "This folder belongs to another account.": "Ця папка належить іншому обліковому запису.",
+  "The selected workspace folder does not exist.": "Вибрана папка робочого простору не існує.",
+  "Only one administrator is supported until each administrator has separate data.": "Поки кожен адміністратор не має власних даних, можливий лише один адміністратор."
 }

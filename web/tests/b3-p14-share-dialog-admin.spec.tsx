@@ -66,13 +66,13 @@ describe("B3-P14 BookShareDialog admin non-owner wording", () => {
 
     // The dialog should show the owner-neutral message.
     const text = await screen.findByText(
-      "Only the book's owner and admins can open a private book, plus anything that references it.",
+      "Only the book's owner can open a private book, plus anything that references it.",
     );
     expect(text).toBeTruthy();
-    // The old "Only you and admins" should NOT appear.
+    // The "Only you" wording should NOT appear.
     expect(
       screen.queryByText(
-        "Only you and admins can open a private book, plus anything that references it.",
+        "Only you can open a private book, plus anything that references it.",
       ),
     ).toBeNull();
   });
@@ -95,12 +95,12 @@ describe("B3-P14 BookShareDialog admin non-owner wording", () => {
     );
 
     const text = await screen.findByText(
-      "Only you and admins can open a private book, plus anything that references it.",
+      "Only you can open a private book, plus anything that references it.",
     );
     expect(text).toBeTruthy();
     expect(
       screen.queryByText(
-        "Only the book's owner and admins can open a private book, plus anything that references it.",
+        "Only the book's owner can open a private book, plus anything that references it.",
       ),
     ).toBeNull();
   });

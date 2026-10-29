@@ -5938,7 +5938,7 @@
   "Make this book public?": "Rendre ce livre public ?",
   "Make this book private?": "Rendre ce livre privé ?",
   "Every signed-in account can read a public book. Each reader keeps their own progress.": "Tous les comptes connectés peuvent lire un livre public. Chaque lecteur conserve sa propre progression.",
-  "Only you and admins can open a private book, plus anything that references it.": "Seuls vous et les administrateurs pouvez ouvrir un livre privé, ainsi que ce qui y fait référence.",
+  "Only you can open a private book, plus anything that references it.": "Vous seul pouvez ouvrir un livre privé, ainsi que ce qui y fait référence.",
   "Private knowledge bases this book uses": "Bases de connaissances privées utilisées par ce livre",
   "Readable through this book": "Lisible via ce livre",
   "Personal connectors cannot be shared.": "Les connecteurs personnels ne peuvent pas être partagés.",
@@ -6086,6 +6086,10 @@
   "{{count}} pages_many": "{{count}} pages",
   "{{count}} resources selected_many": "{{count}} ressources sélectionnées",
   "{{count}} round_many": "{{count}} tours",
-  "Only the book's owner and admins can open a private book, plus anything that references it.": "Seuls le propriétaire du livre et les administrateurs peuvent ouvrir un livre privé, ainsi que tout ce qui le référence.",
-  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "L'espace de travail source de ce livre est archivé et son contenu est en lecture seule. Un administrateur peut tout de même modifier sa visibilité."
+  "Only the book's owner can open a private book, plus anything that references it.": "Seul le propriétaire du livre peut ouvrir un livre privé, ainsi que tout ce qui le référence.",
+  "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "L'espace de travail source de ce livre est archivé et son contenu est en lecture seule. Un administrateur peut tout de même modifier sa visibilité.",
+  "This folder is the deployment's shared content folder and cannot store personal learning data.": "Ce dossier est le dossier de contenu partagé du déploiement et ne peut pas stocker de données d'apprentissage personnelles.",
+  "This folder belongs to another account.": "Ce dossier appartient à un autre compte.",
+  "The selected workspace folder does not exist.": "Le dossier de l'espace de travail sélectionné n'existe pas.",
+  "Only one administrator is supported until each administrator has separate data.": "Un seul administrateur est possible tant que chaque administrateur n'a pas ses propres données."
 }
