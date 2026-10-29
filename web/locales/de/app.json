@@ -2550,7 +2550,7 @@
   "{{role}} · joined {{date}}": "{{role}} · dabei seit {{date}}",
   "This permanently removes the account and its assignments. This cannot be undone.": "Dies entfernt das Konto und seine Zuweisungen dauerhaft. Dies kann nicht rückgängig gemacht werden.",
   "This permanently removes {{count}} accounts and their assignments. This cannot be undone.": "Dies entfernt dauerhaft {{count}} Konten und ihre Zuweisungen. Dies kann nicht rückgängig gemacht werden.",
-  "Admins can manage users and assignments, and work in the shared main workspace.": "Admins können Benutzer und Zuweisungen verwalten und im gemeinsamen Haupt-Workspace arbeiten.",
+  "Admins can manage users and assignments. Each admin keeps their own learning data.": "Admins können Benutzer und Zuweisungen verwalten. Jeder Admin behält seine eigenen Lerndaten.",
   "They will lose access to the admin area and switch to their own assigned workspace.": "Sie verlieren den Zugriff auf den Admin-Bereich und wechseln in ihren eigenen zugewiesenen Workspace.",
   "Username (or email)": "Benutzername (oder E-Mail)",
   "Password (≥ 8 chars)": "Passwort (≥ 8 Zeichen)",
@@ -5700,6 +5700,5 @@
   "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Der Quell-Workspace dieses Buchs ist archiviert und der Inhalt ist schreibgeschützt. Ein Admin kann die Sichtbarkeit trotzdem ändern.",
   "This folder is the deployment's shared content folder and cannot store personal learning data.": "Dieser Ordner ist der gemeinsame Inhaltsordner der Installation und kann keine persönlichen Lerndaten speichern.",
   "This folder belongs to another account.": "Dieser Ordner gehört zu einem anderen Konto.",
-  "The selected workspace folder does not exist.": "Der ausgewählte Workspace-Ordner existiert nicht.",
-  "Only one administrator is supported until each administrator has separate data.": "Solange nicht jeder Administrator eigene Daten hat, ist nur ein Administrator möglich."
+  "The selected workspace folder does not exist.": "Der ausgewählte Workspace-Ordner existiert nicht."
 }

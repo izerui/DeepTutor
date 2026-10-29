@@ -2016,13 +2016,12 @@ async def update_user_role(
             detail="You cannot change your own role",
         )
 
-    from deeptutor.multi_user.roles import other_admin_exists
+    if body.role == "admin":
+        # Record the existing administrator as primary before a second one
+        # exists, so each later administrator gets their own root (P1b).
+        from deeptutor.multi_user.admin_accounts import primary_admin_id
 
-    if body.role == "admin" and other_admin_exists(username):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Only one administrator is supported until each administrator has separate data.",
-        )
+        primary_admin_id()
 
     updated = set_role(username, body.role)
     if not updated:

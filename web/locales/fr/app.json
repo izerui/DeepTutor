@@ -3015,7 +3015,7 @@
   "Demoting…": "Rétrogradation…",
   "{{role}} · joined {{date}}": "{{role}} · inscrit le {{date}}",
   "This permanently removes the account and its assignments. This cannot be undone.": "Le compte et ses attributions seront définitivement supprimés. Cette action est irréversible.",
-  "Admins can manage users and assignments, and work in the shared main workspace.": "Les administrateurs peuvent gérer les utilisateurs et les attributions, et travailler dans l'espace principal partagé.",
+  "Admins can manage users and assignments. Each admin keeps their own learning data.": "Les administrateurs peuvent gérer les utilisateurs et les attributions. Chaque administrateur conserve ses propres données d'apprentissage.",
   "They will lose access to the admin area and switch to their own assigned workspace.": "Cet utilisateur perdra l'accès à la zone d'administration et basculera vers son propre espace attribué.",
   "Username (or email)": "Nom d'utilisateur (ou e-mail)",
   "Password (≥ 8 chars)": "Mot de passe (8 caractères min.)",
@@ -6090,6 +6090,5 @@
   "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "L'espace de travail source de ce livre est archivé et son contenu est en lecture seule. Un administrateur peut tout de même modifier sa visibilité.",
   "This folder is the deployment's shared content folder and cannot store personal learning data.": "Ce dossier est le dossier de contenu partagé du déploiement et ne peut pas stocker de données d'apprentissage personnelles.",
   "This folder belongs to another account.": "Ce dossier appartient à un autre compte.",
-  "The selected workspace folder does not exist.": "Le dossier de l'espace de travail sélectionné n'existe pas.",
-  "Only one administrator is supported until each administrator has separate data.": "Un seul administrateur est possible tant que chaque administrateur n'a pas ses propres données."
+  "The selected workspace folder does not exist.": "Le dossier de l'espace de travail sélectionné n'existe pas."
 }

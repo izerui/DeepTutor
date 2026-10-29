@@ -2549,7 +2549,7 @@
   "{{role}} · joined {{date}}": "{{role}} · dołączył {{date}}",
   "This permanently removes the account and its assignments. This cannot be undone.": "Spowoduje to trwałe usunięcie konta i jego przypisań. Tej operacji nie można cofnąć.",
   "This permanently removes {{count}} accounts and their assignments. This cannot be undone.": "Spowoduje to trwałe usunięcie {{count}} kont i ich przypisań. Tej operacji nie można cofnąć.",
-  "Admins can manage users and assignments, and work in the shared main workspace.": "Administratorzy mogą zarządzać użytkownikami i przypisaniami oraz pracować we współdzielonej głównej przestrzeni roboczej.",
+  "Admins can manage users and assignments. Each admin keeps their own learning data.": "Administratorzy mogą zarządzać użytkownikami i przypisaniami. Każdy administrator ma własne dane nauki.",
   "They will lose access to the admin area and switch to their own assigned workspace.": "Utracą dostęp do panelu administratora i przejdą do przypisanej im przestrzeni roboczej.",
   "Username (or email)": "Nazwa użytkownika (lub e-mail)",
   "Password (≥ 8 chars)": "Hasło (≥ 8 znaków)",
@@ -5746,6 +5746,5 @@
   "This book's source workspace is archived and its content is read-only. An admin can still change its visibility.": "Źródłowy obszar roboczy tej książki jest zarchiwizowany, a jej treść jest tylko do odczytu. Administrator nadal może zmienić jej widoczność.",
   "This folder is the deployment's shared content folder and cannot store personal learning data.": "Ten folder jest wspólnym folderem treści wdrożenia i nie może przechowywać osobistych danych nauki.",
   "This folder belongs to another account.": "Ten folder należy do innego konta.",
-  "The selected workspace folder does not exist.": "Wybrany folder przestrzeni roboczej nie istnieje.",
-  "Only one administrator is supported until each administrator has separate data.": "Dopóki każdy administrator nie ma własnych danych, możliwy jest tylko jeden administrator."
+  "The selected workspace folder does not exist.": "Wybrany folder przestrzeni roboczej nie istnieje."
 }

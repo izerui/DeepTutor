@@ -75,13 +75,3 @@ def can_create_personal_mastery() -> bool:
 
 def can_write_private_kb() -> bool:
     return _student_allows("allow_private_kb")
-
-
-def other_admin_exists(username: str) -> bool:
-    """Whether an administrator other than *username* exists (P1a stopgap for S2)."""
-    from deeptutor.services.auth import list_users
-
-    return any(
-        str(user.get("role") or "") == "admin" and user.get("username") != username
-        for user in list_users()
-    )

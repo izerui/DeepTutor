@@ -799,7 +799,7 @@ export default function AdminUsersPage() {
                   )
                 : confirmTarget.kind === "promote"
                   ? t(
-                      "Admins can manage users and assignments, and work in the shared main workspace.",
+                      "Admins can manage users and assignments. Each admin keeps their own learning data.",
                     )
                   : t(
                       "They will lose access to the admin area and switch to their own assigned workspace.",

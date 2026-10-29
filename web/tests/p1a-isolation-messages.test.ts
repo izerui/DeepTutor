@@ -19,7 +19,7 @@ const KEYS = [
   "This folder is the deployment's shared content folder and cannot store personal learning data.",
   "This folder belongs to another account.",
   "The selected workspace folder does not exist.",
-  "Only one administrator is supported until each administrator has separate data.",
+  "Admins can manage users and assignments. Each admin keeps their own learning data.",
 ];
 
 for (const lang of ["en", "zh", "de", "fr", "pl", "uk"]) {
