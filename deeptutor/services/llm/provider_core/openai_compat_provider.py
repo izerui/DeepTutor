@@ -272,7 +272,7 @@ class OpenAICompatProvider(LLMProvider):
             and placeholder_key
         ):
             raise LLMConfigError(
-                "OpenAI API key is not configured. Set it in Settings > Catalog, "
+                "OpenAI API key is not configured. Set it in Settings > Providers, "
                 "or select a local provider such as Ollama."
             )
         self._client = AsyncOpenAI(

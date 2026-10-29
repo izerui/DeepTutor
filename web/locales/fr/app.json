@@ -478,6 +478,8 @@
   "Synced {{count}} models": "{{count}} modèles synchronisés",
   "Label": "Libellé",
   "Model ID": "ID du modèle",
+  "Model ID is required.": "L'identifiant du modèle est requis.",
+  "Add a model ID for {{name}} on the {{page}} page before applying changes.": "Ajoutez un identifiant de modèle pour {{name}} sur la page « {{page}} » avant d'appliquer les modifications.",
   "Context Window": "Fenêtre de contexte",
   "Unset": "Non défini",
   "Known": "Connu",

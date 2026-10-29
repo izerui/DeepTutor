@@ -478,6 +478,8 @@
   "Synced {{count}} models": "Zsynchronizowano {{count}} modeli",
   "Label": "Etykieta",
   "Model ID": "ID modelu",
+  "Model ID is required.": "Identyfikator modelu jest wymagany.",
+  "Add a model ID for {{name}} on the {{page}} page before applying changes.": "Dodaj identyfikator modelu dla {{name}} na stronie „{{page}}“ przed zastosowaniem zmian.",
   "Context Window": "Okno kontekstowe",
   "Unset": "Nie ustawiono",
   "Known": "Znane",

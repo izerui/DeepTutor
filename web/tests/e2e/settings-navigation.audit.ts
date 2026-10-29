@@ -615,11 +615,14 @@ test("a new provider can be tested with only a key and supplies discovered model
   expect(probes[0]).toMatchObject({ api_key: "new-key", base_url: "https://api.openai.com/v1" });
   await page.getByRole("region", { name: "Provider settings" }).getByRole("link", { name: "Language models", exact: true }).click();
   await page.getByRole("button", { name: "Add model", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   const model = page.getByLabel("Model ID", { exact: true });
+  const continueButton = page.getByRole("button", { name: "Continue", exact: true });
+  await expect(continueButton).toBeDisabled();
   await model.fill("chosen");
   await page.getByRole("option", { name: "chosen-model", exact: true }).click();
   await expect(model).toHaveValue("chosen-model");
+  await continueButton.click();
+  await expect(page.getByRole("region", { name: "Model settings" })).toBeVisible();
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(page.getByText("Draft not applied yet", { exact: true })).toBeVisible();
   const llm = state.draft().catalog.services.llm;

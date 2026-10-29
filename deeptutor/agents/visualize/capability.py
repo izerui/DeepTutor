@@ -35,14 +35,14 @@ logger = logging.getLogger(__name__)
 _TOOL_CALLING_DISABLED_WARNING = (
     "Tool calling is disabled for {target}, but a visualization only reaches "
     "the canvas through the submit_visualization tool call. Enable it in "
-    "Settings → Models → LLM → Capabilities → Tool calling → Supported."
+    "Settings → Language models → Model capabilities → Tool calling → Supported."
 )
 _NO_PAYLOAD_TOOL_CALLING_DISABLED = (
     "No visualization was committed: tool calling is disabled for {target}, so "
     "the model could not call submit_visualization — the only way to hand a "
     "payload to the canvas. Local servers (LM Studio, Ollama, vLLM, llama.cpp) "
     "are opted out by default; declare the model as tool-capable in "
-    "Settings → Models → LLM → Capabilities → Tool calling → Supported, "
+    "Settings → Language models → Model capabilities → Tool calling → Supported, "
     "then run the visualization again."
 )
 _NO_PAYLOAD = (

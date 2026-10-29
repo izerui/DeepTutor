@@ -481,6 +481,8 @@
   "Synced {{count}} models": "已同步 {{count}} 个模型",
   "Label": "标签",
   "Model ID": "模型 ID",
+  "Model ID is required.": "必须填写模型 ID。",
+  "Add a model ID for {{name}} on the {{page}} page before applying changes.": "请先在“{{page}}”页面为 {{name}} 填写模型 ID，再应用更改。",
   "Context Window": "上下文窗口",
   "Source": "来源",
   "Detected": "已检测",

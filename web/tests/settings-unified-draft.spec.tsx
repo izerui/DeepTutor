@@ -20,12 +20,18 @@ import Appearance from "@/features/settings/sections/AppearanceSettingsSection";
 import { UiSettingsProvider } from "@/features/settings/store/UiSettingsProvider";
 import { stageRegistryAction } from "@/lib/provider-registry";
 
-const mocks = vi.hoisted(() => ({ fetch: vi.fn(), theme: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  theme: vi.fn(),
+  push: vi.fn(),
+}));
 vi.mock("@/lib/api", () => ({
   apiUrl: (s: string) => s,
   apiFetch: (...args: unknown[]) => mocks.fetch(...args),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mocks.push }),
+}));
 const t = (key: string, values?: Record<string, unknown>) => key.replace(/{{(.*?)}}/g, (_, name) => String(values?.[name] ?? name));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t, i18n: { language: "en" } }),
@@ -60,6 +66,7 @@ const reply = (value: unknown, ok = true) => ({
 beforeEach(() => {
   live = defaultCatalog();
   stored = null;
+  mocks.push.mockReset();
   resources = {
     workspace: { path: "/original" },
     "video-learning": { provider: "youtube" },
@@ -487,6 +494,17 @@ it("allows incomplete model drafts but blocks Apply before writing any live sett
   expect(stored.catalog.services.llm.profiles[0].models[0].model).toBe("");
   await act(() => settings.applyCatalog());
   expect(settings.draftState).toBe("saved");
+  // Apply names the model and opens the editor that can fix it, instead of
+  // failing with a message that points at no visible field.
+  expect(mocks.push).toHaveBeenCalledWith(
+    "/settings/llm?profile=new&model=new",
+  );
+  expect(settings.toast).toContain(
+    "Add a model ID for new on the Language models page before applying changes.",
+  );
+  expect(
+    mocks.fetch.mock.calls.filter(([url]) => url === "/api/settings/apply"),
+  ).toHaveLength(0);
   expect(writes("/api/settings/workspace")).toHaveLength(0);
   expect(live.services.llm.profiles).toHaveLength(0);
 });

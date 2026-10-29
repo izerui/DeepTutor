@@ -462,6 +462,8 @@
   "Synced {{count}} models": "Синхронізовано моделей: {{count}}",
   "Label": "Назва",
   "Model ID": "ID моделі",
+  "Model ID is required.": "Ідентифікатор моделі обов'язковий.",
+  "Add a model ID for {{name}} on the {{page}} page before applying changes.": "Додайте ідентифікатор моделі для {{name}} на сторінці «{{page}}», перш ніж застосувати зміни.",
   "Context Window": "Контекстне вікно",
   "Unset": "Не встановлено",
   "Known": "Відомо",

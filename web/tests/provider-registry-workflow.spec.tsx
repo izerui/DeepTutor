@@ -291,17 +291,22 @@ it("keeps a flat model list, shows the selected identity, and never exposes cred
     "two",
   );
 });
-it("stages a new model and defaults its display name to the typed model ID", async () => {
+it("requires a model ID before creating the row and names it after that ID", async () => {
   render(<Harness page="llm" />);
   fireEvent.click(screen.getByRole("button", { name: "Add model" }));
   fireEvent.change(screen.getByLabelText("Configured provider"), {
     target: { value: "llm:legacy" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  const editor = screen.getByRole("region", { name: "Model settings" });
-  fireEvent.change(within(editor).getByLabelText("Model ID"), {
+  // A row created with an empty ID used to reach the draft and could only be
+  // fixed from a page the user might not be on when Apply failed.
+  const continueButton = screen.getByRole("button", { name: "Continue" });
+  expect(continueButton).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Model ID"), {
     target: { value: "custom/model-id" },
   });
+  expect(continueButton).not.toBeDisabled();
+  fireEvent.click(continueButton);
+  const editor = screen.getByRole("region", { name: "Model settings" });
   expect(
     within(editor).getByRole("heading", { name: "custom/model-id" }),
   ).toBeTruthy();
@@ -310,6 +315,65 @@ it("stages a new model and defaults its display name to the typed model ID", asy
   const added = mocks.settings.draft.services.llm.profiles.flatMap(p => p.models).find(m => m.model === "custom/model-id");
   expect(added).toMatchObject({ model: "custom/model-id", name: "custom/model-id", provider_ref: expect.objectContaining({ profile_id: "legacy" }) });
   expect(live.services.llm.profiles.flatMap(p => p.models).some(m => m.model === "custom/model-id")).toBe(false);
+});
+
+it("prefills the add panel with the provider's default model", () => {
+  render(
+    <Harness
+      page="llm"
+      providerOptions={{
+        llm: [{ value: "custom", label: "Custom", base_url: "", default_model: "auto-model" }],
+      }}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+  fireEvent.change(screen.getByLabelText("Configured provider"), {
+    target: { value: "llm:legacy" },
+  });
+  expect(screen.getByLabelText("Model ID")).toHaveValue("auto-model");
+  expect(screen.getByRole("button", { name: "Continue" })).not.toBeDisabled();
+});
+
+it("restores the add panel from the URL so a refresh shows the same surface", () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/settings/llm?add=1&provider=llm%3Alegacy",
+  );
+  render(<Harness page="llm" />);
+  expect(screen.getByRole("region", { name: "Add model" })).toBeTruthy();
+  expect(screen.getByLabelText("Configured provider")).toHaveValue("llm:legacy");
+});
+
+it("opens exactly the model named by profile and model query parameters", () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/settings/llm?profile=legacy&model=two",
+  );
+  render(<Harness page="llm" />);
+  const editor = screen.getByRole("region", { name: "Model settings" });
+  expect(within(editor).getByRole("heading", { name: "Two" })).toBeTruthy();
+  expect(within(editor).getByLabelText("Model ID")).toHaveValue("model-two");
+});
+
+it("marks a blank model ID in the editor and blocks making it the default", () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/settings/llm?profile=legacy&model=two",
+  );
+  render(<Harness page="llm" />);
+  const editor = screen.getByRole("region", { name: "Model settings" });
+  fireEvent.change(within(editor).getByLabelText("Model ID"), {
+    target: { value: "" },
+  });
+  expect(within(editor).getByRole("alert").textContent).toBe(
+    "Model ID is required.",
+  );
+  expect(
+    within(editor).getByRole("button", { name: "Set as default" }),
+  ).toBeDisabled();
 });
 it("provider settings contain connections only and direct links to each model page", () => {
   window.history.replaceState(
@@ -355,6 +419,9 @@ it("offers unverified embedding providers after opting into custom integration",
   fireEvent.click(screen.getByLabelText("settings.serviceConfig.custom"));
   expect(within(select).getByRole("option", { name: "xAI" })).toBeTruthy();
   fireEvent.change(select, { target: { value: "connection:x" } });
+  fireEvent.change(screen.getByLabelText("Model ID"), {
+    target: { value: "text-embedding-3-small" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   const profile = mocks.settings.draft.services.embedding.profiles.at(-1)!;
   // `custom` is the OpenAI-compatible binding, whose embedding endpoint the
@@ -545,6 +612,9 @@ it("enabling speech on a provider makes it selectable and keeps the chosen servi
   const select = screen.getByLabelText("Configured provider");
   expect(within(select).getByRole("option", { name: "My account" })).toBeTruthy();
   fireEvent.change(select, { target: { value: "llm:legacy" } });
+  fireEvent.change(screen.getByLabelText("Model ID"), {
+    target: { value: "speech-1" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   expect(mocks.settings.draft.services.tts.profiles.at(-1)?.provider_ref).toMatchObject({ service: "llm", profile_id: "legacy", binding: "custom" });
 });
