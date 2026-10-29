@@ -153,13 +153,19 @@ def _read_quoted(text: str, index: int) -> tuple[str, int]:
     start = index + 1
     index += 1
     escaped = False
+    # A quote inside braces is literal text, as in "The {"}Best{"} Paper".
+    depth = 0
     while index < len(text):
         char = text[index]
         if escaped:
             escaped = False
         elif char == "\\":
             escaped = True
-        elif char == '"':
+        elif char == "{":
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+        elif char == '"' and depth == 0:
             return text[start:index], index + 1
         index += 1
     raise ValueError("unterminated quoted BibTeX value")
@@ -229,6 +235,7 @@ def _scan_entry(text: str, match: re.Match[str]) -> tuple[_Entry | None, int] | 
     # braces it is literal text, as in the umlaut accent ``{\"u}``.
     top_level_depth = brace_depth
     quoted = False
+    quoted_depth = 0
     escaped = False
 
     while index < len(text):
@@ -238,12 +245,17 @@ def _scan_entry(text: str, match: re.Match[str]) -> tuple[_Entry | None, int] | 
                 escaped = False
             elif char == "\\":
                 escaped = True
-            elif char == '"':
+            elif char == "{":
+                quoted_depth += 1
+            elif char == "}" and quoted_depth > 0:
+                quoted_depth -= 1
+            elif char == '"' and quoted_depth == 0:
                 quoted = False
             index += 1
             continue
         if char == '"' and brace_depth == top_level_depth:
             quoted = True
+            quoted_depth = 0
         elif char == "{":
             brace_depth += 1
         elif char == "}":

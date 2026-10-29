@@ -106,3 +106,19 @@ def test_bibtex_to_markdown_formats_jr_and_braced_author_names() -> None:
     result = bibtex_to_markdown(text)
 
     assert "**Authors:** Martin Luther King Jr., Food and Agriculture Organization" in result
+
+
+def test_bibtex_to_markdown_keeps_quoted_value_with_braced_quote() -> None:
+    text = r"""
+    @inproceedings{q2020,
+      title = "The {"}Quoted{"} Paper",
+      author = "Doe, Jane",
+      year = 2020
+    }
+    """
+
+    result = bibtex_to_markdown(text)
+
+    assert '## 1. The "Quoted" Paper' in result
+    assert "**Authors:** Jane Doe" in result
+    assert "**Year:** 2020" in result
