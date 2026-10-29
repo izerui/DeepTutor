@@ -1538,7 +1538,11 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
         return False
     connector = is_connector(record)
     if record.visibility == "public" and not connector:
-        return True
+        from deeptutor.publishing.scope import KNOWLEDGE_BASE, allows
+
+        # Spec 2026-10-29 §7.1: a published knowledge base reaches its scope only.
+        if allows(KNOWLEDGE_BASE, record.kb_id, user.id):
+            return True
     _load_builtin_readers()
     for reference in list_references(record.kb_id):
         if connector and (

@@ -292,6 +292,7 @@ class ClassService:
             self._require_manager(conn, class_id)
             for student_id in ids:
                 self._join(conn, class_id, student_id, via="admin")
+        _paths_follow(*ids)
         return self.get(class_id)
 
     def remove_student(self, class_id: str, student_id: str) -> dict[str, Any]:
@@ -300,6 +301,7 @@ class ClassService:
             conn.execute(
                 "DELETE FROM class_members WHERE class_id = ? AND student_id = ?", (class_id, student_id)
             )
+        _paths_follow(student_id)
         return self.get(class_id)
 
     def leave(self, class_id: str) -> None:
@@ -311,6 +313,7 @@ class ClassService:
             ).rowcount
         if not deleted:
             raise ClassNotFound("You are not in this class.")
+        _paths_follow(self.actor.id)
 
     def _join(self, conn, class_id: str, student_id: str, *, via: str) -> None:
         conn.execute(
@@ -430,6 +433,8 @@ class ClassService:
                     "UPDATE class_invitations SET status = 'declined', responded_at = ? WHERE id = ?",
                     (_now(), invitation_id),
                 )
+        if accept:
+            _paths_follow(self.actor.id)
 
     # ── invite links ──────────────────────────────────────────
 
@@ -473,6 +478,7 @@ class ClassService:
         with store.write() as conn:
             row = _live_link(conn, token)
             self._join(conn, row["class_id"], self.actor.id, via="link")
+        _paths_follow(self.actor.id)
         return {"class_id": row["class_id"], "class_name": row["name"]}
 
     # ── teacher reach ─────────────────────────────────────────
@@ -489,6 +495,14 @@ class ClassService:
         if not self._is_admin() and student_id not in teacher_student_ids(self.actor.id):
             raise ClassForbidden("You can only reset passwords for students in your classes.")
         set_password(accounts[student_id]["username"], hash_password(new_password))
+
+
+def _paths_follow(*student_ids: str) -> None:
+    """Mastery Paths published to classes follow membership (spec §7.1)."""
+    from deeptutor.publishing.scope import reconcile_student_quietly
+
+    for student_id in student_ids:
+        reconcile_student_quietly(student_id)
 
 
 def link_info(token: str) -> dict[str, Any]:

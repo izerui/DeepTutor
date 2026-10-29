@@ -219,6 +219,10 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
     if current_role() != "student" or current_workspace_id():
         return []
     user_id = get_current_user().id
+    from deeptutor.publishing.scope import reconcile_student_quietly
+
+    # Spec 2026-10-29 §7.1: paths published to a class or everyone reach later joiners.
+    reconcile_student_quietly(user_id)
     teaching = TeachingStore()
     created: list[str] = []
     for assignment in teaching.assignments_for_student(user_id):

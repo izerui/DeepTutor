@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { applyDefaultScope } from "@/lib/publish-api";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
 import {
   describeOtherReferences,
@@ -88,6 +90,8 @@ export default function KbSettingsSection({
         (confirmed) => (confirmed ? onVisibilityChange(next, { confirmed }) : onVisibilityChange(next)),
         t,
       );
+      // Spec 2026-10-29 §7.1: a teacher's new publication reaches their classes by default.
+      if (next === "public" && kb.kb_id) await applyDefaultScope("knowledge_base", kb.kb_id).catch(() => undefined);
     } catch (error) {
       setVisibilityError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -276,7 +280,7 @@ export default function KbSettingsSection({
         <h3 className="text-sm font-medium">{t("Visibility")}</h3>
         <p className="text-xs text-[var(--muted-foreground)]">
           {kb.connector ? t("Connectors are always private.") : kb.visibility === "public"
-            ? t("Public knowledge bases are readable by every signed-in account and usable in chat.")
+            ? t("Published knowledge bases are readable by the people chosen below and usable in their chat.")
             : t("Only you can see this knowledge base. Items that reference it can still read it.")}
         </p>
         {canManage && onVisibilityChange && !kb.connector && (kb.visibility === "public" || isTeacher) && (
@@ -286,6 +290,11 @@ export default function KbSettingsSection({
             {kb.visibility === "public" ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
             {kb.visibility === "public" ? t("Make private") : t("Make public")}
           </button>
+        )}
+        {canManage && kb.visibility === "public" && !kb.connector && (
+          <div className="rounded-lg border border-[var(--border)] p-3">
+            <PublishScopeEditor kind="knowledge_base" itemId={kb.kb_id} />
+          </div>
         )}
         {canManage && references !== null && <div className="text-xs text-[var(--muted-foreground)]">
           <h4 className="font-medium">{t("Referenced by")}</h4>

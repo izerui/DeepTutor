@@ -14,6 +14,8 @@ import {
   type WithdrawalImpact,
 } from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
+import { applyDefaultScope } from "@/lib/publish-api";
+import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
 
 const ISSUE_MESSAGES = {
   connector: "Personal connectors cannot be shared.",
@@ -80,6 +82,8 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
         force: makingPublic && isAdmin && force,
         ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
+      // Spec 2026-10-29 §7.1: a teacher's new publication reaches their classes by default.
+      if (makingPublic && sharing) await applyDefaultScope("book", sharing.book_id).catch(() => undefined);
       if (!alive.current) return;
       onChanged();
       onClose();
@@ -106,11 +110,14 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     </>}>
     <div className="space-y-3 text-sm">
       <p>{makingPublic
-        ? t("Every signed-in account can read a public book. Each reader keeps their own progress.")
+        ? t("Teachers publish to the classes they teach by default; afterwards you can choose classes, people or everyone. Each reader keeps their own progress.")
         : isAdmin && book.group !== "mine"
           ? t("Only the book's owner can open a private book, plus anything that references it.")
           : t("Only you can open a private book, plus anything that references it.")}</p>
       {!sharing && !error && <p role="status">{t("Loading…")}</p>}
+      {!makingPublic && sharing?.can_set_visibility && <div className="rounded-lg border border-[var(--border)] p-3">
+        <PublishScopeEditor kind="book" itemId={sharing.book_id} onSaved={onChanged} />
+      </div>}
       {makingPublic && !!sharing?.kbs.private_kbs.length && <fieldset className="space-y-2">
         <legend className="mb-2 font-medium">{t("Private knowledge bases this book uses")}</legend>
         {sharing.kbs.private_kbs.map(kb => <label key={kb.kb_id} className="flex flex-wrap items-center justify-between gap-2">

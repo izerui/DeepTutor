@@ -577,6 +577,7 @@ from deeptutor.api.routers import (
     capabilities,
     capabilities_settings,
     classes,
+    publishing,
     co_writer,
     courses,
     dashboard,
@@ -674,6 +675,7 @@ app.include_router(
 # opened while signed out can name the class; joining requires an account.
 app.include_router(classes.router, prefix="/api/classes", tags=["classes"], dependencies=_auth)
 app.include_router(classes.public_router, prefix="/api/class-invites", tags=["classes"])
+app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

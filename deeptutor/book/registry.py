@@ -800,8 +800,14 @@ def _read_decision(
         return False
     from deeptutor.multi_user.ownership import owns
 
-    if current.visibility == "public" or owns(current.created_by, user):
+    if owns(current.created_by, user):
         return True
+    if current.visibility == "public":
+        from deeptutor.publishing.scope import BOOK, allows
+
+        # Spec 2026-10-29 §7.1: a published book reaches its scope only.
+        if allows(BOOK, current.book_id, user.id):
+            return True
     return _references_of(conn, current.book_id)
 
 

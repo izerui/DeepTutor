@@ -15,6 +15,8 @@ import {
   type TemplateAssignment,
 } from "@/lib/teaching-api";
 
+import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+
 import { ConfirmDialog } from "./ConfirmDialog";
 import { StudentPicker } from "./StudentPicker";
 import { teachingErrorMessage, type Message } from "./teaching";
@@ -195,6 +197,19 @@ export function TemplateAssignmentsDialog({
                 {t("Publish this path before assigning students.")}
               </p>
             )
+          )}
+
+          {canAssign && (
+            <section className="border-t border-[var(--border)] pt-4">
+              <PublishScopeEditor
+                kind="mastery_path"
+                itemId={templateId}
+                onSaved={() => {
+                  onChanged();
+                  setReload((value) => value + 1);
+                }}
+              />
+            </section>
           )}
 
           {error && (

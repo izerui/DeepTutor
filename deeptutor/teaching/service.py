@@ -644,6 +644,9 @@ class TeachingService:
             warn("assignments", TemplateConflict("The path was archived while publishing."))
         elif students:
             try:
+                from deeptutor.publishing.scope import path_added_students
+
+                path_added_students(template.id, students, actor_id=user.id)
                 self.store.assign(template.id, students, assigned_by=user.id)
             except Exception as exc:
                 warn("assignments", exc)
@@ -883,6 +886,10 @@ class TeachingService:
             raise TemplateConflict("Publish this path before assigning students.")
         students = self._validate_students(student_ids)
         user_id, _ = self._actor()
+        from deeptutor.publishing.scope import path_added_students
+
+        # Spec 2026-10-29 §7: hand-picked students join a scoped path's audience.
+        path_added_students(template.id, students, actor_id=user_id)
         self.store.assign(template.id, students, assigned_by=user_id)
         try:
             sync_material_references(template.id, store=self.store, restore=True)
@@ -898,6 +905,12 @@ class TeachingService:
     def revoke(self, template_id: str, student_id: str) -> None:
         """Deny at once; then release old-revision materials nobody else needs."""
         template = self.get(template_id)
+        from deeptutor.publishing.scope import ScopeError, path_revoke_allowed
+
+        try:
+            path_revoke_allowed(template.id, student_id, actor_id=self._actor()[0])
+        except ScopeError as exc:
+            raise TemplateConflict(str(exc)) from exc
         if self.store.revoke(template.id, student_id) is None:
             raise TemplateNotFound("Assignment not found")
         notify_instance_closed(template.id)
