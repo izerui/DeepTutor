@@ -72,15 +72,14 @@ services:
       - "${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
 
     volumes:
+      # Every account, conversation and setting lives under ./data; moving
+      # servers means copying this one folder. There is no shared /workspace
+      # folder: DeepTutor decides each account's storage location.
       - ./data:/app/data
-      - "${DEEPTUTOR_WORKSPACE_HOST:-./data/user/workspace}:/workspace"
 
     environment:
       # Backend root_path — must match the image's basePath.
       - CONTEXT_PATH=/kaoyan
-      # Workspace isolation
-      - DEEPTUTOR_WORKSPACE_ROOT=/workspace
-      - DEEPTUTOR_WORKSPACE_ALLOWED_ROOTS=/workspace
       # Multi-worker turn coordination (uncomment to enable):
       #   - DEEPTUTOR_REDIS_URL=redis://redis:6379/0
       # Optional extras:
