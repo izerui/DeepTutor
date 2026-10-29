@@ -762,6 +762,13 @@ def test_llm_provider_choices_include_cloudgpu() -> None:
     assert llm["cloudgpu"]["base_url"] == "https://cloudgpu.app/v1"
 
 
+def test_llm_provider_choices_include_llmtr() -> None:
+    llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
+
+    assert llm["llmtr"]["label"] == "LLMTR"
+    assert llm["llmtr"]["base_url"] == "https://llmtr.com/v1"
+
+
 def test_llm_provider_choices_include_novita() -> None:
     llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
 

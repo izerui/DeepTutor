@@ -394,6 +394,17 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         default_api_base="https://cloudgpu.app/v1",
     ),
     ProviderSpec(
+        name="llmtr",
+        keywords=("llmtr",),
+        env_key="LLMTR_API_KEY",
+        display_name="LLMTR",
+        backend="openai_compat",
+        is_gateway=True,
+        detect_by_key_prefix="llmtr-",
+        detect_by_base_keyword="llmtr",
+        default_api_base="https://llmtr.com/v1",
+    ),
+    ProviderSpec(
         name="volcengine",
         keywords=("volcengine", "volces", "ark"),
         env_key="OPENAI_API_KEY",
