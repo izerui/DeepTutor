@@ -92,3 +92,17 @@ def test_bibtex_to_markdown_keeps_entry_with_accent_quote_in_braces() -> None:
     assert "## 1. Deep Learning" in result
     assert "mueller2020" in result
     assert "## 2. Second Paper" in result
+
+
+def test_bibtex_to_markdown_formats_jr_and_braced_author_names() -> None:
+    text = r"""
+    @article{king1963,
+      author = {King, Jr., Martin Luther and {Food and Agriculture Organization}},
+      title = {Letter},
+      year = {1963}
+    }
+    """
+
+    result = bibtex_to_markdown(text)
+
+    assert "**Authors:** Martin Luther King Jr., Food and Agriculture Organization" in result
