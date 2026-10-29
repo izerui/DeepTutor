@@ -1,14 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
-import { register, checkIsFirstUser, fetchAuthStatus } from "@/lib/auth";
+import { register, checkIsFirstUser, fetchAuthStatus, fetchRegistrationOpen } from "@/lib/auth";
+import { normalizeInternalReturnPath } from "@/shared/auth/return-url";
 
 export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+function RegisterPageContent() {
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Spec 2026-10-29 §5: a class invite carries its token and returns here after sign-in.
+  const invite = searchParams.get("invite") ?? "";
+  const rawNext = searchParams.get("next");
+  const next = rawNext ? normalizeInternalReturnPath(rawNext) : invite ? "/classes" : "";
+  const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  const [open, setOpen] = useState<boolean | null>(null);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +45,7 @@ export default function RegisterPage() {
       setIsFirst(first);
       setCheckingFirst(false);
     });
+    fetchRegistrationOpen().then(setOpen);
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -41,10 +58,10 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    const result = await register(username, password);
+    const result = await register(username, password, invite);
 
     if (result.ok) {
-      router.replace("/login?registered=1");
+      router.replace(`/login?registered=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
     } else {
       setError(result.error ?? t("Registration failed"));
       setLoading(false);
@@ -74,6 +91,11 @@ export default function RegisterPage() {
       )}
 
       {/* Card */}
+      {!checkingFirst && !isFirst && open === false && !invite ? (
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm px-8 py-8 text-center text-sm text-[var(--muted-foreground)]">
+          {t("Registration is closed. Ask your teacher for an invite link.")}
+        </div>
+      ) : (
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm px-8 py-8">
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email or username */}
@@ -172,11 +194,12 @@ export default function RegisterPage() {
           </button>
         </form>
       </div>
+      )}
 
       <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
         {t("Already have an account?")}{" "}
         <Link
-          href="/login"
+          href={loginHref}
           className="text-[var(--primary)] hover:underline font-medium"
         >
           {t("Sign in")}

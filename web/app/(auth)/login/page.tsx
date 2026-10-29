@@ -26,6 +26,14 @@ function LoginPageContent() {
   );
 
   const registered = searchParams.get("registered") === "1";
+  // Spec 2026-10-29 §5: signing up from a class invite keeps the invite.
+  const joinToken = next.startsWith("/join/")
+    ? decodeURIComponent(next.slice("/join/".length).split(/[?#]/)[0] ?? "")
+    : "";
+  const registerQuery = new URLSearchParams();
+  if (next && next !== "/") registerQuery.set("next", next);
+  if (joinToken) registerQuery.set("invite", joinToken);
+  const registerHref = registerQuery.size ? `/register?${registerQuery}` : "/register";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -157,7 +165,7 @@ function LoginPageContent() {
       <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
         {t("Don't have an account?")}{" "}
         <Link
-          href="/register"
+          href={registerHref}
           className="text-[var(--primary)] hover:underline font-medium"
         >
           {t("Create one")}

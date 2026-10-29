@@ -15,6 +15,7 @@ import {
   type UserRecord,
   type UserImportResult,
 } from "@/lib/admin-api";
+import { RegistrationToggle } from "@/components/admin/RegistrationToggle";
 import { GrantEditor } from "@/features/multi-user/components/GrantEditor";
 import { MigrationResultsNotice } from "@/features/multi-user/components/MigrationResultsNotice";
 import { BookPermissionEditor } from "@/features/multi-user/components/BookPermissionEditor";
@@ -338,7 +339,8 @@ export default function AdminUsersPage() {
                 {t("Manage registered accounts")}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <RegistrationToggle />
               <button
                 onClick={openCreateDialog}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm

@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   ListTodo,
   PenLine,
+  School,
   Settings,
   type LucideIcon,
 } from 'lucide-react'
@@ -61,6 +62,8 @@ export const PRIMARY_NAV: NavEntry[] = [
     surfaces: ['reading', 'chat', 'books'],
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
+  // Spec 2026-10-29 §5: classes for teachers, students and administrators.
+  { href: '/classes', label: 'Classes', icon: School, tooltipKey: 'Classes tooltip', surfaces: ['chat'] },
   {
     href: '/kanban',
     label: 'Task Board',

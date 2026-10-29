@@ -576,6 +576,7 @@ from deeptutor.api.routers import (
     book,
     capabilities,
     capabilities_settings,
+    classes,
     co_writer,
     courses,
     dashboard,
@@ -669,6 +670,10 @@ app.include_router(
     tags=["mastery-teaching"],
     dependencies=_auth,
 )
+# Classes (spec 2026-10-29 §5). The invite-link preview is public so a link
+# opened while signed out can name the class; joining requires an account.
+app.include_router(classes.router, prefix="/api/classes", tags=["classes"], dependencies=_auth)
+app.include_router(classes.public_router, prefix="/api/class-invites", tags=["classes"])
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

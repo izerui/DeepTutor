@@ -10,7 +10,8 @@ beforeEach(() => vi.mocked(fetchAuthStatus).mockReset());
 it.each([
   [["reading"], ["/learning"]],
   [["books"], ["/learning"]],
-  [["chat"], ["/chat", "/learning", "/kanban"]],
+  // Spec 2026-10-29 §5: restricted students still reach their classes.
+  [["chat"], ["/chat", "/learning", "/classes", "/kanban"]],
   [[], []],
 ] as [string[], string[]][])("filters the actual nav entries for %j", (allowed, expected) => {
   expect(PRIMARY_NAV_HREFS.filter((href) => navVisibleUnderPolicy(href, allowed))).toEqual(expected);

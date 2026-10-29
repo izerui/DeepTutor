@@ -371,7 +371,20 @@ def teaching_users(seed_user):
         ("sam", "student"),
         ("uma", "user"),
     )
-    return {name: seed_user(name, role=role) for name, role in accounts}
+    users = {name: seed_user(name, role=role) for name, role in accounts}
+    # Spec 2026-10-29 §5: teachers reach only their class's students, so both
+    # teachers teach one class that holds both students.
+    from deeptutor.classes.service import ClassService
+    from deeptutor.multi_user.models import CurrentUser
+    from deeptutor.multi_user.paths import admin_scope
+
+    admin = CurrentUser(users["adam"]["id"], "adam", "admin", admin_scope())
+    service = ClassService(admin)
+    created = service.create("Teaching fixtures")
+    for teacher in ("tina", "tom"):
+        service.add_teacher(created["id"], users[teacher]["id"])
+    service.add_students(created["id"], [users["sara"]["id"], users["sam"]["id"]])
+    return users
 
 
 @pytest.fixture

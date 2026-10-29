@@ -846,7 +846,20 @@ class TeachingService:
         }
         if any(student_id not in students for student_id in wanted):
             raise InvalidStudents("Only active student accounts can be assigned.")
+        # Spec 2026-10-29 §5: a teacher reaches only the students in their classes.
+        reachable = self._reachable_students()
+        if reachable is not None and any(student_id not in reachable for student_id in wanted):
+            raise InvalidStudents("You can only assign students in your classes.")
         return wanted
+
+    def _reachable_students(self) -> set[str] | None:
+        """``None`` for administrators; a teacher's own class students otherwise."""
+        user_id, is_admin = self._actor()
+        if is_admin:
+            return None
+        from deeptutor.classes.service import teacher_student_ids
+
+        return teacher_student_ids(user_id)
 
     def assignments(self, template_id: str) -> list[dict]:
         template = self.get(template_id)
@@ -923,11 +936,13 @@ class TeachingService:
 
     def list_students(self, query: str = "") -> list[dict]:
         needle = query.strip().casefold()
+        reachable = self._reachable_students()
         return [
             {"id": user_id, "username": str(row["username"]), "avatar": str(row.get("avatar") or "")}
             for user_id, row in _accounts().items()
             if row.get("role") == "student"
             and not row.get("disabled")
+            and (reachable is None or user_id in reachable)
             and (not needle or needle in str(row["username"]).casefold())
         ][:200]
 

@@ -194,3 +194,18 @@ export async function createUser(
   }
   return (await res.json()) as CreatedUser;
 }
+
+/** Turn public sign-up on or off (spec 2026-10-29 D19); invite links always admit. */
+export async function setPublicRegistration(open: boolean): Promise<boolean> {
+  const res = await apiFetch(apiUrl("/api/auth/registration"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ open }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Failed to update registration");
+  }
+  const data = await res.json();
+  return Boolean(data.open);
+}

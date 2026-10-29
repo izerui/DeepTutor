@@ -174,6 +174,8 @@ function extractDetail(detail: unknown): string {
 export async function register(
   username: string,
   password: string,
+  /** A class invite token: admits sign-up while public registration is closed. */
+  invite = "",
 ): Promise<{
   ok: boolean;
   role?: string;
@@ -184,7 +186,7 @@ export async function register(
     const res = await apiFetch(apiUrl("/api/auth/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(invite ? { username, password, invite } : { username, password }),
       // Registration validation failures (e.g. 400/401) should surface inline
       // rather than bounce the user through the global login redirect.
       skipAuthRedirect: true,
@@ -205,6 +207,18 @@ export async function register(
 /**
  * Check whether the user store is empty (first user will become admin).
  */
+/** Whether the sign-up page accepts new accounts without an invite (spec 2026-10-29 D19). */
+export async function fetchRegistrationOpen(): Promise<boolean> {
+  try {
+    const res = await apiFetch(apiUrl("/api/auth/registration"), { skipAuthRedirect: true });
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => ({}));
+    return Boolean(data?.open);
+  } catch {
+    return false;
+  }
+}
+
 export async function checkIsFirstUser(): Promise<boolean> {
   try {
     const res = await apiFetch(apiUrl("/api/auth/is_first_user"));

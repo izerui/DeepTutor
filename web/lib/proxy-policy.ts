@@ -54,6 +54,9 @@ export function isAuthExempt(pathname: string): boolean {
   return (
     pathname.startsWith(LOGIN_PATH) ||
     pathname.startsWith("/register") ||
+    // A class invite opened while signed out names the class and offers
+    // sign-in or registration (spec 2026-10-29 §5).
+    pathname.startsWith("/join/") ||
     pathname === HANDOFF_PATH ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||

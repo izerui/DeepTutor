@@ -277,6 +277,16 @@ class SetRoleRequest(BaseModel):
         return v
 
 
+class PublicRegisterRequest(RegisterRequest):
+    """Self-service sign-up; ``invite`` is a class invite token (spec 2026-10-29 §5)."""
+
+    invite: str = Field(default="", max_length=128)
+
+
+class RegistrationSettings(BaseModel):
+    open: bool
+
+
 class AdminCreateUserRequest(RegisterRequest):
     """Admin user-creation payload: a teacher or a student (spec 2026-10-29 D1)."""
 
@@ -691,6 +701,8 @@ def _learning_surface_for_path(
         # the router already scopes every record to the current account, so
         # all methods (including progress PATCH/POST) belong to "chat".
         ("/api/mastery-paths", "chat"),
+        # Joining, leaving and answering class invitations (spec 2026-10-29 §5).
+        ("/api/classes", "chat"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):
             return surface
@@ -1190,13 +1202,14 @@ async def logout(response: Response) -> dict:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, request: Request, response: Response) -> dict:
+async def register(body: PublicRegisterRequest, request: Request, response: Response) -> dict:
     """
-    Bootstrap-only registration.
+    Self-service registration.
 
-    Public endpoint that creates the *first* admin account when the user store
-    is empty. Once an admin exists, this endpoint is closed; further accounts
-    must be created by an admin via ``POST /api/auth/users``.
+    The first account becomes the administrator. After that, anyone may sign
+    up as a student while public registration is open; while it is closed, a
+    valid class invite token still admits a new student, who joins that class
+    on creation (spec 2026-10-29 §5, D19).
 
     Only available when AUTH_ENABLED=true.
     """
@@ -1233,12 +1246,22 @@ async def register(body: RegisterRequest, request: Request, response: Response) 
             "is_admin": False,
         }
 
-    # Standard mode — only allowed before the first admin exists.
-    if not is_first_user():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Self-registration is closed. Ask an administrator to create your account.",
-        )
+    first_user = is_first_user()
+    invite = body.invite.strip()
+    if not first_user:
+        from deeptutor.classes.service import ClassError, link_info
+        from deeptutor.multi_user.registration import public_registration_open
+
+        if invite:
+            try:
+                await asyncio.to_thread(link_info, invite)
+            except ClassError as exc:
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        elif not public_registration_open():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Registration is closed. Ask your teacher for an invite link.",
+            )
 
     existing = {u["username"] for u in list_users()}
     if body.username in existing:
@@ -1247,23 +1270,64 @@ async def register(body: RegisterRequest, request: Request, response: Response) 
             detail="Username already taken",
         )
 
-    add_user(body.username, body.password)
+    add_user(body.username, body.password, role="student")
     user_id = ""
-    role = "user"
+    role = "student"
     for item in list_users():
         if item.get("username") == body.username:
             user_id = str(item.get("id") or "")
-            role = str(item.get("role") or "user")
+            role = str(item.get("role") or "student")
             break
-    logger.info(f"First user (admin) registered: '{body.username}'")
+    joined: dict | None = None
+    if invite and role == "student" and user_id:
+        joined = await asyncio.to_thread(_join_new_student, user_id, body.username, invite)
+    if first_user:
+        logger.info(f"First user (admin) registered: '{body.username}'")
+    else:
+        logger.info("Student registered: '%s' (invite=%s)", body.username, bool(invite))
     return {
         "ok": True,
         "user_id": user_id,
         "username": body.username,
         "role": role,
-        "is_first_user": True,
+        "is_first_user": first_user,
         "is_admin": role == "admin",
+        "joined_class": joined,
     }
+
+
+def _join_new_student(user_id: str, username: str, invite: str) -> dict | None:
+    """Put a student who signed up through an invite link straight into the class."""
+    from deeptutor.classes.service import ClassError, ClassService
+    from deeptutor.multi_user.models import CurrentUser
+    from deeptutor.multi_user.paths import scope_for_user
+
+    actor = CurrentUser(user_id, username, "student", scope_for_user(user_id, is_admin=False))
+    try:
+        return ClassService(actor).join_by_link(invite)
+    except ClassError:
+        # The account exists either way; the invite page can still be retried.
+        logger.warning("New student %s could not join with the invite link", username)
+        return None
+
+
+@router.get("/registration")
+async def registration_status() -> dict:
+    """Public: whether the sign-up page accepts new accounts without an invite."""
+    from deeptutor.multi_user.registration import public_registration_open
+
+    return {"open": bool(AUTH_ENABLED) and public_registration_open()}
+
+
+@router.put("/registration")
+async def update_registration(
+    body: RegistrationSettings, current: TokenPayload = Depends(require_admin)
+) -> dict:
+    from deeptutor.multi_user.registration import set_public_registration
+
+    opened = await asyncio.to_thread(set_public_registration, body.open)
+    logger.info("Admin '%s' set public registration to %s", current.username if current else "local", opened)
+    return {"open": opened}
 
 
 @router.get("/is_first_user")
