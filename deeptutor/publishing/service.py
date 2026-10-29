@@ -146,30 +146,36 @@ class PublishService:
             "suggested_classes": [] if self._role() == "admin" else sorted(classes),
         }
 
-    def _validated(self, kind: str, everyone: bool, users: Any, classes: Any) -> Scope:
-        from deeptutor.classes.service import _accounts
+    def _validated(self, kind: str, everyone: bool, users: Any, classes: Any, current: Scope) -> Scope:
+        """Check what the publisher adds; targets already in the scope may stay.
+
+        A class the teacher no longer teaches, or a student who left their
+        classes, must not block other changes; removing them is always allowed.
+        """
+        from deeptutor.classes.service import _accounts, teacher_student_ids
 
         users, classes = _clean_ids(users), _clean_ids(classes)
-        pickable = self._pickable_classes()
-        if any(c not in pickable for c in classes):
-            raise ScopeForbidden("You can only publish to classes you teach.")
         accounts = _accounts()
-        for user_id in users:
-            account = accounts.get(user_id)
-            if account is None or account["disabled"]:
+        # Deleted accounts drop out silently; they can no longer receive anything.
+        users = [u for u in users if u in accounts and u != self.actor.id]
+        added_classes = [c for c in classes if c not in current.classes]
+        added_users = [u for u in users if u not in current.users]
+        pickable = self._pickable_classes()
+        if any(c not in pickable for c in added_classes):
+            raise ScopeForbidden("You can only publish to classes you teach.")
+        reachable = None if self._role() == "admin" else teacher_student_ids(self.actor.id)
+        for user_id in added_users:
+            account = accounts[user_id]
+            if account["disabled"]:
                 raise ScopeError("Only active accounts can receive content.")
             if kind in STUDENT_KINDS and account["role"] != "student":
                 raise ScopeError(
                     "Only students receive Mastery Paths." if kind == MASTERY_PATH
                     else "Only students receive practice sets."
                 )
-        if kind in STUDENT_KINDS and users and self._role() != "admin":
-            from deeptutor.classes.service import teacher_student_ids
-
-            reachable = teacher_student_ids(self.actor.id)
-            if any(u not in reachable for u in users):
-                raise ScopeForbidden("You can only assign students in your classes.")
-        users = [u for u in users if u != self.actor.id]
+            # Spec §5: a teacher names only students of their own classes (any teacher may be named).
+            if reachable is not None and account["role"] == "student" and user_id not in reachable:
+                raise ScopeForbidden("You can only choose students in your classes.")
         return Scope(everyone=bool(everyone), users=users, classes=classes)
 
     def set_scope(
@@ -180,8 +186,9 @@ class PublishService:
         info = self._item(kind, item_id)
         if kind == MASTERY_PATH and not info["public"]:
             raise ScopeError("Publish this path before choosing who receives it.")
-        new = self._validated(kind, everyone, users, classes)
-        before = self._reached(kind, self._current(kind, item_id, info), info)
+        current = self._current(kind, item_id, info)
+        new = self._validated(kind, everyone, users, classes, current)
+        before = self._reached(kind, current, info)
         cut = before - self._reached(kind, new, info)
         if cut and not confirm:
             raise ScopeNeedsConfirmation(len(cut))
@@ -198,11 +205,16 @@ class PublishService:
         needle = str(query or "").strip().casefold()
         if not needle:
             return []
+        from deeptutor.classes.service import teacher_student_ids
+
+        # Spec §5: teachers see the students of their own classes; any teacher.
+        reachable = None if self._role() == "admin" else teacher_student_ids(self.actor.id)
         return [
             {"id": user_id, "username": account["username"], "role": account["role"]}
             for user_id, account in sorted(_accounts().items(), key=lambda item: item[1]["username"])
             if account["role"] in ("student", "teacher") and not account["disabled"]
             and user_id != self.actor.id and needle in account["username"].casefold()
+            and (reachable is None or account["role"] == "teacher" or user_id in reachable)
         ][:50]
 
 

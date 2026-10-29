@@ -276,6 +276,9 @@ def _apply_choices(
             # Only an explicit canonical choice supersedes pending legacy grants.
             record_choice(conn, kb.kb_id, "private", schema="main")
     for kb in publish:
+        from deeptutor.publishing.scope import KNOWLEDGE_BASE, default_scope_on_publish
+
+        default_scope_on_publish(KNOWLEDGE_BASE, kb.kb_id)
         # The plan was built from this locked connection and checked actor/kind.
         conn.execute(
             "UPDATE kb_registry SET visibility = 'public', updated_at = ? WHERE kb_id = ?",
@@ -388,6 +391,10 @@ def change_visibility(
         if not is_teacher_or_admin():
             raise books.BookVisibilityError("Only teachers and admins can publish books.")
         _apply_choices(conn, record, choices, force=force)
+        if record.visibility != "public":
+            from deeptutor.publishing.scope import BOOK, default_scope_on_publish
+
+            default_scope_on_publish(BOOK, record.book_id)
     else:
         foreign = [
             ref for ref in books._references_of(conn, record.book_id)

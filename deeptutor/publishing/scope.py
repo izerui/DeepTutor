@@ -116,20 +116,23 @@ def managed_items(kind: str) -> list[str]:
 
 
 def member_class_ids(user_id: str) -> set[str]:
-    """Active classes the account is in, as a student or as a teacher."""
+    """Active classes the account is in: as a student if a student, as a teacher if a teacher."""
     from deeptutor.classes import store as class_store
 
+    account = _accounts().get(user_id)
+    if account is None or account["disabled"] or account["role"] not in ("student", "teacher"):
+        return set()
+    sql = (
+        "SELECT m.class_id FROM class_members m JOIN classes c ON c.id = m.class_id "
+        "WHERE m.student_id = ? AND c.archived = 0"
+        if account["role"] == "student" else
+        "SELECT t.class_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
+        "WHERE t.user_id = ? AND c.archived = 0"
+    )
     with class_store.read() as conn:
         if conn is None:
             return set()
-        rows = conn.execute(
-            "SELECT m.class_id FROM class_members m JOIN classes c ON c.id = m.class_id "
-            "WHERE m.student_id = ? AND c.archived = 0 "
-            "UNION SELECT t.class_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
-            "WHERE t.user_id = ? AND c.archived = 0",
-            (user_id, user_id),
-        ).fetchall()
-    return {row[0] for row in rows}
+        return {row[0] for row in conn.execute(sql, (user_id,))}
 
 
 def _reaches(scope: Scope, user_id: str, classes: set[str] | None = None) -> bool:
@@ -217,6 +220,44 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
             [(kind, item_id, "user", u) for u in scope.users]
             + [(kind, item_id, "class", c) for c in scope.classes],
         )
+
+
+def taught_class_ids(user_id: str) -> list[str]:
+    from deeptutor.classes import store as class_store
+
+    with class_store.read() as conn:
+        if conn is None:
+            return []
+        return sorted(
+            row[0] for row in conn.execute(
+                "SELECT t.class_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
+                "WHERE t.user_id = ? AND c.archived = 0",
+                (user_id,),
+            )
+        )
+
+
+def default_scope_on_publish(kind: str, item_id: str) -> None:
+    """Spec §7.1: a first publication reaches the publisher's own classes.
+
+    Runs where an item becomes public or published, inside that write, so an
+    item is never readable by everyone in between; a failure aborts the
+    publication. A publisher who teaches no class (most administrators) gets
+    no scope row, i.e. "everyone" for books and knowledge bases — never a
+    silent "nobody" — and narrows it in the scope editor (decided 2026-10-30).
+    A practice set always gets a row: without classes it reaches nobody until
+    its author chooses. An item that already has a scope keeps it; code
+    without a request user (migrations, maintenance) adds none.
+    """
+    from deeptutor.multi_user.context import get_current_user_or_none
+
+    user = get_current_user_or_none()
+    if user is None or get_scope(kind, item_id) is not None:
+        return
+    classes = taught_class_ids(user.id)
+    if not classes and kind != PRACTICE_SET:
+        return
+    _store_scope(kind, item_id, Scope(classes=classes), actor_id=user.id)
 
 
 def forget(kind: str, item_id: str) -> None:

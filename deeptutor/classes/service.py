@@ -8,6 +8,7 @@ invitation, or by an administrator adding them; they can leave on their own.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import time
 from typing import Any
@@ -16,6 +17,8 @@ import uuid
 from deeptutor.classes import store
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.models import CurrentUser
+
+logger = logging.getLogger(__name__)
 
 NAME_MAX = 100
 INVITE_TTL_MAX_DAYS = 365
@@ -100,7 +103,9 @@ class ClassService:
 
     def _require_manager(self, conn, class_id: str):
         row = self._class_row(conn, class_id)
-        if not self._is_admin() and not self._teaches(conn, class_id):
+        # The live role counts: a teacher demoted to student manages nothing,
+        # even before their old class rows are cleaned up.
+        if not self._is_admin() and (_role(self.actor) != "teacher" or not self._teaches(conn, class_id)):
             raise ClassForbidden("Only this class's teachers and administrators can manage it.")
         return row
 
@@ -136,6 +141,21 @@ class ClassService:
                     "UPDATE classes SET archived = ?, updated_at = ? WHERE id = ?",
                     (1 if archived else 0, _now(), class_id),
                 )
+                if archived:
+                    # An archived class admits nobody: restoring it later must
+                    # not revive an old link or old invitations.
+                    conn.execute("DELETE FROM class_invite_links WHERE class_id = ?", (class_id,))
+                    conn.execute(
+                        "UPDATE class_invitations SET status = 'cancelled', responded_at = ? "
+                        "WHERE class_id = ? AND status = 'pending'",
+                        (_now(), class_id),
+                    )
+            members = [
+                r["student_id"]
+                for r in conn.execute("SELECT student_id FROM class_members WHERE class_id = ?", (class_id,))
+            ] if archived is not None else []
+        # Archiving ends what reached students through this class; restoring returns it.
+        _paths_follow(*members)
         return self.get(class_id)
 
     def list_classes(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
@@ -267,6 +287,17 @@ class ClassService:
     def remove_teacher(self, class_id: str, user_id: str) -> dict[str, Any]:
         with store.write() as conn:
             self._require_manager(conn, class_id)
+            if not self._is_admin():
+                # Spec §5: administrators change who teaches; a teacher may only step down,
+                # and never leave the class without a teacher.
+                if user_id != self.actor.id:
+                    raise ClassForbidden("Only administrators remove other teachers.")
+                remaining = conn.execute(
+                    "SELECT COUNT(*) FROM class_teachers WHERE class_id = ? AND user_id != ?",
+                    (class_id, user_id),
+                ).fetchone()[0]
+                if not remaining:
+                    raise ClassConflict("Add another teacher before leaving this class.")
             conn.execute(
                 "DELETE FROM class_teachers WHERE class_id = ? AND user_id = ?", (class_id, user_id)
             )
@@ -289,7 +320,8 @@ class ClassService:
         for student_id in ids:
             self._require_student(accounts, student_id)
         with store.write() as conn:
-            self._require_manager(conn, class_id)
+            if self._require_manager(conn, class_id)["archived"]:
+                raise ClassConflict("This class is archived.")
             for student_id in ids:
                 self._join(conn, class_id, student_id, via="admin")
         _paths_follow(*ids)
@@ -427,6 +459,10 @@ class ClassService:
             if row is None or row["student_id"] != self.actor.id:
                 raise ClassNotFound("Invitation not found.")
             if accept:
+                if _role(self.actor) != "student" or self.actor.is_admin:
+                    raise ClassForbidden("Only student accounts join classes.")
+                if self._class_row(conn, row["class_id"])["archived"]:
+                    raise ClassConflict("This class is archived.")
                 self._join(conn, row["class_id"], self.actor.id, via="invitation")
             else:
                 conn.execute(
@@ -492,9 +528,22 @@ class ClassService:
         self._require_student(accounts, student_id)
         if len(new_password or "") < 8:
             raise ClassError("Password must be at least 8 characters.")
-        if not self._is_admin() and student_id not in teacher_student_ids(self.actor.id):
+        if not self._is_admin() and (
+            _role(self.actor) != "teacher" or student_id not in teacher_student_ids(self.actor.id)
+        ):
             raise ClassForbidden("You can only reset passwords for students in your classes.")
         set_password(accounts[student_id]["username"], hash_password(new_password))
+        end_other_sessions(student_id, revoked_by=self.actor.id)
+
+
+def end_other_sessions(user_id: str, *, revoked_by: str) -> None:
+    """After a password reset: paired devices stop working too (tokens end via the store)."""
+    try:
+        from deeptutor.multi_user.device_credentials import revoke_device_credentials_for_user
+
+        revoke_device_credentials_for_user(user_id, revoked_by=revoked_by)
+    except Exception:
+        logger.exception("Could not revoke the device credentials of %s", user_id)
 
 
 def _paths_follow(*student_ids: str) -> None:
@@ -539,7 +588,16 @@ def teacher_student_ids(teacher_id: str) -> set[str]:
             "WHERE t.user_id = ? AND c.archived = 0",
             (teacher_id,),
         ).fetchall()
-    return {row["student_id"] for row in rows}
+    accounts = _accounts()
+    teacher = accounts.get(teacher_id)
+    if teacher is None or teacher["role"] != "teacher" or teacher["disabled"]:
+        return set()
+    # Only accounts that are students now (a promoted student's rows may linger).
+    return {
+        row["student_id"] for row in rows
+        if (accounts.get(row["student_id"]) or {}).get("role") == "student"
+        and not accounts[row["student_id"]]["disabled"]
+    }
 
 
 def _class_policy(row) -> dict[str, bool]:

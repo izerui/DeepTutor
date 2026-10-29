@@ -59,6 +59,7 @@ class JoinRequest(BaseModel):
 
 class StudentPolicyUpdate(BaseModel):
     allow_personal_mastery: bool | None = None
+    allow_personal_book: bool | None = None
     allow_private_kb: bool | None = None
 
 

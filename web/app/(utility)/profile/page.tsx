@@ -11,6 +11,7 @@ import { fetchAuthStatus, logout } from "@/lib/auth";
 import { browserPath } from "@/lib/workspace-scope";
 import {
   getProfile,
+  changeOwnPassword,
   removeAvatarImage,
   setAvatarMarker,
   uploadAvatarImage,
@@ -380,6 +381,8 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            <PasswordCard />
+
             {/* Sign out card */}
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
               <div>
@@ -403,5 +406,67 @@ export default function ProfilePage() {
           </>
         )}
     </FeaturePage>
+  );
+}
+
+/** Change one's own password (spec 2026-10-29 D20: after a reset, set your own). */
+function PasswordCard() {
+  const { t } = useTranslation();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const field =
+    "h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)]";
+  return (
+    <form
+      className="mt-4 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setBusy(true);
+        setMessage(null);
+        changeOwnPassword(current, next)
+          .then(() => {
+            setCurrent("");
+            setNext("");
+            setMessage({ ok: true, text: t("Password changed. Other devices were signed out.") });
+          })
+          .catch((err) => setMessage({ ok: false, text: err instanceof Error ? t(err.message) : String(err) }))
+          .finally(() => setBusy(false));
+      }}
+    >
+      <h2 className="text-sm font-semibold text-[var(--foreground)]">{t("Change password")}</h2>
+      <input
+        type="password"
+        autoComplete="current-password"
+        aria-label={t("Current password")}
+        placeholder={t("Current password")}
+        className={field}
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        aria-label={t("New password (at least 8 characters)")}
+        placeholder={t("New password (at least 8 characters)")}
+        className={field}
+        value={next}
+        minLength={8}
+        onChange={(e) => setNext(e.target.value)}
+      />
+      <button
+        type="submit"
+        disabled={busy || !current || next.length < 8}
+        className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-sm font-medium text-[var(--primary-foreground)] disabled:opacity-50"
+      >
+        {t("Change password")}
+      </button>
+      {message && (
+        <p role={message.ok ? "status" : "alert"} className={`text-sm ${message.ok ? "text-[var(--muted-foreground)]" : "text-red-600"}`}>
+          {message.text}
+        </p>
+      )}
+    </form>
   );
 }

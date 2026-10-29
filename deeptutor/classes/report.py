@@ -143,7 +143,49 @@ class ReportService:
                     (class_id,),
                 )
             ]
+        # Only accounts that are students now: a promoted student's learning
+        # data is theirs alone (D2), whatever rows linger.
+        accounts = _accounts()
+        students = [
+            s for s in students
+            if (accounts.get(s) or {}).get("role") == "student" and not accounts[s]["disabled"]
+        ]
         return row["name"], students
+
+    def _my_practice_results(self, student_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """D17: each student's results on this teacher's practice sets (scores only)."""
+        from deeptutor.practice_sets import store as practice_store
+
+        if not student_ids:
+            return {}
+        marks = ",".join("?" for _ in student_ids)
+        with practice_store.read() as conn:
+            if conn is None:
+                return {}
+            rows = conn.execute(
+                f"SELECT p.id, p.title, s.student_id, s.score, s.max_score, s.late, s.submitted_at "
+                f"FROM practice_submissions s JOIN practice_sets p ON p.id = s.set_id "
+                f"WHERE p.owner_user_id = ? AND s.student_id IN ({marks}) "
+                f"ORDER BY s.submitted_at",
+                (self.actor.id, *student_ids),
+            ).fetchall()
+        grouped: dict[tuple[str, str], list] = {}
+        for row in rows:
+            grouped.setdefault((row["student_id"], row["id"]), []).append(row)
+        results: dict[str, list[dict[str, Any]]] = {}
+        for (student_id, set_id), mine in grouped.items():
+            first = mine[0]
+            results.setdefault(student_id, []).append({
+                "set_id": set_id,
+                "title": first["title"],
+                "attempts": len(mine),
+                "first_score": first["score"],
+                "best_score": max(r["score"] for r in mine),
+                "max_score": first["max_score"],
+                "late": bool(first["late"]),
+                "last_submitted_at": mine[-1]["submitted_at"],
+            })
+        return results
 
     def _my_template_ids(self) -> dict[str, str]:
         from deeptutor.teaching.store import TeachingStore
@@ -198,6 +240,7 @@ class ReportService:
         name, students = self._class_students(class_id)
         accounts = _accounts()
         my_templates = self._my_template_ids()
+        practice = self._my_practice_results(students)
         rows = []
         for student_id in students:
             report = self._student_report(student_id, my_templates, detail=False)
@@ -205,6 +248,7 @@ class ReportService:
                 "id": student_id,
                 "username": (accounts.get(student_id) or {}).get("username") or student_id,
                 **report,
+                "practice_sets": practice.get(student_id, []),
             })
         return {"class_id": class_id, "class_name": name, "students": rows}
 
@@ -219,6 +263,7 @@ class ReportService:
             "id": student_id,
             "username": (accounts.get(student_id) or {}).get("username") or student_id,
             **report,
+            "practice_sets": self._my_practice_results([student_id]).get(student_id, []),
         }
 
 

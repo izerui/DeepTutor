@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 from deeptutor.practice_sets.service import PracticeError, PracticeSetService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -137,7 +139,15 @@ async def set_report(set_id: str):
 
 @router.get("/{set_id}/take")
 async def take_set(set_id: str):
-    return {"set": await _call(PracticeSetService().take, set_id)}
+    service = PracticeSetService()
+    view = await _call(service.take, set_id)
+    if view["answers_revealed"]:
+        # Answers withheld from the student's bank until now are filled in.
+        try:
+            await service.reveal_in_bank(set_id)
+        except Exception:
+            logger.exception("Could not complete practice set %s answers in the question bank", set_id)
+    return {"set": view}
 
 
 @router.post("/{set_id}/submit")

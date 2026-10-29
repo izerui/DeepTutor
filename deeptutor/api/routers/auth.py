@@ -50,7 +50,7 @@ from deeptutor.multi_user.device_credentials import (
     list_device_credentials,
     revoke_device_credential,
 )
-from deeptutor.multi_user.identity import get_user_by_id
+from deeptutor.multi_user.identity import get_user, get_user_by_id
 from deeptutor.multi_user.learning_access import learning_policy_for_user
 from deeptutor.multi_user.models import AccountPreset
 from deeptutor.multi_user.paths import local_admin_user
@@ -1250,16 +1250,21 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
 
     first_user = is_first_user()
     invite = body.invite.strip()
+    invite_error = ""
     if not first_user:
         from deeptutor.classes.service import ClassError, link_info
         from deeptutor.multi_user.registration import public_registration_open
 
+        is_open = await asyncio.to_thread(public_registration_open)
         if invite:
             try:
                 await asyncio.to_thread(link_info, invite)
             except ClassError as exc:
-                raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-        elif not public_registration_open():
+                if not is_open:
+                    raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+                # Open registration does not depend on the link: sign up, join nothing.
+                invite, invite_error = "", str(exc)
+        elif not is_open:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Registration is closed. Ask your teacher for an invite link.",
@@ -1295,6 +1300,7 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
         "is_first_user": first_user,
         "is_admin": role == "admin",
         "joined_class": joined,
+        "invite_error": invite_error,
     }
 
 
@@ -1390,6 +1396,42 @@ async def get_profile(
             created_at="",
         )
     return UserInfo(**info)
+
+
+class ChangeOwnPassword(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+@router.put("/profile/password")
+async def change_own_password(
+    body: ChangeOwnPassword,
+    response: Response,
+    payload: TokenPayload | None = Depends(require_auth),
+) -> dict:
+    """Change one's own password (e.g. after an administrator or teacher reset it).
+
+    Every other session and paired device ends; this browser gets a fresh
+    session so the person stays signed in here.
+    """
+    current = _require_profile_identity(payload)
+    if POCKETBASE_ENABLED or not AUTH_ENABLED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not available in this deployment.")
+    if authenticate(current.username, body.current_password) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
+    from deeptutor.classes.service import end_other_sessions
+    from deeptutor.multi_user.identity import set_password
+    from deeptutor.services.auth import hash_password
+
+    record = await asyncio.to_thread(set_password, current.username, hash_password(body.new_password))
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user_id = str(record.get("id") or "")
+    await asyncio.to_thread(end_other_sessions, user_id, revoked_by=user_id)
+    token = create_token(current.username, str(record.get("role") or current.role), user_id)
+    response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
+    _no_store(response)
+    return {"ok": True}
 
 
 @router.put("/profile")
@@ -2060,6 +2102,34 @@ async def retry_account_handoff(
     return {"cleared": remaining is None, "handoff": remaining.to_dict() if remaining else None}
 
 
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+@router.put("/users/{username}/password", status_code=status.HTTP_200_OK)
+async def admin_reset_password(
+    username: str,
+    body: AdminPasswordReset,
+    current: TokenPayload = Depends(require_admin),
+) -> dict:
+    """Spec 2026-10-29 D20: an administrator resets any account's forgotten password.
+
+    Sessions and paired devices signed in with the old password stop working.
+    """
+    from deeptutor.classes.service import end_other_sessions
+    from deeptutor.multi_user.identity import set_password
+    from deeptutor.services.auth import hash_password
+
+    record = await asyncio.to_thread(set_password, username, hash_password(body.new_password))
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    await asyncio.to_thread(
+        end_other_sessions, str(record.get("id") or ""), revoked_by=current.user_id or current.username
+    )
+    logger.info("Admin '%s' reset the password of '%s'", current.username, username)
+    return {"ok": True, "username": username}
+
+
 @router.put("/users/{username}/role", status_code=status.HTTP_200_OK)
 async def update_user_role(
     username: str,
@@ -2073,16 +2143,30 @@ async def update_user_role(
             detail="You cannot change your own role",
         )
 
-    if body.role == "admin":
-        # Record the existing administrator as primary before a second one
-        # exists, so each later administrator gets their own root (P1b).
-        from deeptutor.multi_user.admin_accounts import primary_admin_id
+    from deeptutor.multi_user.admin_accounts import primary_admin_id
 
-        primary_admin_id()
+    target = get_user(username)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Record the existing administrator as primary before a second one exists,
+    # so each later administrator gets their own root (P1b).
+    primary = primary_admin_id()
+    if body.role != "admin" and primary and str(target.get("id") or "") == primary:
+        # Their personal data lives in the legacy admin root (P1b); another
+        # role would point the account at an empty one.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The first administrator's role cannot be changed.",
+        )
+    old_role = str(target.get("role") or "")
 
     updated = set_role(username, body.role)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    from deeptutor.classes.lifecycle import after_role_change
+
+    # Spec 2026-10-29 §5: class rows and assignments follow the new role.
+    await asyncio.to_thread(after_role_change, str(target.get("id") or ""), old_role, body.role)
 
     logger.info(
         f"Admin '{current.username if current else 'local'}' set '{username}' role to {body.role!r}"

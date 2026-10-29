@@ -16,23 +16,23 @@ from .models import normalize_role
 
 TEACHING_ROLES: frozenset[str] = frozenset({"admin", "teacher"})
 
-#: ``None`` in a grant means "use these". Personal mastery paths stay open to
-#: students by default; private knowledge bases are closed by default.
+#: ``None`` in a grant means "use these". Spec 2026-10-29 §6: personal
+#: Mastery Paths and books stay open to students by default; private
+#: knowledge bases are closed by default.
 STUDENT_POLICY_DEFAULTS: dict[str, bool] = {
     "allow_personal_mastery": True,
+    "allow_personal_book": True,
     "allow_private_kb": False,
 }
 
 
 def normalize_student_policy(value: Any) -> dict[str, bool] | None:
+    """The items set for this student; missing items inherit (spec 2026-10-29 §6)."""
     if not isinstance(value, dict):
         return None
-    policy = dict(STUDENT_POLICY_DEFAULTS)
-    for key in STUDENT_POLICY_DEFAULTS:
-        raw = value.get(key)
-        if isinstance(raw, bool):
-            policy[key] = raw
-    return policy
+    return {
+        key: value[key] for key in STUDENT_POLICY_DEFAULTS if isinstance(value.get(key), bool)
+    }
 
 
 def current_role() -> str:
@@ -65,13 +65,13 @@ def effective_student_policy(user_id: str) -> dict[str, bool]:
         stored = load_grant(user_id).get("student_policy")
     except GrantStorageError:
         return {key: False for key in STUDENT_POLICY_DEFAULTS}
-    personal = normalize_student_policy(stored)
-    if personal is not None:
-        return personal
     from deeptutor.classes.service import class_student_policy
 
     policy = dict(STUDENT_POLICY_DEFAULTS)
     policy.update(class_student_policy(user_id))
+    # Per item: a setting made for this student wins over their classes.
+    if isinstance(stored, dict):
+        policy.update({k: v for k, v in stored.items() if k in policy and isinstance(v, bool)})
     return policy
 
 
@@ -87,3 +87,7 @@ def can_create_personal_mastery() -> bool:
 
 def can_write_private_kb() -> bool:
     return _student_allows("allow_private_kb")
+
+
+def can_create_personal_book() -> bool:
+    return _student_allows("allow_personal_book")

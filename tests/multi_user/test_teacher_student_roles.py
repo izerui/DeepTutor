@@ -18,24 +18,23 @@ def test_teaching_roles_are_admin_and_teacher_only():
 
 
 def test_student_policy_defaults():
+    # Spec 2026-10-29 §6: own Mastery Paths and books on, private KBs off.
     assert roles.STUDENT_POLICY_DEFAULTS == {
         "allow_personal_mastery": True,
+        "allow_personal_book": True,
         "allow_private_kb": False,
     }
 
 
-def test_normalize_student_policy_fills_defaults_and_drops_unknown_keys():
+def test_normalize_student_policy_keeps_set_items_and_drops_unknown_keys():
     assert roles.normalize_student_policy(None) is None
     assert roles.normalize_student_policy("bogus") is None
+    # Spec 2026-10-29 §6: items not set for the student inherit from classes.
     assert roles.normalize_student_policy({"allow_private_kb": True, "x": 1}) == {
-        "allow_personal_mastery": True,
         "allow_private_kb": True,
     }
-    # Non-boolean values fall back to the default instead of being coerced.
-    assert roles.normalize_student_policy({"allow_personal_mastery": "no"}) == {
-        "allow_personal_mastery": True,
-        "allow_private_kb": False,
-    }
+    # Non-boolean values are not set (they inherit) instead of being coerced.
+    assert roles.normalize_student_policy({"allow_personal_mastery": "no"}) == {}
 
 
 def test_current_role_reads_live_role_not_token_role(seed_user, as_user):
@@ -116,9 +115,10 @@ def test_empty_grant_has_null_student_policy():
     from deeptutor.multi_user.grants import empty_grant, normalize_grant
 
     assert empty_grant("u1")["student_policy"] is None
+    # Spec 2026-10-29 §6: only the items set for the student are stored.
     assert normalize_grant("u1", {"student_policy": {"allow_private_kb": True}})[
         "student_policy"
-    ] == {"allow_personal_mastery": True, "allow_private_kb": True}
+    ] == {"allow_private_kb": True}
 
 
 def test_load_grant_rejects_non_object_student_policy(seed_user):

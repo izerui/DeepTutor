@@ -274,6 +274,7 @@ class PracticeSetService:
 
     def get(self, set_id: str) -> dict[str, Any]:
         """The author's view: draft questions with answers."""
+        self._require_author()
         with store.read() as conn:
             row = self._owned(conn, set_id)
         return {**self._summary(row), "questions": json.loads(row["draft_questions_json"])}
@@ -282,6 +283,7 @@ class PracticeSetService:
         self, set_id: str, *, title: str | None = None, description: str | None = None,
         questions: Any = None, due_at: float | None | str = "", reveal: str | None = None,
     ) -> dict[str, Any]:
+        self._require_author()
         sets: list[str] = []
         values: list[Any] = []
         if title is not None:
@@ -315,6 +317,7 @@ class PracticeSetService:
 
     def publish(self, set_id: str) -> dict[str, Any]:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
+        self._require_author()
         with store.write() as conn:
             row = self._owned(conn, set_id)
             if row["status"] == "archived":
@@ -322,6 +325,8 @@ class PracticeSetService:
             questions = normalize_questions(json.loads(row["draft_questions_json"]))
             if not questions:
                 raise PracticeError("Add at least one question before publishing.")
+            if row["reveal"] == "after_due" and row["due_at"] is None:
+                raise PracticeError("Set a deadline, or show answers right after submitting.")
             revision = row["current_revision"] + 1
             now = _now()
             conn.execute(
@@ -334,9 +339,14 @@ class PracticeSetService:
                 "WHERE id = ?",
                 (revision, now, set_id),
             )
+        from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
+
+        # Spec §7.1: by default the set reaches the classes its author teaches.
+        default_scope_on_publish(PRACTICE_SET, set_id)
         return self.get(set_id)
 
     def archive(self, set_id: str) -> dict[str, Any]:
+        self._require_author()
         with store.write() as conn:
             self._owned(conn, set_id)
             conn.execute(
@@ -345,6 +355,7 @@ class PracticeSetService:
         return self.get(set_id)
 
     def delete(self, set_id: str) -> None:
+        self._require_author()
         with store.write() as conn:
             row = self._owned(conn, set_id)
             if row["current_revision"] > 0:
@@ -395,7 +406,7 @@ class PracticeSetService:
         if kb_ref:
             from deeptutor.multi_user.knowledge_access import resolve_kb
 
-            kb_name = resolve_kb(kb_ref).name
+            kb_name = resolve_kb(kb_ref).id
         count = max(1, min(int(count or 5), 20))
         types = [t for t in (question_types or []) if t in QUESTION_TYPES and t != "multi_choice"]
         bus = StreamBus()
@@ -484,7 +495,8 @@ class PracticeSetService:
                 "FROM practice_submissions WHERE set_id = ? AND student_id = ? ORDER BY submitted_at",
                 (set_id, self.actor.id),
             ).fetchall()
-        reveal = self._reveal(row, bool(submissions))
+        # A submission to an earlier version does not reveal this version's answers.
+        reveal = self._reveal(row, any(s["revision"] == row["current_revision"] for s in submissions))
         questions = json.loads(revision["questions_json"])
         latest = submissions[-1] if submissions else None
         return {
@@ -503,9 +515,13 @@ class PracticeSetService:
 
     @staticmethod
     def _reveal(row, submitted: bool) -> bool:
+        """Answers show only to a student who has submitted this version (§8.3);
+        with ``after_due`` also not before the deadline, so nobody copies them."""
+        if not submitted:
+            return False
         if row["reveal"] == "after_due":
             return row["due_at"] is not None and _now() >= row["due_at"]
-        return submitted
+        return True
 
     async def submit(self, set_id: str, answers: dict[str, Any], *, started_at: float | None = None) -> dict[str, Any]:
         import asyncio
@@ -556,8 +572,8 @@ class PracticeSetService:
                 )
 
         await asyncio.to_thread(save)
-        await self._to_my_bank(row, revision, questions, given, results)
         reveal = self._reveal(row, True)
+        await self._to_my_bank(row, revision, questions, given, results, reveal=reveal)
         return {
             "submission_id": submission_id,
             "score": score,
@@ -565,48 +581,87 @@ class PracticeSetService:
             "late": late,
             "answers_revealed": reveal,
             "results": [
-                {**r, "feedback": results[r["question_id"]]["feedback"],
+                # AI feedback can quote the key, so it waits for the answers too.
+                {**r, "feedback": results[r["question_id"]]["feedback"] if reveal else "",
                  **({"correct_answer": q["correct_answer"], "explanation": q["explanation"]} if reveal else {})}
                 for r, q in zip(rows, questions)
             ],
         }
 
-    async def _to_my_bank(self, row, revision, questions, given, results) -> None:
+    @staticmethod
+    def _bank_item(row, revision, question, *, answer: str, result: str, reveal: bool) -> dict[str, Any]:
+        return {
+            "origin_type": "practice_set",
+            "origin_ref": f"practice_set:{row['id']}",
+            "turn_id": f"rev{revision['revision']}",
+            "question_id": question["question_id"],
+            "question": question["question"],
+            "question_type": question["question_type"],
+            "options": question["options"],
+            # Withheld until the teacher's reveal time (§8.3); filled in by
+            # :meth:`reveal_in_bank` once the student may see them.
+            "correct_answer": question["correct_answer"] if reveal else "",
+            "explanation": question["explanation"] if reveal else "",
+            "user_answer": answer,
+            "is_correct": result == "correct",
+            "result": result,
+            "source": "practice_set",
+            "material_id": row["id"],
+            "material_title": revision["title"],
+            "assessment_type": "quiz",
+        }
+
+    async def _to_my_bank(self, row, revision, questions, given, results, *, reveal: bool) -> None:
         """Each answer into the student's own question bank, tagged with the set (§8.3)."""
         from deeptutor.services.session.sqlite_store import get_sqlite_session_store
 
-        items = []
-        for question in questions:
-            result = results[question["question_id"]]["result"]
-            items.append({
-                "origin_type": "practice_set",
-                "origin_ref": f"practice_set:{row['id']}",
-                "turn_id": f"rev{revision['revision']}",
-                "question_id": question["question_id"],
-                "question": question["question"],
-                "question_type": question["question_type"],
-                "options": question["options"],
-                "correct_answer": question["correct_answer"],
-                "explanation": question["explanation"],
-                "user_answer": given[question["question_id"]],
-                "is_correct": result == "correct",
-                "result": result,
-                "source": "practice_set",
-                "material_id": row["id"],
-                "material_title": revision["title"],
-                "assessment_type": "quiz",
-            })
+        items = [
+            self._bank_item(
+                row, revision, question, answer=given[question["question_id"]],
+                result=results[question["question_id"]]["result"], reveal=reveal,
+            )
+            for question in questions
+        ]
         try:
             await get_sqlite_session_store().upsert_notebook_entries(None, items)
         except Exception:
             # The submission and its score stand; only the bank copy is missing.
             logger.exception("Could not save practice set %s answers to the question bank", row["id"])
 
+    async def reveal_in_bank(self, set_id: str) -> None:
+        """Once answers may show, complete the bank entries saved without them."""
+        import asyncio
+
+        from deeptutor.services.session.sqlite_store import get_sqlite_session_store
+
+        def load():
+            with store.read() as conn:
+                return self._published(conn, set_id)
+
+        row, revision = await asyncio.to_thread(load)
+        bank = get_sqlite_session_store()
+        items = []
+        for question in json.loads(revision["questions_json"]):
+            entry = await bank.find_notebook_entry_by_origin(
+                "practice_set", f"practice_set:{set_id}", question["question_id"],
+                turn_id=f"rev{revision['revision']}",
+            )
+            if entry is None or entry.get("correct_answer") or not question["correct_answer"]:
+                continue
+            items.append(self._bank_item(
+                row, revision, question, answer=str(entry.get("user_answer") or ""),
+                result=str(entry.get("result") or "ungraded"), reveal=True,
+            ))
+        if items:
+            await bank.upsert_notebook_entries(None, items)
+
     # the teacher's report (§8.4)
 
     def report(self, set_id: str) -> dict[str, Any]:
+        """Results of the students the set reaches, plus anyone who submitted and left it (§8.4)."""
         from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
+        self._require_author()
         with store.read() as conn:
             row = self._owned(conn, set_id)
             submissions = conn.execute(
@@ -618,18 +673,24 @@ class PracticeSetService:
             ).fetchone()
         scope = get_scope(PRACTICE_SET, set_id)
         reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
-        names = _usernames()
+        from deeptutor.classes.service import _accounts
+
+        accounts = _accounts()
+        names = {user_id: account["username"] for user_id, account in accounts.items()}
         by_student: dict[str, list] = {}
         for submission in submissions:
-            if submission["student_id"] in reached:
+            # A deleted account or one that is no longer a student is not reported.
+            if (accounts.get(submission["student_id"]) or {}).get("role") == "student":
                 by_student.setdefault(submission["student_id"], []).append(submission)
         students = []
-        for student_id in sorted(reached, key=lambda s: names.get(s, s)):
+        for student_id in sorted(reached | set(by_student), key=lambda s: names.get(s, s)):
             mine = by_student.get(student_id, [])
             first = mine[0] if mine else None
             students.append({
                 "id": student_id,
                 "username": names.get(student_id, student_id),
+                # False: submitted earlier, then left the scope (a class, or was removed).
+                "in_scope": student_id in reached,
                 "completed": bool(mine),
                 "attempts": len(mine),
                 "first_score": first["score"] if first else None,
@@ -640,10 +701,14 @@ class PracticeSetService:
                 "late": bool(first["late"]) if first else False,
                 "submitted_at": first["submitted_at"] if first else None,
             })
-        # Error rate per question over each student's first submission.
+        # Error rate per question of the current version, over each student's
+        # first submission to that version.
         tally: dict[str, list[int]] = {}
         for mine in by_student.values():
-            for result in json.loads(mine[0]["results_json"]):
+            current = [s for s in mine if s["revision"] == row["current_revision"]]
+            if not current:
+                continue
+            for result in json.loads(current[0]["results_json"]):
                 if result["result"] == "ungraded":
                     continue
                 counts = tally.setdefault(result["question_id"], [0, 0])
@@ -666,7 +731,6 @@ class PracticeSetService:
                 for q in questions
             ],
         }
-
 
 def _usernames() -> dict[str, str]:
     from deeptutor.classes.service import _accounts

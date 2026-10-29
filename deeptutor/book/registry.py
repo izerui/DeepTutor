@@ -806,7 +806,8 @@ def _read_decision(
         from deeptutor.publishing.scope import BOOK, allows
 
         # Spec 2026-10-29 §7.1: a published book reaches its scope only.
-        if allows(BOOK, current.book_id, user.id):
+        # Administrators see every published book: they withdraw or delete (D10).
+        if user.is_admin or allows(BOOK, current.book_id, user.id):
             return True
     return _references_of(conn, current.book_id)
 

@@ -141,6 +141,19 @@ export async function deleteUsers(
   return (await res.json()) as UserBatchDeleteResult;
 }
 
+/** Spec 2026-10-29 D20: the administrator resets a forgotten password. */
+export async function resetUserPassword(username: string, newPassword: string): Promise<void> {
+  const res = await apiFetch(apiUrl(`/api/auth/users/${encodeURIComponent(username)}/password`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === "string" ? data.detail : "Failed to reset password");
+  }
+}
+
 export async function setUserRole(
   username: string,
   role: AccountRole,

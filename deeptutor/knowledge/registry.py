@@ -900,6 +900,10 @@ def set_visibility(
         # Spec 7.4 / rule R1: a withdrawal cuts the other accounts off; their
         # references become "unavailable" instead of silently reading on.
         _revoke(conn, record, foreign, reason="made_private")
+        if visibility == "public" and record.visibility != "public":
+            from deeptutor.publishing.scope import KNOWLEDGE_BASE, default_scope_on_publish
+
+            default_scope_on_publish(KNOWLEDGE_BASE, record.kb_id)
         conn.execute(
             "UPDATE kb_registry SET visibility = ?, updated_at = ? WHERE kb_id = ?",
             (visibility, _now(), record.kb_id),
@@ -1541,7 +1545,8 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
         from deeptutor.publishing.scope import KNOWLEDGE_BASE, allows
 
         # Spec 2026-10-29 §7.1: a published knowledge base reaches its scope only.
-        if allows(KNOWLEDGE_BASE, record.kb_id, user.id):
+        # Administrators see every published one: they withdraw or delete (D10).
+        if user.is_admin or allows(KNOWLEDGE_BASE, record.kb_id, user.id):
             return True
     _load_builtin_readers()
     for reference in list_references(record.kb_id):

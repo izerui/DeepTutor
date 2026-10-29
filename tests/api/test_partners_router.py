@@ -377,7 +377,14 @@ class TestChannelOnboarding:
         # route from a merely authenticated one.
         monkeypatch.setattr(auth_service, "AUTH_SECRET", "test-secret")
         monkeypatch.setattr(auth_service, "POCKETBASE_ENABLED", False)
-        token = auth_service.create_token("not-an-admin", role="user", user_id="u-1")
+        # Spec 2026-10-29: tokens are checked against the account store.
+        from deeptutor.multi_user.identity import get_user, save_user
+
+        if get_user("not-an-admin") is None:
+            save_user("not-an-admin", auth_service.hash_password("password123"), role="student")
+        token = auth_service.create_token(
+            "not-an-admin", role="student", user_id=get_user("not-an-admin")["id"]
+        )
         # No context manager: this must not run the app's lifespan.
         client = TestClient(api_main.app)
         response = client.post(

@@ -31,6 +31,10 @@ ALL_STAGES = (
     "teacher_paths",
     "student_assignments",
     "path_materials",
+    # Spec 2026-10-29 §5/§7/§8: classes, publish targets and practice sets follow too.
+    "classes",
+    "publish_targets",
+    "practice_sets",
 )
 
 

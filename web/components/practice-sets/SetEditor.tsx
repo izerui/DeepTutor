@@ -194,7 +194,8 @@ export function SetEditor({
               onChange={(e) => patch({ reveal: e.target.value as Reveal })}
             >
               <option value="after_submit">{t("Right after submitting")}</option>
-              <option value="after_due">{t("After the deadline")}</option>
+              {/* Without a deadline, "after the deadline" would never come. */}
+              <option value="after_due" disabled={!draft.due_at}>{t("After the deadline")}</option>
             </select>
           </label>
         </div>

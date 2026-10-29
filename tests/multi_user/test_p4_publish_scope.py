@@ -62,7 +62,8 @@ def test_a_class_scope_reaches_its_students_and_teachers_only(teaching_users, as
         PublishService().set_scope(
             KNOWLEDGE_BASE, kb.kb_id, everyone=False, users=[], classes=[class_id], confirm=True
         )
-    for name, expected in (("sara", True), ("sam", True), ("tom", True), ("uma", False), ("adam", False)):
+    # Administrators see every published item so they can withdraw it (D10).
+    for name, expected in (("sara", True), ("sam", True), ("tom", True), ("uma", False), ("adam", True)):
         assert _reads_kb(as_account, name, kb) is expected, name
 
 

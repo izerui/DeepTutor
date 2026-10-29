@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 
@@ -22,6 +22,8 @@ export default function JoinClassPage() {
   const router = useRouter();
   const params = useParams<{ token: string }>();
   const token = String(params?.token ?? "");
+  // Set when the student comes back from signing in: spec §5 joins them at once.
+  const auto = useSearchParams()?.get("auto") === "1";
   const [state, setState] = useState<State>({ kind: "loading" });
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
@@ -47,6 +49,11 @@ export default function JoinClassPage() {
   }, [token]);
 
   const here = `/join/${encodeURIComponent(token)}`;
+
+  useEffect(() => {
+    if (auto && state.kind === "ready" && state.signedIn && state.isStudent && !joining && !error) void join();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, state]);
 
   async function join() {
     setJoining(true);
@@ -77,7 +84,7 @@ export default function JoinClassPage() {
           {!state.signedIn ? (
             <div className="space-y-2">
               <Link
-                href={`/login?next=${encodeURIComponent(here)}`}
+                href={`/login?next=${encodeURIComponent(`${here}?auto=1`)}`}
                 className="block rounded-lg bg-[var(--primary)] px-4 py-2.5 text-[13.5px] font-semibold text-[var(--primary-foreground)]"
               >
                 {t("Sign in to join")}

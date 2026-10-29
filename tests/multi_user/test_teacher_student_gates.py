@@ -82,6 +82,7 @@ def test_status_reports_student_policy(status_client):
     assert body["is_teacher"] is False
     assert body["student_policy"] == {
         "allow_personal_mastery": True,
+        "allow_personal_book": True,
         "allow_private_kb": False,
     }
 

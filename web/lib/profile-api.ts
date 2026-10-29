@@ -52,6 +52,16 @@ function extractDetail(data: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Change one's own password; other sessions end, this one continues. */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await apiFetch(apiUrl("/api/auth/profile/password"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!res.ok) throw new Error(extractDetail(await res.json().catch(() => ({})), "Failed to change password"));
+}
+
 /** Fetch the signed-in user's own profile. */
 export async function getProfile(): Promise<ProfileInfo> {
   const res = await apiFetch(apiUrl("/api/auth/profile"));

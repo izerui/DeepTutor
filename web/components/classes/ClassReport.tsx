@@ -55,6 +55,7 @@ export function ClassReportSection({ classId }: { classId: string }) {
               <th className={cell}>{t("Student")}</th>
               <th className={cell}>{t("My paths: mastered points")}</th>
               <th className={cell}>{t("My paths: wrong answers")}</th>
+              <th className={cell}>{t("My practice sets: submitted")}</th>
               <th className={cell}>{t("All learning: mastered points")}</th>
               <th className={cell}>{t("Question bank: wrong")}</th>
               <th className={cell}>{t("Study time (7 days / total)")}</th>
@@ -82,6 +83,7 @@ export function ClassReportSection({ classId }: { classId: string }) {
                   <td className={`${cell} font-medium text-[var(--foreground)]`}>{student.username}</td>
                   <td className={cell}>{mine.total ? `${mine.mastered} / ${mine.total}` : "—"}</td>
                   <td className={cell}>{mine.total ? mine.wrong : "—"}</td>
+                  <td className={cell}>{(student.practice_sets ?? []).length || "—"}</td>
                   <td className={cell}>
                     {student.overall.kp_mastered} / {student.overall.kp_total}
                   </td>
@@ -128,6 +130,21 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
   return (
     <div className="space-y-3 rounded-xl border border-[var(--border)] p-3">
       <h4 className="text-[13px] font-medium text-[var(--foreground)]">{report.username}</h4>
+      {(report.practice_sets ?? []).length > 0 && (
+        <ul className="space-y-1 text-[12.5px]">
+          {(report.practice_sets ?? []).map((set) => (
+            <li key={set.set_id} className="flex flex-wrap gap-x-3">
+              <span className="font-medium text-[var(--foreground)]">{set.title}</span>
+              <span className="text-[var(--muted-foreground)]">
+                {t("First {{first}} · best {{best}} / {{max}} · {{count}} attempts", {
+                  first: set.first_score, best: set.best_score, max: set.max_score, count: set.attempts,
+                })}
+                {set.late && ` · ${t("Late")}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {report.teacher_paths.length === 0 ? (
         <p className="text-[12px] text-[var(--muted-foreground)]">{t("No paths from you yet.")}</p>
       ) : (

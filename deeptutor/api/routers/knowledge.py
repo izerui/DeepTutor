@@ -3786,6 +3786,9 @@ def _detach_kb_once(kb_name: str, *, force: bool, confirmed: frozenset[str] | No
 
     if force and not get_current_user().is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force deletion.")
+    withdrawn = _admin_withdrawal(kb_name, force=force, confirmed=confirmed)
+    if withdrawn:
+        return None
     try:
         manager, resolved_name, base_dir = _writable_kb(kb_name)
         with document_mutation_or_busy(base_dir, resolved_name):
@@ -3828,8 +3831,33 @@ def _detach_kb_once(kb_name: str, *, force: bool, confirmed: frozenset[str] | No
     return detached
 
 
+def _admin_withdrawal(kb_name: str, *, force: bool, confirmed: frozenset[str] | None) -> bool:
+    """Spec 2026-10-29 D10 / §4 rule 5: an administrator's deletion of someone
+    else's published KB only withdraws it (private again, references revoked);
+    the owner's files stay. ``False`` when this is an ordinary deletion."""
+    from deeptutor.knowledge import registry
+    from deeptutor.multi_user.ownership import owns
+
+    user = get_current_user()
+    record = registry.resolve_ref(kb_name)
+    if record is None or not user.is_admin or owns(record.created_by, user):
+        return False
+    if record.visibility != "public":
+        raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
+    registry.set_visibility(
+        record.kb_id, "private", force=force,
+        confirm=confirmed is not None, confirmed_referrers=confirmed,
+    )
+    from deeptutor.multi_user.audit import log_admin_action
+
+    log_admin_action("kb_withdraw", summary={"kb_id": record.kb_id, "via": "delete"})
+    return True
+
+
 def _purge_detached_kb(detached) -> None:
     """Remove the committed deletion's files; failures only leave orphans."""
+    if detached is None:
+        return
     try:
         detached.purge()
     except Exception:
@@ -3847,6 +3875,8 @@ def _purge_after_commit(detached) -> None:
     Runs after the registry commit and outside every lock (a worker thread
     for the async routes): both removals may be slow.
     """
+    if detached is None:
+        return  # an administrator's withdrawal: no files to remove
     _purge_detached_kb(detached)
     try:
         detached.manager.purge_committed_deletions()

@@ -109,6 +109,7 @@ export default function BankToolbar({
         <option value="book">{t("Book")}</option>
         <option value="partner_chat">{t("Partner Chat")}</option>
         <option value="import">{t("Imported")}</option>
+        <option value="practice_set">{t("Practice sets")}</option>
       </select>
 
       <select

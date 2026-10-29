@@ -14,7 +14,6 @@ import {
   type WithdrawalImpact,
 } from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
-import { applyDefaultScope } from "@/lib/publish-api";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
 
 const ISSUE_MESSAGES = {
@@ -82,8 +81,6 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
         force: makingPublic && isAdmin && force,
         ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
-      // Spec 2026-10-29 §7.1: a teacher's new publication reaches their classes by default.
-      if (makingPublic && sharing) await applyDefaultScope("book", sharing.book_id).catch(() => undefined);
       if (!alive.current) return;
       onChanged();
       onClose();

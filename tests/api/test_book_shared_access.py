@@ -413,7 +413,12 @@ def test_admin_delete_preserves_inert_legacy_evidence(shared_env) -> None:
     )
 
     assert response.status_code == 200
-    assert canonical.load_book("bk_shared") is None
+    # Spec 2026-10-29 D10 / §4 rule 5: an admin's deletion of the teacher's
+    # book only withdraws it; the owner's files stay.
+    assert canonical.load_book("bk_shared") is not None
+    from deeptutor.book import registry as book_registry
+
+    assert book_registry.get_book("bk_shared") is None
     alice = get_user("alice")
     editor = get_user("editor")
     assert alice is not None and editor is not None

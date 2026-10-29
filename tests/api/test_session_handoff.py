@@ -51,7 +51,13 @@ def _handoff_client(
         )
         bearer = "pb-bearer-token-that-must-not-persist"
     else:
-        bearer = auth_service.create_token("alice", "user", "u-alice")
+        # Spec 2026-10-29: tokens are checked against the account store, so
+        # the account must exist.
+        from deeptutor.multi_user.identity import get_user, save_user
+
+        if get_user("alice") is None:
+            save_user("alice", auth_service.hash_password("password123"), role="student")
+        bearer = auth_service.create_token("alice", "student", get_user("alice")["id"])
 
     app = FastAPI()
     app.include_router(auth_router.router, prefix="/api/auth")
@@ -99,7 +105,9 @@ def test_private_create_public_exchange_and_complete(tmp_path, monkeypatch) -> N
         completed.cookies.get("dt_token", ""),
     )
     assert session is not None
-    assert (session.username, session.role, session.user_id) == ("alice", "user", "u-alice")
+    from deeptutor.multi_user.identity import get_user
+
+    assert (session.username, session.role, session.user_id) == ("alice", "student", get_user("alice")["id"])
 
     replayed = client.post(
         "/api/auth/session-handoff/complete",

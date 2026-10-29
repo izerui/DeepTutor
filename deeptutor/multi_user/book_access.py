@@ -248,7 +248,10 @@ class ResolvedBook:
 def can_create_book() -> bool:
     if not _auth_enabled() or get_current_user().is_admin:
         return True
-    return permission_for_user(get_current_user()).create
+    from .roles import can_create_personal_book
+
+    # Spec 2026-10-29 §6: students build their own books only where allowed.
+    return permission_for_user(get_current_user()).create and can_create_personal_book()
 
 
 def resolve_book(book_id: str) -> ResolvedBook | None:

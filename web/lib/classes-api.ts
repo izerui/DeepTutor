@@ -39,7 +39,7 @@ export interface ClassDetail extends ClassSummary {
   student_policy?: Partial<Record<StudentPolicyKey, boolean>>;
 }
 
-export type StudentPolicyKey = "allow_personal_mastery" | "allow_private_kb";
+export type StudentPolicyKey = "allow_personal_mastery" | "allow_personal_book" | "allow_private_kb";
 
 export interface AttemptTally {
   correct: number;
@@ -71,11 +71,24 @@ export interface OverallReport {
   study_minutes_7d: number;
 }
 
+export interface PracticeSetResult {
+  set_id: string;
+  title: string;
+  attempts: number;
+  first_score: number;
+  best_score: number;
+  max_score: number;
+  late: boolean;
+  last_submitted_at: number;
+}
+
 export interface StudentReport {
   id: string;
   username: string;
   teacher_paths: TeacherPathReport[];
   overall: OverallReport;
+  /** Spec D17: this teacher's practice sets the student submitted. */
+  practice_sets?: PracticeSetResult[];
 }
 
 export interface ClassReport {

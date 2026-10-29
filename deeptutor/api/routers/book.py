@@ -1013,6 +1013,13 @@ async def _delete_book(
     user = get_current_user()
     if force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force book deletion.")
+    from deeptutor.multi_user.ownership import owns
+
+    if resolved.record is not None and user.is_admin and not owns(resolved.record.created_by, user):
+        # Spec 2026-10-29 D10 / §4 rule 5: an administrator deleting someone
+        # else's published book only withdraws it — the registration and its
+        # references go, the owner's files stay (they find it as a private book).
+        return await _retire_archived_book(resolved, book_id, force=force, confirmed=confirmed)
     references = []
     # B3-12 (a): an archived source is never touched. An admin's deletion of
     # a book that is public there only retires its registry identity (checked
@@ -1063,6 +1070,11 @@ def _unregister_deleted(conn: sqlite3.Connection, book_id: str) -> None:
     """Revoke (``book_deleted``), drop the row and intent, release KB protection."""
     book_registry._unregister(conn, book_id)
     book_sharing.sync_protection(conn, book_id)
+    from deeptutor.publishing.scope import BOOK, forget
+
+    # Book ids come from directory names and may be registered again later;
+    # a new registration must not inherit this one's audience.
+    forget(BOOK, book_id)
 
 
 def _log_book_delete(book_id: str, references: list[Any], **extra: Any) -> None:

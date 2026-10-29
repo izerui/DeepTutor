@@ -319,10 +319,21 @@ def decode_token(token: str) -> TokenPayload | None:
         username = payload.get("sub")
         if not username:
             return None
+        # Spec 2026-10-29: the account store, not the token, decides who this
+        # is now. A deleted, disabled or replaced account, or a password reset
+        # after the token was issued, ends the session; the role is the live one.
+        record = _load_users().get(str(username))
+        if not isinstance(record, dict) or record.get("disabled"):
+            return None
         user_id = str(payload.get("uid") or "")
-        if not user_id:
-            record = _load_users().get(str(username)) or {}
-            user_id = str(record.get("id") or "")
+        if user_id and user_id != str(record.get("id") or ""):
+            return None
+        user_id = user_id or str(record.get("id") or "")
+        changed_at = record.get("credentials_changed_at")
+        issued_at = payload.get("iat")
+        if isinstance(changed_at, (int, float)) and isinstance(issued_at, (int, float)):
+            if issued_at < int(changed_at):
+                return None
         device_credential_id = str(payload.get("dcid") or "")
         device_session_nonce = str(payload.get("dcs") or "")
         if device_credential_id:
@@ -336,7 +347,7 @@ def decode_token(token: str) -> TokenPayload | None:
                 return None
         return TokenPayload(
             username=username,
-            role=payload.get("role", "user"),
+            role=str(record.get("role") or payload.get("role", "user")),
             user_id=user_id,
             device_credential_id=device_credential_id,
             device_session_nonce=device_session_nonce,
@@ -436,6 +447,8 @@ def authenticate(username: str, password: str) -> TokenPayload | None:
 
     hashed = record.get("hash", "") if isinstance(record, dict) else record
     if not verify_password(password, hashed):
+        return None
+    if isinstance(record, dict) and record.get("disabled"):
         return None
 
     role = record.get("role", "user") if isinstance(record, dict) else "user"

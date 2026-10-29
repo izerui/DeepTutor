@@ -60,14 +60,27 @@ def test_closed_registration_still_admits_an_invited_student(auth_client, as_use
 
 
 def test_a_bad_invite_is_refused_before_any_account_is_made(auth_client):
+    """While registration is closed, only a valid invite admits a new account."""
+    from deeptutor.multi_user.registration import set_public_registration
     from deeptutor.services.auth import list_users
 
     client, _ = auth_client
+    set_public_registration(False)
     response = client.post(
         "/api/auth/register", json={"username": "ghost", "password": "password-123", "invite": "nope"},
     )
     assert response.status_code == 404
     assert "ghost" not in {u["username"] for u in list_users()}
+
+
+def test_open_registration_ignores_a_dead_invite(auth_client):
+    """Spec 2026-10-30 closure: an open sign-up does not depend on the link; it joins nothing."""
+    client, _ = auth_client
+    response = client.post(
+        "/api/auth/register", json={"username": "ghost", "password": "password-123", "invite": "nope"},
+    )
+    assert response.status_code == 201
+    assert response.json()["joined_class"] is None and response.json()["invite_error"]
 
 
 def test_only_admins_change_the_registration_setting(auth_client):

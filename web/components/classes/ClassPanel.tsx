@@ -37,7 +37,7 @@ const hintClass = "text-[12px] leading-relaxed text-[var(--muted-foreground)]";
 
 export function ClassPanel({ classId, onChanged }: { classId: string; onChanged: () => void }) {
   const { t } = useTranslation();
-  const { isAdmin } = useAuthStatus();
+  const { isAdmin, userId } = useAuthStatus();
   const [detail, setDetail] = useState<ClassDetail | null>(null);
   const [link, setLink] = useState<InviteLink | null>(null);
   const [error, setError] = useState("");
@@ -93,40 +93,43 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
         <InviteLinkSection detail={detail} link={link} run={run} />
       </section>
 
+      {/* An archived class admits nobody (spec §5). */}
+      {!detail.archived && (
       <section className={sectionClass}>
-        <h3 className={titleClass}>{t("Invite students")}</h3>
-        <p className={hintClass}>{t("Search by username. The student joins after accepting the invitation.")}</p>
-        <PersonSearch
-          search={searchStudents}
-          actionLabel={t("Invite")}
-          onPick={(person) => run(() => inviteStudent(detail.id, person.id), t("Invitation sent."))}
-        />
-        {(detail.pending_invitations ?? []).length > 0 && (
-          <ul className="space-y-1">
-            {(detail.pending_invitations ?? []).map((invitation) => (
-              <li key={invitation.id} className="flex items-center justify-between gap-2 text-[12.5px]">
-                <span className="text-[var(--foreground)]">
-                  {invitation.username} · <span className="text-[var(--muted-foreground)]">{t("Waiting for reply")}</span>
-                </span>
-                <button type="button" className={actionClass} onClick={() => void run(() => cancelInvitation(invitation.id))}>
-                  <X size={13} />
-                  {t("Cancel invitation")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {isAdmin && (
-          <div className="space-y-2 border-t border-[var(--border)] pt-3">
-            <p className={hintClass}>{t("Administrators can also add students directly, without an invitation.")}</p>
-            <PersonSearch
-              search={searchStudents}
-              actionLabel={t("Add")}
-              onPick={(person) => run(() => addStudents(detail.id, [person.id]))}
-            />
-          </div>
-        )}
-      </section>
+          <h3 className={titleClass}>{t("Invite students")}</h3>
+          <p className={hintClass}>{t("Search by username. The student joins after accepting the invitation.")}</p>
+          <PersonSearch
+            search={searchStudents}
+            actionLabel={t("Invite")}
+            onPick={(person) => run(() => inviteStudent(detail.id, person.id), t("Invitation sent."))}
+          />
+          {(detail.pending_invitations ?? []).length > 0 && (
+            <ul className="space-y-1">
+              {(detail.pending_invitations ?? []).map((invitation) => (
+                <li key={invitation.id} className="flex items-center justify-between gap-2 text-[12.5px]">
+                  <span className="text-[var(--foreground)]">
+                    {invitation.username} · <span className="text-[var(--muted-foreground)]">{t("Waiting for reply")}</span>
+                  </span>
+                  <button type="button" className={actionClass} onClick={() => void run(() => cancelInvitation(invitation.id))}>
+                    <X size={13} />
+                    {t("Cancel invitation")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {isAdmin && (
+            <div className="space-y-2 border-t border-[var(--border)] pt-3">
+              <p className={hintClass}>{t("Administrators can also add students directly, without an invitation.")}</p>
+              <PersonSearch
+                search={searchStudents}
+                actionLabel={t("Add")}
+                onPick={(person) => run(() => addStudents(detail.id, [person.id]))}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       <section className={sectionClass}>
         <h3 className={titleClass}>
@@ -159,7 +162,8 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
           {detail.teachers.map((teacher) => (
             <li key={teacher.id} className="flex items-center justify-between gap-2 text-[12.5px]">
               <span className="text-[var(--foreground)]">{teacher.username}</span>
-              <button
+              {/* Spec §5: administrators change who teaches; a teacher may step down if another remains. */}
+              {(isAdmin || (teacher.id === userId && detail.teachers.length > 1)) && <button
                 type="button"
                 className={actionClass}
                 onClick={() => {
@@ -169,8 +173,8 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
                 }}
               >
                 <Trash2 size={13} />
-                {t("Remove")}
-              </button>
+                {teacher.id === userId ? t("Leave as teacher") : t("Remove")}
+              </button>}
             </li>
           ))}
         </ul>
@@ -219,7 +223,16 @@ function ClassHeader({ detail, run }: { detail: ClassDetail; run: Run }) {
           <button
             type="button"
             className={actionClass}
-            onClick={() => void run(() => updateClass(detail.id, { archived: !detail.archived }))}
+            onClick={() => {
+              if (
+                detail.archived ||
+                window.confirm(
+                  t("Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept."),
+                )
+              ) {
+                void run(() => updateClass(detail.id, { archived: !detail.archived }));
+              }
+            }}
           >
             {detail.archived ? t("Restore class") : t("Archive class")}
           </button>
@@ -315,6 +328,7 @@ function InviteLinkSection({ detail, link, run }: { detail: ClassDetail; link: I
 
 const POLICY_ROWS: { key: StudentPolicyKey; label: string }[] = [
   { key: "allow_personal_mastery", label: "Create their own Mastery Paths" },
+  { key: "allow_personal_book", label: "Create their own books" },
   { key: "allow_private_kb", label: "Create their own knowledge bases" },
 ];
 

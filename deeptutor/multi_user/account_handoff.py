@@ -9,6 +9,8 @@ stages, each in its own transaction:
     :func:`deeptutor.book.registry.transfer_book_ownership`
 ``teacher_paths`` / ``student_assignments`` / ``path_materials``
     :func:`deeptutor.teaching.service.handle_account_deleted`
+``classes`` / ``publish_targets`` / ``practice_sets``
+    :mod:`deeptutor.classes.lifecycle` (spec 2026-10-29 §5, §7, §8)
 
 A pending record (in the KB registry, see ``account_handoffs`` there) is
 written before the stages run and narrowed to the failed stages afterwards,
@@ -40,6 +42,9 @@ STAGES: tuple[str, ...] = (
     "teacher_paths",
     "student_assignments",
     "path_materials",
+    "classes",
+    "publish_targets",
+    "practice_sets",
 )
 _TEACHING_STAGES = frozenset({"teacher_paths", "student_assignments", "path_materials"})
 #: Records one startup pass retries at most.
@@ -133,6 +138,22 @@ def run_stages(
         else:
             errors.extend(teaching_errors)
         failed.extend(stage for stage in teaching if stage in set(teaching_failed))
+
+    from deeptutor.classes import lifecycle
+
+    for stage, run in (
+        ("classes", lambda: lifecycle.forget_deleted_account(user_id)),
+        ("publish_targets", lambda: lifecycle.forget_publish_targets(user_id)),
+        ("practice_sets", lambda: lifecycle.transfer_practice_sets(user_id, successor_id)),
+    ):
+        if stage not in stages:
+            continue
+        try:
+            run()
+        except Exception as exc:
+            failure(f"Could not run the {stage} hand-over of deleted user '%s'")
+            failed.append(stage)
+            errors.append(f"{stage}: {exc!r}")
 
     return _ordered(failed), "; ".join(errors)
 

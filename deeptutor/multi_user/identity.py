@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import secrets
 import threading
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -95,6 +96,10 @@ def _canonical_record(
         record["book_permission"] = _stored_book_permission(value.get("book_permission"))
     if "learner_profile" in value:
         record["learner_profile"] = normalize_profile(value.get("learner_profile"))
+    # Spec 2026-10-29 D20: tokens issued before a password reset stop working.
+    changed_at = value.get("credentials_changed_at")
+    if isinstance(changed_at, (int, float)) and not isinstance(changed_at, bool):
+        record["credentials_changed_at"] = float(changed_at)
     return record
 
 
@@ -375,6 +380,8 @@ def set_password(username: str, hashed_password: str) -> dict[str, Any] | None:
         if record is None:
             return None
         record["hash"] = hashed_password
+        # Sessions signed in with the old password end (see services.auth.decode_token).
+        record["credentials_changed_at"] = time.time()
         _write_users(users)
         return deepcopy(record)
 
@@ -442,11 +449,12 @@ def set_role(username: str, role: Role) -> bool:
         raise ValueError(f"role must be one of {sorted(ASSIGNABLE_ROLES)}")
     if not USERS_FILE.exists():
         return False
-    users = load_users()
-    if username not in users:
-        return False
-    users[username]["role"] = role
-    _write_users(users)
+    with _USERS_WRITE_LOCK:
+        users = load_users()
+        if username not in users:
+            return False
+        users[username]["role"] = role
+        _write_users(users)
     return True
 
 

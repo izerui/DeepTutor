@@ -66,14 +66,3 @@ export const searchPeople = (query: string) =>
   call<{ people: { id: string; username: string; role: string }[] }>(`/people?q=${encodeURIComponent(query)}`).then(
     (r) => r.people,
   );
-
-/**
- * Spec §7.1: a teacher publishes to the classes they teach unless they choose
- * otherwise. Applied right after an item first becomes public; nobody loses
- * access because nobody had it.
- */
-export async function applyDefaultScope(kind: PublishKind, id: string): Promise<void> {
-  const described = await getScope(kind, id);
-  if (described.scope.managed || described.suggested_classes.length === 0) return;
-  await setScope(kind, id, { everyone: false, users: [], classes: described.suggested_classes, confirm: true });
-}

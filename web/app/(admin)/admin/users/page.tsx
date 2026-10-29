@@ -9,6 +9,7 @@ import {
   deleteUsers,
   listUsers,
   deleteUser,
+  resetUserPassword,
   setUserRole,
   createUser,
   importUsers,
@@ -25,6 +26,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { filterUsersByQuery } from "@/lib/admin-users";
 import { accountRoleLabelKey, type AccountRole } from "@/lib/account-role";
 import {
+  KeyRound,
   Search,
   Shield,
   ShieldCheck,
@@ -663,6 +665,26 @@ export default function AdminUsersPage() {
                                 ) : (
                                   <Shield size={15} />
                                 )}
+                              </button>
+                            </Tooltip>
+                            <Tooltip label={t("Reset password for {{username}}", { username: user.username })} side="top">
+                              <button
+                                onClick={() => {
+                                  const next = window.prompt(t("New password for {{username}} (at least 8 characters)", { username: user.username }));
+                                  if (next === null) return;
+                                  if (next.length < 8) {
+                                    setActionError(t("Password must be at least 8 characters."));
+                                    return;
+                                  }
+                                  resetUserPassword(user.username, next)
+                                    .then(() => window.alert(t("Password updated. Tell {{username}} their new password.", { username: user.username })))
+                                    .catch((e) => setActionError(e instanceof Error ? t(e.message) : t("Failed to reset password")));
+                                }}
+                                aria-label={t("Reset password for {{username}}", { username: user.username })}
+                                className="rounded-lg p-1.5 text-[var(--muted-foreground)]
+                                         hover:bg-[var(--background)] hover:text-[var(--foreground)] transition-colors"
+                              >
+                                <KeyRound size={15} />
                               </button>
                             </Tooltip>
                             <Tooltip label={

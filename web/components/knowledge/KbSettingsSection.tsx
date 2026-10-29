@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
-import { applyDefaultScope } from "@/lib/publish-api";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
 import {
   describeOtherReferences,
@@ -92,8 +91,6 @@ export default function KbSettingsSection({
         (confirmed) => (confirmed ? onVisibilityChange(next, { confirmed }) : onVisibilityChange(next)),
         t,
       );
-      // Spec 2026-10-29 §7.1: a teacher's new publication reaches their classes by default.
-      if (next === "public" && kb.kb_id) await applyDefaultScope("knowledge_base", kb.kb_id).catch(() => undefined);
     } catch (error) {
       setVisibilityError(error instanceof Error ? error.message : String(error));
     } finally {

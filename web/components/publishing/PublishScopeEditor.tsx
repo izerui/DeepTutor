@@ -82,6 +82,9 @@ export function PublishScopeEditor({
     };
   }, [query]);
 
+  // A confirmation covers the scope that was shown; any later edit asks again.
+  useEffect(() => setAffected(null), [everyone, classes, people]);
+
   const save = async (confirm: boolean) => {
     setBusy(true);
     setError("");

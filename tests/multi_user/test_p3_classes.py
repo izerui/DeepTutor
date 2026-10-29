@@ -195,7 +195,7 @@ def test_across_classes_any_allow_wins(as_user, people):
     _class_with(as_user, people, "sam", policy={"allow_private_kb": False, "allow_personal_mastery": False})
     _class_with(as_user, people, "sam", policy={"allow_private_kb": True})
     policy = effective_student_policy(people["sam"]["id"])
-    assert policy == {"allow_private_kb": True, "allow_personal_mastery": False}
+    assert policy == {"allow_private_kb": True, "allow_personal_mastery": False, "allow_personal_book": True}
 
 
 def test_a_personal_setting_wins_over_classes(as_user, people):
