@@ -2016,6 +2016,14 @@ async def update_user_role(
             detail="You cannot change your own role",
         )
 
+    from deeptutor.multi_user.roles import other_admin_exists
+
+    if body.role == "admin" and other_admin_exists(username):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only one administrator is supported until each administrator has separate data.",
+        )
+
     updated = set_role(username, body.role)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
