@@ -2436,6 +2436,7 @@ export default function ChatWorkspace() {
                   />
                 ) : (
                   <Tooltip
+                    className="min-w-0 max-w-full"
                     label={canRenameSession
                       ? t("Click to rename session")
                       : t("Start a conversation to rename")}
