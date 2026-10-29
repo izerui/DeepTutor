@@ -166,3 +166,52 @@ def test_archived_classes_drop_out_of_teacher_reach(as_user, people):
         ClassService().add_students(cls["id"], [people["sam"]["id"]])
         ClassService().update(cls["id"], archived=True)
     assert teacher_student_ids(people["tina"]["id"]) == set()
+
+
+# ── P3c: class-wide student permissions (spec §6) ─────────────────────
+
+
+def _class_with(as_user, people, *students, policy):
+    with as_user(people["boss"]["id"], role="admin", username="boss"):
+        cls = ClassService().create("Policy class")
+        ClassService().add_students(cls["id"], [people[s]["id"] for s in students])
+        ClassService().set_student_policy(cls["id"], policy)
+    return cls
+
+
+def test_a_class_setting_applies_to_its_students(as_user, people):
+    from deeptutor.multi_user.roles import effective_student_policy
+
+    sam = people["sam"]["id"]
+    assert effective_student_policy(sam)["allow_private_kb"] is False  # default
+    _class_with(as_user, people, "sam", policy={"allow_private_kb": True})
+    assert effective_student_policy(sam)["allow_private_kb"] is True
+    assert effective_student_policy(sam)["allow_personal_mastery"] is True  # unset → default
+
+
+def test_across_classes_any_allow_wins(as_user, people):
+    from deeptutor.multi_user.roles import effective_student_policy
+
+    _class_with(as_user, people, "sam", policy={"allow_private_kb": False, "allow_personal_mastery": False})
+    _class_with(as_user, people, "sam", policy={"allow_private_kb": True})
+    policy = effective_student_policy(people["sam"]["id"])
+    assert policy == {"allow_private_kb": True, "allow_personal_mastery": False}
+
+
+def test_a_personal_setting_wins_over_classes(as_user, people):
+    from deeptutor.multi_user.grants import load_grant, save_grant
+    from deeptutor.multi_user.roles import effective_student_policy
+
+    sam = people["sam"]["id"]
+    _class_with(as_user, people, "sam", policy={"allow_private_kb": True})
+    grant = load_grant(sam)
+    grant["student_policy"] = {"allow_personal_mastery": True, "allow_private_kb": False}
+    save_grant(sam, grant)
+    assert effective_student_policy(sam)["allow_private_kb"] is False
+
+
+def test_only_admins_set_class_permissions(as_user, people):
+    with _as(as_user, people, "tina", "teacher"):
+        cls = ClassService().create("Physics 1")
+        with pytest.raises(ClassForbidden):
+            ClassService().set_student_policy(cls["id"], {"allow_private_kb": True})

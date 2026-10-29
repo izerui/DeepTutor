@@ -53,14 +53,26 @@ def is_teacher_or_admin() -> bool:
 
 
 def effective_student_policy(user_id: str) -> dict[str, bool]:
-    """The student's policy; every ability is denied when the grant is unreadable."""
+    """The student's policy; every ability is denied when the grant is unreadable.
+
+    Spec 2026-10-29 §6: a setting made for this student wins; otherwise the
+    classes they are in decide (any class that allows, allows); otherwise the
+    defaults apply.
+    """
     from .grants import GrantStorageError, load_grant
 
     try:
         stored = load_grant(user_id).get("student_policy")
     except GrantStorageError:
         return {key: False for key in STUDENT_POLICY_DEFAULTS}
-    return normalize_student_policy(stored) or dict(STUDENT_POLICY_DEFAULTS)
+    personal = normalize_student_policy(stored)
+    if personal is not None:
+        return personal
+    from deeptutor.classes.service import class_student_policy
+
+    policy = dict(STUDENT_POLICY_DEFAULTS)
+    policy.update(class_student_policy(user_id))
+    return policy
 
 
 def _student_allows(key: str) -> bool:

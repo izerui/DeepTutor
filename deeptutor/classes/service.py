@@ -7,6 +7,7 @@ invitation, or by an administrator adding them; they can leave on their own.
 
 from __future__ import annotations
 
+import json
 import secrets
 import time
 from typing import Any
@@ -189,6 +190,7 @@ class ClassService:
                 "teachers": [self._person(accounts, t["user_id"]) for t in teachers],
             }
             if manager:
+                result["student_policy"] = _class_policy(row)
                 members = conn.execute(
                     "SELECT student_id, joined_via, joined_at FROM class_members "
                     "WHERE class_id = ? ORDER BY joined_at",
@@ -225,6 +227,28 @@ class ClassService:
     def _person(accounts: dict[str, dict[str, Any]], user_id: str) -> dict[str, Any]:
         account = accounts.get(user_id) or {}
         return {"id": user_id, "username": account.get("username") or user_id}
+
+    def set_student_policy(self, class_id: str, policy: dict[str, Any]) -> dict[str, Any]:
+        """Class-wide student permissions; administrators only (spec §6).
+
+        Each key is ``True`` (allow), ``False`` (do not allow) or absent / ``None``
+        (inherit the default).
+        """
+        from deeptutor.multi_user.roles import STUDENT_POLICY_DEFAULTS
+
+        if not self._is_admin():
+            raise ClassForbidden("Only administrators set student permissions.")
+        cleaned = {
+            key: value for key, value in (policy or {}).items()
+            if key in STUDENT_POLICY_DEFAULTS and isinstance(value, bool)
+        }
+        with store.write() as conn:
+            self._require_manager(conn, class_id)
+            conn.execute(
+                "UPDATE classes SET student_policy_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(cleaned, sort_keys=True), _now(), class_id),
+            )
+        return self.get(class_id)
 
     # ── teachers ──────────────────────────────────────────────
 
@@ -504,6 +528,31 @@ def teacher_student_ids(teacher_id: str) -> set[str]:
     return {row["student_id"] for row in rows}
 
 
+def _class_policy(row) -> dict[str, bool]:
+    try:
+        value = json.loads(row["student_policy_json"] or "{}")
+    except (KeyError, IndexError, ValueError):
+        return {}
+    return {k: v for k, v in value.items() if isinstance(v, bool)} if isinstance(value, dict) else {}
+
+
+def class_student_policy(student_id: str) -> dict[str, bool]:
+    """What the student's active classes say, per key: any allow wins (spec §6)."""
+    with store.read() as conn:
+        if conn is None:
+            return {}
+        rows = conn.execute(
+            "SELECT c.student_policy_json FROM classes c JOIN class_members m ON m.class_id = c.id "
+            "WHERE m.student_id = ? AND c.archived = 0",
+            (student_id,),
+        ).fetchall()
+    combined: dict[str, bool] = {}
+    for row in rows:
+        for key, value in _class_policy(row).items():
+            combined[key] = combined.get(key, False) or value
+    return combined
+
+
 def student_class_ids(student_id: str) -> set[str]:
     with store.read() as conn:
         if conn is None:
@@ -522,6 +571,7 @@ __all__ = [
     "ClassForbidden",
     "ClassNotFound",
     "ClassService",
+    "class_student_policy",
     "link_info",
     "student_class_ids",
     "teacher_student_ids",

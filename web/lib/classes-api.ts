@@ -35,6 +35,53 @@ export interface ClassDetail extends ClassSummary {
   teachers: ClassPerson[];
   students?: ClassStudent[];
   pending_invitations?: { id: string; username: string; created_at: number }[];
+  /** Class-wide student permissions; an absent key inherits the default. */
+  student_policy?: Partial<Record<StudentPolicyKey, boolean>>;
+}
+
+export type StudentPolicyKey = "allow_personal_mastery" | "allow_private_kb";
+
+export interface AttemptTally {
+  correct: number;
+  partial: number;
+  incorrect: number;
+}
+
+export interface TeacherPathReport {
+  template_id: string;
+  title: string;
+  revision: number;
+  kp_total: number;
+  kp_mastered: number;
+  average_mastery: number;
+  attempts: AttemptTally;
+  last_activity: number | null;
+  knowledge_points?: { name: string; mastery: number; mastered: boolean }[];
+}
+
+export interface OverallReport {
+  path_count: number;
+  self_study_path_count: number;
+  kp_total: number;
+  kp_mastered: number;
+  attempts: AttemptTally;
+  last_activity: number | null;
+  question_bank: { total: number; correct: number; partial: number; incorrect: number };
+  study_minutes_total: number;
+  study_minutes_7d: number;
+}
+
+export interface StudentReport {
+  id: string;
+  username: string;
+  teacher_paths: TeacherPathReport[];
+  overall: OverallReport;
+}
+
+export interface ClassReport {
+  class_id: string;
+  class_name: string;
+  students: StudentReport[];
 }
 
 export interface InviteLink {
@@ -101,6 +148,14 @@ export const removeStudent = (id: string, studentId: string) =>
   call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}`, {
     method: "DELETE",
   }).then((r) => r.class);
+export const setClassStudentPolicy = (id: string, policy: Partial<Record<StudentPolicyKey, boolean>>) =>
+  call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}/student-policy`, {
+    method: "PUT",
+    body: JSON.stringify(policy),
+  }).then((r) => r.class);
+export const getClassReport = (id: string) => call<ClassReport>(`/${encodeURIComponent(id)}/report`);
+export const getStudentReport = (id: string, studentId: string) =>
+  call<StudentReport>(`/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}/report`);
 export const leaveClass = (id: string) => call<{ ok: boolean }>(`/${encodeURIComponent(id)}/leave`, { method: "POST" });
 
 export const inviteStudent = (id: string, studentId: string) =>

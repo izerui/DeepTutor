@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS classes (
     name TEXT NOT NULL,
     created_by TEXT NOT NULL,
     archived INTEGER NOT NULL DEFAULT 0,
+    -- Class-wide student permissions (spec 2026-10-29 §6); {} inherits defaults.
+    student_policy_json TEXT NOT NULL DEFAULT '{}',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -95,6 +97,11 @@ def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
         if not readonly:
             conn.execute("PRAGMA synchronous = FULL")
             conn.executescript(_SCHEMA)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(classes)")}
+            if "student_policy_json" not in columns:
+                conn.execute(
+                    "ALTER TABLE classes ADD COLUMN student_policy_json TEXT NOT NULL DEFAULT '{}'"
+                )
         return conn
     except BaseException:
         conn.close()

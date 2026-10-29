@@ -21,12 +21,15 @@ import {
   revokeInviteLink,
   searchStudents,
   searchTeachers,
+  setClassStudentPolicy,
   updateClass,
   type ClassDetail,
   type ClassPerson,
   type InviteLink,
+  type StudentPolicyKey,
 } from "@/lib/classes-api";
 import { actionClass, CopyButton, inputClass, primaryClass } from "./ClassesHub";
+import { ClassReportSection } from "./ClassReport";
 
 const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
 const titleClass = "text-[13.5px] font-medium text-[var(--foreground)]";
@@ -139,6 +142,16 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
           </ul>
         )}
       </section>
+
+      {/* Spec 2026-10-29 D17: teachers read learning reports; administrators do not. */}
+      {!isAdmin && (
+        <section className={sectionClass}>
+          <h3 className={titleClass}>{t("Learning report")}</h3>
+          <ClassReportSection classId={detail.id} />
+        </section>
+      )}
+
+      {isAdmin && <StudentPolicySection detail={detail} run={run} />}
 
       <section className={sectionClass}>
         <h3 className={titleClass}>{t("Teachers")}</h3>
@@ -297,6 +310,44 @@ function InviteLinkSection({ detail, link, run }: { detail: ClassDetail; link: I
         )}
       </div>
     </div>
+  );
+}
+
+const POLICY_ROWS: { key: StudentPolicyKey; label: string }[] = [
+  { key: "allow_personal_mastery", label: "Create their own Mastery Paths" },
+  { key: "allow_private_kb", label: "Create their own knowledge bases" },
+];
+
+function StudentPolicySection({ detail, run }: { detail: ClassDetail; run: Run }) {
+  const { t } = useTranslation();
+  const policy = detail.student_policy ?? {};
+  const choose = (key: StudentPolicyKey, value: string) => {
+    const next: Partial<Record<StudentPolicyKey, boolean>> = { ...policy };
+    if (value === "") delete next[key];
+    else next[key] = value === "allow";
+    void run(() => setClassStudentPolicy(detail.id, next), t("Student permissions saved."));
+  };
+  return (
+    <section className={sectionClass}>
+      <h3 className={titleClass}>{t("Student permissions")}</h3>
+      <p className={hintClass}>
+        {t("Applies to every student in this class. A setting made for one student wins; across classes, any class that allows, allows.")}
+      </p>
+      {POLICY_ROWS.map((row) => (
+        <label key={row.key} className="flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-[var(--foreground)]">
+          {t(row.label)}
+          <select
+            value={policy[row.key] === undefined ? "" : policy[row.key] ? "allow" : "deny"}
+            onChange={(e) => choose(row.key, e.target.value)}
+            className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 text-[12px]"
+          >
+            <option value="">{t("Default")}</option>
+            <option value="allow">{t("Allow")}</option>
+            <option value="deny">{t("Do not allow")}</option>
+          </select>
+        </label>
+      ))}
+    </section>
   );
 }
 

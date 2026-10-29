@@ -57,6 +57,11 @@ class JoinRequest(BaseModel):
     token: str = Field(min_length=1, max_length=128)
 
 
+class StudentPolicyUpdate(BaseModel):
+    allow_personal_mastery: bool | None = None
+    allow_private_kb: bool | None = None
+
+
 class PasswordReset(BaseModel):
     new_password: str = Field(min_length=8, max_length=256)
 
@@ -175,6 +180,27 @@ async def remove_student(class_id: str, student_id: str) -> dict:
 async def leave_class(class_id: str) -> dict:
     await _call(lambda: ClassService().leave(class_id))
     return {"ok": True}
+
+
+@router.put("/{class_id}/student-policy")
+async def set_class_student_policy(class_id: str, payload: StudentPolicyUpdate) -> dict:
+    return {"class": await _call(
+        lambda: ClassService().set_student_policy(class_id, payload.model_dump(exclude_none=True))
+    )}
+
+
+@router.get("/{class_id}/report")
+async def class_report(class_id: str) -> dict:
+    from deeptutor.classes.report import ReportService
+
+    return await _call(lambda: ReportService().class_report(class_id))
+
+
+@router.get("/{class_id}/students/{student_id}/report")
+async def student_report(class_id: str, student_id: str) -> dict:
+    from deeptutor.classes.report import ReportService
+
+    return await _call(lambda: ReportService().student_report(class_id, student_id))
 
 
 @router.post("/{class_id}/invitations")
