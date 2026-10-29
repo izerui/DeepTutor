@@ -22,7 +22,8 @@ function RegisterPageContent() {
   // Spec 2026-10-29 §5: a class invite carries its token and returns here after sign-in.
   const invite = searchParams.get("invite") ?? "";
   const rawNext = searchParams.get("next");
-  const next = rawNext ? normalizeInternalReturnPath(rawNext) : invite ? "/classes" : "";
+  // Signing up with an invite already joins the class, so land on the class list.
+  const next = invite ? "/classes" : rawNext ? normalizeInternalReturnPath(rawNext) : "";
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
   const [open, setOpen] = useState<boolean | null>(null);
 
