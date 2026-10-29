@@ -287,8 +287,16 @@ async def get_ask_hint(session_id: str) -> dict[str, Any]:
 
     An empty hint is a real answer, not an error — a conversation with no
     messages yet, a timeout, a model that answered instead of predicting, all
-    leave the composer's own static placeholder standing.
+    leave the composer's own static placeholder standing. So does the learner
+    having turned the hint off (Settings → Conversation), which is checked
+    before the cache: a line written while it was on must not outlive the
+    switch.
     """
+    from deeptutor.services.settings.starter_settings import ask_hint_enabled
+
+    if not ask_hint_enabled():
+        return AskHint(hint="", session_id=session_id, generated_at=time.time()).to_dict()
+
     material = await _collect(session_id)
     if not material:
         return AskHint(hint="", session_id=session_id, generated_at=time.time()).to_dict()

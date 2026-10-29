@@ -414,6 +414,33 @@ async def test_chat_attachment_settings_roundtrip(
 
 
 @pytest.mark.asyncio
+async def test_chat_starter_settings_keep_ask_hint_when_omitted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from deeptutor.services.settings import starter_settings
+
+    monkeypatch.setattr(
+        starter_settings,
+        "get_path_service",
+        lambda: SimpleNamespace(get_settings_file=lambda name: tmp_path / f"{name}.json"),
+    )
+
+    initial = await settings_router.get_chat_starter_settings()
+    assert initial["settings"]["ask_hint_enabled"] is True
+
+    turned_off = await settings_router.update_chat_starter_settings(
+        settings_router.ChatStarterSettingsUpdate(trace_count=20, ask_hint_enabled=False)
+    )
+    assert turned_off["settings"]["ask_hint_enabled"] is False
+
+    # A client that predates the switch only sends trace_count.
+    legacy = await settings_router.update_chat_starter_settings(
+        settings_router.ChatStarterSettingsUpdate(trace_count=30)
+    )
+    assert legacy["settings"] == {"version": 1, "trace_count": 30, "ask_hint_enabled": False}
+
+
+@pytest.mark.asyncio
 async def test_mineru_settings_roundtrip_redacts_token(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

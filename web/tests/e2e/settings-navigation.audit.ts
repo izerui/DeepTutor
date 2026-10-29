@@ -149,7 +149,7 @@ async function mockSettings(
       json = { chat_response_timeout: timeout };
     } else if (path === "/api/settings/chat-starters")
       json = {
-        settings: { trace_count: 5 },
+        settings: { trace_count: 5, ask_hint_enabled: true },
         bounds: { trace_count: { min: 1, max: 50 } },
       };
     else if (path === "/api/system/status")

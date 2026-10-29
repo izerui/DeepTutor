@@ -9328,11 +9328,12 @@ export interface paths {
     };
     /**
      * Get Chat Starter Settings
-     * @description How many recent activities shape the home screen's starting points.
+     * @description How many recent activities shape the home screen's starting points, and
+     *     whether the chat composer offers a predicted next line.
      *
-     *     Per user and not admin-gated, unlike the attachment caps next door: this
-     *     changes the size of one prompt built from the caller's own memory, not any
-     *     resource other people share.
+     *     Per user and not admin-gated, unlike the attachment caps next door: these
+     *     change one prompt built from the caller's own memory, or skip one call, not
+     *     any resource other people share.
      */
     readonly get: operations["get_chat_starter_settings_api_settings_chat_starters_get"];
     /** Update Chat Starter Settings */
@@ -13744,12 +13745,17 @@ export interface components {
     };
     /**
      * ChatStarterSettingsUpdate
-     * @description How much recent activity shapes the home screen's starting points.
+     * @description How much recent activity shapes the home screen's starting points, and
+     *     whether the chat composer offers a predicted next line.
      *
      *     Bounds mirror ``starter_settings.TRACE_COUNT_RANGE`` so the API rejects
-     *     loudly what the file layer would silently clamp.
+     *     loudly what the file layer would silently clamp. ``ask_hint_enabled`` left
+     *     out (``None``) keeps the stored value, so a client that only knows
+     *     ``trace_count`` cannot switch the hint back on by accident.
      */
     readonly ChatStarterSettingsUpdate: {
+      /** Ask Hint Enabled */
+      readonly ask_hint_enabled?: boolean | null;
       /** Trace Count */
       readonly trace_count: number;
     };

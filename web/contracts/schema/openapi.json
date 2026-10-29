@@ -1863,8 +1863,19 @@
         "type": "object"
       },
       "ChatStarterSettingsUpdate": {
-        "description": "How much recent activity shapes the home screen's starting points.\n\nBounds mirror ``starter_settings.TRACE_COUNT_RANGE`` so the API rejects\nloudly what the file layer would silently clamp.",
+        "description": "How much recent activity shapes the home screen's starting points, and\nwhether the chat composer offers a predicted next line.\n\nBounds mirror ``starter_settings.TRACE_COUNT_RANGE`` so the API rejects\nloudly what the file layer would silently clamp. ``ask_hint_enabled`` left\nout (``None``) keeps the stored value, so a client that only knows\n``trace_count`` cannot switch the hint back on by accident.",
         "properties": {
+          "ask_hint_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Hint Enabled"
+          },
           "trace_count": {
             "maximum": 100.0,
             "minimum": 3.0,
@@ -58654,7 +58665,7 @@
     },
     "/api/settings/chat-starters": {
       "get": {
-        "description": "How many recent activities shape the home screen's starting points.\n\nPer user and not admin-gated, unlike the attachment caps next door: this\nchanges the size of one prompt built from the caller's own memory, not any\nresource other people share.",
+        "description": "How many recent activities shape the home screen's starting points, and\nwhether the chat composer offers a predicted next line.\n\nPer user and not admin-gated, unlike the attachment caps next door: these\nchange one prompt built from the caller's own memory, or skip one call, not\nany resource other people share.",
         "operationId": "get_chat_starter_settings_api_settings_chat_starters_get",
         "parameters": [
           {
