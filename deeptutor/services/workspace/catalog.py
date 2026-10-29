@@ -333,6 +333,10 @@ class WorkspaceCatalogMixin:
         root = Path(path).expanduser().resolve() if path else self._managed_root() / workspace_id
         self._assert_allowed_root(root)
         if path:
+            blocked = personal_root_error(root, _owner_id())
+            if blocked:
+                raise WorkspaceError(blocked)
+        if path:
             if not root.is_dir():
                 raise WorkspaceError("The selected workspace folder does not exist.")
         else:

@@ -55,3 +55,50 @@ def test_an_adopted_deployment_folder_cannot_hold_learning_data(as_user, shared)
         assert "shared content folder" in listed["error"]
         with pytest.raises(WorkspaceError, match="shared content folder"):
             resolve_workspace_scope(row["workspace_id"])
+
+
+def test_a_folder_registered_by_one_account_is_refused_to_another(as_user, shared):
+    folder = shared / "notes"
+    folder.mkdir()
+    with as_user("alice"):
+        ContentWorkspaceService().create_workspace("Notes", str(folder))
+    with as_user("bob"):
+        with pytest.raises(WorkspaceError, match="another account"):
+            ContentWorkspaceService().create_workspace("Notes", str(folder))
+
+
+def test_existing_double_claims_are_blocked_for_both_accounts(as_user, shared):
+    folder = shared / "notes"
+    folder.mkdir()
+    ids = {}
+    for uid in ("alice", "bob"):
+        with as_user(uid):
+            ids[uid] = _register(ContentWorkspaceService(), f"ws_notes_{uid}", folder)["workspace_id"]
+    for uid in ("alice", "bob"):
+        with as_user(uid):
+            with pytest.raises(WorkspaceError, match="another account"):
+                resolve_workspace_scope(ids[uid])
+
+
+def test_admin_cannot_register_another_accounts_storage(as_user, mu_isolated_root):
+    from deeptutor.multi_user import paths
+
+    bob_folder = paths.USERS_ROOT / "bob" / "stuff"
+    bob_folder.mkdir(parents=True)
+    system_folder = paths.SYSTEM_ROOT / "stuff"
+    system_folder.mkdir(parents=True)
+    with as_user("boss", role="admin"):
+        for folder in (bob_folder, system_folder):
+            with pytest.raises(WorkspaceError, match="another account"):
+                ContentWorkspaceService().create_workspace("X", str(folder))
+
+
+def test_an_account_may_still_register_its_own_folder_twice_by_name(as_user, shared):
+    folder = shared / "mine"
+    folder.mkdir()
+    with as_user("alice"):
+        service = ContentWorkspaceService()
+        first = service.create_workspace("Mine", str(folder))
+        again = service.create_workspace("Mine again", str(folder))
+        assert again["workspace_id"] == first["workspace_id"]
+        resolve_workspace_scope(first["workspace_id"])
