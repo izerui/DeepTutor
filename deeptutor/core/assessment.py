@@ -3,9 +3,11 @@
 from typing import Literal, get_args
 
 AssessmentSource = Literal[
-    "deep_question", "mastery_path", "immersive_reading", "book", "partner_chat", "import"
+    "deep_question", "mastery_path", "immersive_reading", "book", "partner_chat", "import",
+    # Spec 2026-10-29 §8.3: answers to a teacher's practice set.
+    "practice_set",
 ]
-QuestionOriginType = Literal["conversation", "external_import", "document_analysis"]
+QuestionOriginType = Literal["conversation", "external_import", "document_analysis", "practice_set"]
 AssessmentType = Literal["quiz", "focus_check", "qualitative", "review"]
 AssessmentResult = Literal["correct", "incorrect", "partial", "ungraded", "voided"]
 

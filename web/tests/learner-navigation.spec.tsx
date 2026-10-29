@@ -11,7 +11,7 @@ it.each([
   [["reading"], ["/learning"]],
   [["books"], ["/learning"]],
   // Spec 2026-10-29 §5: restricted students still reach their classes.
-  [["chat"], ["/chat", "/learning", "/classes", "/kanban"]],
+  [["chat"], ["/chat", "/learning", "/classes", "/practice-sets", "/kanban"]],
   [[], []],
 ] as [string[], string[]][])("filters the actual nav entries for %j", (allowed, expected) => {
   expect(PRIMARY_NAV_HREFS.filter((href) => navVisibleUnderPolicy(href, allowed))).toEqual(expected);

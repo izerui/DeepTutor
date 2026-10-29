@@ -18,6 +18,8 @@ from deeptutor.publishing.scope import (
     KINDS,
     KNOWLEDGE_BASE,
     MASTERY_PATH,
+    PRACTICE_SET,
+    STUDENT_KINDS,
     Scope,
     ScopeError,
     ScopeForbidden,
@@ -56,6 +58,15 @@ class PublishService:
             record = registry.get_kb(item_id)
             found = record is not None and owns(record.created_by, self.actor)
             info = {"owner": record.created_by, "public": record.visibility == "public"} if found else {}
+        elif kind == PRACTICE_SET:
+            from deeptutor.practice_sets import store as practice_store
+
+            with practice_store.read() as conn:
+                row = conn.execute(
+                    "SELECT owner_user_id, status FROM practice_sets WHERE id = ?", (item_id,)
+                ).fetchone() if conn else None
+            found = row is not None and row["owner_user_id"] == self.actor.id
+            info = {"owner": row["owner_user_id"], "public": row["status"] == "published"} if found else {}
         else:
             from deeptutor.teaching.store import TeachingStore
 
@@ -98,12 +109,14 @@ class PublishService:
             return stored
         if kind == MASTERY_PATH:
             return scopes._template_scope(item_id)
+        if kind == PRACTICE_SET:
+            return Scope(managed=False)  # a practice set reaches nobody until its scope is set
         return Scope(everyone=bool(info["public"]), managed=False)
 
     def _reached(self, kind: str, scope: Scope, info: dict[str, Any]) -> set[str]:
         if not info["public"]:
             return set()
-        return scopes.audience(scope, students_only=kind == MASTERY_PATH, owner_id=info["owner"])
+        return scopes.audience(scope, students_only=kind in STUDENT_KINDS, owner_id=info["owner"])
 
     # ── API ───────────────────────────────────────────────────
 
@@ -145,9 +158,12 @@ class PublishService:
             account = accounts.get(user_id)
             if account is None or account["disabled"]:
                 raise ScopeError("Only active accounts can receive content.")
-            if kind == MASTERY_PATH and account["role"] != "student":
-                raise ScopeError("Only students receive Mastery Paths.")
-        if kind == MASTERY_PATH and users and self._role() != "admin":
+            if kind in STUDENT_KINDS and account["role"] != "student":
+                raise ScopeError(
+                    "Only students receive Mastery Paths." if kind == MASTERY_PATH
+                    else "Only students receive practice sets."
+                )
+        if kind in STUDENT_KINDS and users and self._role() != "admin":
             from deeptutor.classes.service import teacher_student_ids
 
             reachable = teacher_student_ids(self.actor.id)

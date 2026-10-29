@@ -31,6 +31,8 @@ PINNED_SOURCES = {
     "book",
     "partner_chat",
     "import",
+    # Spec 2026-10-29 §8.3: answers to a teacher's practice set.
+    "practice_set",
 }
 
 

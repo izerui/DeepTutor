@@ -3,7 +3,7 @@ import { apiFetch, apiUrl } from "./api";
 /** Publish scopes are system-level: never workspace-scoped (spec 2026-10-29 §7). */
 const BASE = "/api/publish";
 
-export type PublishKind = "book" | "knowledge_base" | "mastery_path";
+export type PublishKind = "book" | "knowledge_base" | "mastery_path" | "practice_set";
 
 export interface PublishScope {
   everyone: boolean;

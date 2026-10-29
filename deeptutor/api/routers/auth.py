@@ -703,6 +703,8 @@ def _learning_surface_for_path(
         ("/api/mastery-paths", "chat"),
         # Joining, leaving and answering class invitations (spec 2026-10-29 §5).
         ("/api/classes", "chat"),
+        # Answering a teacher's practice set (spec 2026-10-29 §8.3).
+        ("/api/practice-sets", "chat"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):
             return surface

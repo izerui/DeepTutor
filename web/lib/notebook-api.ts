@@ -260,12 +260,14 @@ export type AssessmentSource =
   | "immersive_reading"
   | "book"
   | "partner_chat"
-  | "import";
+  | "import"
+  | "practice_set";
 
 export type QuestionOriginType =
   | "conversation"
   | "external_import"
-  | "document_analysis";
+  | "document_analysis"
+  | "practice_set";
 
 export type AssessmentType = "quiz" | "focus_check" | "qualitative" | "review";
 

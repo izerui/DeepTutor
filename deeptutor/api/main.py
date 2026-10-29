@@ -578,6 +578,7 @@ from deeptutor.api.routers import (
     capabilities_settings,
     classes,
     publishing,
+    practice_sets,
     co_writer,
     courses,
     dashboard,
@@ -676,6 +677,7 @@ app.include_router(
 app.include_router(classes.router, prefix="/api/classes", tags=["classes"], dependencies=_auth)
 app.include_router(classes.public_router, prefix="/api/class-invites", tags=["classes"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
+app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

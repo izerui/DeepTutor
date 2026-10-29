@@ -1,6 +1,7 @@
 import { LEARNING_HUB } from '@/lib/learning-routes'
 import {
   Bot,
+  ClipboardList,
   GraduationCap,
   HeartHandshake,
   House,
@@ -64,6 +65,14 @@ export const PRIMARY_NAV: NavEntry[] = [
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
   // Spec 2026-10-29 §5: classes for teachers, students and administrators.
   { href: '/classes', label: 'Classes', icon: School, tooltipKey: 'Classes tooltip', surfaces: ['chat'] },
+  // Spec 2026-10-29 §8: teachers write practice sets; students answer them.
+  {
+    href: '/practice-sets',
+    label: 'Practice sets',
+    icon: ClipboardList,
+    tooltipKey: 'Practice sets tooltip',
+    surfaces: ['chat'],
+  },
   {
     href: '/kanban',
     label: 'Task Board',

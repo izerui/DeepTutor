@@ -179,7 +179,7 @@ export function PublishScopeEditor({
           </ul>
         )}
       </div>
-      {!described.scope.managed && described.published && (
+      {!described.scope.managed && described.published && kind !== "practice_set" && (
         <p className="text-[var(--muted-foreground)]">
           {kind === "mastery_path"
             ? t("Currently only the students you picked receive this path.")

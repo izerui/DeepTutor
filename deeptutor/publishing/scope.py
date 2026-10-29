@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 BOOK = "book"
 KNOWLEDGE_BASE = "knowledge_base"
 MASTERY_PATH = "mastery_path"
-KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH)
+PRACTICE_SET = "practice_set"
+KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET)
+#: Kinds whose receivers are students only (they study or answer them).
+STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET)
 
 
 class ScopeError(Exception):
@@ -342,6 +345,8 @@ __all__ = [
     "KINDS",
     "KNOWLEDGE_BASE",
     "MASTERY_PATH",
+    "PRACTICE_SET",
+    "STUDENT_KINDS",
     "Scope",
     "ScopeError",
     "ScopeForbidden",
