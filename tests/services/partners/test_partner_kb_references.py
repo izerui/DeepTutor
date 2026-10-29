@@ -346,7 +346,9 @@ def test_admin_delegation_accounts_for_actual_partner_creator(
 
 @pytest.mark.parametrize(
     "source_owner,target_owner,allowed",
-    [("alice", "alice", True), ("admin2", "alice", False),
+    # spec 2026-10-29 D2: an admin cannot hand alice's private connector to anyone,
+    # not even alice's own partner.
+    [("alice", "alice", False), ("admin2", "alice", False),
      ("admin2", "", False), (LOCAL_ADMIN_ID, "", True)],
 )
 def test_admin_connector_delegation_uses_target_owner(
