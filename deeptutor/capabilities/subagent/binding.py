@@ -70,6 +70,11 @@ def _resolve(context: UnifiedContext) -> dict[str, str] | None:
         kind = str(meta.get("agent_kind") or "").strip()
         if not kind or kind == "partner":
             continue
+        from deeptutor.knowledge.kb_types import is_retired_connected_agent_kb
+
+        if is_retired_connected_agent_kb(meta):
+            # Spec 2026-10-29 P1c: connected local agents are closed.
+            continue
         return {
             "name": str(meta.get("name") or ref),
             "kind": kind,

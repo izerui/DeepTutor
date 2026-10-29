@@ -583,7 +583,13 @@ def resolve_kb_metadata(kb_ref: str | None) -> dict[str, Any] | None:
     except HTTPException:
         return None
     manager = _manager_for(str(resource.base_dir.resolve()))
-    return manager.get_metadata(resource.name)
+    metadata = manager.get_metadata(resource.name)
+    from deeptutor.knowledge.kb_types import is_retired_server_folder_kb
+
+    if is_retired_server_folder_kb(metadata):
+        # Spec 2026-10-29 P1c: capabilities never receive a server folder.
+        metadata = {k: v for k, v in metadata.items() if k not in {"vault_path", "external_path"}}
+    return metadata
 
 
 def resolve_kb_manifest(

@@ -7,6 +7,10 @@ CLI; they verify the wiring (binding, exclusivity, injected spec) and the tool's
 authoritative consult-budget + session continuity + event streaming.
 """
 
+# Spec 2026-10-29 P1c: connected local agents are closed. Tests of connecting,
+# detecting, syncing and consulting them were removed; the refusals are covered
+# by tests/api/test_p1c_connected_agents.py.
+
 from __future__ import annotations
 
 import pytest
@@ -47,53 +51,6 @@ def test_inactive_without_subagent_kb(monkeypatch) -> None:
     ctx = UnifiedContext(user_message="hi", knowledge_bases=["plain-kb"])
     assert cap.is_active(ctx) is False
     assert cap.system_block(ctx, language="en", prompts={}) is None
-
-
-def test_active_injects_spec_and_min_rounds(monkeypatch) -> None:
-    _bind(monkeypatch, kind="codex", cwd="/tmp/proj")
-    cap = SubagentCapability()
-    ctx = UnifiedContext(user_message="hi", knowledge_bases=["myagent"])
-    assert cap.is_active(ctx) is True
-    assert tuple(cap.owned_tools) == SUBAGENT_TOOL_NAMES
-
-    block = cap.system_block(ctx, language="en", prompts={})
-    assert block is not None and "myagent" in block.content
-    # The loop budget floor is lifted so the full consult budget + a finish
-    # round always fit.
-    assert ctx.runtime.min_loop_rounds >= 2
-
-    spec = cap.augment_kwargs("consult_subagent", {"question": "q"}, ctx)["_subagent"]
-    assert spec["kind"] == "codex"
-    assert spec["cwd"] == "/tmp/proj"
-    assert spec["budget"] >= 1
-    assert isinstance(spec["config"], BackendConfig)
-    assert spec["state"] == {"count": 0, "session_id": None, "name": "myagent"}
-    # Never injected for a non-owned tool.
-    assert "_subagent" not in cap.augment_kwargs("rag", {}, ctx)
-
-
-def test_consult_budget_override_from_runtime_context(monkeypatch) -> None:
-    _bind(monkeypatch)
-    cap = SubagentCapability()
-    # Typed per-turn override from the composer wins over the default.
-    ctx = UnifiedContext(
-        user_message="hi",
-        knowledge_bases=["myagent"],
-        runtime=TurnRuntimeContext(subagent_consult_budget=3),
-    )
-    assert (
-        cap.augment_kwargs("consult_subagent", {"question": "q"}, ctx)["_subagent"]["budget"] == 3
-    )
-    # Out-of-range values are clamped, not trusted.
-    ctx_hi = UnifiedContext(
-        user_message="hi",
-        knowledge_bases=["myagent"],
-        runtime=TurnRuntimeContext(subagent_consult_budget=999),
-    )
-    assert (
-        cap.augment_kwargs("consult_subagent", {"question": "q"}, ctx_hi)["_subagent"]["budget"]
-        == 12
-    )
 
 
 def test_binding_cached(monkeypatch) -> None:
@@ -155,14 +112,6 @@ def test_exclusive_compose_pure_subagent_mounts_no_rag() -> None:
         "consult_subagent",
         "ask_user",
     }
-
-
-def test_registry_flags_subagent_turn_as_exclusive(monkeypatch) -> None:
-    _bind(monkeypatch)
-    subagent_turn = UnifiedContext(user_message="hi", knowledge_bases=["myagent"])
-    plain_turn = UnifiedContext(user_message="hi", knowledge_bases=["plain-kb"])
-    assert any_exclusive_capability_active(subagent_turn) is True
-    assert any_exclusive_capability_active(plain_turn) is False
 
 
 def test_owned_kbs_reports_only_agent_ref(monkeypatch) -> None:
@@ -259,42 +208,6 @@ async def test_consult_budget_is_authoritative(monkeypatch) -> None:
 async def test_consult_without_spec_is_graceful() -> None:
     res = await ConsultSubagentTool().execute(question="hi")
     assert res.success is False and "no subagent" in res.content.lower()
-
-
-@pytest.mark.asyncio
-async def test_session_id_persists_across_turns(monkeypatch, tmp_path) -> None:
-    # A backend session id captured in one turn is remembered (keyed by chat
-    # session + connection) and resumed by the next turn's augment_kwargs — so
-    # the local agent keeps context across DeepTutor's separate messages.
-    from deeptutor.services.subagent import sessions as sess
-
-    monkeypatch.setattr(sess, "_path", lambda: tmp_path / "subagent_sessions.json")
-    _bind(monkeypatch)  # "myagent" → claude_code
-    backend = _FakeBackend()
-    monkeypatch.setattr("deeptutor.services.subagent.get_backend", lambda kind: backend)
-
-    cap = SubagentCapability()
-    tool = ConsultSubagentTool()
-
-    async def sink(*_a, **_k):
-        return None
-
-    # Turn 1: nothing remembered yet → consult creates "sess-1", which persists.
-    ctx1 = UnifiedContext(user_message="hi", knowledge_bases=["myagent"], session_id="chatA")
-    spec1 = cap.augment_kwargs("consult_subagent", {"question": "Q1"}, ctx1)["_subagent"]
-    assert spec1["state"]["session_id"] is None
-    await tool.execute(question="Q1", _subagent=spec1, event_sink=sink)
-    assert sess.get_session(sess.session_key("chatA", "myagent")) == "sess-1"
-
-    # Turn 2 (fresh context): augment_kwargs seeds the remembered session.
-    ctx2 = UnifiedContext(user_message="more", knowledge_bases=["myagent"], session_id="chatA")
-    spec2 = cap.augment_kwargs("consult_subagent", {"question": "Q2"}, ctx2)["_subagent"]
-    assert spec2["state"]["session_id"] == "sess-1"
-
-    # A different chat session does not inherit the agent session.
-    ctx3 = UnifiedContext(user_message="hi", knowledge_bases=["myagent"], session_id="chatB")
-    spec3 = cap.augment_kwargs("consult_subagent", {"question": "Q"}, ctx3)["_subagent"]
-    assert spec3["state"]["session_id"] is None
 
 
 def test_group_selection_requires_discussion_and_uses_stable_identity(monkeypatch):

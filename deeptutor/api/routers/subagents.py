@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from deeptutor.api.routers.auth import require_admin
 from deeptutor.knowledge.kb_types import SUBAGENT_KB_TYPE
 from deeptutor.multi_user.knowledge_access import account_kb_manager
+from deeptutor.services.connected_agents import refuse_connected_agents
 from deeptutor.services.rag.linked_kb import assert_path_allowed
 from deeptutor.services.subagent import (
     detect_all,
@@ -57,6 +58,7 @@ class SubagentMessageRequest(BaseModel):
 @router.get("/detect")
 async def detect_subagents():
     """Report which local and remote agent backends are usable."""
+    refuse_connected_agents()
     detections = await detect_all()
     return {"backends": [d.to_dict() for d in detections]}
 
@@ -64,6 +66,7 @@ async def detect_subagents():
 @router.get("/backends/options")
 async def backend_options():
     """Synced model + reasoning-effort options per backend (settings page sync)."""
+    refuse_connected_agents()
     from deeptutor.services.subagent.models import list_backend_options
 
     options = await list_backend_options()
@@ -77,6 +80,7 @@ async def sync_backend(kind: str):
     For Claude Code this scrapes its ``/model`` TUI live and caches the result;
     for Codex it re-reads the CLI-maintained cache.
     """
+    refuse_connected_agents()
     from deeptutor.services.subagent import get_backend
     from deeptutor.services.subagent.models import sync_backend_options
 
@@ -116,6 +120,7 @@ async def list_connections():
 @router.post("/connections")
 async def create_connection(payload: ConnectSubagentRequest):
     """Connect a local or remote subagent as a selectable KB."""
+    refuse_connected_agents()
     name = (payload.name or "").strip()
     agent_kind = (payload.agent_kind or "").strip()
     if not name or not agent_kind:
@@ -185,6 +190,7 @@ async def message_connection(name: str, payload: SubagentMessageRequest):
     native run as newline-delimited JSON, in the same channel shape the chat WS
     uses, so the sidebar transcript renders it identically.
     """
+    refuse_connected_agents()
     message = (payload.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="A non-empty 'message' is required.")
@@ -270,6 +276,7 @@ async def get_settings():
 @router.put("/settings", dependencies=[Depends(require_admin)])
 async def update_settings(payload: SubagentSettingsPayload):
     """Update the subagent settings (admin-gated; deployment-wide)."""
+    refuse_connected_agents()
     merged = load_subagent_settings().to_dict()
     if payload.consult_budget is not None:
         merged["consult_budget"] = payload.consult_budget

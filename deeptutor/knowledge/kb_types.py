@@ -159,6 +159,36 @@ def supports_local_raw_files(entry: Any) -> bool:
     return isinstance(entry, dict) and not is_connected_kb(entry)
 
 
+# Spec 2026-10-29 P1c: no account points DeepTutor at a server folder. These
+# kinds were pointers to arbitrary folders on the server; existing entries stay
+# listed (so their owners can delete them) but are never read again.
+RETIRED_SERVER_FOLDER_KB_TYPES = frozenset({OBSIDIAN_KB_TYPE, LINKED_KB_TYPE})
+RETIRED_SERVER_FOLDER_MESSAGE = (
+    "This knowledge base points to a server folder, which is no longer supported. "
+    "Delete it and upload the documents instead."
+)
+
+
+def is_retired_server_folder_kb(entry: Any) -> bool:
+    return isinstance(entry, dict) and entry.get("type") in RETIRED_SERVER_FOLDER_KB_TYPES
+
+
+# Spec 2026-10-29 P1c: connected local agents (Claude Code, Codex, ...) run on
+# the server with access to its files and are closed. Partner delegates stay.
+RETIRED_CONNECTED_AGENT_MESSAGE = (
+    "Connected local agents are no longer supported. Delete this connection."
+)
+_PARTNER_AGENT_KINDS = frozenset({"partner", "partner_group"})
+
+
+def is_retired_connected_agent_kb(entry: Any) -> bool:
+    return (
+        isinstance(entry, dict)
+        and entry.get("type") == SUBAGENT_KB_TYPE
+        and str(entry.get("agent_kind") or "") not in _PARTNER_AGENT_KINDS
+    )
+
+
 def external_root_of(entry: Any) -> str | None:
     """Absolute path a connected KB points at, or ``None`` for ordinary KBs.
 
@@ -171,6 +201,11 @@ def external_root_of(entry: Any) -> str | None:
 
 
 __all__ = [
+    "RETIRED_SERVER_FOLDER_KB_TYPES",
+    "RETIRED_SERVER_FOLDER_MESSAGE",
+    "is_retired_server_folder_kb",
+    "RETIRED_CONNECTED_AGENT_MESSAGE",
+    "is_retired_connected_agent_kb",
     "OBSIDIAN_KB_TYPE",
     "LINKED_KB_TYPE",
     "SUBAGENT_KB_TYPE",

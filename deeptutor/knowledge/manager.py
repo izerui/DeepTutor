@@ -29,10 +29,14 @@ from deeptutor.knowledge.kb_types import (
     LINKED_KB_TYPE,
     MARGINNOTE4_KB_TYPE,
     OBSIDIAN_KB_TYPE,
+    RETIRED_CONNECTED_AGENT_MESSAGE,
+    RETIRED_SERVER_FOLDER_MESSAGE,
     SUBAGENT_KB_TYPE,
     WEKNORA_KB_TYPE,
     external_root_of,
     is_connected_kb,
+    is_retired_connected_agent_kb,
+    is_retired_server_folder_kb,
 )
 from deeptutor.knowledge.manifest import iter_kb_documents
 from deeptutor.knowledge.naming import validate_knowledge_base_name
@@ -1322,6 +1326,8 @@ class KnowledgeBaseManager:
                 raise ValueError("No default knowledge base set")
 
         entry = self.config.get("knowledge_bases", {}).get(name, {})
+        if is_retired_server_folder_kb(entry):
+            raise ValueError(RETIRED_SERVER_FOLDER_MESSAGE)
         external = external_root_of(entry)
         if external:
             folder = Path(external).expanduser()
@@ -1567,7 +1573,8 @@ class KnowledgeBaseManager:
 
         # Connected KBs live outside ``base_dir``; resolve to their external
         # pointer so the on-disk stats/index-version scan below reflect reality.
-        external = external_root_of(kb_config)
+        retired = is_retired_server_folder_kb(kb_config)
+        external = None if retired else external_root_of(kb_config)
         kb_dir = Path(external).expanduser() if external else self.base_dir / kb_name
 
         status = kb_config.get("status")
@@ -1633,6 +1640,12 @@ class KnowledgeBaseManager:
                 status = "unknown"
         elif not status:
             status = "unknown"
+        if retired:
+            status = "error"
+            progress = {"stage": "error", "message": RETIRED_SERVER_FOLDER_MESSAGE}
+        elif is_retired_connected_agent_kb(kb_config):
+            status = "error"
+            progress = {"stage": "error", "message": RETIRED_CONNECTED_AGENT_MESSAGE}
 
         # Build metadata from kb_config.json (authoritative source)
         metadata = {
