@@ -27,6 +27,10 @@ from deeptutor.utils.document_extractor import (
     is_document_extension,
     normalize_epub_archive,
 )
+from tests.docx_math_fixture import (
+    EXPECTED_EQUATION_PARAGRAPHS,
+    native_equation_docx_bytes,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures — generate office docs on the fly
@@ -538,6 +542,27 @@ class TestTruncation:
 
 
 class TestExtractDocumentsFromRecords:
+    def test_native_word_equations_reach_chat_attachment_text(self) -> None:
+        records = [
+            {
+                "type": "file",
+                "filename": "equations.docx",
+                "base64": base64.b64encode(native_equation_docx_bytes()).decode(),
+                "mime_type": (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ),
+                "url": "",
+            }
+        ]
+
+        doc_texts, updated = extract_documents_from_records(records)
+
+        assert len(doc_texts) == 1
+        for paragraph in EXPECTED_EQUATION_PARAGRAPHS:
+            assert paragraph in doc_texts[0]
+        assert "Fraction: 12 + 13." not in doc_texts[0]
+        assert updated[0]["extracted_text"] == "\n\n".join(EXPECTED_EQUATION_PARAGRAPHS)
+
     def test_mixed_image_and_doc(self) -> None:
         docx_bytes = _make_docx(["hello there"])
         docx_b64 = base64.b64encode(docx_bytes).decode()

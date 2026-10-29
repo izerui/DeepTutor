@@ -38,6 +38,12 @@ from defusedxml import ElementTree as DefusedElementTree
 
 logger = logging.getLogger(__name__)
 
+# Office Open XML math namespace used while walking DOCX paragraphs. Keeping
+# the namespace separate from the local tag name is essential: both ordinary
+# Word runs and Office Math runs use a ``t`` leaf, but only the latter carries
+# structural meaning that must be rendered by its parents.
+MATH_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+
 # ---------------------------------------------------------------------------
 # Budgets. Defaults serve the chat-attachment path; the reading-area ingest
 # passes looser per-document caps because images are stored on disk there and
@@ -257,8 +263,148 @@ def _local_name(tag: Any) -> str:
     return tag if isinstance(tag, str) else ""
 
 
+def _namespace(tag: Any) -> str:
+    """Return the namespace URI from an ElementTree expanded tag."""
+    if isinstance(tag, str) and tag.startswith("{") and "}" in tag:
+        return tag[1:].split("}", 1)[0]
+    return ""
+
+
 def _parse_xml(raw: bytes) -> Any:
     return DefusedElementTree.fromstring(raw)
+
+
+def _child_with_local_name(node: Any, name: str) -> Any | None:
+    """Return the first direct child whose expanded tag has *name*."""
+    return next((child for child in node if _local_name(child.tag) == name), None)
+
+
+def _attribute_with_local_name(node: Any, name: str) -> str:
+    """Read an attribute without coupling the parser to an OOXML prefix."""
+    for key, value in node.attrib.items():
+        if _local_name(key) == name:
+            return str(value)
+    return ""
+
+
+def _omml_leaf_text(node: Any) -> str:
+    """Flatten only math leaves, for an explicit unsupported-node warning."""
+    return "".join(
+        child.text or ""
+        for child in node.iter()
+        if _namespace(child.tag) == MATH_NS and _local_name(child.tag) == "t"
+    ).strip()
+
+
+def _omml_children(node: Any) -> str:
+    return "".join(_render_omml(child) for child in node)
+
+
+def _omml_argument(node: Any, name: str) -> str:
+    child = _child_with_local_name(node, name)
+    return _render_omml(child).strip() if child is not None else ""
+
+
+def _math_atom(text: str) -> str:
+    """Parenthesise a compound operand while leaving simple atoms readable."""
+    text = text.strip()
+    if not text:
+        return "?"
+    if re.fullmatch(r"[\w.]+(?:_[\w.]+)?(?:\^[\w.]+)?", text, flags=re.UNICODE):
+        return text
+    if re.fullmatch(r"(?:sqrt|root)\(.*\)", text):
+        return text
+    if text.startswith("[") and text.endswith("]"):
+        return text
+    return f"({text})"
+
+
+def _render_omml(node: Any) -> str:
+    """Render a supported Office Math subtree as unambiguous plain math.
+
+    This intentionally produces model-readable text rather than presentation
+    markup. Unsupported structural nodes are labelled with their leaf content
+    so a formula can never silently turn into a different, plausible problem.
+    """
+    if node is None:
+        return ""
+    name = _local_name(node.tag)
+    if _namespace(node.tag) != MATH_NS:
+        return "".join(_render_docx_text(child) for child in node)
+
+    if name == "t":
+        return node.text or ""
+    if name.endswith("Pr") or name in {"ctrlPr", "degHide"}:
+        return ""
+    if name in {
+        "oMath",
+        "oMathPara",
+        "r",
+        "e",
+        "num",
+        "den",
+        "sup",
+        "sub",
+        "deg",
+        "lim",
+        "fName",
+    }:
+        return _omml_children(node)
+
+    if name == "f":
+        numerator = _omml_argument(node, "num")
+        denominator = _omml_argument(node, "den")
+        return f"{_math_atom(numerator)}/{_math_atom(denominator)}"
+
+    if name == "sSup":
+        base = _omml_argument(node, "e")
+        exponent = _omml_argument(node, "sup")
+        return f"{_math_atom(base)}^{_math_atom(exponent)}"
+
+    if name == "sSub":
+        base = _omml_argument(node, "e")
+        subscript = _omml_argument(node, "sub")
+        return f"{_math_atom(base)}_{_math_atom(subscript)}"
+
+    if name == "sSubSup":
+        base = _omml_argument(node, "e")
+        subscript = _omml_argument(node, "sub")
+        exponent = _omml_argument(node, "sup")
+        return f"{_math_atom(base)}_{_math_atom(subscript)}^{_math_atom(exponent)}"
+
+    if name == "rad":
+        expression = _omml_argument(node, "e")
+        degree = _omml_argument(node, "deg")
+        properties = _child_with_local_name(node, "radPr")
+        degree_hidden = (
+            _child_with_local_name(properties, "degHide") if properties is not None else None
+        )
+        hidden_value = (
+            _attribute_with_local_name(degree_hidden, "val").lower()
+            if degree_hidden is not None
+            else ""
+        )
+        if not degree or hidden_value in {"1", "true", "on"}:
+            return f"sqrt({expression or '?'})"
+        return f"root({degree}, {expression or '?'})"
+
+    flattened = _omml_leaf_text(node) or name
+    return f"[unsupported equation: {flattened}]"
+
+
+def _render_docx_text(node: Any) -> str:
+    """Render text below one DOCX node without flattening OMML structure."""
+    name = _local_name(node.tag)
+    namespace = _namespace(node.tag)
+    if namespace == MATH_NS:
+        return _render_omml(node)
+    if name == "t":
+        return node.text or ""
+    if name == "tab":
+        return "\t"
+    if name in {"br", "cr"}:
+        return "\n"
+    return "".join(_render_docx_text(child) for child in node)
 
 
 def fit_inline_image(ext: str, data: bytes, *, max_edge: int) -> tuple[str, bytes]:
@@ -353,18 +499,11 @@ def extract_docx_rich(data: bytes, *, budget: ImageBudget | None = None) -> Docx
         for node in root.iter():
             if _local_name(node.tag) != "p":
                 continue
-            text_parts: list[str] = []
             markers: list[str] = []
             seen_rids: set[str] = set()
             for child in node.iter():
                 name = _local_name(child.tag)
-                if name == "t" and child.text:
-                    text_parts.append(child.text)
-                elif name == "tab":
-                    text_parts.append("\t")
-                elif name in {"br", "cr"}:
-                    text_parts.append("\n")
-                elif name == "blip":
+                if name == "blip":
                     rid = _blip_embed_rid(child)
                     if not rid or rid in seen_rids:
                         continue
@@ -378,7 +517,7 @@ def extract_docx_rich(data: bytes, *, budget: ImageBudget | None = None) -> Docx
                             by_target[target] = image
                     if image is not None:
                         markers.append(build_marker(image))
-            paragraph = "".join(text_parts).strip()
+            paragraph = _render_docx_text(node).strip()
             if markers:
                 paragraph = (paragraph + "\n" if paragraph else "") + "\n".join(markers)
             if paragraph:

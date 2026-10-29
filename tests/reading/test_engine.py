@@ -38,6 +38,10 @@ from deeptutor.reading.extract import (
 from deeptutor.reading.models import parse_text_selectors
 from deeptutor.reading.search import normalise, search_units, terms_of
 from deeptutor.utils.document_images import MAX_INLINE_IMAGE_EDGE
+from tests.docx_math_fixture import (
+    EXPECTED_EQUATION_PARAGRAPHS,
+    native_equation_docx_bytes,
+)
 
 pymupdf = pytest.importorskip("pymupdf")
 
@@ -429,6 +433,20 @@ def test_ingest_writes_units_raw_and_manifest(store: ReadingStore, pdf_path: Pat
     assert store.unit_text(manifest.material_id, 2).find("scaled dot-product") >= 0
     raw = store.raw_path(manifest.material_id)
     assert raw is not None and raw.read_bytes()[:5] == b"%PDF-"
+
+
+def test_ingest_preserves_native_word_equations(store: ReadingStore, tmp_path: Path) -> None:
+    source = tmp_path / "equations.docx"
+    source.write_bytes(native_equation_docx_bytes())
+
+    manifest = store.ingest(source)
+
+    assert manifest.extractor == "docx"
+    assert manifest.unit_count == 1
+    unit = store.unit_text(manifest.material_id, 1)
+    for paragraph in EXPECTED_EQUATION_PARAGRAPHS:
+        assert paragraph in unit
+    assert "Fraction: 12 + 13." not in unit
 
 
 def test_epub_store_keeps_original_but_legacy_pdf_flag_stays_false(

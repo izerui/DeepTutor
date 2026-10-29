@@ -12,6 +12,10 @@ from deeptutor.services.parsing.engines import factory
 from deeptutor.services.parsing.engines.docling.config import DoclingConfig
 from deeptutor.services.parsing.engines.tika.config import TikaConfig
 from deeptutor.services.parsing.types import ParserError
+from tests.docx_math_fixture import (
+    EXPECTED_EQUATION_PARAGRAPHS,
+    native_equation_docx_bytes,
+)
 
 
 def test_known_engines() -> None:
@@ -76,6 +80,20 @@ def test_text_only_parser_extracts_docx_text(tmp_path) -> None:
     parser.parse(docx, workdir, config={})
 
     assert (workdir / "lesson.md").read_text(encoding="utf-8") == "Hello DeepTutor"
+
+
+def test_text_only_parser_preserves_native_word_equations(tmp_path) -> None:
+    parser = factory.get_parser("text_only")
+    docx = tmp_path / "equations.docx"
+    docx.write_bytes(native_equation_docx_bytes())
+    workdir = tmp_path / "parsed"
+    workdir.mkdir()
+
+    parser.parse(docx, workdir, config={})
+
+    markdown = (workdir / "equations.md").read_text(encoding="utf-8")
+    assert markdown == "\n\n".join(EXPECTED_EQUATION_PARAGRAPHS)
+    assert "Fraction: 12 + 13." not in markdown
 
 
 def test_text_only_parser_converts_bibtex_to_structured_markdown(tmp_path) -> None:

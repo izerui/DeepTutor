@@ -28,6 +28,11 @@ from deeptutor.utils.document_images import (
     image_index_from_name,
     reading_image_budget,
 )
+from tests.docx_math_fixture import (
+    EXPECTED_EQUATION_PARAGRAPHS,
+    native_equation_docx_bytes,
+    unsupported_equation_docx_bytes,
+)
 
 
 def _png_bytes(size: tuple[int, int] = (400, 300)) -> bytes:
@@ -133,6 +138,18 @@ def test_docx_rich_repeats_marker_for_reused_target(png: bytes) -> None:
     assert len(rich.collection.images) == 1
     markers = find_markers("\n".join(rich.paragraphs))
     assert len(markers) == 2
+
+
+def test_docx_rich_preserves_native_word_equation_structure() -> None:
+    rich = extract_docx_rich(native_equation_docx_bytes())
+
+    assert rich.paragraphs == EXPECTED_EQUATION_PARAGRAPHS
+
+
+def test_docx_rich_marks_unsupported_word_equation_instead_of_flattening() -> None:
+    rich = extract_docx_rich(unsupported_equation_docx_bytes())
+
+    assert rich.paragraphs == ("Unsupported: [unsupported equation: 12]",)
 
 
 # ---------------------------------------------------------------------------
