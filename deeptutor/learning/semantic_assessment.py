@@ -260,9 +260,7 @@ def _prior_correct_questions(store, path_id: str) -> list:
         if not isinstance(receipts, list):
             receipts = [{"question_id": interaction.question.question_id, **result}]
         by_id = {
-            receipt.get("question_id"): receipt
-            for receipt in receipts
-            if isinstance(receipt, dict)
+            receipt.get("question_id"): receipt for receipt in receipts if isinstance(receipt, dict)
         }
         for leaf in interaction.question.questions or [interaction.question]:
             receipt = by_id.get(leaf.question_id)

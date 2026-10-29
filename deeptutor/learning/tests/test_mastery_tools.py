@@ -2028,8 +2028,7 @@ async def test_quiz_refuses_a_restatement_of_a_correctly_answered_question(path_
     must not re-pose a question the learner already answered correctly (issue
     #2073). The refusal reaches the tutor as a failed, explanatory tool result.
     """
-    from deeptutor.learning import lesson_evidence
-    from deeptutor.learning import semantic_assessment
+    from deeptutor.learning import lesson_evidence, semantic_assessment
 
     await _build_basic(path_id)
     status = json.loads((await MasteryStatusTool().execute(_mastery_path_id=path_id)).content)
