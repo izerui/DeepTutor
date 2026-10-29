@@ -62,7 +62,9 @@ def _legacy_account_id(name: str) -> str:
     # Historical general-chat selections used a role-specific prefix. Keep
     # that alias only for the owning account; custom workspaces can have
     # same-name KBs, so their legacy IDs cannot be redirected globally.
-    role = "admin" if get_current_user().is_admin else "user"
+    from deeptutor.multi_user.admin_accounts import is_primary_admin
+
+    role = "admin" if is_primary_admin(get_current_user()) else "user"
     return f"{role}:kb:{name}"
 
 

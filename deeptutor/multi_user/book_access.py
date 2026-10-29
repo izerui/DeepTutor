@@ -35,8 +35,11 @@ def _auth_enabled() -> bool:
 
 
 def _owner_id() -> str:
-    user = get_current_user()
-    return LOCAL_ADMIN_ID if user.is_admin else user.id
+    # LOCAL_ADMIN_ID for the primary administrator's legacy root, otherwise the
+    # account itself — including later administrators (spec 2026-10-29 P1b).
+    from .admin_accounts import storage_owner_id
+
+    return storage_owner_id(get_current_user())
 
 
 def _my_owner_ids(user: CurrentUser) -> set[str]:

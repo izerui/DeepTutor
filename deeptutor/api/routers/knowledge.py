@@ -64,6 +64,7 @@ from deeptutor.knowledge.manager import KnowledgeBaseManager
 from deeptutor.knowledge.naming import validate_knowledge_base_name
 from deeptutor.knowledge.progress_tracker import ProgressStage, ProgressTracker
 from deeptutor.logging import PROCESS_LOG_PRIVATE_ATTR
+from deeptutor.multi_user.admin_accounts import is_primary_admin
 from deeptutor.multi_user.context import (
     get_current_user,
     get_current_user_or_none,
@@ -3086,7 +3087,7 @@ def _list_knowledge_bases():
         default_name = manager.get_default(available_names=kb_names)
         access_items = list_visible_kb_access()
         access_by_id = {str(item.get("id") or ""): item for item in access_items}
-        own_prefix = "admin:kb:" if get_current_user().is_admin else "user:kb:"
+        own_prefix = "admin:kb:" if is_primary_admin(get_current_user()) else "user:kb:"
 
         logger.debug(f"Found {len(kb_names)} knowledge bases: {kb_names}")
 
@@ -3113,7 +3114,7 @@ def _list_knowledge_bases():
                         path=info.get("path"),
                         status=info.get("status"),
                         progress=info.get("progress"),
-                        source="admin" if get_current_user().is_admin else "user",
+                        source="admin" if is_primary_admin(get_current_user()) else "user",
                         assigned=False,
                         read_only=False,
                         provenance_label=access_by_id.get(f"{own_prefix}{info['name']}", {}).get(
@@ -3151,7 +3152,7 @@ def _list_knowledge_bases():
                                 status="error",
                                 progress=fallback_progress,
                                 source=access.get("source")
-                                or ("admin" if get_current_user().is_admin else "user"),
+                                or ("admin" if is_primary_admin(get_current_user()) else "user"),
                                 assigned=access.get("assigned", False),
                                 read_only=access.get("read_only", False),
                                 provenance_label=access.get("provenance_label"),

@@ -62,7 +62,11 @@ def actor_for_account(user_id: str) -> CurrentUser | None:
 
 def personal_actor_id(actor: CurrentUser | None) -> str | None:
     """Account id requiring private Partner state, or ``None`` for legacy scope."""
-    if actor is None or actor.is_admin or is_partner_user_id(actor.id):
+    from deeptutor.multi_user.admin_accounts import is_primary_admin
+
+    # Only the primary administrator uses the legacy shared Partner state;
+    # later administrators keep their own (spec 2026-10-29 P1b).
+    if actor is None or is_primary_admin(actor) or is_partner_user_id(actor.id):
         return None
     return actor.id
 

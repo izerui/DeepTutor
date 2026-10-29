@@ -18,6 +18,7 @@ from deeptutor.knowledge.manifest import (
     document_root,
 )
 
+from .admin_accounts import is_primary_admin
 from .context import get_current_user
 from .models import KnowledgeResource
 from .paths import get_account_path_service, get_admin_path_service, get_current_path_service
@@ -151,7 +152,7 @@ def _resolve_registered(kb_ref: str, *, require_write: bool) -> KnowledgeResourc
         name=record.dir_name,
         base_dir=base_dir,
         source="admin" if base_dir == admin_kb_base_dir().resolve() else "user",
-        assigned=record.created_by != user.id and not user.is_admin,
+        assigned=record.created_by != user.id and not is_primary_admin(user),
         read_only=not writable,
     )
 
@@ -229,7 +230,7 @@ def _resolve_kb(kb_ref: str, *, require_write: bool = False) -> KnowledgeResourc
     user = get_current_user()
     requested_source, name = _strip_resource_prefix(kb_ref)
 
-    if user.is_admin:
+    if is_primary_admin(user):
         manager = current_kb_manager()
         resolved = _resolve_default_or_name(manager, name)
         return KnowledgeResource(
@@ -373,7 +374,7 @@ def _with_account_subagents(items: list[dict[str, Any]], *, origin: str) -> list
             {
                 "id": rid,
                 "name": name,
-                "source": "admin" if get_current_user().is_admin else "user",
+                "source": "admin" if is_primary_admin(get_current_user()) else "user",
                 "assigned": False,
                 "read_only": False,
                 "provenance_label": "Account library",
@@ -402,12 +403,12 @@ def _list_visible_knowledge_bases() -> list[dict[str, Any]]:
     )
     return [
         {
-            "id": f"admin:kb:{name}" if user.is_admin else f"user:kb:{name}",
+            "id": f"admin:kb:{name}" if is_primary_admin(user) else f"user:kb:{name}",
             "name": name,
-            "source": "admin" if user.is_admin else "user",
+            "source": "admin" if is_primary_admin(user) else "user",
             "assigned": False,
             "read_only": False,
-            "provenance_label": "Created by you" if not user.is_admin else "Admin workspace",
+            "provenance_label": "Created by you" if not is_primary_admin(user) else "Admin workspace",
             **_registry_fields(records.get(name), owned=True),
         }
         for name in names

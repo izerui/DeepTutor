@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from deeptutor.multi_user.paths import local_admin_user
 from deeptutor.partners.bus.events import InboundMessage, OutboundMessage
 from deeptutor.partners.bus.queue import MessageBus
 from deeptutor.partners.channels.feishu import FeishuChannel
@@ -90,7 +91,7 @@ def _callback(value: dict, *, sender: str = "ou_owner", message_id: str = "om_pi
 
 def test_model_command_lists_choices_and_keeps_group_text_only(monkeypatch) -> None:
     handler = _handler(monkeypatch)
-    private = handler.dispatch(_message("/model", actor=SimpleNamespace(is_admin=True)))
+    private = handler.dispatch(_message("/model", actor=local_admin_user()))
     assert private is not None
     assert "1. OpenAI · Model 0 (current)" in private.content
     assert len(private.metadata["_feishu_model_options"]) == 8
@@ -137,7 +138,7 @@ def test_selecting_catalog_default_clears_legacy_model_override(monkeypatch) -> 
     handler = _handler(monkeypatch, config, save=lambda partner_id, cfg: saved.append(partner_id))
     monkeypatch.setattr(commands_mod, "can_manage_partner", lambda partner_id, actor: True)
 
-    result = handler.dispatch(_message("/model 1", actor=SimpleNamespace(is_admin=True)))
+    result = handler.dispatch(_message("/model 1", actor=local_admin_user()))
     assert result is not None and result.metadata["_feishu_model_switch_success"]
     assert config.llm_selection == {"profile_id": "profile", "model_id": "model-0"}
     assert config.model is None
@@ -154,7 +155,7 @@ async def test_runner_carries_picker_result_to_feishu_delivery(monkeypatch, part
     runner = PartnerRunner("ada", PartnerConfig(name="Ada"), MessageBus())
     outbound_metadata: dict = {}
     listing = await runner.process_message(
-        _message("/model", actor=SimpleNamespace(is_admin=True)),
+        _message("/model", actor=local_admin_user()),
         delivery_meta=outbound_metadata,
     )
     assert "Available models" in listing
@@ -167,7 +168,7 @@ async def test_runner_carries_picker_result_to_feishu_delivery(monkeypatch, part
     assert "Link this chat" in denied
     assert "_feishu_model_switch_success" not in callback_metadata
 
-    callback = _message("/model profile model-1", actor=SimpleNamespace(is_admin=True))
+    callback = _message("/model profile model-1", actor=local_admin_user())
     callback.metadata.update(
         {"_feishu_model_picker_message_id": "om_picker", "_feishu_model_picker_id": "picker"}
     )

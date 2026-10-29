@@ -359,6 +359,7 @@ def read_partner_entities() -> list[Entity]:
     their own per-user sessions for Partners that are still assigned to them;
     neither side scans another user's relationship-state directory.
     """
+    from deeptutor.multi_user.admin_accounts import is_primary_admin
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.multi_user.partner_access import assigned_partner_ids
     from deeptutor.multi_user.paths import get_admin_path_service
@@ -368,7 +369,8 @@ def read_partner_entities() -> list[Entity]:
     # Read-only adapters are also called directly in maintenance/tests where no
     # CurrentUser ContextVar is installed. Preserve the older path-scope guard
     # instead of treating a non-admin workspace as the implicit local admin.
-    if user.is_admin and get_path_service().workspace_root.resolve() != admin_root:
+    primary = is_primary_admin(user)
+    if primary and get_path_service().workspace_root.resolve() != admin_root:
         return []
     partners_root = admin_root / "partners"
     if not partners_root.exists():
@@ -384,7 +386,7 @@ def read_partner_entities() -> list[Entity]:
             continue
         sessions_dir = (
             partner_dir / "sessions"
-            if user.is_admin
+            if primary
             else partner_dir / "users" / user.id / "sessions"
         )
         if not sessions_dir.is_dir():

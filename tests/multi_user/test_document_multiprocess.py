@@ -173,8 +173,12 @@ def _process_job(base, database, operation, connection, *, pause=False, fail=Fal
         patch.setattr(knowledge, "_load_kb_entry_or_404", lambda *args: {
             "rag_provider": "llamaindex", "status": "ready",
         })
-        patch.setattr(knowledge, "get_current_user", lambda: SimpleNamespace(
-            id="owner", is_admin=True,
+        from deeptutor.multi_user.models import CurrentUser
+        from deeptutor.multi_user.paths import admin_scope
+
+        # A real user: ownership reads the storage scope (spec 2026-10-29 P1b).
+        patch.setattr(knowledge, "get_current_user", lambda: CurrentUser(
+            "owner", "owner", "admin", admin_scope(),
         ))
         original_ownership = write_lock.write_ownership
         reported_busy = False

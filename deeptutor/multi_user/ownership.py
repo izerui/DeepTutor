@@ -2,8 +2,8 @@
 
 Spec 2026-10-29 D2: an administrator is an ordinary owner of personal data and
 does not bypass other accounts' private items. Until per-administrator storage
-(P1b), every administrator writes under ``LOCAL_ADMIN_ID`` as well as their own
-id, and administrator-managed partners keep storing on the administrators' behalf.
+The primary administrator writes under ``LOCAL_ADMIN_ID`` as well as their own id
+(P1b); administrator-managed partners keep storing on their behalf.
 
 The system itself -- code running with no request user, such as startup
 backfills, migrations and background maintenance -- still acts as the local
@@ -16,9 +16,12 @@ from .models import LOCAL_ADMIN_ID, CurrentUser
 
 
 def owner_ids(user: CurrentUser) -> frozenset[str]:
-    if user.is_admin:
-        return frozenset({user.id, LOCAL_ADMIN_ID})
-    return frozenset({user.id})
+    # The primary administrator also owns what the legacy root recorded under
+    # LOCAL_ADMIN_ID; everyone else, later administrators included, owns only
+    # their own account (spec 2026-10-29 P1b).
+    from .admin_accounts import storage_owner_id
+
+    return frozenset({user.id, storage_owner_id(user)})
 
 
 def is_system_actor(user: CurrentUser) -> bool:

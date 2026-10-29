@@ -47,7 +47,9 @@ class VisualizerStore:
         from deeptutor.services.path_service import get_path_service
 
         service = get_path_service()
-        self.root = (root or (service.get_user_root() / "visualizers")).resolve()
+        # Next to the settings file: the shared system location for every
+        # administrator (spec 2026-10-29 P1b); unchanged for everyone else.
+        self.root = (root or (service.get_settings_dir().parent / "visualizers")).resolve()
         self.state_file = (state_file or service.get_settings_file("visualizers.json")).resolve()
 
     def state(self) -> dict[str, list[str]]:

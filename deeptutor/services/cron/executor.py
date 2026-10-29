@@ -130,8 +130,19 @@ async def _execute_chat_job(job: CronJob) -> tuple[str, str | None]:
     from deeptutor.runtime.turn_engine import get_turn_engine
     from deeptutor.services.session import get_sqlite_session_store
 
-    if job.owner.is_admin:
+    if job.owner.is_admin and (
+        not job.owner.user_id
+        or scope_for_user(job.owner.user_id, is_admin=True) == local_admin_user().scope
+    ):
         user = local_admin_user()
+    elif job.owner.is_admin:
+        # A later administrator's job runs in their own storage (spec 2026-10-29 P1b).
+        user = CurrentUser(
+            id=job.owner.user_id,
+            username=job.owner.user_id,
+            role="admin",
+            scope=scope_for_user(job.owner.user_id, is_admin=True),
+        )
     else:
         user = CurrentUser(
             id=job.owner.user_id,

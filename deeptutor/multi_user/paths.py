@@ -101,7 +101,14 @@ def local_admin_user() -> CurrentUser:
 
 def scope_for_user(user_id: str, *, is_admin: bool) -> UserScope:
     if is_admin:
-        return admin_scope()
+        # Spec 2026-10-29 P1b: only the primary administrator keeps the legacy
+        # root; later administrators get personal roots like every account.
+        from .admin_accounts import is_primary_admin_id, secondary_admin_scope
+
+        if is_primary_admin_id(user_id):
+            return admin_scope()
+        migrate_legacy_multi_user_tree()
+        return secondary_admin_scope(user_id)
     migrate_legacy_multi_user_tree()
     return UserScope(kind="user", user_id=user_id, root=(USERS_ROOT / user_id).resolve())
 
@@ -141,7 +148,10 @@ def get_path_service_for_scope(scope: UserScope) -> PathService:
     key = scope.cache_key
     service = _path_services.get(key)
     if service is None:
-        service = PathService(workspace_root=scope.root)
+        from .admin_accounts import AdminAccountPathService, is_secondary_admin_scope
+
+        factory = AdminAccountPathService if is_secondary_admin_scope(scope) else PathService
+        service = factory(workspace_root=scope.root)
         _path_services[key] = service
     return service
 
@@ -156,7 +166,7 @@ def get_account_path_service() -> PathService:
     user = get_current_user_or_none()
     if user is None:
         return PathService.get_instance()
-    if user.scope.kind == "user":
+    if user.scope.root.resolve() != ADMIN_WORKSPACE_ROOT.resolve():
         ensure_scope_workspace(user.scope)
     return get_path_service_for_scope(user.scope)
 
@@ -191,10 +201,13 @@ def _resolve_owner() -> tuple[str, PathService]:
         # A partner is a synthetic user, not a person: it has a workspace but no
         # account, so an asset keyed to an account belongs to its owner.
         return LOCAL_ADMIN_ID, get_admin_path_service()
-    if user.scope.kind == "user":
+    if user.scope.root.resolve() != ADMIN_WORKSPACE_ROOT.resolve():
         ensure_scope_workspace(user.scope)
-        return user.id, get_path_service_for_scope(user.scope)
-    return LOCAL_ADMIN_ID, get_path_service_for_scope(user.scope)
+    # The account for users and later administrators, LOCAL_ADMIN_ID for the
+    # primary administrator's legacy root (P1b).
+    from .admin_accounts import storage_owner_id
+
+    return storage_owner_id(user), get_path_service_for_scope(user.scope)
 
 
 def get_owner_path_service() -> PathService:
