@@ -1282,6 +1282,10 @@ class MasteryQuizTool(BaseTool):
             return _no_built_path_result("mastery_quiz")
         pending_action = kwargs.get("pending_action", "retain")
         resume_id = kwargs.get("resume_question_id")
+        # Model adapters may include blank optional strings in tool arguments.
+        # A blank ID is absent; a real ID still requires the resume action.
+        if isinstance(resume_id, str) and not resume_id.strip():
+            resume_id = None
         if pending_action == "resume":
             contract_fields = {
                 "knowledge_point_id",
@@ -1323,6 +1327,9 @@ class MasteryQuizTool(BaseTool):
                     success=False,
                 )
         raw_questions = kwargs.get("questions")
+        # An empty optional group carries no contracts; use the single question.
+        if isinstance(raw_questions, list) and not raw_questions:
+            raw_questions = None
         if pending_action == "resume":
             pending, echoed_options = None, False
         elif raw_questions is None:
