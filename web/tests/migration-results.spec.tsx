@@ -134,12 +134,13 @@ it("waits for confirmed admin access and hides results when access is lost", asy
   expect(apiFetch).toHaveBeenCalledTimes(1);
 });
 
-it("retains personal data migration while making no admin migration request", async () => {
+it("hides data migration from non-admins and makes no admin migration request", async () => {
   auth.isAdmin = false;
   const pages = visibleSettingsPages({
     resolved: true, hideAdminOnly: true, showLearnerOnly: false, showGuardianOnly: true,
   });
-  expect(pages.some(page => page.key === "data-migration")).toBe(true);
+  // Spec 2026-10-29 D4: moving data between workspaces is an administrator task.
+  expect(pages.some(page => page.key === "data-migration")).toBe(false);
   vi.mocked(apiFetch).mockImplementation(async url => Response.json(
     String(url).includes("/discover?")
       ? { features: [], historical: [], session_backend: "sqlite" }

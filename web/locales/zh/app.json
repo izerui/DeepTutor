@@ -2536,7 +2536,7 @@
   "(you)": "（你）",
   "Manage assignments": "管理分配",
   "Cannot change your own role": "无法更改自己的角色",
-  "Demote to user": "降级为普通用户",
+  "Demote to teacher": "降级为老师",
   "Promote to admin": "提升为管理员",
   "Cannot delete your own account": "无法删除自己的账户",
   "Delete {{username}}": "删除 {{username}}",

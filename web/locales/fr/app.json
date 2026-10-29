@@ -3002,7 +3002,7 @@
   "(you)": "(vous)",
   "Manage assignments": "Gérer les attributions",
   "Cannot change your own role": "Impossible de modifier votre propre rôle",
-  "Demote to user": "Rétrograder en utilisateur",
+  "Demote to teacher": "Rétrograder en enseignant",
   "Promote to admin": "Promouvoir administrateur",
   "Cannot delete your own account": "Impossible de supprimer votre propre compte",
   "Delete {{username}}": "Supprimer {{username}}",

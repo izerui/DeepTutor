@@ -22,17 +22,17 @@ const zh = JSON.parse(
   readFileSync(path.resolve(process.cwd(), "locales/zh/app.json"), "utf8"),
 ) as Record<string, string>;
 
-test("admin user creation sends the selected preset", () => {
+test("admin user creation sends a role and optional learning restrictions", () => {
+  // Spec 2026-10-29 P2: accounts are teachers or students; "learner" is only a
+  // student's starting learning restrictions.
   assert.match(
     adminApi,
-    /export type AccountPreset = "standard" \| "learner" \| "custom"/,
+    /body: JSON\.stringify\(\{ username, password, role, preset \}\)/,
   );
-  assert.match(
-    adminApi,
-    /body: JSON\.stringify\(\{ username, password, preset \}\)/,
-  );
-  assert.match(usersPage, /\["standard", "learner", "custom"\] as const/);
-  assert.match(usersPage, /aria-pressed=\{createPreset === preset\}/);
+  assert.match(adminApi, /const preset: AccountPreset = restricted \? "learner" : "standard";/);
+  assert.match(usersPage, /\["student", "teacher"\] as const/);
+  assert.match(usersPage, /aria-pressed=\{createRole === role\}/);
+  assert.match(usersPage, /setCreateRestricted\(event\.target\.checked\)/);
 });
 
 test("grant editing exposes the server-enforced learning policy controls", () => {

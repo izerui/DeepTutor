@@ -212,13 +212,6 @@ export function GrantEditor({
       ),
     [grant.skills],
   );
-  const partnerIds = useMemo(
-    () =>
-      new Set(
-        grant.partners.map((item) => String(item.partner_id || item.id || "")),
-      ),
-    [grant.partners],
-  );
 
   const selectedModelCount = useMemo(
     () =>
@@ -267,19 +260,6 @@ export function GrantEditor({
             (item) => String(item.skill_id || item.id || "") !== name,
           )
         : [...next.skills, { skill_id: name, access: "use", source: "admin" }];
-      return next;
-    });
-  }
-
-  function togglePartner(partnerId: string, name: string) {
-    setGrant((current) => {
-      const next = structuredClone(current) as GrantPayload;
-      const exists = partnerIds.has(partnerId);
-      next.partners = exists
-        ? next.partners.filter(
-            (item) => String(item.partner_id || item.id || "") !== partnerId,
-          )
-        : [...next.partners, { partner_id: partnerId, name, source: "admin" }];
       return next;
     });
   }
@@ -434,9 +414,6 @@ export function GrantEditor({
               </span>
               <span className="rounded-full bg-[var(--muted)]/60 px-2 py-1">
                 {t("{{count}} skills", { count: skillIds.size })}
-              </span>
-              <span className="rounded-full bg-[var(--muted)]/60 px-2 py-1">
-                {t("{{count}} partners", { count: partnerIds.size })}
               </span>
               <span className="rounded-full bg-[var(--muted)]/60 px-2 py-1">
                 {toolsSummary}
@@ -639,33 +616,7 @@ export function GrantEditor({
                 ))}
               </div>
             </section>
-            <section className="min-w-0">
-              <SectionTitle>{t("Partners")}</SectionTitle>
-              <div className="space-y-1.5 text-xs">
-                {(resources?.partners || []).length === 0 ? (
-                  <p className="px-1 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-                    {t("No partners yet. Create one under Partners to assign it.")}
-                  </p>
-                ) : (
-                  (resources?.partners || []).map((partner) => (
-                    <CheckRow
-                      key={partner.partner_id}
-                      label={partner.name || partner.partner_id}
-                      description={partner.description}
-                      checked={partnerIds.has(partner.partner_id)}
-                      disabled={controlsDisabled}
-                      onToggle={() =>
-                        togglePartner(
-                          partner.partner_id,
-                          partner.name || partner.partner_id,
-                        )
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-
+            {/* Spec 2026-10-29 D5: partners are not lent through grants. */}
             <section className="min-w-0">
               <SectionTitle>{t("System tools")}</SectionTitle>
               <ModeSwitch

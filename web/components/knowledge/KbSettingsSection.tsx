@@ -56,7 +56,7 @@ export default function KbSettingsSection({
     : moveSourceId.startsWith("workspace:")
       ? moveSourceId.slice("workspace:".length).split(":kb:")[0]
       : null;
-  const { isTeacher, allowPrivateKb } = useAuthStatus();
+  const { isTeacher, allowPrivateKb, isAdmin } = useAuthStatus();
   const canWrite = !kb.read_only && allowPrivateKb;
   const canManage = Boolean(kb.kb_id) && canWrite;
   const [references, setReferences] = useState<KnowledgeBaseReferenceSummary | null>(null);
@@ -211,7 +211,8 @@ export default function KbSettingsSection({
         )}
       </section>}
 
-      {canWrite && onMove && sourceWorkspaceId !== null && (
+      {/* Spec 2026-10-29 D4: moving between workspaces is for administrators. */}
+      {canWrite && onMove && sourceWorkspaceId !== null && isAdmin && (
         <section className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
           <div>
             <div className="text-[12.5px] font-medium text-[var(--foreground)]">

@@ -11,6 +11,8 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mocks.query),
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+const auth = vi.hoisted(() => ({ isAdmin: true }))
+vi.mock('@/hooks/useAuthStatus', () => ({ useAuthStatus: () => auth }))
 vi.mock('@/hooks/useChatWorkspaces', () => ({ useChatWorkspaces: () => ({
   workspaces: [{ workspace_id: 'other', display_name: 'Other', status: 'ready' }], error: '',
 }) }))
@@ -23,6 +25,7 @@ function Creation({ open }: { open: () => void }) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.isAdmin = true
   mocks.query = ''
   window.history.replaceState({}, '', '/learning/books')
   mocks.library.mockResolvedValue({ items: [], unavailable_workspaces: [] })
@@ -35,6 +38,15 @@ it('chooses a new destination without treating the library filter as storage sco
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   expect(mocks.push).toHaveBeenCalledWith('/learning/books?create=1&dt_workspace=other')
   expect(open).not.toHaveBeenCalled()
+})
+it('opens creation directly for teachers and students, who have no workspaces to choose', () => {
+  // Spec 2026-10-29 D4.
+  auth.isAdmin = false
+  const open = vi.fn()
+  render(<Creation open={open} />)
+  fireEvent.click(screen.getByRole('button', { name: 'New' }))
+  expect(open).toHaveBeenCalledOnce()
+  expect(screen.queryByLabelText('Save to workspace')).toBeNull()
 })
 it('opens creation after client navigation even before window.location reflects the new query', async () => {
   const open = vi.fn()

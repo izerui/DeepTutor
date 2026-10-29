@@ -17,6 +17,7 @@ import {
   Plus,
   Server,
 } from "lucide-react";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { useEmbeddingModels } from "@/hooks/useEmbeddingModels";
 import EmbeddingModelSelector from "./EmbeddingModelSelector";
 import Modal from "@/components/common/Modal";
@@ -147,6 +148,7 @@ export default function CreateKbModal({
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("llamaindex");
   const [files, setFiles] = useState<File[]>([]);
+  const { isAdmin } = useAuthStatus();
   const [storageWorkspaceId, setStorageWorkspaceId] = useState("");
   const [storageWorkspaces, setStorageWorkspaces] = useState<ChatWorkspaceRegistration[]>([]);
   const [pageIndexMode, setPageIndexMode] = useState<"" | "flash" | "standard">(
@@ -683,7 +685,8 @@ export default function CreateKbModal({
           )}
         </div>
 
-        {mode === "new" && !isLightRagServer && !isWeKnora && (
+        {/* Spec 2026-10-29 D4: only administrators pick a storage workspace. */}
+        {mode === "new" && !isLightRagServer && !isWeKnora && isAdmin && (
           <div>
             <label className="mb-1 block text-[12px] font-medium text-[var(--foreground)]">
               {t("Storage workspace")}

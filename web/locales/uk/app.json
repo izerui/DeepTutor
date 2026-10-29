@@ -2445,7 +2445,7 @@
   "(you)": "(ви)",
   "Manage assignments": "Керувати призначеннями",
   "Cannot change your own role": "Неможливо змінити власну роль",
-  "Demote to user": "Понизити до користувача",
+  "Demote to teacher": "Понизити до викладача",
   "Promote to admin": "Підвищити до адміністратора",
   "Cannot delete your own account": "Неможливо видалити власний обліковий запис",
   "Delete {{username}}": "Видалити {{username}}",

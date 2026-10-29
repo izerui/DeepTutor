@@ -42,9 +42,8 @@ export function settingsAccessFromAuthStatus(
     hideAdminOnly: Boolean(authStatus.enabled) && !authStatus.is_admin,
     showLearnerOnly:
       ordinaryAuthenticatedUser && authStatus.preset === "learner",
-    showGuardianOnly:
-      ordinaryAuthenticatedUser &&
-      (authStatus.preset === "standard" || authStatus.preset === "custom"),
+    // Spec 2026-10-29 D16: guardians are retired.
+    showGuardianOnly: false,
     learningShell: isLearningShellStatus(authStatus),
   };
 }

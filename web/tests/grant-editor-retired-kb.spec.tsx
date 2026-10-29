@@ -32,7 +32,9 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(screen.queryByRole("heading", { name: "Knowledge" })).not.toBeInTheDocument();
   expect(screen.queryByText(/KBs/)).not.toBeInTheDocument();
   expect(screen.queryByText("Retired KB")).not.toBeInTheDocument();
-  for (const name of ["Model One", "Skill One", "Partner One", "Enable learning policy", "Allow private knowledge bases"])
+  // Spec 2026-10-29 D5: partners are not lent through grants, so there is no partner checkbox.
+  expect(screen.queryByRole("checkbox", { name: /^Partner One/ })).not.toBeInTheDocument();
+  for (const name of ["Model One", "Skill One", "Enable learning policy", "Allow private knowledge bases"])
     fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${name}`) }));
   fireEvent.click(screen.getByRole("button", { name: "Save assignments" }));
   await waitFor(() => expect(saveUserGrant).toHaveBeenCalledOnce());
@@ -40,7 +42,7 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(saved.knowledge_bases).toEqual(stored.knowledge_bases);
   expect(saved.models.llm).toEqual([{ profile_id: "model", model_ids: ["one"], source: "admin" }]);
   expect(saved.skills).toEqual([{ skill_id: "Skill One", access: "use", source: "admin" }]);
-  expect(saved.partners).toEqual([{ partner_id: "partner", name: "Partner One", source: "admin" }]);
+  expect(saved.partners).toEqual([]);
   expect(saved.learning_policy?.locked_persona).toBe("teacher");
   expect(saved.student_policy).toEqual({ allow_personal_mastery: true, allow_private_kb: true });
   expect(saved.enabled_tools).toBeNull();

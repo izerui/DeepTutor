@@ -83,6 +83,8 @@ export interface SettingsCategory {
   learnerOnly?: boolean;
   /** Shown only to authenticated standard users who may act as guardians. */
   guardianOnly?: boolean;
+  /** Hidden from non-administrators (a direct-section category). */
+  adminOnly?: boolean;
 }
 
 export function isSettingsLeafVisible(
@@ -96,6 +98,7 @@ export function isSettingsCategoryVisible(
   category: SettingsCategory,
   access: SettingsAccess,
 ): boolean {
+  if (category.adminOnly && access.hideAdminOnly) return false;
   if (category.learnerOnly && !access.showLearnerOnly) return false;
   if (category.guardianOnly && !access.showGuardianOnly) return false;
   return (
@@ -466,6 +469,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     },
     icon: FolderOpen,
     href: "/settings#workspace",
+    // Spec 2026-10-29 D4: teachers and students have no workspaces to manage.
+    adminOnly: true,
   },
   {
     key: "models",

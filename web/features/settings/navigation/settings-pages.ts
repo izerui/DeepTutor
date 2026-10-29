@@ -75,6 +75,8 @@ const extraPages: SettingsLeaf[] = [
     icon: Archive,
     href: '/settings/data-migration',
     tile: '',
+    // Spec 2026-10-29 D4: moving data between workspaces is an administrator task.
+    adminOnly: true,
   },
   {
     key: 'usage',
@@ -135,7 +137,7 @@ export function visibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
 
 function allVisibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
   return [
-    ...extraPages,
+    ...extraPages.filter(leaf => isSettingsLeafVisible(leaf, access)),
     ...SETTINGS_CATEGORIES.filter(category => isSettingsCategoryVisible(category, access))
       .flatMap(category => category.children ?? [{ ...category, tile: '' }])
       .filter(

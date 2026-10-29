@@ -2534,7 +2534,7 @@
   "(you)": "(ty)",
   "Manage assignments": "Zarządzaj przypisaniami",
   "Cannot change your own role": "Nie można zmienić swojej roli",
-  "Demote to user": "Zmień rolę na użytkownika",
+  "Demote to teacher": "Zmień rolę na nauczyciela",
   "Promote to admin": "Przyznaj uprawnienia administratora",
   "Cannot delete your own account": "Nie można usunąć własnego konta",
   "Delete {{username}}": "Usuń {{username}}",

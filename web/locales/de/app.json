@@ -2535,7 +2535,7 @@
   "(you)": "(du)",
   "Manage assignments": "Zuweisungen verwalten",
   "Cannot change your own role": "Eigene Rolle kann nicht geändert werden",
-  "Demote to user": "Zum Benutzer herabstufen",
+  "Demote to teacher": "Zur Lehrkraft herabstufen",
   "Promote to admin": "Zum Admin befördern",
   "Cannot delete your own account": "Eigenes Konto kann nicht gelöscht werden",
   "Delete {{username}}": "{{username}} löschen",

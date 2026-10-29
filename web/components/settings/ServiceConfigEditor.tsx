@@ -518,12 +518,8 @@ export function ServiceConfigEditor({
             "Model endpoints are assigned by your administrator. You can still personalize theme and language here.",
           )}
         </div>
-        {/* One thing an ordinary user CAN configure for themselves: an
-            owner-bound Codex login. It authenticates their own ChatGPT plan,
-            so it is never something an administrator can grant them — the
-            account has to sign in for itself (#781). The card talks only to
-            the per-user OAuth endpoints and exposes no catalog. */}
-        {service === "llm" && <CodexOAuthCard />}
+        {/* Spec 2026-10-29 D6: no personal models — an ordinary account no
+            longer signs in to Codex for itself. */}
       </div>
     );
   }

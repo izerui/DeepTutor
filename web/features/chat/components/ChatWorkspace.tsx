@@ -269,7 +269,7 @@ export default function ChatWorkspace() {
   // strips partner_id from their turns and 403s the lists), so the composer
   // does not offer them (B3-P13). Held back until the account is known so a
   // learner never sees the entries flash in and out.
-  const { learningPolicy, loading: authStatusLoading } = useAuthStatus();
+  const { learningPolicy, loading: authStatusLoading, isAdmin } = useAuthStatus();
   const partnersOffered = !authStatusLoading && learningPolicy === null;
 
   const {
@@ -2703,8 +2703,9 @@ export default function ChatWorkspace() {
                 workspacePending={workspacePending}
                 // Immersive modes own their own material; a workspace binding
                 // there would compete with it, so they get no pill.
+                // Spec 2026-10-29 D4: only administrators file chats into workspaces.
                 onSelectWorkspace={
-                  !state.workspaceMode
+                  !state.workspaceMode && isAdmin
                     ? handleSelectWorkspace
                     : undefined
                 }

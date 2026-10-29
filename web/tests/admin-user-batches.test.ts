@@ -41,7 +41,8 @@ test("users page wires CSV import and multi-select deletion", () => {
 
 test("batch import cannot provision administrators", () => {
   assert.match(authRouter, /fieldnames != expected/);
-  assert.match(authRouter, /if role != "user":/);
+  // Spec 2026-10-29 D1: only teachers and students are provisioned here.
+  assert.match(authRouter, /if role not in \{"teacher", "student"\}:/);
   assert.match(authRouter, /Only non-admin users can be provisioned/);
 });
 

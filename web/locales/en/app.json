@@ -2536,7 +2536,7 @@
   "(you)": "(you)",
   "Manage assignments": "Manage assignments",
   "Cannot change your own role": "Cannot change your own role",
-  "Demote to user": "Demote to user",
+  "Demote to teacher": "Demote to teacher",
   "Promote to admin": "Promote to admin",
   "Cannot delete your own account": "Cannot delete your own account",
   "Delete {{username}}": "Delete {{username}}",

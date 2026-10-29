@@ -132,7 +132,8 @@ test("learner and guardian sections follow the resolved account type", () => {
     preset: "standard",
   });
   assert.equal(isSettingsCategoryVisible(learner, guardianAccount), false);
-  assert.equal(isSettingsCategoryVisible(guardian, guardianAccount), true);
+  // Spec 2026-10-29 D16: guardians are retired.
+  assert.equal(isSettingsCategoryVisible(guardian, guardianAccount), false);
   assert.equal(isSettingsCategoryVisible(agents, guardianAccount), false);
 });
 

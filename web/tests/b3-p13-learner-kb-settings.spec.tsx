@@ -140,7 +140,10 @@ describe("B3-P13 settings surface", () => {
     const standardKeys = visibleSettingsPages(
       settingsAccessFromAuthStatus({ ...base, preset: "standard", learning_policy: null }),
     ).map((page) => page.key);
-    expect(standardKeys).toEqual(expect.arrayContaining(["general", "tools", "workspace", "about"]));
+    expect(standardKeys).toEqual(expect.arrayContaining(["general", "tools", "about"]));
+    // Spec 2026-10-29 D4: workspace management is for administrators only.
+    expect(standardKeys).not.toContain("workspace");
+    expect(standardKeys).not.toContain("data-migration");
     expect(standardKeys).not.toContain("learner-profile");
   });
 

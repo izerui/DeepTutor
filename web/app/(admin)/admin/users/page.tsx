@@ -13,14 +13,12 @@ import {
   createUser,
   importUsers,
   type UserRecord,
-  type AccountPreset,
   type UserImportResult,
 } from "@/lib/admin-api";
 import { GrantEditor } from "@/features/multi-user/components/GrantEditor";
 import { MigrationResultsNotice } from "@/features/multi-user/components/MigrationResultsNotice";
 import { BookPermissionEditor } from "@/features/multi-user/components/BookPermissionEditor";
 import { LearnerProfileEditor } from "@/features/multi-user/components/LearnerProfileEditor";
-import { GuardianRelationshipsEditor } from "@/features/multi-user/components/GuardianRelationshipsEditor";
 import { UserAvatar } from "@/components/UserAvatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { filterUsersByQuery } from "@/lib/admin-users";
@@ -77,7 +75,10 @@ export default function AdminUsersPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [createUsername, setCreateUsername] = useState("");
   const [createPassword, setCreatePassword] = useState("");
-  const [createPreset, setCreatePreset] = useState<AccountPreset>("standard");
+  // Spec 2026-10-29 P2: an account is a teacher or a student; a student may
+  // start with learning restrictions (the retired "learner" preset).
+  const [createRole, setCreateRole] = useState<"teacher" | "student">("student");
+  const [createRestricted, setCreateRestricted] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -117,7 +118,8 @@ export default function AdminUsersPage() {
   function openCreateDialog() {
     setCreateUsername("");
     setCreatePassword("");
-    setCreatePreset("standard");
+    setCreateRole("student");
+    setCreateRestricted(false);
     setCreateError("");
     setShowCreateDialog(true);
   }
@@ -155,7 +157,7 @@ export default function AdminUsersPage() {
     }
     setCreateSubmitting(true);
     try {
-      await createUser(username, createPassword, createPreset);
+      await createUser(username, createPassword, createRole, createRole === "student" && createRestricted);
       setShowCreateDialog(false);
       await load();
     } catch (e) {
@@ -193,7 +195,8 @@ export default function AdminUsersPage() {
         await deleteUser(user.username);
         setUsers((prev) => prev.filter((u) => u.username !== user.username));
       } else {
-        const newRole = kind === "promote" ? "admin" : "user";
+        // Spec 2026-10-29 D1: an administrator steps down to teacher.
+        const newRole = kind === "promote" ? "admin" : "teacher";
         await setUserRole(user.username, newRole);
         setUsers((prev) =>
           prev.map((u) =>
@@ -597,25 +600,12 @@ export default function AdminUsersPage() {
                               })}
                               className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {(["user", "teacher", "student"] as const).map((role) => (
+                              {(["teacher", "student"] as const).map((role) => (
                                 <option key={role} value={role}>
                                   {t(accountRoleLabelKey(role))}
                                 </option>
                               ))}
                             </select>
-                          )}
-                          {!isAdmin && user.preset && (
-                            <span className="mt-1 block text-[11px] text-[var(--muted-foreground)]">
-                              {t("Preset: {{preset}}", {
-                                preset: t(
-                                  user.preset === "learner"
-                                    ? "Learner"
-                                    : user.preset === "custom"
-                                      ? "Custom"
-                                      : "Standard",
-                                ),
-                              })}
-                            </span>
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-[var(--muted-foreground)]">
@@ -644,7 +634,7 @@ export default function AdminUsersPage() {
                                 isSelf
                                   ? t("Cannot change your own role")
                                   : user.role === "admin"
-                                    ? t("Demote to user")
+                                    ? t("Demote to teacher")
                                     : t("Promote to admin")
                               } side="top">
                               <button
@@ -659,7 +649,7 @@ export default function AdminUsersPage() {
                                   isSelf
                                     ? t("Cannot change your own role")
                                     : user.role === "admin"
-                                      ? t("Demote to user")
+                                      ? t("Demote to teacher")
                                       : t("Promote to admin")
                                 }
                                 className="rounded-lg p-1.5 text-[var(--muted-foreground)]
@@ -709,21 +699,13 @@ export default function AdminUsersPage() {
                               <GrantEditor
                                 key={`${user.id}-${user.role}`}
                                 userId={user.id}
-                                lockLearningPolicy={user.preset === "learner"}
                                 isStudent={user.role === "student"}
                               />
                               <BookPermissionEditor userId={user.id} />
                               {user.preset === "learner" && (
-                                <>
-                                  <GuardianRelationshipsEditor
-                                    learnerId={user.id}
-                                    learnerUsername={user.username}
-                                    users={users}
-                                  />
-                                  <LearnerProfileEditor
-                                    username={user.username}
-                                  />
-                                </>
+                                <LearnerProfileEditor
+                                  username={user.username}
+                                />
                               )}
                             </div>
                           </td>
@@ -749,7 +731,7 @@ export default function AdminUsersPage() {
             ? t("Delete user")
             : confirmTarget?.kind === "promote"
               ? t("Promote to admin")
-              : t("Demote to user")
+              : t("Demote to teacher")
         }
         tone={confirmTarget?.kind === "delete" ? "danger" : "default"}
         confirmLabel={
@@ -888,49 +870,47 @@ export default function AdminUsersPage() {
 
             <fieldset className="mb-4">
               <legend className="mb-1.5 block text-xs text-[var(--muted-foreground)]">
-                {t("Account preset")}
+                {t("Role")}
               </legend>
               <div
-                className="grid grid-cols-3 gap-1 rounded-lg bg-[var(--muted)]/50 p-1"
+                className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--muted)]/50 p-1"
                 role="group"
-                aria-label={t("Account preset")}
+                aria-label={t("Role")}
               >
-                {(["standard", "learner", "custom"] as const).map((preset) => (
+                {(["student", "teacher"] as const).map((role) => (
                   <button
-                    key={preset}
+                    key={role}
                     type="button"
                     disabled={createSubmitting}
-                    aria-pressed={createPreset === preset}
-                    onClick={() => setCreatePreset(preset)}
+                    aria-pressed={createRole === role}
+                    onClick={() => setCreateRole(role)}
                     className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                      createPreset === preset
+                      createRole === role
                         ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
                         : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     }`}
                   >
-                    {t(
-                      preset === "learner"
-                        ? "Learner"
-                        : preset === "custom"
-                          ? "Custom"
-                          : "Standard",
-                    )}
+                    {t(role === "teacher" ? "Teacher" : "Student")}
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-                {createPreset === "learner"
-                  ? t(
-                      "Chat and Immersive Reading only, with uploads and tools disabled until assigned.",
-                    )
-                  : createPreset === "custom"
-                    ? t(
-                        "Create an ordinary account, then customize its assignments.",
-                      )
-                    : t(
-                        "Create an ordinary account with the default workspace behavior.",
-                      )}
-              </p>
+              {createRole === "student" && (
+                <label className="mt-2 flex items-start gap-2 text-xs text-[var(--foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={createRestricted}
+                    disabled={createSubmitting}
+                    onChange={(event) => setCreateRestricted(event.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    {t("Learning restrictions")}
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+                      {t("Chat and Immersive Reading only, with uploads and tools disabled until assigned.")}
+                    </span>
+                  </span>
+                </label>
+              )}
             </fieldset>
 
             {createError && (

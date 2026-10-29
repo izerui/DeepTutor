@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import Modal from '@/components/common/Modal'
+import { useAuthStatus } from '@/hooks/useAuthStatus'
 import { useChatWorkspaces } from '@/hooks/useChatWorkspaces'
 import { activeWorkspaceId, scopedUrl } from '@/lib/workspace-scope'
 import type { LearningOrigin } from '@/lib/learning-library'
@@ -76,6 +77,7 @@ export function useLearningCreation(open: () => void) {
   useCreateRequest(open)
   const { t } = useTranslation()
   const { workspaces, error } = useChatWorkspaces()
+  const { isAdmin } = useAuthStatus()
   const [choosing, setChoosing] = useState(false)
   const [destination, setDestination] = useState(activeWorkspaceId)
   const dialog = <Modal isOpen={choosing} onClose={() => setChoosing(false)} title={t('Save new content to')} width="sm">
@@ -101,7 +103,8 @@ export function useLearningCreation(open: () => void) {
     </div>
   </Modal>
   // Course-created content inherits the course store so its references stay valid.
-  return { begin: () => query.has("course") ? open() : setChoosing(true), dialog }
+  // Spec 2026-10-29 D4: teachers and students always save to their own space.
+  return { begin: () => query.has("course") || !isAdmin ? open() : setChoosing(true), dialog }
 }
 
 export function requestedLearningCreation() {

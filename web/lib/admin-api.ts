@@ -170,12 +170,16 @@ export interface CreatedUser {
 export async function createUser(
   username: string,
   password: string,
-  preset: AccountPreset = "standard",
+  role: "teacher" | "student" = "student",
+  restricted = false,
 ): Promise<CreatedUser> {
+  // Spec 2026-10-29 P2: "learner" is now only the starting learning
+  // restrictions of a student, not an account type.
+  const preset: AccountPreset = restricted ? "learner" : "standard";
   const res = await apiFetch(apiUrl("/api/auth/users"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, preset }),
+    body: JSON.stringify({ username, password, role, preset }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
