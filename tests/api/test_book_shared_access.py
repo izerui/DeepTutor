@@ -74,6 +74,10 @@ def shared_env(tmp_path, monkeypatch):
     books_grant["learning_policy"]["allowed_surfaces"] = ["chat", "reading", "books"]
     save_grant(books_without_acl["id"], deepcopy(books_grant))
     save_grant(reader["id"], books_grant)
+    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
+    from deeptutor.multi_user.role_migration import run_role_migration
+
+    run_role_migration()
 
     tokens = {
         "root": TokenPayload(username="root", role="admin", user_id=root["id"]),

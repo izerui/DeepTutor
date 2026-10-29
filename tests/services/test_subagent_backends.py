@@ -1126,13 +1126,11 @@ async def test_partner_consult_unknown_partner(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_partner_consult_rechecks_revoked_grant(monkeypatch, tmp_path) -> None:
     from deeptutor.multi_user.models import CurrentUser, UserScope
-    import deeptutor.multi_user.partner_access as partner_access
     from deeptutor.multi_user.paths import user_context
     from deeptutor.services.subagent.partner import PartnerBackend
 
     manager = _FakePartnerManager()
     _patch_manager(monkeypatch, manager)
-    monkeypatch.setattr(partner_access, "load_grant", lambda uid: {"partners": []})
     user = CurrentUser(
         "u_alice",
         "alice",

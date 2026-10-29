@@ -182,7 +182,8 @@ def test_device_login_returns_normal_identity_and_revocation_invalidates_token(
     assert login.status_code == 200, login.text
     body = login.json()
     assert body["username"] == "learner"
-    assert body["role"] == "user"
+    # Spec 2026-10-29 D1: accounts created without a role are students.
+    assert body["role"] == "student"
     token = login.cookies["dt_token"]
 
     status = client.get("/api/auth/status", headers=_auth(token))

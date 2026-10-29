@@ -128,6 +128,13 @@ async def lifespan(app: FastAPI):
         application_container = get_application_container()
         app.state.application_container = application_container
     await application_container.start()
+    try:
+        # Spec 2026-10-29 P2: three roles; idempotent, so it runs on every start.
+        from deeptutor.multi_user.role_migration import run_role_migration
+
+        await asyncio.to_thread(run_role_migration)
+    except Exception:
+        logger.exception("Role migration failed; legacy roles stay readable")
     from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
     from deeptutor.api.utils.task_log_stream import get_task_stream_manager
     from deeptutor.knowledge.progress_events import install_progress_ports

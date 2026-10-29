@@ -391,10 +391,7 @@ async def test_admin_kb_grants_are_retired_but_payload_round_trips(
             "knowledge_bases"
         ] == entries
         assert "kb_count" not in audits[-1]["summary"]
-        from deeptutor.multi_user.context import get_current_user
-
-        report = await multi_user.guardian_report(alice["id"], get_current_user())
-        assert report["grant_summary"]["knowledge_base_count"] == 0
+        # Guardian reports are retired (spec 2026-10-29 D16).
         assert "knowledge_bases" not in await multi_user.admin_resources(None)
 
 

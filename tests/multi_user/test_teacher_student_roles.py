@@ -45,9 +45,9 @@ def test_current_role_reads_live_role_not_token_role(seed_user, as_user):
     with as_user(record["id"], role="teacher", username="tina"):
         assert roles.current_role() == "teacher"
         assert roles.is_teacher_or_admin() is True
-        set_role("tina", "user")
+        set_role("tina", "student")
         # The token still says "teacher"; the live record wins.
-        assert roles.current_role() == "user"
+        assert roles.current_role() == "student"
         assert roles.is_teacher_or_admin() is False
 
 

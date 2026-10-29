@@ -31,8 +31,9 @@ def test_normalize_role_passes_legal_roles_through(legal):
 
 
 @pytest.mark.parametrize("bogus", ["", "superadmin", "Admin", "instructor", "parent", "root"])
-def test_normalize_role_degrades_unknown_values_to_user(bogus):
-    assert normalize_role(bogus) == "user"
+def test_normalize_role_degrades_unknown_values_to_student(bogus):
+    # Spec 2026-10-29 D1: the least-privileged role is now "student".
+    assert normalize_role(bogus) == "student"
 
 
 def test_normalize_role_honors_custom_default():
@@ -50,11 +51,14 @@ def test_set_role_accepts_legal_roles_and_readback_preserves_them(seed_user):
     seed_user("alice", "password1234")
     seed_user("bob", "password1234")
     assert set_role("alice", "admin") is True
-    assert set_role("bob", "user") is True
+    assert set_role("bob", "student") is True
+    # "user" is no longer assignable (spec 2026-10-29 D1).
+    with pytest.raises(ValueError):
+        set_role("bob", "user")
     # Re-read through the canonicalization path: legal roles must survive it.
     roles = {username: record["role"] for username, record in load_users().items()}
     assert roles["alice"] == "admin"
-    assert roles["bob"] == "user"
+    assert roles["bob"] == "student"
 
 
 def test_set_role_rejects_unknown_roles(mu_isolated_root):
@@ -78,11 +82,11 @@ def test_set_role_accepts_new_roles_and_round_trips(seed_user, role):
     assert roles["carol"] == role
 
 
-def test_corrupted_stored_role_degrades_to_user_on_load(mu_isolated_root):
+def test_corrupted_stored_role_degrades_to_student_on_load(mu_isolated_root):
     from deeptutor.multi_user import identity
 
     identity.USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # "bob" is a non-first account, so its canonical default is "user"; the
+    # "bob" is a non-first account, so its canonical default is "student"; the
     # corrupted "superadmin" value must degrade to that, never pass through.
     identity.USERS_FILE.write_text(
         '{"alice": {"id": "u_a", "hash": "h"},'
@@ -90,7 +94,7 @@ def test_corrupted_stored_role_degrades_to_user_on_load(mu_isolated_root):
         encoding="utf-8",
     )
     roles = {username: record["role"] for username, record in identity.load_users().items()}
-    assert roles["bob"] == "user"
+    assert roles["bob"] == "student"
 
 
 # ------------------------------------------------- token payload mapping
@@ -105,11 +109,11 @@ def test_token_payload_maps_legal_roles_through():
     assert current.is_admin is False
 
 
-def test_token_payload_degrades_unknown_roles_to_user():
+def test_token_payload_degrades_unknown_roles_to_student():
     current = user_from_token_payload(
         SimpleNamespace(user_id="u_x", username="x", role="superadmin")
     )
-    assert current.role == "user"
+    assert current.role == "student"
     assert current.is_admin is False
 
 
@@ -129,7 +133,8 @@ def test_set_role_request_accepts_legal_roles():
     assert SetRoleRequest(role="admin").role == "admin"
     assert SetRoleRequest(role="teacher").role == "teacher"
     assert SetRoleRequest(role="student").role == "student"
-    assert SetRoleRequest(role="user").role == "user"
+    with pytest.raises(ValidationError):
+        SetRoleRequest(role="user")
 
 
 def test_set_role_request_rejects_unknown_roles():

@@ -50,40 +50,39 @@ def test_normalize_grant_missing_partners_defaults_empty():
 
 
 # ── assigned_partner_ids ──────────────────────────────────────
+# Spec 2026-10-29 D5: lending is retired — a partner belongs to its creator.
 
 
-def test_assigned_partner_ids_reads_grant(as_user, monkeypatch):
-    monkeypatch.setattr(
-        partner_access,
-        "load_grant",
-        lambda uid: {"partners": [{"partner_id": "p1"}, {"id": "p2"}, {"partner_id": "  "}]},
-    )
-    with as_user("u_alice", role="user"):
-        assert partner_access.assigned_partner_ids() == {"p1", "p2"}
+def _lend(uid: str, partner_ids: list[str]) -> None:
+    from deeptutor.multi_user.grants import load_grant, save_grant
+    from deeptutor.multi_user.identity import save_user
+
+    record = save_user(uid, "hash", role="student")
+    grant = load_grant(record["id"])
+    grant["partners"] = [{"partner_id": pid} for pid in partner_ids]
+    save_grant(record["id"], grant)
+
+
+def test_assigned_partner_ids_is_always_empty(as_user, seed_user):
+    seed_user("boss", role="admin")
+    _lend("u_alice", ["p1", "p2"])
+    with as_user("u_alice", role="student"):
+        assert partner_access.assigned_partner_ids() == set()
 
 
 # ── assert_partner_allowed ────────────────────────────────────
 
 
-def test_admin_may_use_any_partner(as_user, monkeypatch):
-    # Admin short-circuits before any grant lookup.
-    monkeypatch.setattr(
-        partner_access,
-        "load_grant",
-        lambda uid: (_ for _ in ()).throw(AssertionError("admin must not read grants")),
-    )
+def test_admin_may_use_admin_managed_partners(as_user):
     with as_user("u_admin", role="admin"):
-        partner_access.assert_partner_allowed("anything")  # no raise
+        partner_access.assert_partner_allowed("anything")  # ownerless → admin-managed
 
 
-def test_non_admin_allowed_only_for_assigned(as_user, monkeypatch):
-    monkeypatch.setattr(
-        partner_access, "load_grant", lambda uid: {"partners": [{"partner_id": "p1"}]}
-    )
-    with as_user("u_alice", role="user"):
-        partner_access.assert_partner_allowed("p1")  # assigned → ok
+def test_a_lent_partner_is_not_usable(as_user, monkeypatch):
+    _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1", "owner_id": "u_bob"}])
+    with as_user("u_alice", role="student"):
         with pytest.raises(HTTPException) as exc:
-            partner_access.assert_partner_allowed("p2")
+            partner_access.assert_partner_allowed("p1")
         assert exc.value.status_code == 403
 
 
@@ -105,23 +104,9 @@ def test_admin_sees_all_partners_identity_only(as_user, monkeypatch):
     assert all("channels" not in c and "llm_selection" not in c for c in cards)
 
 
-def test_non_admin_sees_only_assigned_partners(as_user, monkeypatch):
-    _patch_manager(
-        monkeypatch,
-        [{"partner_id": "p1", "name": "P1"}, {"partner_id": "p2", "name": "P2"}],
-    )
-    monkeypatch.setattr(
-        partner_access, "load_grant", lambda uid: {"partners": [{"partner_id": "p2"}]}
-    )
-    with as_user("u_alice", role="user"):
-        cards = partner_access.visible_partner_cards()
-    assert [c["partner_id"] for c in cards] == ["p2"]
-
-
-def test_non_admin_with_no_grant_sees_nothing(as_user, monkeypatch):
-    _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1"}])
-    monkeypatch.setattr(partner_access, "load_grant", lambda uid: empty_grant(uid))
-    with as_user("u_alice", role="user"):
+def test_non_admin_sees_no_partners_they_do_not_own(as_user, monkeypatch):
+    _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1"}, {"partner_id": "p2", "name": "P2"}])
+    with as_user("u_alice", role="student"):
         assert partner_access.visible_partner_cards() == []
 
 
@@ -130,8 +115,7 @@ def test_non_admin_with_no_grant_sees_nothing(as_user, monkeypatch):
 
 def test_owner_may_manage_and_use_their_own_partner(as_user, monkeypatch):
     _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1", "owner_id": "u_alice"}])
-    monkeypatch.setattr(partner_access, "load_grant", lambda uid: empty_grant(uid))
-    with as_user("u_alice", role="user"):
+    with as_user("u_alice", role="student"):
         assert partner_access.can_manage_partner("p1")
         assert partner_access.can_use_partner("p1")
         partner_access.assert_partner_manageable("p1")  # no raise
@@ -140,57 +124,45 @@ def test_owner_may_manage_and_use_their_own_partner(as_user, monkeypatch):
 
 def test_a_partner_someone_else_owns_is_not_manageable(as_user, monkeypatch):
     _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1", "owner_id": "u_bob"}])
-    monkeypatch.setattr(partner_access, "load_grant", lambda uid: empty_grant(uid))
-    with as_user("u_alice", role="user"):
+    with as_user("u_alice", role="student"):
         assert not partner_access.can_manage_partner("p1")
         with pytest.raises(HTTPException) as exc:
             partner_access.assert_partner_manageable("p1")
         assert exc.value.status_code == 403
 
 
-def test_assigned_partner_is_usable_but_not_manageable(as_user, monkeypatch):
+def test_an_admin_cannot_manage_another_accounts_partner(as_user, monkeypatch):
+    # Spec 2026-10-29 D2: someone's own partner is their personal data.
     _patch_manager(monkeypatch, [{"partner_id": "p1", "name": "P1", "owner_id": "u_bob"}])
-    monkeypatch.setattr(
-        partner_access, "load_grant", lambda uid: {"partners": [{"partner_id": "p1"}]}
-    )
-    with as_user("u_alice", role="user"):
-        assert partner_access.can_use_partner("p1")
+    with as_user("u_admin", role="admin"):
         assert not partner_access.can_manage_partner("p1")
+        assert not partner_access.can_use_partner("p1")
 
 
 def test_ownerless_partners_stay_admin_managed(as_user, monkeypatch):
     # Partners that predate ownership carry no owner_id; nobody inherits them
     # just by having an empty id themselves.
     _patch_manager(monkeypatch, [{"partner_id": "legacy", "name": "Legacy", "owner_id": ""}])
-    monkeypatch.setattr(partner_access, "load_grant", lambda uid: empty_grant(uid))
-    with as_user("", role="user"):
+    with as_user("", role="student"):
         assert not partner_access.can_manage_partner("legacy")
     with as_user("u_admin", role="admin"):
         assert partner_access.can_manage_partner("legacy")
 
 
-def test_visible_partners_projects_by_what_the_caller_may_do(as_user, monkeypatch):
+def test_visible_partners_shows_only_the_callers_own(as_user, monkeypatch):
     _patch_manager(
         monkeypatch,
         [
             {"partner_id": "mine", "name": "Mine", "owner_id": "u_alice", "channels": ["qq"]},
             {"partner_id": "lent", "name": "Lent", "owner_id": "u_bob", "channels": ["telegram"]},
-            {"partner_id": "hidden", "name": "Hidden", "owner_id": "u_bob"},
         ],
     )
-    monkeypatch.setattr(
-        partner_access, "load_grant", lambda uid: {"partners": [{"partner_id": "lent"}]}
-    )
-    with as_user("u_alice", role="user"):
+    with as_user("u_alice", role="student"):
         visible = {p["partner_id"]: p for p in partner_access.visible_partners()}
 
-    assert set(visible) == {"mine", "lent"}
-    # Their own partner comes through whole, with its wiring and a manage flag.
+    assert set(visible) == {"mine"}
     assert visible["mine"]["can_manage"] is True
     assert visible["mine"]["channels"] == ["qq"]
-    # A partner merely lent to them is reduced to a face.
-    assert visible["lent"]["can_manage"] is False
-    assert "channels" not in visible["lent"]
 
 
 # ── assignable pool (admin side) ──────────────────────────────

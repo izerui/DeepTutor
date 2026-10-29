@@ -60,32 +60,12 @@ def owner_catalog_service() -> ModelCatalogService:
 
 
 def _personal_catalog_profiles() -> list[dict[str, Any]]:
-    """Owner-bound LLM profiles from the owner's own catalog.
+    """Owner-bound LLM profiles from the owner's own catalog — always none.
 
-    Empty for an administrator: their owner-bound profiles already live in
-    the shared catalog they manage, and overlaying them would duplicate
-    every model in their own option list.
+    Spec 2026-10-29 D6: nobody uses personal models; every model comes from the
+    system catalog the administrators manage.
     """
-    from .context import get_current_user_or_none
-    from .model_access import is_owner_bound
-
-    user = get_current_user_or_none()
-    if user is None or user.is_admin:
-        return []
-    service = owner_catalog_service()
-    # Checked rather than loaded blind: ``load()`` writes a default catalog
-    # when the file is absent, and a user who never touched Codex should not
-    # get a settings file created on every options request.
-    if not service.path.exists():
-        return []
-    profiles = service.load().get("services", {}).get("llm", {}).get("profiles", []) or []
-    return [
-        profile
-        for profile in profiles
-        if isinstance(profile, dict)
-        and is_owner_bound(profile)
-        and (profile.get("managed_by") != _CODEX_MANAGED_BY or _codex_profile_is_current(profile))
-    ]
+    return []
 
 
 def personal_llm_rows() -> list[dict[str, Any]]:

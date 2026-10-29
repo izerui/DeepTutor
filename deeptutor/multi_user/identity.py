@@ -22,7 +22,7 @@ from .book_permission import (
     public_permission_dict,
 )
 from .learner_profile import normalize_profile
-from .models import VALID_ROLES, AccountPreset, Role, normalize_role
+from .models import ASSIGNABLE_ROLES, AccountPreset, Role, normalize_role
 from .paths import PROJECT_ROOT, SYSTEM_ROOT, migrate_legacy_multi_user_tree
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ def _canonical_record(
     username: str,
     value: Any,
     *,
-    default_role: Role = "user",
+    default_role: Role = "student",
 ) -> dict[str, Any] | None:
     if isinstance(value, str):
         return {
@@ -200,7 +200,7 @@ def load_users(  # nosec B107 - empty defaults mean "no env fallback supplied".
     canonical: dict[str, dict[str, Any]] = {}
     changed = False
     for index, (username, value) in enumerate(users.items()):
-        role: Role = "admin" if index == 0 else "user"
+        role: Role = "admin" if index == 0 else "student"
         if isinstance(value, dict):
             role = normalize_role(str(value.get("role") or ""), role)  # type: ignore[assignment]
         record = _canonical_record(str(username), value, default_role=role)
@@ -232,7 +232,7 @@ def load_users(  # nosec B107 - empty defaults mean "no env fallback supplied".
 def save_user(
     username: str,
     hashed_password: str,
-    role: Role = "user",
+    role: Role = "student",
     preset: AccountPreset = "standard",
 ) -> dict[str, Any]:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -438,8 +438,8 @@ def delete_avatar_file(user_id: str) -> None:
 
 
 def set_role(username: str, role: Role) -> bool:
-    if role not in VALID_ROLES:
-        raise ValueError(f"role must be one of {sorted(VALID_ROLES)}")
+    if role not in ASSIGNABLE_ROLES:
+        raise ValueError(f"role must be one of {sorted(ASSIGNABLE_ROLES)}")
     if not USERS_FILE.exists():
         return False
     users = load_users()

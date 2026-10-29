@@ -51,7 +51,7 @@ def test_require_teacher_or_admin(teacher_client, token, expected):
 def test_require_teacher_or_admin_uses_live_role(teacher_client):
     from deeptutor.services.auth import set_role
 
-    set_role("teacher1", "user")
+    set_role("teacher1", "student")
     assert teacher_client.get("/teach", headers=_bearer("teacher-token")).status_code == 403
 
 

@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 from deeptutor.api.routers import settings as settings_router
+from deeptutor.multi_user.models import CurrentUser
+from deeptutor.multi_user.paths import local_admin_user, scope_for_user
 from deeptutor.services.codex_auth.contracts import CodexAuthError
 from deeptutor.services.config.provider_runtime import (
     ResolvedEmbeddingConfig,
@@ -1650,7 +1652,7 @@ def test_provider_choices_advertise_wire_api_support_from_backend_metadata() -> 
 
 
 @pytest.mark.asyncio
-async def test_codex_oauth_status_is_reachable_by_an_ordinary_user(
+async def test_codex_oauth_is_refused_to_an_ordinary_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Codex OAuth is personal, not administrative (#781).
@@ -1667,7 +1669,7 @@ async def test_codex_oauth_status_is_reachable_by_an_ordinary_user(
     monkeypatch.setattr(
         settings_router,
         "get_current_user",
-        lambda: SimpleNamespace(id="u_alice", is_admin=False),
+        lambda: CurrentUser("u_alice", "alice", "student", scope_for_user("u_alice", is_admin=False)),
     )
     monkeypatch.setattr(
         settings_router,
@@ -1676,7 +1678,12 @@ async def test_codex_oauth_status_is_reachable_by_an_ordinary_user(
         raising=False,
     )
 
-    assert await settings_router.get_openai_codex_oauth_status() == fake.public_status()
+    # Spec 2026-10-29 D6: no personal models; only the main administrator signs in.
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as refused:
+        await settings_router.get_openai_codex_oauth_status()
+    assert refused.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -1687,7 +1694,7 @@ async def test_codex_oauth_routes_return_only_public_service_payloads(
     monkeypatch.setattr(
         settings_router,
         "get_current_user",
-        lambda: SimpleNamespace(id="root", is_admin=True),
+        lambda: local_admin_user(),
     )
     monkeypatch.setattr(
         settings_router,
@@ -1736,7 +1743,7 @@ async def test_codex_oauth_error_maps_to_sanitized_http_detail(
     monkeypatch.setattr(
         settings_router,
         "get_current_user",
-        lambda: SimpleNamespace(id="root", is_admin=True),
+        lambda: local_admin_user(),
     )
     monkeypatch.setattr(
         settings_router,

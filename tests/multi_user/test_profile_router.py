@@ -38,6 +38,10 @@ def profile_client(mu_isolated_root, monkeypatch):
     alice = save_user("alice", "$2b$12$placeholder", role="admin")
     bob = save_user("bob", "$2b$12$placeholder", role="user", preset="learner")
     standard = save_user("sam", "$2b$12$placeholder", role="user")
+    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
+    from deeptutor.multi_user.role_migration import run_role_migration
+
+    run_role_migration()
 
     tokens = {
         "admin-token": TokenPayload(username="alice", role="admin", user_id=alice["id"]),
@@ -71,7 +75,8 @@ def test_get_profile_returns_own_record(profile_client):
     client, users = profile_client
     body = client.get("/api/auth/profile", headers=_auth("user-token")).json()
     assert body["username"] == "bob"
-    assert body["role"] == "user"
+    # The startup role migration made the legacy "user" a student (spec 2026-10-29 D1).
+    assert body["role"] == "student"
     assert body["id"] == users["bob"]["id"]
     assert body["avatar"] == ""
 

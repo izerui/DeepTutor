@@ -782,6 +782,11 @@ class TestWebContinuity:
         with client:
             _create(client, start=False)
             manager = router_mod.get_partner_manager()
+            # Spec 2026-10-29 D2: an admin manages only partners they own, so the
+            # auth-disabled socket identity (local admin) must own this one.
+            config = manager.load_config("ada")
+            config.owner_id = LOCAL_ADMIN_ID
+            manager.save_config("ada", config, auto_start=False)
 
             async def reply(_partner_id, _content, **_kwargs):
                 return "answer"

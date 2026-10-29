@@ -362,11 +362,20 @@ async def admin_migration_results(_: object = Depends(require_admin)) -> dict[st
     return {"items": [item.to_dict() for item in registry.list_migration_items()]}
 
 
+GUARDIANS_RETIRED = "Guardian features are no longer available."
+
+
+def _refuse_retired_guardians() -> None:
+    """Spec 2026-10-29 D16: teachers, not guardians, follow students' learning."""
+    raise HTTPException(status_code=404, detail=GUARDIANS_RETIRED)
+
+
 @router.get("/guardians")
 async def list_guardian_relationships(
     include_revoked: bool = False,
     _: object = Depends(require_admin),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     users = _users_by_id()
     relationships = [
         _relationship_view(relationship, users)
@@ -380,6 +389,7 @@ async def authorize_guardian_relationship(
     payload: GuardianAuthorizationPayload,
     current: object = Depends(require_admin),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     _require_assignable_user(payload.guardian_user_id)
     _require_assignable_user(payload.learner_user_id)
     try:
@@ -412,6 +422,7 @@ async def revoke_guardian_relationship(
     relationship_id: str,
     current: object = Depends(require_admin),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     revoked_by = str(getattr(current, "user_id", "") or "")
     relationship = revoke_guardian(relationship_id, revoked_by=revoked_by)
     if relationship is None:
@@ -434,6 +445,7 @@ async def revoke_guardian_relationship(
 async def my_guardianships(
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     guardian_user_id = str(getattr(current, "user_id", "") or "")
     _require_assignable_user(guardian_user_id)
     users = _users_by_id()
@@ -449,6 +461,7 @@ async def revoke_my_guardianship(
     relationship_id: str,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     guardian_user_id = str(getattr(current, "user_id", "") or "")
     _require_assignable_user(guardian_user_id)
     relationship = relationship_by_id(relationship_id)
@@ -474,6 +487,7 @@ async def guardian_report(
     learner_user_id: str,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "view_reports"
     )
@@ -519,6 +533,7 @@ async def guardian_material_catalog(
     learner_user_id: str,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     _learner_username, _learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "assign_materials"
     )
@@ -543,6 +558,7 @@ async def assign_guardian_materials(
     payload: GuardianMaterialsPayload,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     _require_guardian_access(current, learner_user_id, "assign_materials")
     raise HTTPException(
         status_code=410,
@@ -578,6 +594,7 @@ async def get_guardian_restrictions(
     learner_user_id: str,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     _learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "manage_restrictions"
     )
@@ -602,6 +619,7 @@ async def put_guardian_restrictions(
     payload: GuardianRestrictionsPayload,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     learner_username, learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "manage_restrictions"
     )
@@ -686,6 +704,7 @@ async def reset_learner_credentials(
     payload: GuardianCredentialResetPayload,
     current: object = Depends(require_auth),
 ) -> dict[str, Any]:
+    _refuse_retired_guardians()
     learner_username, _learner_record, actor_user_id, is_admin = _require_guardian_access(
         current, learner_user_id, "reset_credentials"
     )
@@ -725,14 +744,11 @@ async def put_user_grants(
     payload: GrantPayload,
     _: object = Depends(require_admin),
 ) -> dict[str, Any]:
-    user_record = _require_assignable_user(user_id)
+    _require_assignable_user(user_id)
     try:
         grant = normalize_grant(user_id, payload.grant)
-        if (
-            str(user_record[1].get("preset") or "standard") == "learner"
-            and grant.get("learning_policy") is None
-        ):
-            raise ValueError("Learner accounts must retain a learning policy.")
+        # Spec 2026-10-29 D5: partners are no longer lent through grants.
+        grant["partners"] = []
         validate_grant(grant)
         _validate_reading_policy(grant)
         _stage_assigned_materials(user_id, grant)

@@ -334,9 +334,16 @@ def test_admin_delegation_accounts_for_actual_partner_creator(
     record = registry.ensure_registered(source.parent, "physics", created_by="admin2")
     registry.set_visibility(record.kb_id, "public")
     actor = CurrentUser("admin2", "Admin", "admin", scope_for_user("admin2", is_admin=True))
+    if target_owner:
+        # Spec 2026-10-29 D2: alice's own partner is hers; an admin cannot manage it.
+        with user_context(actor):
+            [error] = provision_assets("ada", knowledge_bases=[record.ref])["errors"]
+        assert error["error"] == "You cannot manage this partner"
+        assert registry.list_references(record.kb_id) == []
+        return
     with user_context(actor):
         assert provision_assets("ada", knowledge_bases=[record.ref])["errors"] == []
-    assert registry.list_references(record.kb_id)[0].created_by == (target_owner or LOCAL_ADMIN_ID)
+    assert registry.list_references(record.kb_id)[0].created_by == LOCAL_ADMIN_ID
     # Rule R1: the owner withdraws without force; the partner's reference is revoked.
     registry.set_visibility(record.kb_id, "private")
     assert registry.list_referenced("partner", "ada") == []

@@ -148,13 +148,13 @@ def is_first_user() -> bool:
 def add_user(
     username: str,
     plain_password: str,
-    role: Role = "user",
+    role: Role = "student",
     preset: AccountPreset = "standard",
 ) -> None:
     """
     Add or update a user in data/user/auth_users.json.
 
-    The role defaults to 'user'. Pass role='admin' to elevate. When the store
+    The role defaults to 'student'. Pass role='admin' to elevate. When the store
     is empty the first user is automatically promoted to 'admin' regardless of
     the role argument.
 

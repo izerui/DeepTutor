@@ -91,20 +91,21 @@ def client(tmp_path, monkeypatch) -> tuple[TestClient, _Service, dict[str, Curre
 
 
 @pytest.mark.parametrize(("method", "path"), CODEX_ROUTES)
-def test_an_ordinary_user_drives_their_own_codex_lifecycle(client, method, path) -> None:
+def test_an_ordinary_user_is_refused(client, method, path) -> None:
+    """Spec 2026-10-29 D6: no personal models; only the main administrator signs in."""
     test_client, service, _current = client
 
     response = getattr(test_client, method)(path)
 
-    assert response.status_code == 200
-    assert service.calls, "the request must reach the owner-scoped service"
+    assert response.status_code == 403
+    assert service.calls == []
 
 
 @pytest.mark.parametrize(
     ("model", "reasoning_effort"),
     [("gpt-5.6-sol", "high"), ("gpt-5.6-luna", "none")],
 )
-def test_an_ordinary_user_sets_their_own_codex_reasoning_effort(
+def test_an_ordinary_user_cannot_set_codex_reasoning_effort(
     client,
     model: str,
     reasoning_effort: str,
@@ -116,8 +117,8 @@ def test_an_ordinary_user_sets_their_own_codex_reasoning_effort(
         json={"model": model, "reasoning_effort": reasoning_effort},
     )
 
-    assert response.status_code == 200
-    assert service.calls == [f"reasoning:{model}:{reasoning_effort}"]
+    assert response.status_code == 403
+    assert service.calls == []
 
 
 @pytest.mark.parametrize(("method", "path"), CODEX_ROUTES)

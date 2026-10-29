@@ -192,19 +192,20 @@ class ApplicationContainer:
 
         from deeptutor.multi_user.identity import list_user_info
         from deeptutor.multi_user.models import CurrentUser
+        from deeptutor.multi_user.models import normalize_role
         from deeptutor.multi_user.paths import local_admin_user, scope_for_user
 
         users = [local_admin_user()]
         for record in list_user_info():
             user_id = str(record.get("id") or "").strip()
-            role = str(record.get("role") or "user")
+            role = normalize_role(str(record.get("role") or ""))
             if not user_id or role == "admin":
                 continue
             users.append(
                 CurrentUser(
                     id=user_id,
                     username=str(record.get("username") or user_id),
-                    role="user",
+                    role=role,  # type: ignore[arg-type]
                     scope=scope_for_user(user_id, is_admin=False),
                 )
             )
@@ -240,6 +241,7 @@ class ApplicationContainer:
 
         from deeptutor.multi_user.identity import list_user_info
         from deeptutor.multi_user.models import CurrentUser
+        from deeptutor.multi_user.models import normalize_role
         from deeptutor.multi_user.paths import local_admin_user, scope_for_user, user_context
 
         users = [local_admin_user()]
@@ -247,10 +249,10 @@ class ApplicationContainer:
             CurrentUser(
                 id=str(record.get("id") or ""),
                 username=str(record.get("username") or record.get("id") or ""),
-                role="admin" if str(record.get("role") or "user") == "admin" else "user",
+                role=normalize_role(str(record.get("role") or "")),  # type: ignore[arg-type]
                 scope=scope_for_user(
                     str(record.get("id") or ""),
-                    is_admin=str(record.get("role") or "user") == "admin",
+                    is_admin=str(record.get("role") or "") == "admin",
                 ),
             )
             for record in list_user_info()

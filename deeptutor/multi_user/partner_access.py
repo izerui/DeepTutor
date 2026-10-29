@@ -28,7 +28,6 @@ from typing import Any
 from fastapi import HTTPException
 
 from .context import get_current_user
-from .grants import load_grant
 from .models import CurrentUser
 
 
@@ -50,23 +49,27 @@ def partner_owner_id(partner_id: str) -> str:
 
 
 def assigned_partner_ids(user_id: str | None = None) -> set[str]:
-    """The partner ids an admin has assigned to the user (empty for admins)."""
-    user = get_current_user()
-    uid = user_id or user.id
-    return {
-        str(item.get("partner_id") or item.get("id") or "").strip()
-        for item in load_grant(uid).get("partners", []) or []
-        if str(item.get("partner_id") or item.get("id") or "").strip()
-    }
+    """Partners lent to the user by an admin — always none.
+
+    Spec 2026-10-29 D5: a partner belongs to the account that built it; lending
+    is retired, so stored ``partners`` grant entries no longer take effect.
+    """
+    return set()
 
 
 def can_manage_partner(partner_id: str, user: CurrentUser | None = None) -> bool:
-    """Whether the user may configure *partner_id* — its owner, or any admin."""
+    """Whether the user may configure *partner_id*.
+
+    Its owner may; administrators manage only administrator-managed partners
+    (no owner) — another account's partner is personal data (spec 2026-10-29 D2).
+    """
+    from .ownership import owns
+
     actor = user or get_current_user()
-    if actor.is_admin:
-        return True
     owner = partner_owner_id(partner_id)
-    return bool(owner) and owner == actor.id
+    if not owner:
+        return actor.is_admin
+    return owner == actor.id or owns(owner, actor)
 
 
 def can_use_partner(partner_id: str, user: CurrentUser | None = None) -> bool:

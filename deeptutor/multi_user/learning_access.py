@@ -21,15 +21,9 @@ def learning_policy_for_user(user_id: str, *, is_admin: bool = False) -> dict[st
     if is_admin:
         return None
     loaded = load_grant(user_id)
+    # Spec 2026-10-29 P2: only the grant decides; the role migration wrote the
+    # retired learner preset's restrictions into each such grant.
     policy = loaded.get("learning_policy")
-    if policy is None:
-        from .identity import get_user_by_id
-
-        user = get_user_by_id(user_id)
-        if user is not None and str(user[1].get("preset") or "standard") == "learner":
-            from .grants import learner_grant
-
-            policy = learner_grant(user_id).get("learning_policy")
     if not isinstance(policy, dict):
         return None
     policy = deepcopy(policy)

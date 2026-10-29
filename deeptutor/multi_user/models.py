@@ -15,12 +15,17 @@ ScopeKind = Literal["admin", "user"]
 #: least-privilege — only "admin" elevates.
 VALID_ROLES: frozenset[str] = frozenset({"admin", "teacher", "student", "user"})
 
+#: The roles an account can be given (spec 2026-10-29 D1). ``user`` stays in
+#: ``VALID_ROLES`` only so stored legacy records still load until the one-time
+#: role migration turns them into students.
+ASSIGNABLE_ROLES: frozenset[str] = frozenset({"admin", "teacher", "student"})
 
-def normalize_role(value: str, default: str = "user") -> str:
+
+def normalize_role(value: str, default: str = "student") -> str:
     """Return ``value`` when it is a legal role, else ``default``.
 
     Least-privilege degrade: an unknown or corrupted role never keeps or
-    gains privileges — it falls back to the given default (usually "user").
+    gains privileges — it falls back to the given default (usually "student").
     """
     return value if value in VALID_ROLES else default
 

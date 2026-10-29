@@ -27,6 +27,17 @@ settings_router = APIRouter()
 files_router = APIRouter()
 
 
+WORKSPACES_ADMIN_ONLY = "Workspaces are managed by an administrator."
+
+
+def _require_workspace_admin() -> None:
+    """Spec 2026-10-29 D4: teachers and students have one space; no workspace management."""
+    from deeptutor.multi_user.context import get_current_user
+
+    if not get_current_user().is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=WORKSPACES_ADMIN_ONLY)
+
+
 class WorkspacePathPayload(BaseModel):
     path: str | None = None
 
@@ -69,6 +80,7 @@ async def _data_operation(function, *args, **kwargs):
 
 @settings_router.post("/knowledge-bases/preview-move")
 async def preview_knowledge_move(payload: KnowledgeMovePayload) -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.kb_move import preview_kb_move
 
     return await _data_operation(preview_kb_move, payload.source_id, payload.target_workspace_id)
@@ -76,6 +88,7 @@ async def preview_knowledge_move(payload: KnowledgeMovePayload) -> dict:
 
 @settings_router.post("/knowledge-bases/move")
 async def move_knowledge_base(payload: KnowledgeMovePayload) -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.kb_move import move_kb
 
     return await _data_operation(move_kb, payload.source_id, payload.target_workspace_id)
@@ -93,6 +106,7 @@ def _assert_migration_access():
 
 @settings_router.get("/data/discover")
 async def discover_workspace_data(source_workspace_id: str = "") -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.data_migration import discover
 
     return await _data_operation(discover, source_workspace_id)
@@ -100,6 +114,7 @@ async def discover_workspace_data(source_workspace_id: str = "") -> dict:
 
 @settings_router.post("/data/preview")
 async def preview_workspace_data(payload: DataMigrationPayload) -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.data_migration import preview
 
     return await _data_operation(
@@ -109,6 +124,7 @@ async def preview_workspace_data(payload: DataMigrationPayload) -> dict:
 
 @settings_router.post("/data/migrate")
 async def migrate_workspace_data(payload: DataMigrationPayload) -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.data_migration import migrate_data
 
     return await _data_operation(
@@ -118,6 +134,7 @@ async def migrate_workspace_data(payload: DataMigrationPayload) -> dict:
 
 @settings_router.post("/data/export")
 async def export_workspace_data(payload: DataMigrationPayload) -> dict:
+    _require_workspace_admin()
     from deeptutor.services.workspace.data_migration import export_data
 
     return await _data_operation(
@@ -145,6 +162,7 @@ async def recover_workspace_migration(operation_id: str) -> dict:
 
 @settings_router.get("/data/exports/{operation_id}")
 async def download_workspace_export(operation_id: str) -> FileResponse:
+    _require_workspace_admin()
     _assert_migration_access()
     from deeptutor.services.workspace.data_migration import export_path
 
@@ -247,6 +265,7 @@ async def workspace_resource_catalog(workspace_id: str = "") -> dict:
 
 @settings_router.post("/registrations")
 async def create_workspace(payload: CreateWorkspacePayload) -> dict:
+    _require_workspace_admin()
     if payload.path and payload.path.strip():
         refuse_server_folder()
     try:
@@ -263,6 +282,7 @@ async def create_workspace(payload: CreateWorkspacePayload) -> dict:
 
 @settings_router.patch("/registrations/{workspace_id}")
 async def update_registered_workspace(workspace_id: str, payload: UpdateWorkspacePayload) -> dict:
+    _require_workspace_admin()
     try:
         from deeptutor.services.workspace.activity import data_activity
         from deeptutor.services.workspace.data_migration import assert_no_pending_recovery

@@ -81,7 +81,8 @@ def test_learner_preset_expands_to_a_conservative_grant(preset_client):
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["role"] == "user"
+    # Spec 2026-10-29 D1: a restricted learner is a student with a learning policy.
+    assert body["role"] == "student"
     assert body["preset"] == "learner"
 
     grant = load_grant(body["user_id"])
@@ -128,7 +129,10 @@ def test_learner_creation_rolls_back_when_grant_initialization_fails(preset_clie
     assert get_user("student") is None
 
 
-def test_learner_accounts_cannot_disable_the_learning_policy(preset_client):
+def test_an_admin_may_lift_a_students_learning_restrictions(preset_client):
+    """Spec 2026-10-29 P2: restrictions are student permissions, not an account type."""
+    from deeptutor.multi_user.grants import load_grant
+
     client, _admin, _tokens = preset_client
     created = client.post(
         "/api/auth/users",
@@ -146,8 +150,8 @@ def test_learner_accounts_cannot_disable_the_learning_policy(preset_client):
         json={"grant": {"learning_policy": None}},
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Learner accounts must retain a learning policy."
+    assert response.status_code == 200, response.text
+    assert load_grant(created["user_id"]).get("learning_policy") is None
 
 
 @pytest.mark.parametrize("preset", ["learner", "custom"])

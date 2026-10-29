@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import time
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -269,19 +270,17 @@ class SetRoleRequest(BaseModel):
         # Validate against the same whitelist the identity store enforces so
         # the API layer and the storage layer share a single source of truth;
         # a hardcoded subset here would 422 roles the store itself accepts.
-        from deeptutor.multi_user.models import VALID_ROLES
+        from deeptutor.multi_user.models import ASSIGNABLE_ROLES
 
-        if v not in VALID_ROLES:
-            raise ValueError(f"Role must be one of {sorted(VALID_ROLES)}")
+        if v not in ASSIGNABLE_ROLES:
+            raise ValueError(f"Role must be one of {sorted(ASSIGNABLE_ROLES)}")
         return v
 
 
 class AdminCreateUserRequest(RegisterRequest):
-    """Admin user-creation payload.
+    """Admin user-creation payload: a teacher or a student (spec 2026-10-29 D1)."""
 
-    A preset configures an ordinary account; it never becomes a third role.
-    """
-
+    role: Literal["teacher", "student"] = "student"
     preset: AccountPreset = "standard"
 
 
@@ -854,22 +853,14 @@ async def auth_status(
                 from deeptutor.multi_user.models import normalize_role
 
                 live_role = normalize_role(str(info.get("role") or "user"))
-            raw_preset = str(info.get("preset") or "standard")
-            if raw_preset == "learner":
-                preset = "learner"
-            elif raw_preset == "custom":
-                preset = "custom"
-            else:
-                preset = "standard"
         learning_policy = learning_policy_for_user(
             payload.user_id,
             is_admin=payload.role == "admin",
         )
-        # Guardians may attach a policy to a standard or custom account. That
-        # policy, not the stored label, is what the runtime must enforce and
-        # what clients need to render the scoped experience.
-        if learning_policy is not None and preset != "learner":
-            preset = "learner"
+        # Spec 2026-10-29 P2: there are no account presets. A student with a
+        # learning policy gets the restricted learning experience; clients
+        # still read it as ``preset == "learner"``.
+        preset = "learner" if learning_policy is not None else "standard"
         if live_role == "student":
             from deeptutor.multi_user.roles import effective_student_policy
 
@@ -1237,7 +1228,7 @@ async def register(body: RegisterRequest, request: Request, response: Response) 
             "ok": True,
             "user_id": result.get("id", ""),
             "username": body.username,
-            "role": "user",
+            "role": "student",
             "is_first_user": True,
             "is_admin": False,
         }
@@ -1556,7 +1547,7 @@ def _require_local_learner(current: TokenPayload) -> tuple[str, dict]:
     account = get_user_by_id(current.user_id)
     if account is None or account[0] != current.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if str(account[1].get("preset") or "standard") != "learner":
+    if learning_policy_for_user(current.user_id) is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Learner profile required"
         )
@@ -1604,8 +1595,8 @@ async def get_learner_profile(username: str, _: TokenPayload = Depends(require_a
     user = get_user(username)
     if (
         user is None
-        or str(user.get("role") or "user") == "admin"
-        or str(user.get("preset") or "standard") != "learner"
+        or str(user.get("role") or "") == "admin"
+        or learning_policy_for_user(str(user.get("id") or "")) is None
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return {"learner_profile": user.get("learner_profile")}
@@ -1623,8 +1614,8 @@ async def put_learner_profile(
     user = get_user(username)
     if (
         user is None
-        or str(user.get("role") or "user") == "admin"
-        or str(user.get("preset") or "standard") != "learner"
+        or str(user.get("role") or "") == "admin"
+        or learning_policy_for_user(str(user.get("id") or "")) is None
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     try:
@@ -1675,7 +1666,7 @@ def _create_admin_user(
             "ok": True,
             "user_id": result.get("id", ""),
             "username": body.username,
-            "role": "user",
+            "role": "student",
             "is_admin": False,
             "preset": "standard",
         }
@@ -1683,16 +1674,16 @@ def _create_admin_user(
     if any(item.get("username") == body.username for item in list_users()):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
 
-    add_user(body.username, body.password, preset=body.preset)
+    add_user(body.username, body.password, role=body.role, preset=body.preset)
     created = next(
         (item for item in list_users() if item.get("username") == body.username),
         None,
     )
     user_id = str(created.get("id") or "") if created else ""
-    role = str(created.get("role") or "user") if created else "user"
+    role = str(created.get("role") or "") if created else ""
     preset = str(created.get("preset") or "standard") if created else "standard"
 
-    if role != "user":
+    if role not in {"teacher", "student"}:
         delete_user(body.username)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

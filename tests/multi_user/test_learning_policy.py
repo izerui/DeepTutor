@@ -185,22 +185,6 @@ def test_policy_without_explicit_reading_keeps_legacy_access(mu_isolated_root, s
         }
 
 
-def test_learner_preset_falls_back_to_the_conservative_policy(mu_isolated_root, seed_user):
-    learner = _seed_learner(seed_user, "student")
-    assert set_preset("student", "learner")
-
-    policy = learning_policy_for_user(learner["id"], is_admin=False)
-
-    assert policy is not None
-    assert policy["default_capability"] == "immersive_reading"
-    assert policy["allowed_surfaces"] == ["chat", "reading"]
-    assert policy["reading"] == {
-        "allow_upload": False,
-        "material_ids": [],
-        "extensions": [],
-    }
-
-
 def test_apply_policy_keeps_public_and_own_kbs(
     mu_isolated_root, seed_user, as_user, make_kb
 ):

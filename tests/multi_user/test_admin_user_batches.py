@@ -54,7 +54,8 @@ def test_import_reports_rows_and_creates_only_ordinary_users(batch_client):
     assert [result["ok"] for result in body["results"]] == [True, True, True, False, False], body
     assert "Username already taken" in body["results"][3]["error"]
     assert "Password must be at least 8 characters" in body["results"][4]["error"]
-    assert all(result["user"]["role"] == "user" for result in body["results"][:3])
+    # Spec 2026-10-29 D1: imported accounts are students.
+    assert all(result["user"]["role"] == "student" for result in body["results"][:3])
     assert all(result["user"]["is_admin"] is False for result in body["results"][:3])
 
     users = {
@@ -64,7 +65,7 @@ def test_import_reports_rows_and_creates_only_ordinary_users(batch_client):
     assert set(users) == {"root", "alice", "bob", "carol"}
     assert users["alice"]["preset"] == "learner"
     assert users["carol"]["preset"] == "custom"
-    assert all(item["role"] == "user" for name, item in users.items() if name != "root")
+    assert all(item["role"] == "student" for name, item in users.items() if name != "root")
 
 
 def test_import_rejects_role_column_and_creates_nothing(batch_client):

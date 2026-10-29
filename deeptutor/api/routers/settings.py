@@ -600,12 +600,20 @@ def _require_codex_oauth_actor() -> None:
     including signing them out. Partners inherit the owner's login at call
     time and need no lifecycle of their own.
     """
+    from deeptutor.multi_user.admin_accounts import is_primary_admin
     from deeptutor.services.partners.scope import is_partner_user_id
 
     if is_partner_user_id(get_current_user().id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A partner uses the Codex login of the account that owns it.",
+        )
+    # Spec 2026-10-29 D6: models are configured for the whole system. Only the
+    # primary administrator, whose login backs the system catalog, signs in.
+    if not is_primary_admin(get_current_user()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the main administrator can sign in to Codex for the system.",
         )
 
 

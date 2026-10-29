@@ -229,7 +229,8 @@ def test_admin_create_user_returns_role_user(bootstrap_client):
 
     assert response.status_code == 201
     body = response.json()
-    assert body["role"] == "user"
+    # Spec 2026-10-29 D1: new accounts are students.
+    assert body["role"] == "student"
     assert body["is_admin"] is False
 
 
@@ -245,7 +246,7 @@ def test_bootstrap_admin_remains_listed_after_creating_an_account(bootstrap_clie
 
     by_name = {item["username"]: item for item in listed}
     assert by_name[env_admin]["role"] == "admin"
-    assert by_name["student1"]["role"] == "user"
+    assert by_name["student1"]["role"] == "student"
 
 
 def test_bootstrap_admin_username_cannot_be_taken_by_a_new_account(bootstrap_client, env_admin):

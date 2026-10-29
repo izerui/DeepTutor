@@ -193,7 +193,8 @@ async def test_resource_api_roundtrip(as_user):
         workspace_resource_catalog,
     )
 
-    with as_user("alice"):
+    # Spec 2026-10-29 D4: workspace management is for administrators.
+    with as_user("alice", role="admin"):
         result = await create_workspace(
             CreateWorkspacePayload(
                 name="Selected", resources={"skills": [], "mcp": [], "knowledge_bases": []}
