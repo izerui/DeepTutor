@@ -61,6 +61,8 @@ export default function KbSettingsSection({
   const { isTeacher, allowPrivateKb, isAdmin } = useAuthStatus();
   const canWrite = !kb.read_only && allowPrivateKb;
   const canManage = Boolean(kb.kb_id) && canWrite;
+  // D10: an administrator withdraws or deletes someone else's published KB, nothing more.
+  const canRetire = !canWrite && isAdmin && Boolean(kb.can_retire) && kb.visibility === "public";
   const [references, setReferences] = useState<KnowledgeBaseReferenceSummary | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export default function KbSettingsSection({
   }, [canManage, sourceId, kb.visibility]);
 
   const changeVisibility = async (next: KnowledgeBaseVisibility) => {
-    if (!onVisibilityChange || !canManage) return;
+    if (!onVisibilityChange || !(canManage || canRetire)) return;
     setVisibilityBusy(true);
     setVisibilityError(null);
     try {
@@ -283,8 +285,8 @@ export default function KbSettingsSection({
             ? t("Published knowledge bases are readable by the people chosen below and usable in their chat.")
             : t("Only you can see this knowledge base. Items that reference it can still read it.")}
         </p>
-        {canManage && onVisibilityChange && !kb.connector && (kb.visibility === "public" || isTeacher) && (
-          <button type="button" disabled={visibilityBusy || references === null}
+        {((canManage && (kb.visibility === "public" || isTeacher)) || canRetire) && onVisibilityChange && !kb.connector && (
+          <button type="button" disabled={visibilityBusy || (canManage && references === null)}
             onClick={() => void changeVisibility(kb.visibility === "public" ? "private" : "public")}
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs disabled:opacity-50">
             {kb.visibility === "public" ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
@@ -310,7 +312,7 @@ export default function KbSettingsSection({
         {visibilityError && <p role="alert" className="text-xs text-red-600">{visibilityError}</p>}
       </section>}
 
-      {canWrite && onDelete && <section className="space-y-3 rounded-lg border border-red-200 bg-red-50/40 p-3 dark:border-red-900/60 dark:bg-red-950/15">
+      {(canWrite || canRetire) && onDelete && <section className="space-y-3 rounded-lg border border-red-200 bg-red-50/40 p-3 dark:border-red-900/60 dark:bg-red-950/15">
         <div>
           <div className="text-[12.5px] font-medium text-red-700 dark:text-red-300">
             {t("Danger zone")}

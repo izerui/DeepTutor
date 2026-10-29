@@ -845,10 +845,13 @@ def can_read_book(record: BookRecord, user: CurrentUser) -> bool:
 def _can_write(conn: sqlite3.Connection, record: BookRecord, user: CurrentUser) -> bool:
     from deeptutor.multi_user.ownership import owns
 
+    from deeptutor.publishing.admin import retiring
+
     current = _bound_record(conn, record)
-    # D10: administrators keep the fallback over published books only.
+    # D10: administrators only withdraw or delete published books they do not own.
     return current is not None and (
-        owns(current.created_by, user) or (user.is_admin and current.visibility == "public")
+        owns(current.created_by, user)
+        or (user.is_admin and current.visibility == "public" and retiring())
     )
 
 

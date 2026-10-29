@@ -1567,8 +1567,12 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
 def can_write(record: KbRecord, user: CurrentUser) -> bool:
     from deeptutor.multi_user.ownership import owns
 
-    # D10: administrators keep the fallback over published items only.
-    return owns(record.created_by, user) or (user.is_admin and record.visibility == "public")
+    from deeptutor.publishing.admin import retiring
+
+    # D10: administrators only withdraw or delete published items they do not own.
+    return owns(record.created_by, user) or (
+        user.is_admin and record.visibility == "public" and retiring()
+    )
 
 
 @dataclass(frozen=True)

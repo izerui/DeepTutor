@@ -216,6 +216,8 @@ export interface KnowledgeBase {
   source?: "admin" | "user";
   assigned?: boolean;
   read_only?: boolean;
+  /** Spec 2026-10-29 D10: an administrator may withdraw or delete this published KB without editing it. */
+  can_retire?: boolean;
   provenance_label?: string;
   available?: boolean;
   kb_id?: string;

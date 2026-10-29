@@ -89,8 +89,11 @@ def test_resolution_opens_bounded_catalogs_and_archive_applies_immediately(
     for catalog in [*catalogs, teacher_catalog]:
         _age(catalog)
     role = "admin" if caller == "root" else "user"
+    from deeptutor.publishing.admin import admin_retiring
+
+    # spec 2026-10-29 D10 (P4): an admin writes someone else's public KB only while retiring it.
     opened = _count_catalog_opens(monkeypatch)
-    with as_user(caller, role=role):
+    with as_user(caller, role=role), admin_retiring(role == "admin"):
         # Warm-up may read every catalog once per process.
         assert not resolve_kb(record.ref, require_write=True).read_only
         opened.clear()
@@ -102,7 +105,7 @@ def test_resolution_opens_bounded_catalogs_and_archive_applies_immediately(
     with as_user("teacher"):
         ContentWorkspaceService().update_workspace(workspace, archived=True)
     opened.clear()
-    with as_user(caller, role=role):
+    with as_user(caller, role=role), admin_retiring(role == "admin"):
         assert resolve_kb(record.ref).read_only
         with pytest.raises(HTTPException) as denied:
             resolve_kb(record.ref, require_write=True)
@@ -113,7 +116,7 @@ def test_resolution_opens_bounded_catalogs_and_archive_applies_immediately(
     # Restoring takes effect immediately too.
     with as_user("teacher"):
         ContentWorkspaceService().update_workspace(workspace, archived=False)
-    with as_user(caller, role=role):
+    with as_user(caller, role=role), admin_retiring(role == "admin"):
         assert not resolve_kb(record.ref, require_write=True).read_only
 
 

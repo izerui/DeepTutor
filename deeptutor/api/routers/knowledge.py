@@ -150,6 +150,8 @@ async def deny_student_kb_writes(request: Request) -> None:
         )
 
 
+from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
+
 router = APIRouter(
     dependencies=[Depends(deny_student_kb_writes), Depends(enter_mastery_template_scope)]
 )
@@ -3896,6 +3898,7 @@ class DeleteKnowledgeBaseRequest(BaseModel):
 
 
 @router.post("/knowledge-bases/delete")
+@retiring_route()
 async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
     """Delete a knowledge base named in the body rather than in the path.
 
@@ -3918,6 +3921,7 @@ async def delete_knowledge_base_by_name(payload: DeleteKnowledgeBaseRequest):
 
 
 @router.delete("/knowledge-bases/{kb_name}")
+@retiring_route()
 async def delete_knowledge_base(
     kb_name: str,
     force: bool = False,
@@ -3954,6 +3958,7 @@ def _registered_record(kb_name: str):
 
 
 @router.put("/knowledge-bases/{kb_name}/visibility")
+@retiring_route(lambda kwargs: kwargs["payload"].visibility == "private")
 async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
     from deeptutor.knowledge import registry
     from deeptutor.multi_user.roles import is_teacher_or_admin

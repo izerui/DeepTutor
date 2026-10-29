@@ -269,22 +269,11 @@ def test_shared_read_health_check_does_not_mutate_canonical_book(shared_env) -> 
     assert canonical.load_book("bk_shared").updated_at == updated_at
 
 
-def test_admin_editing_foreign_book_requires_current_revision(shared_env) -> None:
+def test_admin_cannot_edit_a_foreign_public_book(shared_env) -> None:
+    # spec 2026-10-29 D10 (P4): an admin withdraws or deletes another account's
+    # public book; editing it is refused even with the current revision.
     client, canonical = shared_env
-    missing = client.post(
-        "/api/books/update-block",
-        headers=_headers("root"),
-        json={
-            "book_id": "bk_shared",
-            "page_id": "pg_1",
-            "block_id": "blk_1",
-            "body": "First",
-        },
-    )
-    assert missing.status_code == 409
-    assert missing.json()["detail"]["code"] == "book_revision_required"
-
-    success = client.post(
+    response = client.post(
         "/api/books/update-block",
         headers=_headers("root"),
         json={
@@ -295,24 +284,8 @@ def test_admin_editing_foreign_book_requires_current_revision(shared_env) -> Non
             "expected_revision": 1,
         },
     )
-    assert success.status_code == 200
-    assert success.json()["book_revision"] == 2
-    assert canonical.load_page("bk_shared", "pg_1").blocks[0].payload["body"] == "Edited"
-
-    stale = client.post(
-        "/api/books/update-block",
-        headers=_headers("root"),
-        json={
-            "book_id": "bk_shared",
-            "page_id": "pg_1",
-            "block_id": "blk_1",
-            "body": "Stale",
-            "expected_revision": 1,
-        },
-    )
-    assert stale.status_code == 409
-    assert stale.json()["detail"]["code"] == "book_revision_conflict"
-    assert stale.json()["detail"]["current_revision"] == 2
+    assert response.status_code in (403, 404)
+    assert canonical.load_page("bk_shared", "pg_1").blocks[0].payload["body"] == "Original"
 
 
 def test_shared_capabilities_are_returned_in_list_and_detail(shared_env) -> None:
@@ -349,6 +322,7 @@ def test_retired_edit_grant_does_not_allow_writing(shared_env) -> None:
 
 
 def test_rest_producer_and_canonical_ws_replay_ignore_local_id_collision(shared_env):
+    # spec 2026-10-29 D10 (P4): admins no longer edit others' public books; the owner edits.
     from deeptutor.book.models import Spine
     from deeptutor.multi_user.identity import get_user
     from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
@@ -363,7 +337,7 @@ def test_rest_producer_and_canonical_ws_replay_ignore_local_id_collision(shared_
     with client:
         # A real REST engine producer runs under the editing admin's context.
         paused = client.post(
-            "/api/books/pause", headers=_headers("root"), json={"book_id": "book:bk_shared"},
+            "/api/books/pause", headers=_headers("teacher"), json={"book_id": "book:bk_shared"},
         )
         assert paused.status_code == 200
         with client.websocket_connect("/ws/books?token=alice") as ws:
@@ -376,7 +350,7 @@ def test_rest_producer_and_canonical_ws_replay_ignore_local_id_collision(shared_
             assert ack["book_id"] == "book:bk_shared"
             assert ws.receive_json()["metadata"]["kind"] == "compilation_paused"
             paused = client.post(
-                "/api/books/pause", headers=_headers("root"), json={"book_id": "book:bk_shared"},
+                "/api/books/pause", headers=_headers("teacher"), json={"book_id": "book:bk_shared"},
             )
             assert paused.status_code == 200
             assert ws.receive_json()["metadata"]["kind"] == "compilation_paused"

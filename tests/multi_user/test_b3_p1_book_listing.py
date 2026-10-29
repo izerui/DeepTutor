@@ -90,9 +90,12 @@ async def test_listing_payload_keeps_capabilities_and_access_decisions(as_user):
         admin_listed = {b["id"]: b for b in (await router.list_books())["books"]}
         for book_id in admin_listed:
             assert _without_listing_extras(admin_listed[book_id]) == _oracle(book_id)
+    # spec 2026-10-29 D10 (P4): an admin withdraws or deletes others' public books, never edits them.
     for book_id in ids[1:]:
-        assert admin_listed[book_id]["can_edit"] is True
-        assert admin_listed[book_id]["can_make_public"] is True
+        assert admin_listed[book_id]["can_edit"] is False
+        assert admin_listed[book_id]["can_make_public"] is False
+        assert admin_listed[book_id]["can_set_visibility"] is True
+        assert admin_listed[book_id]["can_delete"] is True
     with as_user("author", role="teacher"):
         own = {b["id"]: b for b in (await router.list_books())["books"]}
     assert own[ids[0]]["source"] == "own" and own[ids[0]]["can_set_visibility"] is True

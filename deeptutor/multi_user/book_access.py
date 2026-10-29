@@ -48,6 +48,14 @@ def _my_owner_ids(user: CurrentUser) -> set[str]:
     return set(owner_ids(user))
 
 
+def _may_retire(record: registry.BookRecord | None, user: CurrentUser) -> bool:
+    """D10: the registry write check as the withdraw and delete routes see it."""
+    from deeptutor.publishing.admin import admin_retiring
+
+    with admin_retiring():
+        return bool(record is not None and registry.can_write_book(record, user))
+
+
 def admin_may_retire(record: registry.BookRecord | None, user: CurrentUser) -> bool:
     """B3-12 (a): an admin may delete a public book despite a read-only source.
 
@@ -210,7 +218,7 @@ class ResolvedBook:
             "group": "mine" if owned else "public",
             "can_set_visibility": (manageable and (
                 is_teacher_or_admin() or (owned and record.visibility == "public")
-            )) or (registry_ok and self.admin_may_unpublish()),
+            )) or (self.admin_may_unpublish() and _may_retire(record, user)),
             "can_make_public": manageable and is_teacher_or_admin(),
         }
 
@@ -298,7 +306,9 @@ def _located(
         source="shared",
         permission="edit" if writable else "read",
         can_edit=writable,
-        can_delete=writable or (registry_writable and admin_may_retire(record, user)),
+        can_delete=writable or (
+            admin_may_retire(record, user) and (registry_writable or _may_retire(record, user))
+        ),
         learning=BookLearningOverlay(get_current_path_service()),
         record=record,
         registry_writable=registry_writable,

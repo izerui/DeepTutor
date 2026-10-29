@@ -435,7 +435,13 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
         if canonical_kb_id(storage_ref) == storage_ref:
             legacy_refs.append(storage_ref)
 
+    from deeptutor.publishing.admin import admin_retiring
+
+    with admin_retiring():
+        # D10: an administrator may withdraw or delete what they cannot edit.
+        can_retire = registry.can_write(record, get_current_user())
     return {
+        "can_retire": can_retire,
         "kb_id": record.kb_id,
         "ref": record.ref,
         "legacy_refs": legacy_refs,

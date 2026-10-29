@@ -59,6 +59,8 @@ from deeptutor.multi_user.book_access import (
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.runtime.stream_bus import StreamBus
 
+from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
+
 router = APIRouter(dependencies=[Depends(enter_mastery_template_scope)])
 ws_router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -959,6 +961,7 @@ def _reference_summary(
 
 
 @router.delete("/books/{book_id}")
+@retiring_route()
 async def delete_book(
     book_id: str,
     force: bool = False,
@@ -1198,6 +1201,7 @@ def _sharing_snapshot(
 
 
 @router.get("/books/{book_id}/sharing")
+@retiring_route()  # D10: the withdraw dialog reads these
 async def get_book_sharing(book_id: str) -> dict[str, Any]:
     def read() -> dict[str, Any]:
         # Read-only views: an admin who may still make the book private sees them.
@@ -1222,6 +1226,7 @@ async def get_book_sharing(book_id: str) -> dict[str, Any]:
 
 
 @router.put("/books/{book_id}/visibility")
+@retiring_route(lambda kwargs: kwargs["req"].visibility == "private")
 async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[str, Any]:
     from deeptutor.multi_user.roles import is_teacher_or_admin
 
@@ -1275,6 +1280,7 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 
 
 @router.get("/books/{book_id}/references")
+@retiring_route()  # D10: the withdraw dialog reads these
 async def get_book_references(book_id: str) -> dict[str, Any]:
     def read() -> dict[str, Any]:
         # Read-only views: an admin who may still make the book private sees them.

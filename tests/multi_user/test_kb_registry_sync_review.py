@@ -260,8 +260,11 @@ async def test_catalog_failure_does_not_revoke_reads_or_freeze_known_sources(
             else:
                 conn.execute("UPDATE workspaces SET payload='not-json'")
     # A known physical source remains writable and schedulable.
+    from deeptutor.publishing.admin import admin_retiring
+
+    # spec 2026-10-29 D10 (P4): the admin's fallback exists only while withdrawing or deleting.
     for uid, role in [("u1", "user"), ("root", "admin")]:
-        with as_user(uid, role=role):
+        with as_user(uid, role=role), admin_retiring(role == "admin"):
             assert not resolve_kb(record.ref).read_only
             assert not resolve_kb(record.ref, require_write=True).read_only
     assert record in registry_scope.indexed_records()

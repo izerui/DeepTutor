@@ -406,8 +406,8 @@ export default function KnowledgeBaseDetail({
                   kb={kb}
                   onMove={!kb.read_only && onMove ? (targetWorkspaceId) => onMove(kb.id && !kb.id.startsWith("kb:") ? kb.id : knowledgeBaseRef(kb), targetWorkspaceId) : undefined}
                   onSetDefault={!kb.read_only && kb.can_set_default ? () => onSetDefault(knowledgeBaseRef(kb)) : undefined}
-                  onDelete={!kb.read_only ? () => onDelete(knowledgeBaseRef(kb)) : undefined}
-                  onVisibilityChange={!kb.read_only && onVisibilityChange ? (visibility, options) => onVisibilityChange(knowledgeBaseRef(kb), visibility, options) : undefined}
+                  onDelete={!kb.read_only || kb.can_retire ? () => onDelete(knowledgeBaseRef(kb)) : undefined}
+                  onVisibilityChange={(!kb.read_only || kb.can_retire) && onVisibilityChange ? (visibility, options) => onVisibilityChange(knowledgeBaseRef(kb), visibility, options) : undefined}
                 />
               )}
             </div>

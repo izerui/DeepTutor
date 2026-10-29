@@ -378,7 +378,11 @@ def change_visibility(
     if visibility not in books.VISIBILITIES:
         raise books.BookVisibilityError("Visibility must be 'public' or 'private'.")
     choices = _choices(kb_choices)
-    _authorize(conn, record, force=force)
+    from deeptutor.publishing.admin import admin_retiring
+
+    # D10: an administrator may withdraw a published book they cannot edit.
+    with admin_retiring(visibility == "private"):
+        _authorize(conn, record, force=force)
     record = books._target(conn, record.book_id)
     if visibility == "public":
         if not is_teacher_or_admin():

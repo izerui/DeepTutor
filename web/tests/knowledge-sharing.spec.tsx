@@ -211,3 +211,15 @@ it("groups public/private/connectors and removes creation and external connectio
   rerender(<KnowledgeHome {...common} activeSection="knowledge-engines" kbs={[]} />);
   expect(screen.queryByText("External knowledge sources")).toBeNull();
 });
+
+it("lets an admin only withdraw or delete someone else's published KB (spec 2026-10-29 D10)", async () => {
+  fixture.auth = { isAdmin: true, isTeacher: false, allowPrivateKb: true };
+  const change = vi.fn().mockResolvedValue(undefined);
+  render(<KbSettingsSection
+    kb={{ ...owned, owned: false, read_only: true, can_retire: true, visibility: "public" }}
+    onSetDefault={vi.fn()} onDelete={vi.fn()} onMove={vi.fn()} onVisibilityChange={change} />);
+  expect(screen.queryByRole("button", { name: "Set as default" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Delete knowledge base" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Make private" }));
+  await waitFor(() => expect(change).toHaveBeenCalledWith("private"));
+});

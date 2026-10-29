@@ -60,9 +60,12 @@ async def test_document_delete_follows_d18(knowledge, as_user, make_kb):
             await knowledge.delete_kb_file(record.ref, "doc.md", force=True)
         assert hidden.value.status_code == 404
     registry.set_visibility(record.ref, "public")
+    # spec 2026-10-29 D10 (P4): a published KB is withdrawn or deleted, never edited.
     with as_user("root", role="admin"):
-        assert (await knowledge.delete_kb_file(record.ref, "doc.md", force=True))["status"] == "ok"
-    assert registry.find_document(record.ref, "doc.md").deleted
+        with pytest.raises(HTTPException) as refused:
+            await knowledge.delete_kb_file(record.ref, "doc.md", force=True)
+        assert refused.value.status_code == 403
+    assert not registry.find_document(record.ref, "doc.md").deleted
 
 
 @pytest.mark.asyncio
