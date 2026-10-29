@@ -2294,15 +2294,9 @@ def test_rag_providers_marks_linkable() -> None:
     assert by_id["lightrag-server"]["linkable"] is False
 
 
-def test_probe_folder_endpoint_finds_ready_index(tmp_path: Path) -> None:
-    version = tmp_path / "version-1"
-    version.mkdir()
-    (version / "docstore.json").write_text("{}", encoding="utf-8")
-    (version / "index_store.json").write_text("{}", encoding="utf-8")
-    (version / "meta.json").write_text(
-        json.dumps({"version": "version-1", "signature": "x", "layout": "flat"}),
-        encoding="utf-8",
-    )
+def test_probe_folder_endpoint_is_retired(tmp_path: Path) -> None:
+    """Spec 2026-10-29 P1c: no account inspects or links a server folder."""
+    from deeptutor.services.server_folders import SERVER_FOLDER_DISABLED
 
     with TestClient(_build_app()) as client:
         response = client.post(
@@ -2310,22 +2304,8 @@ def test_probe_folder_endpoint_finds_ready_index(tmp_path: Path) -> None:
             json={"folder_path": str(tmp_path), "rag_provider": "llamaindex"},
         )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ok"] is True
-    assert payload["version"] == "version-1"
-
-
-def test_probe_folder_endpoint_rejects_pageindex(tmp_path: Path) -> None:
-    with TestClient(_build_app()) as client:
-        response = client.post(
-            "/api/knowledge-bases/probe-folder",
-            json={"folder_path": str(tmp_path), "rag_provider": "pageindex"},
-        )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ok"] is False
-    assert payload["error"]
+    assert response.status_code == 403
+    assert response.json()["detail"] == SERVER_FOLDER_DISABLED
 
 
 def _patch_server_probe(monkeypatch, *, ok: bool, error: str | None = None) -> None:

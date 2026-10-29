@@ -110,6 +110,7 @@ from deeptutor.services.rag.pipelines.ima.config import (
     get_account_credentials,
 )
 from deeptutor.services.rag.visual_assets import VisualAssetStore
+from deeptutor.services.server_folders import refuse_server_folder
 from deeptutor.services.web_source.scheduler import get_web_source_sync_scheduler
 from deeptutor.services.workspace.knowledge import workspace_id_for_kb_base_dir
 from deeptutor.utils.document_extractor import (
@@ -2441,6 +2442,7 @@ async def connect_obsidian_vault(payload: ConnectObsidianRequest):
     upload, no index. The vault must be a directory the server can reach (i.e. a
     local/self-hosted deployment); the Obsidian capability reads it live.
     """
+    refuse_server_folder()
     name = (payload.name or "").strip()
     vault_path = (payload.vault_path or "").strip()
     if not name or not vault_path:
@@ -2474,6 +2476,8 @@ async def connect_marginnote4(payload: ConnectMarginNote4Request):
     bind to it on turns where the user selects this KB. When ``db_path`` is
     omitted the capability derives a default SQLite path from the KB name.
     """
+    if (payload.db_path or "").strip():
+        refuse_server_folder()
     name = (payload.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required.")
@@ -2514,6 +2518,7 @@ async def probe_linked_folder_route(payload: ProbeFolderRequest):
     the UI can present and confirm before any registration happens. Does not
     create a knowledge base.
     """
+    refuse_server_folder()
     folder_path = (payload.folder_path or "").strip()
     if not folder_path:
         raise HTTPException(status_code=400, detail="folder_path is required.")
@@ -2534,6 +2539,7 @@ async def connect_linked_folder_route(payload: ConnectFolderRequest):
     re-index. Embedding-mismatch warnings do not block the link (the user may
     switch embedding models later); a missing/invalid index does.
     """
+    refuse_server_folder()
     name = (payload.name or "").strip()
     folder_path = (payload.folder_path or "").strip()
     if not name or not folder_path:
@@ -5392,6 +5398,7 @@ async def link_folder(kb_name: str, request: LinkFolderRequest):
     - Home directory: ~/Documents
     - Relative paths (resolved from server working directory)
     """
+    refuse_server_folder()
     try:
         manager, resolved_name, _ = _writable_kb(kb_name)
         _assert_not_connected_kb(resolved_name, _load_kb_entry_or_404(manager, resolved_name))
@@ -5455,6 +5462,7 @@ async def sync_folder(kb_name: str, folder_id: str, background_tasks: Background
     This scans the linked folder for supported documents and processes
     any new files that haven't been added yet.
     """
+    refuse_server_folder()
     try:
         manager, kb_name, kb_base_dir = _writable_kb(kb_name)
         kb_entry = _load_kb_entry_or_404(manager, kb_name)

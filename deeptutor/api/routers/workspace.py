@@ -14,6 +14,7 @@ from deeptutor.multi_user.partner_access import visible_partners
 from deeptutor.multi_user.paths import user_context
 from deeptutor.services.auth import TokenPayload
 from deeptutor.services.partners.scope import partner_user
+from deeptutor.services.server_folders import refuse_server_folder
 from deeptutor.services.workspace import (
     WorkspaceError,
     WorkspaceItem,
@@ -203,6 +204,7 @@ async def _migrate_workspaces(path: str, workspace_id: str | None = None) -> dic
 
 @settings_router.post("/registrations/migrate-root")
 async def migrate_workspace_root(payload: WorkspaceMigrationPayload) -> dict:
+    refuse_server_folder()
     return await _migrate_workspaces(payload.path)
 
 
@@ -210,6 +212,7 @@ async def migrate_workspace_root(payload: WorkspaceMigrationPayload) -> dict:
 async def migrate_registered_workspace(
     workspace_id: str, payload: WorkspaceMigrationPayload
 ) -> dict:
+    refuse_server_folder()
     return await _migrate_workspaces(payload.path, workspace_id)
 
 
@@ -244,6 +247,8 @@ async def workspace_resource_catalog(workspace_id: str = "") -> dict:
 
 @settings_router.post("/registrations")
 async def create_workspace(payload: CreateWorkspacePayload) -> dict:
+    if payload.path and payload.path.strip():
+        refuse_server_folder()
     try:
         workspace = get_content_workspace_service().create_workspace(
             payload.name,
@@ -280,11 +285,15 @@ async def get_workspace_settings() -> dict:
 
 @settings_router.post("/validate")
 async def validate_workspace(payload: WorkspacePathPayload) -> dict:
+    if payload.path and payload.path.strip():
+        refuse_server_folder()
     return get_content_workspace_service().validate(payload.path)
 
 
 @settings_router.put("")
 async def update_workspace(payload: WorkspacePathPayload) -> dict:
+    if payload.path and payload.path.strip():
+        refuse_server_folder()
     service = get_content_workspace_service()
     try:
         service.set_workspace(payload.path)

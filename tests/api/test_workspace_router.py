@@ -48,16 +48,18 @@ def workspace_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return TestClient(app), service
 
 
-def test_workspace_settings_select_and_reset(workspace_api, tmp_path: Path) -> None:
+def test_workspace_settings_refuse_a_server_folder_but_reset(workspace_api, tmp_path: Path) -> None:
+    """Spec 2026-10-29 P1c: no account picks a server folder; resetting stays allowed."""
+    from deeptutor.services.server_folders import SERVER_FOLDER_DISABLED
+
     client, service = workspace_api
     custom = tmp_path / "learning-materials"
     custom.mkdir()
 
     selected = client.put("/api/settings/workspace", json={"path": str(custom)})
-    assert selected.status_code == 200
-    assert selected.json()["path"] == str(custom.resolve())
-    assert selected.json()["is_default"] is False
-    assert service.current_binding().root == custom.resolve()
+    assert selected.status_code == 403
+    assert selected.json()["detail"] == SERVER_FOLDER_DISABLED
+    assert service.current_binding().root != custom.resolve()
 
     reset = client.put("/api/settings/workspace", json={"path": None})
     assert reset.status_code == 200
@@ -211,47 +213,22 @@ def test_an_unpublished_item_is_still_not_found(partner_workspace_api) -> None:
     assert response.status_code == 404
 
 
-def test_workspace_migration_api_blocks_active_turns_and_keeps_bindings(
-    workspace_api, tmp_path, monkeypatch
-):
-    from unittest.mock import AsyncMock
-
-    import deeptutor.services.session as sessions
+def test_workspace_folder_migration_is_retired(workspace_api, tmp_path):
+    """Spec 2026-10-29 P1c: workspace folders are not moved to a chosen server folder."""
+    from deeptutor.services.server_folders import SERVER_FOLDER_DISABLED
 
     client, service = workspace_api
-    store = AsyncMock()
-    monkeypatch.setattr(sessions, "get_session_store", lambda: store)
     created = client.post("/api/settings/workspace/registrations", json={"name": "Research"})
     assert created.status_code == 200
     row = created.json()["workspace"]
-    original = Path(row["path"])
-    (original / "notes.txt").write_text("Keep this")
     destination = tmp_path / "new-root"
-    store.list_nonterminal_turns.return_value = [{"turn_id": "active"}]
-    blocked = client.post(
-        "/api/settings/workspace/registrations/migrate-root", json={"path": str(destination)}
-    )
-    assert blocked.status_code == 409
-    assert "running conversations" in blocked.json()["detail"]
-    assert store.list_nonterminal_turns.await_count == 1
-    assert service.describe_catalog()["migration"] is None
-    assert not destination.exists()
-    store.list_nonterminal_turns.return_value = []
-    moved = client.post(
-        "/api/settings/workspace/registrations/migrate-root", json={"path": str(destination)}
-    )
-    assert moved.status_code == 200
-    assert store.list_nonterminal_turns.await_count == 2
-    assert moved.json()["root"] == str(destination)
-    binding = service.validate_chat_binding(row["workspace_id"])
-    assert binding.root == destination / row["workspace_id"]
-    assert (binding.root / "notes.txt").read_text() == "Keep this"
-    assert (original / "notes.txt").read_text() == "Keep this"
-    individual = tmp_path / "independent"
-    result = client.post(
+    for url in (
+        "/api/settings/workspace/registrations/migrate-root",
         f"/api/settings/workspace/registrations/{row['workspace_id']}/migrate",
-        json={"path": str(individual)},
-    )
-    assert result.status_code == 200
-    assert service.validate_chat_binding(row["workspace_id"]).root == individual
+    ):
+        refused = client.post(url, json={"path": str(destination)})
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == SERVER_FOLDER_DISABLED
+    assert not destination.exists()
+    assert service.validate_chat_binding(row["workspace_id"]).root == Path(row["path"])
     assert client.post("/api/settings/workspace/registrations/system-snapshot").status_code == 200
