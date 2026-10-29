@@ -219,6 +219,33 @@ def test_mineru_models_ready_ignores_unrelated_modelscope_repositories(
     assert rd.mineru_models_ready() is False
 
 
+def test_mineru_models_ready_is_fail_closed_when_cache_root_is_unreadable(
+    tmp_path, monkeypatch
+) -> None:
+    """An unreadable HOME must read as "models missing", not crash the probe.
+
+    The container backend runs as ``deeptutor`` while supervisor leaves HOME
+    pointing at root's home; probing ``/root/.cache`` then raises
+    PermissionError, which the readiness matrix used to surface as the
+    unactionable ``parser_probe_failed`` instead of ``models_missing``.
+    """
+    from deeptutor.services.parsing.engines.mineru import readiness as rd
+
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "empty-huggingface"))
+
+    class _UnreadableModels:
+        def is_dir(self) -> bool:
+            raise PermissionError(13, "Permission denied", "/root/.cache/modelscope/hub/models")
+
+    class _UnreadableRoot:
+        def __truediv__(self, _part: str) -> _UnreadableModels:
+            return _UnreadableModels()
+
+    monkeypatch.setattr(rd, "_modelscope_dir", lambda: _UnreadableRoot())
+
+    assert rd.mineru_models_ready() is False
+
+
 def test_mineru_cloud_readiness_needs_token() -> None:
     from deeptutor.services.parsing.engines.mineru.config import MinerUConfig
     from deeptutor.services.parsing.engines.mineru.readiness import mineru_readiness
