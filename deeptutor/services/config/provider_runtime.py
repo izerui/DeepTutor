@@ -192,6 +192,15 @@ EMBEDDING_PROVIDERS: dict[str, EmbeddingProviderSpec] = {
         default_model="text-embedding-3-large",
         default_dim=3072,
     ),
+    "mistral": EmbeddingProviderSpec(
+        label="Mistral",
+        adapter="openai_compat",
+        default_api_base=EMBEDDING_PROVIDER_DEFAULT_ENDPOINTS["mistral"],
+        keywords=("mistral", "mistral-embed", "codestral-embed"),
+        is_local=False,
+        default_model="mistral-embed",
+        default_dim=1024,
+    ),
     "gemini": EmbeddingProviderSpec(
         label="Gemini",
         adapter="gemini",
@@ -369,6 +378,19 @@ TTS_PROVIDERS: dict[str, VoiceProviderSpec] = {
         default_api_base="https://api.openai.com/v1",
         default_model="gpt-4o-mini-tts",
     ),
+    "mistral": VoiceProviderSpec(
+        label="Mistral (Voxtral TTS)",
+        default_api_base="https://api.mistral.ai/v1",
+        adapter="mistral_tts",
+        default_model="voxtral-mini-tts-2603",
+    ),
+    "xai": VoiceProviderSpec(
+        label="xAI (Grok Voice)",
+        default_api_base="https://api.x.ai/v1",
+        adapter="xai_tts",
+        default_model="grok-tts",
+        default_voice="eve",
+    ),
     # Gemini TTS only speaks the native generateContent audio API, never the
     # OpenAI-compatible /audio/speech endpoint, so it gets its own adapter.
     "gemini": VoiceProviderSpec(
@@ -442,6 +464,18 @@ STT_PROVIDERS: dict[str, VoiceProviderSpec] = {
         default_api_base="https://api.openai.com/v1",
         default_model="gpt-4o-mini-transcribe",
     ),
+    "mistral": VoiceProviderSpec(
+        label="Mistral (Voxtral)",
+        default_api_base="https://api.mistral.ai/v1",
+        adapter="mistral_stt",
+        default_model="voxtral-mini-latest",
+    ),
+    "xai": VoiceProviderSpec(
+        label="xAI (Grok Voice)",
+        default_api_base="https://api.x.ai/v1",
+        adapter="xai_stt",
+        default_model="grok-voice-transcribe-2.0",
+    ),
     "openrouter": VoiceProviderSpec(
         label="OpenRouter",
         default_api_base="https://openrouter.ai/api/v1",
@@ -487,6 +521,9 @@ VOICE_PROVIDER_ALIASES = {
     "aoai": "azure_openai",
     "openai_compatible": "custom",
     "lmstudio": "vllm",
+    "voxtral": "mistral",
+    "x_ai": "xai",
+    "grok": "xai",
 }
 
 
@@ -529,6 +566,11 @@ IMAGEGEN_PROVIDERS: dict[str, GenerationProviderSpec] = {
         label="OpenAI",
         default_api_base="https://api.openai.com/v1",
         default_model="gpt-image-1",
+    ),
+    "xai": GenerationProviderSpec(
+        label="xAI (Grok Imagine)",
+        default_api_base="https://api.x.ai/v1",
+        default_model="grok-imagine-image-2.0",
     ),
     "volcengine": GenerationProviderSpec(
         label="Volcengine Ark (Seedream)",
@@ -583,6 +625,12 @@ VIDEOGEN_PROVIDERS: dict[str, GenerationProviderSpec] = {
         adapter="async_task",
         default_model="doubao-seedance-1-0-pro-250528",
     ),
+    "xai": GenerationProviderSpec(
+        label="xAI (Grok Imagine Video)",
+        default_api_base="https://api.x.ai/v1",
+        adapter="xai",
+        default_model="grok-imagine-video-1.5",
+    ),
     "custom": GenerationProviderSpec(
         label="Async Task (Custom)",
         default_api_base="",
@@ -603,6 +651,8 @@ GENERATION_PROVIDER_ALIASES = {
     "azure": "azure_openai",
     "aoai": "azure_openai",
     "openai_compatible": "custom",
+    "x_ai": "xai",
+    "grok": "xai",
 }
 
 
