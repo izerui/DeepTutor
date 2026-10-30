@@ -72,7 +72,7 @@ import {
 } from "@/features/chat/ChatStateAdapter";
 import { useAppShell } from "@/context/AppShellContext";
 import { readStoredResponseLanguage } from "@/context/app-shell-storage";
-import { RESPONSE_LANGUAGE_OPTIONS } from "@/features/settings/store";
+import { RESPONSE_LANGUAGE_OPTIONS } from "@/context/response-language-options";
 
 import type { FilePreviewSource } from "@/components/chat/preview/previewerFor";
 import type { LLMSelection, StreamEvent } from "@/features/chat/model/protocol";

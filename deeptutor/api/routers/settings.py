@@ -18,7 +18,7 @@ from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ from deeptutor.services.settings.interface_settings import (
 from deeptutor.services.settings.interface_settings import (
     UiLanguage,
     atomic_update,
+    resolve_display_settings,
     resolve_languages,
     sanitize_enabled_tools,
 )
@@ -171,7 +172,22 @@ class SidebarNavOrder(BaseModel):
     learnResearch: List[str]
 
 
-class UISettings(BaseModel):
+class DisplaySettings(BaseModel):
+    """Account-scoped learning text preferences; no interface chrome settings."""
+
+    content_font_scale: Literal[90, 100, 110, 125, 150] = 100
+    content_line_spacing: Literal["compact", "normal", "relaxed"] = "normal"
+
+    @field_validator("content_font_scale", mode="before")
+    @classmethod
+    def validate_font_scale(cls, value: Any) -> Any:
+        """Reject coerced strings, floats and booleans as preference values."""
+        if type(value) is not int:
+            raise ValueError("content_font_scale must be an integer percentage")
+        return value
+
+
+class UISettings(DisplaySettings):
     theme: Literal["system", "light", "dark", "glass", "snow"] = "system"
     language: UiLanguage = "en"
     response_language: ResponseLanguage = "en"
@@ -182,11 +198,11 @@ class UISettings(BaseModel):
     code_block_wrap_long_lines: Optional[bool] = None
 
 
-class UISettingsUpdate(BaseModel):
+class UISettingsUpdate(DisplaySettings):
     """Partial UI settings for user-initiated PATCH/PUT updates via /api/settings/ui.
 
-    All fields have None defaults so `model_dump(exclude_unset=True)` naturally
-    excludes fields not provided in the frontend payload, while explicitly provided
+    `model_dump(exclude_unset=True)` excludes fields not provided in the
+    frontend payload, while explicitly provided
     defaults (e.g., `theme: "snow"`) still update the backend. This separates
     the semantic contract: `/ui` endpoint only merges whatever explicitly arrives
     from the frontend.
@@ -203,6 +219,9 @@ class UISettingsUpdate(BaseModel):
     code_block_theme: str | None = None
     code_block_show_line_numbers: bool | None = None
     code_block_wrap_long_lines: bool | None = None
+    # Optional by omission, never nullable: null is not a saved preference.
+    content_font_scale: Literal[90, 100, 110, 125, 150] = 100
+    content_line_spacing: Literal["compact", "normal", "relaxed"] = "normal"
 
 
 class VoiceAutoplayUpdate(BaseModel):
@@ -545,7 +564,12 @@ def load_ui_settings() -> dict[str, Any]:
                 saved = json.load(handle)
                 # resolve_languages owns the legacy migration (a file predating
                 # the UI/response split inherits its one language into both).
-                merged = {**DEFAULT_UI_SETTINGS, **saved, **resolve_languages(saved)}
+                merged = {
+                    **DEFAULT_UI_SETTINGS,
+                    **saved,
+                    **resolve_languages(saved),
+                    **resolve_display_settings(saved),
+                }
                 # Filter persisted enabled_optional_tools to current
                 # toggleable set so retired tool names can't leak into
                 # the per-turn payload.
@@ -2161,6 +2185,12 @@ async def get_ui_settings():
     """
     settings = load_ui_settings()
     return {field: settings.get(field) for field in PRESESSION_UI_FIELDS}
+
+
+@router.get("/display", response_model=DisplaySettings)
+async def get_display_settings() -> DisplaySettings:
+    """Read learning typography through the authenticated, request-scoped router."""
+    return DisplaySettings(**resolve_display_settings(load_ui_settings()))
 
 
 @router.put("/ui")

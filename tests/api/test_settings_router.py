@@ -2093,3 +2093,114 @@ def test_llm_provider_choices_include_opper() -> None:
 
     assert llm["opper"]["label"] == "Opper"
     assert llm["opper"]["base_url"] == "https://api.opper.ai/v3/compat"
+
+
+@pytest.mark.parametrize("value", [None, True, 100.0, "150", 80, 200, {}, []])
+def test_learning_font_scale_rejects_invalid_values(value):
+    """Only integer percentages from the supported set may be written."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        settings_router.UISettingsUpdate(content_font_scale=value)
+
+
+@pytest.mark.parametrize("value", [None, 1.5, "wide", True, {}])
+def test_learning_line_spacing_rejects_invalid_values(value):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        settings_router.UISettingsUpdate(content_line_spacing=value)
+
+
+@pytest.mark.asyncio
+async def test_learning_display_partial_updates_preserve_legacy_and_unrelated_fields(
+    monkeypatch, tmp_path
+):
+    """Old clients and parked drafts must not reset newer display preferences."""
+    settings_file = tmp_path / "interface.json"
+    monkeypatch.setattr(settings_router, "_settings_file", lambda: settings_file)
+    monkeypatch.setattr(interface_settings, "_interface_settings_file", lambda: settings_file)
+    settings_file.write_text(json.dumps({"language": "zh", "unrelated": {"keep": True}}))
+    assert (await settings_router.get_display_settings()).model_dump() == {
+        "content_font_scale": 100,
+        "content_line_spacing": "normal",
+    }
+    await settings_router.update_ui_settings(
+        settings_router.UISettingsUpdate(
+            content_font_scale=150,
+            content_line_spacing="relaxed",
+        )
+    )
+    await settings_router.update_ui_settings(settings_router.UISettingsUpdate(theme="system"))
+    await settings_router.update_ui_settings(
+        settings_router.UISettingsUpdate(content_line_spacing="compact")
+    )
+    saved = json.loads(settings_file.read_text())
+    assert saved["unrelated"] == {"keep": True}
+    assert saved["content_font_scale"] == 150
+    assert saved["content_line_spacing"] == "compact"
+    assert saved["language"] == "zh"
+    assert interface_settings.get_ui_settings()["content_font_scale"] == 150
+    public = await settings_router.get_ui_settings()
+    assert set(public) == {"theme", "language", "response_language"}
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        {},
+        {"content_font_scale": "150", "content_line_spacing": "bad"},
+        {"content_font_scale": True, "content_line_spacing": None},
+        {"content_font_scale": 999, "content_line_spacing": []},
+    ],
+)
+def test_both_display_readers_default_malformed_or_legacy_settings(monkeypatch, tmp_path, saved):
+    settings_file = tmp_path / "interface.json"
+    settings_file.write_text(json.dumps(saved))
+    monkeypatch.setattr(settings_router, "_settings_file", lambda: settings_file)
+    monkeypatch.setattr(interface_settings, "_interface_settings_file", lambda: settings_file)
+    for settings in (settings_router.load_ui_settings(), interface_settings.get_ui_settings()):
+        assert settings["content_font_scale"] == 100
+        assert settings["content_line_spacing"] == "normal"
+
+
+def test_display_read_is_not_on_public_settings_router():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(settings_router.public_router, prefix="/api/settings")
+    assert TestClient(app).get("/api/settings/display").status_code == 404
+
+
+def test_display_read_requires_auth_and_returns_only_display_fields(monkeypatch, tmp_path):
+    """Mount through the real authentication dependency (as main.py does)."""
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+
+    from deeptutor.api.routers import auth as auth_router
+
+    settings_file = tmp_path / "interface.json"
+    settings_file.write_text(
+        json.dumps({"content_font_scale": 125, "sidebar_description": "private"})
+    )
+    monkeypatch.setattr(settings_router, "_settings_file", lambda: settings_file)
+    monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
+    app = FastAPI()
+    app.include_router(
+        settings_router.router,
+        prefix="/api/settings",
+        dependencies=[Depends(auth_router.require_auth)],
+    )
+    client = TestClient(app)
+    assert client.get("/api/settings/display").status_code == 401
+    assert (
+        client.get(
+            "/api/settings/display", headers={"Authorization": "Bearer invalid-display-token"}
+        ).status_code
+        == 401
+    )
+    monkeypatch.setattr(auth_router, "AUTH_ENABLED", False)
+    response = client.get("/api/settings/display")
+    assert response.status_code == 200
+    assert response.json() == {"content_font_scale": 125, "content_line_spacing": "normal"}

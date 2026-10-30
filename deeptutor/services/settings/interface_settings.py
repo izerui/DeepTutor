@@ -26,6 +26,8 @@ DEFAULT_UI_SETTINGS: dict[str, Any] = {
     "theme": "system",
     "language": "en",
     "response_language": "en",
+    "content_font_scale": 100,
+    "content_line_spacing": "normal",
     # When true, TTS verbalizes LaTeX (fractions, powers, Greek). Dollar
     # delimiters are stripped either way so the voice never says "dollar".
     "voice_math_speak": True,
@@ -174,6 +176,20 @@ def resolve_languages(saved: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
+def resolve_display_settings(saved: Mapping[str, Any]) -> dict[str, Any]:
+    """Read bounded learning typography, including legacy or malformed files."""
+    scale = saved.get("content_font_scale")
+    spacing = saved.get("content_line_spacing")
+    return {
+        "content_font_scale": scale
+        if type(scale) is int and scale in (90, 100, 110, 125, 150)
+        else 100,
+        "content_line_spacing": spacing
+        if isinstance(spacing, str) and spacing in ("compact", "normal", "relaxed")
+        else "normal",
+    }
+
+
 def get_ui_settings() -> dict[str, Any]:
     """
     Read UI settings from interface.json with defaults.
@@ -187,7 +203,12 @@ def get_ui_settings() -> dict[str, Any]:
         try:
             with open(settings_file, encoding="utf-8") as f:
                 saved = json.load(f) or {}
-            return {**DEFAULT_UI_SETTINGS, **saved, **resolve_languages(saved)}
+            return {
+                **DEFAULT_UI_SETTINGS,
+                **saved,
+                **resolve_languages(saved),
+                **resolve_display_settings(saved),
+            }
         except Exception:
             # On any parse error, fall back to defaults (safe)
             return DEFAULT_UI_SETTINGS.copy()

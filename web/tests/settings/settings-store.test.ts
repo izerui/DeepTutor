@@ -60,6 +60,8 @@ import type {
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
 const VALID_UI: UiSettings = {
+  content_font_scale: 100,
+  content_line_spacing: 'normal',
   theme: 'dark',
   language: 'en',
   response_language: 'en',

@@ -40,6 +40,7 @@ import { useTranslation } from "react-i18next";
 import type { SelectedHistorySession } from "@/components/chat/HistorySessionPicker";
 import type { SelectedQuestionEntry } from "@/components/chat/QuestionBankPicker";
 import { ActivityFold, FoldCaret } from "@/components/activity";
+import { LearningText } from "@/components/common/LearningText";
 import AssistantResponse from "@/components/common/AssistantResponse";
 import {
   InlineFileCardProvider,
@@ -1917,7 +1918,7 @@ export const UserMessage = memo(function UserMessage({
                 }
               />
             ) : null}
-            <div className="whitespace-pre-wrap">{msg.content}</div>
+            <div className="whitespace-pre-wrap"><LearningText size={14}>{msg.content}</LearningText></div>
           </div>
         )}
         {/* Recovery records are local to this browser. Keep their actions

@@ -28,6 +28,7 @@ import {
 
 export default function SimpleMarkdownRenderer({
   content,
+  learningTextSize,
   className = "",
   variant = "default",
 }: MarkdownRendererProps) {
@@ -454,10 +455,11 @@ export default function SimpleMarkdownRenderer({
   // clickable file links (no-op outside a chat message — fileCtx is null).
   const fileCtx = useInlineFileCardContext();
   const fileLinkPlugin = useMemo(
-    () => makeFileLinkRemarkPlugin(
-      fileCtx?.files ?? [],
-      fileCtx?.unresolvedRelativeLinksAsText,
-    ),
+    () =>
+      makeFileLinkRemarkPlugin(
+        fileCtx?.files ?? [],
+        fileCtx?.unresolvedRelativeLinksAsText,
+      ),
     [fileCtx?.files, fileCtx?.unresolvedRelativeLinksAsText],
   );
   const remarkPlugins = useMemo(
@@ -472,7 +474,16 @@ export default function SimpleMarkdownRenderer({
       : "md-renderer prose prose-sm max-w-none font-serif";
 
   return (
-    <div className={`${rootClasses} ${className}`}>
+    <div
+      className={`${rootClasses} ${className} ${learningTextSize && !isTrace ? "learning-text" : ""}`}
+      style={
+        learningTextSize && !isTrace
+          ? ({
+              "--learning-text-base": `${learningTextSize}px`,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         components={components}
