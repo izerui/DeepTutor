@@ -19,6 +19,8 @@ unit-tested in isolation and reused by any ingestion path.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
@@ -64,6 +66,23 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+@contextmanager
+def _remove_on_error(paths: list[Path]) -> Iterator[None]:
+    """Delete ``paths`` if the block raises, then re-raise.
+
+    The caller rejects the whole archive on any error, so members written
+    before the failing one must not stay behind in the target directory.
+    """
+    try:
+        yield
+    except BaseException:
+        for path in paths:
+            # Best effort: a failed unlink must not mask the original error.
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
+        raise
+
+
 def safe_extract_zip(
     zip_path: str | Path,
     target_dir: str | Path,
@@ -91,6 +110,9 @@ def safe_extract_zip(
     Raises:
         ArchiveTooLargeError: If the archive trips a zip-bomb guard.
         zipfile.BadZipFile: If the file is not a valid zip archive.
+
+    When any error propagates, the files this call already wrote are removed
+    first, so a rejected archive leaves nothing behind in ``target_dir``.
     """
     limits = limits or ZipExtractionLimits()
     target_dir = Path(target_dir)
@@ -104,7 +126,7 @@ def safe_extract_zip(
     seen_names: set[str] = set()
     total_bytes = 0
 
-    with zipfile.ZipFile(zip_path) as archive:
+    with zipfile.ZipFile(zip_path) as archive, _remove_on_error(result.extracted):
         members = [info for info in archive.infolist() if not info.is_dir()]
         if len(members) > limits.max_entries:
             raise ArchiveTooLargeError(
@@ -195,14 +217,15 @@ def _extract_member(
     returned still exceeds the limit so the caller can detect the overflow.
     """
     written = 0
-    with archive.open(info) as source, open(destination, "wb") as sink:
-        while True:
-            chunk = source.read(chunk_size)
-            if not chunk:
-                break
-            written += len(chunk)
-            if written > max_entry_bytes:
+    with archive.open(info) as source, _remove_on_error([destination]):
+        with open(destination, "wb") as sink:
+            while True:
+                chunk = source.read(chunk_size)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_entry_bytes:
+                    sink.write(chunk)
+                    return written  # signal overflow; caller cleans up
                 sink.write(chunk)
-                return written  # signal overflow; caller cleans up
-            sink.write(chunk)
     return written

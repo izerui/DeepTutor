@@ -217,6 +217,39 @@ def test_compression_ratio_guard_raises(tmp_path: Path) -> None:
         )
 
 
+def test_rejected_archive_removes_members_already_extracted(tmp_path: Path) -> None:
+    # The ratio guard trips on the second member, after the first was written.
+    src = _make_zip(
+        tmp_path / "a.zip", [("notes.txt", b"hello"), ("bomb.txt", b"A" * 50_000)], deflate=True
+    )
+    out = tmp_path / "out"
+
+    with pytest.raises(ArchiveTooLargeError):
+        safe_extract_zip(
+            src,
+            out,
+            allowed_extensions=DOC_EXTS,
+            limits=ZipExtractionLimits(max_compression_ratio=10.0),
+        )
+
+    assert list(out.iterdir()) == []
+
+
+def test_corrupt_member_leaves_nothing_behind(tmp_path: Path) -> None:
+    src = _make_zip(tmp_path / "a.zip", [("one.txt", b"first"), ("two.txt", b"second")])
+    data = bytearray(src.read_bytes())
+    # Members are stored, so this flips a payload byte and two.txt fails its CRC
+    # check, which zipfile only reports after the bytes were written out.
+    data[data.rindex(b"second")] ^= 0xFF
+    src.write_bytes(bytes(data))
+    out = tmp_path / "out"
+
+    with pytest.raises(zipfile.BadZipFile):
+        safe_extract_zip(src, out, allowed_extensions=DOC_EXTS)
+
+    assert list(out.iterdir()) == []
+
+
 def test_bad_zip_raises(tmp_path: Path) -> None:
     bogus = tmp_path / "not.zip"
     bogus.write_bytes(b"this is not a zip")
