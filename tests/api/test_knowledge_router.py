@@ -3433,3 +3433,38 @@ def test_learner_can_read_secret_free_engine_settings(monkeypatch, tmp_path, pat
     response = TestClient(app).get(path)
     assert response.status_code == 200
     assert "deployment-secret" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/knowledge-bases/missing-kb"),
+        ("DELETE", "/api/knowledge-bases/missing-kb"),
+        ("PUT", "/api/knowledge-bases/default/missing-kb"),
+        ("GET", "/api/knowledge-bases/missing-kb/progress"),
+        ("POST", "/api/knowledge-bases/missing-kb/progress/clear"),
+        ("POST", "/api/knowledge-bases/missing-kb/reindex"),
+        ("POST", "/api/knowledge-bases/missing-kb/retry"),
+        ("GET", "/api/knowledge-bases/missing-kb/linked-folders"),
+        ("DELETE", "/api/knowledge-bases/missing-kb/linked-folders/x"),
+        ("GET", "/api/knowledge-bases/missing-kb/github-sources"),
+        ("DELETE", "/api/knowledge-bases/missing-kb/github-source/x"),
+        ("POST", "/api/knowledge-bases/missing-kb/sync-github"),
+        ("GET", "/api/knowledge-bases/missing-kb/web-sources"),
+        ("GET", "/api/knowledge-bases/missing-kb/web-source-sync"),
+        ("DELETE", "/api/knowledge-bases/missing-kb/web-source/x"),
+        ("POST", "/api/knowledge-bases/missing-kb/web-source/x/cancel"),
+        ("GET", "/api/knowledge-bases/missing-kb/web-source/x/pairings"),
+        ("POST", "/api/knowledge-bases/missing-kb/web-source/x/retry"),
+        ("POST", "/api/knowledge-bases/missing-kb/sync-web"),
+    ],
+)
+def test_missing_kb_returns_404_instead_of_500(method: str, path: str) -> None:
+    """A missing KB must surface as 404, never as a catch-all 500.
+
+    (Server-folder sync is refused with 403 on develop before any lookup.)"""
+    from deeptutor.api.main import app
+
+    response = TestClient(app, raise_server_exceptions=False).request(method, path, json={})
+
+    assert response.status_code == 404, response.text
