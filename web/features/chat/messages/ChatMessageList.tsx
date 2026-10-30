@@ -45,6 +45,7 @@ import AssistantResponse from "@/components/common/AssistantResponse";
 import {
   InlineFileCardProvider,
   mergeGeneratedFiles,
+  unlinkedGeneratedFiles,
 } from "@/components/common/InlineFileCard";
 import Tooltip from "@/shared/ui/Tooltip";
 import type {
@@ -543,21 +544,31 @@ function humanizeFilename(filename: string): string {
  * side panel, same path as user uploads. Sources: persisted ``generated``
  * attachments on the message (durable) merged with artifacts from streamed
  * tool_result events (live, while the turn is still running), deduped by URL.
+ *
+ * An image the reply already embeds with ``![](...)`` is drawn there, so its
+ * card is left out; showing both reads as the figure appearing twice.
  */
 export function GeneratedFileCards({
   attachments,
   events,
+  content,
   onOpen,
 }: {
   attachments: MessageAttachment[];
   events?: StreamEvent[];
+  /** The reply text, used to tell which images are already shown inline. */
+  content?: string;
   onOpen?: (attachment: MessageAttachment) => void;
 }) {
   const { t } = useTranslation();
-  const files = useMemo(
-    () => mergeGeneratedFiles(attachments, events),
-    [attachments, events],
-  );
+  const files = useMemo(() => {
+    const merged = mergeGeneratedFiles(attachments, events);
+    if (!content) return merged;
+    const unlinked = new Set(unlinkedGeneratedFiles(content, merged));
+    return merged.filter(
+      (file) => !file.mime_type?.startsWith("image/") || unlinked.has(file),
+    );
+  }, [attachments, events, content]);
   if (!files.length) return null;
   return (
     <div className="mt-3 flex flex-col gap-2">
@@ -2487,6 +2498,7 @@ export const ChatMessageList = memo(function ChatMessageList({
             <GeneratedFileCards
               attachments={msg.attachments ?? []}
               events={msg.events}
+              content={msg.content}
               onOpen={onPreviewAttachment}
             />
             {(() => {
