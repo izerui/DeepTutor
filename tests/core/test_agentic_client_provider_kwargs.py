@@ -327,6 +327,8 @@ def test_short_k3_override_does_not_match_unrelated_models(model: str) -> None:
         ("azure_openai", "o4-mini"),
         ("openai", "gpt-5"),
         ("custom", "gpt-5-mini"),
+        ("custom", "o3-mini"),
+        ("custom", "o4-mini"),
     ],
 )
 def test_agentic_kwargs_drop_temperature_for_openai_reasoning_models(
