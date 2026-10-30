@@ -22,9 +22,11 @@ export function initI18n(language?: unknown) {
     fallbackLng: "en",
     // Use a single default namespace to keep lookups simple.
     // We intentionally keep keySeparator disabled so keys like "Generating..." remain valid.
+    // nsSeparator too: keys like "Query:" or "http://localhost:8080" would otherwise split as ns:key.
     defaultNS: "app",
     ns: ["app"],
     keySeparator: false,
+    nsSeparator: false,
     interpolation: {
       escapeValue: false,
     },
