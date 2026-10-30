@@ -319,7 +319,11 @@ class LlamaIndexPipeline:
         # on the existing embedding/retrieval path.
         from .exercise_lookup import lookup_exercises, requested_exercises
 
-        if requested_exercises(query)[0]:
+        document_keys = kwargs.get("document_keys")
+        if document_keys is not None and not document_keys:
+            return self._nodes_to_result(query, [])
+        exact_request = bool(requested_exercises(query)[0])
+        if exact_request and document_keys is None:
             kb_dir = resolve_kb_dir(self.kb_base_dir, kb_name)
             try:
                 exact = await asyncio.to_thread(
@@ -353,6 +357,24 @@ class LlamaIndexPipeline:
                 "provider": "llamaindex",
                 "needs_reindex": True,
             }
+
+        if exact_request and document_keys is not None:
+            try:
+                exact = await asyncio.to_thread(
+                    lookup_exercises,
+                    query,
+                    kb_dir,
+                    Path(self.kb_base_dir).parent / "parse_cache",
+                    document_keys=document_keys,
+                    storage_dir=storage_dir,
+                )
+            except Exception:
+                self.logger.exception(
+                    "Scoped exercise evidence unavailable; using normal retrieval"
+                )
+            else:
+                if exact is not None and exact.get("sources"):
+                    return exact
 
         embedding_mismatch_warning = self._embedding_mismatch_warning(kb_name)
 
