@@ -691,7 +691,16 @@ def _extract_pptx_rich_ooxml(data: bytes, *, budget: ImageBudget | None = None) 
             except Exception:
                 slides.append("")
                 continue
+            handled_blips: set[Any] = set()
             for node in root.iter():
+                if _local_name(node.tag) == "blip":
+                    if node not in handled_blips:
+                        image = _load_office_image(
+                            zf, names, rel_targets.get(_blip_embed_rid(node), ""), budget, images
+                        )
+                        if image is not None:
+                            lines.append(build_marker(image))
+                    continue
                 if _local_name(node.tag) != "p":
                     continue
                 text_parts: list[str] = []
@@ -706,6 +715,7 @@ def _extract_pptx_rich_ooxml(data: bytes, *, budget: ImageBudget | None = None) 
                     elif name in {"br", "cr"}:
                         text_parts.append("\n")
                     elif name == "blip":
+                        handled_blips.add(child)
                         rid = _blip_embed_rid(child)
                         if not rid or rid in seen_rids:
                             continue
