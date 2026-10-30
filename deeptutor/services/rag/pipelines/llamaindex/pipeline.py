@@ -17,6 +17,7 @@ from deeptutor.services.embedding import get_embedding_config
 from deeptutor.services.rag.embedding_signature import signature_from_embedding_config
 from deeptutor.services.rag.index_versioning import (
     EmbeddingSignature,
+    prune_flat_versions,
     resolve_storage_dir_for_read,
     resolve_storage_dir_for_rebuild,
     write_version_meta,
@@ -33,6 +34,21 @@ from .embedding_adapter import (
     verify_embedding_connectivity,
 )
 from .errors import search_error_result
+
+
+def _notify_indexed_files(documents: list[Any], callback: Callable[..., Any] | None) -> None:
+    """Tell the caller which source files actually landed in the index."""
+    if callback is None:
+        return
+    indexed_paths: set[str] = set()
+    for document in documents:
+        metadata = getattr(document, "metadata", None)
+        if isinstance(metadata, dict):
+            path = metadata.get("file_path")
+            if isinstance(path, str) and path:
+                indexed_paths.add(path)
+    callback(sorted(indexed_paths))
+
 
 DEFAULT_KB_BASE_DIR = str(get_runtime_data_root() / "knowledge_bases")
 
@@ -281,17 +297,7 @@ class LlamaIndexPipeline:
             if resumed:
                 self.logger.info(f"Resumed interrupted LlamaIndex candidate at {storage_dir}")
             await self._publish_verified(kb_dir, storage_dir, signature, documents)
-
-            indexed_file_callback = kwargs.get("indexed_file_callback")
-            if indexed_file_callback is not None:
-                indexed_paths: set[str] = set()
-                for document in documents:
-                    metadata = getattr(document, "metadata", None)
-                    if isinstance(metadata, dict):
-                        path = metadata.get("file_path")
-                        if isinstance(path, str) and path:
-                            indexed_paths.add(path)
-                indexed_file_callback(sorted(indexed_paths))
+            _notify_indexed_files(documents, kwargs.get("indexed_file_callback"))
 
             self.logger.info(f"KB '{kb_name}' initialized successfully with LlamaIndex")
             return True
@@ -527,6 +533,7 @@ class LlamaIndexPipeline:
                 self.logger.info(f"Created new index with {num_added} documents")
 
             await self._publish_verified(kb_dir, plan.storage_dir, signature, documents)
+            _notify_indexed_files(documents, kwargs.get("indexed_file_callback"))
             self.logger.info(f"Successfully added documents to KB '{kb_name}'")
             return True
 
@@ -563,6 +570,7 @@ class LlamaIndexPipeline:
                     "readiness_verified": True,
                 },
             )
+            prune_flat_versions(kb_dir, protect=storage_dir)
         if run:
             run.data["usable_version"] = storage_dir.name
             for document in documents:

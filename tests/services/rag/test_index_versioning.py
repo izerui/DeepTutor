@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from deeptutor.services.rag.index_versioning import (
+    RETAINED_FLAT_VERSIONS,
     EmbeddingSignature,
     find_matching_version,
     list_kb_versions,
@@ -180,3 +181,46 @@ def test_list_kb_versions_includes_legacy_nested_and_root_layouts(tmp_path: Path
     layouts = {entry["layout"] for entry in list_kb_versions(kb_dir)}
 
     assert {"nested_legacy", "root_legacy"} <= layouts
+
+
+def test_publishing_a_llamaindex_version_drops_snapshots_beyond_the_retained_tail(
+    tmp_path: Path,
+) -> None:
+    kb_dir = tmp_path / "kb"
+    kb_dir.mkdir()
+    signature = _signature()
+    other = _signature(model="embed-b")
+
+    building = kb_dir / "version-1"
+    building.mkdir()
+    (building / "docstore.json").write_text("{}", encoding="utf-8")
+    (building / ".building.json").write_text("{}", encoding="utf-8")
+
+    lightrag = kb_dir / "version-2"
+    lightrag.mkdir()
+    (lightrag / "kv_store_doc_status.json").write_text("{}", encoding="utf-8")
+    (lightrag / "meta.json").write_text(
+        json.dumps({"provider": "lightrag", "signature": "lightrag", "version": "version-2"}),
+        encoding="utf-8",
+    )
+
+    start = 3
+    count = RETAINED_FLAT_VERSIONS + 1
+    for offset in range(count):
+        version_dir = kb_dir / f"version-{start + offset}"
+        version_dir.mkdir()
+        (version_dir / "docstore.json").write_text("{}", encoding="utf-8")
+        (version_dir / "index_store.json").write_text("{}", encoding="utf-8")
+        write_version_meta(kb_dir, signature, storage_dir=version_dir)
+
+    other_dir = kb_dir / f"version-{start + count}"
+    other_dir.mkdir()
+    (other_dir / "docstore.json").write_text("{}", encoding="utf-8")
+    write_version_meta(kb_dir, other, storage_dir=other_dir)
+
+    assert not (kb_dir / f"version-{start}").exists()
+    for offset in range(1, count):
+        assert (kb_dir / f"version-{start + offset}").is_dir()
+    assert building.is_dir()
+    assert lightrag.is_dir()
+    assert other_dir.is_dir()
