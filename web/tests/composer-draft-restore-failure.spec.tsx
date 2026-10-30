@@ -10,8 +10,12 @@ const drafts = vi.hoisted(() => ({
   read: vi.fn<() => Promise<unknown>>(),
   save: vi.fn<() => Promise<void>>(),
 }));
+const draftLocation = vi.hoisted(() => ({
+  current: { workspaceId: "ws_test", pathname: "/chat" },
+}));
 
 vi.mock("@/lib/workspace-drafts", () => ({
+  currentWorkspaceDraftLocation: () => draftLocation.current,
   readWorkspaceDraft: drafts.read,
   saveWorkspaceDraft: drafts.save,
 }));
@@ -34,6 +38,7 @@ const activeCap: CapabilityDef = {
 beforeEach(() => {
   drafts.read.mockReset();
   drafts.save.mockReset();
+  draftLocation.current = { workspaceId: "ws_test", pathname: "/chat" };
 });
 
 function Harness({ onSend = () => {} }: { onSend?: (content: string) => void }) {
@@ -152,7 +157,7 @@ it("saves newly typed text merged with the stored draft when switching after a f
   expect(drafts.save).toHaveBeenCalledWith({
     text: "stored draft\ntyped after failure",
     attachments: [],
-  });
+  }, "ws_test", "/chat");
 });
 
 it("keeps typed text on a retried switch after the first merge save failed", async () => {
@@ -177,7 +182,7 @@ it("keeps typed text on a retried switch after the first merge save failed", asy
   expect(drafts.save).toHaveBeenLastCalledWith({
     text: "typed after failure",
     attachments: [],
-  });
+  }, "ws_test", "/chat");
 });
 
 it("keeps typed text when the stored draft has attachments but no text", async () => {
@@ -201,7 +206,7 @@ it("keeps typed text when the stored draft has attachments but no text", async (
   expect(drafts.save).toHaveBeenCalledWith({
     text: "typed after failure",
     attachments: storedAttachments,
-  });
+  }, "ws_test", "/chat");
 });
 
 it("rejects the switch when a re-read of the stored draft still fails after new input", async () => {
@@ -248,5 +253,151 @@ it("still saves the composer content on workspace switch after a successful rest
   expect(drafts.save).toHaveBeenCalledWith({
     text: "saved on switch",
     attachments: [],
+  }, "ws_test", "/chat");
+});
+
+it("autosaves typed text after a short pause", async () => {
+  vi.useFakeTimers();
+  try {
+    drafts.read.mockResolvedValue(undefined);
+    drafts.save.mockResolvedValue(undefined);
+    render(<Harness />);
+    await act(async () => {});
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "half-written question" },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(drafts.save).toHaveBeenCalledWith({
+      text: "half-written question",
+      attachments: [],
+    }, "ws_test", "/chat");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("flushes a pending draft when the composer unmounts", async () => {
+  drafts.read.mockResolvedValue(undefined);
+  drafts.save.mockResolvedValue(undefined);
+  const { unmount } = render(<Harness />);
+  await act(async () => {});
+
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "not sent yet" },
   });
+  unmount();
+  await act(async () => {});
+
+  expect(drafts.save).toHaveBeenCalledWith({
+    text: "not sent yet",
+    attachments: [],
+  }, "ws_test", "/chat");
+});
+
+it("does not overwrite a stored draft when an empty composer unmounts", async () => {
+  drafts.read.mockResolvedValue({ text: "stored draft", attachments: [] });
+  drafts.save.mockResolvedValue(undefined);
+  const { unmount } = render(<Harness />);
+  await act(async () => {});
+
+  unmount();
+  await act(async () => {});
+
+  expect(drafts.save).not.toHaveBeenCalled();
+});
+
+it("saves under the route where the text was typed", async () => {
+  draftLocation.current = { workspaceId: "ws_test", pathname: "/chat/one" };
+  drafts.read.mockResolvedValue(undefined);
+  drafts.save.mockResolvedValue(undefined);
+  const { unmount } = render(<Harness />);
+  await act(async () => {});
+
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "route-bound draft" },
+  });
+  draftLocation.current = { workspaceId: "ws_test", pathname: "/settings" };
+  unmount();
+  await act(async () => {});
+
+  expect(drafts.save).toHaveBeenCalledWith({
+    text: "route-bound draft",
+    attachments: [],
+  }, "ws_test", "/chat/one");
+});
+
+it("merges text typed before the stored draft finishes loading", async () => {
+  let resolveRead!: (value: unknown) => void;
+  drafts.read.mockReturnValue(new Promise((resolve) => {
+    resolveRead = resolve;
+  }));
+  drafts.save.mockResolvedValue(undefined);
+  render(<Harness />);
+
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "typed early" },
+  });
+  expect(drafts.save).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveRead({ text: "stored draft", attachments: [] });
+  });
+
+  expect(screen.getByRole("textbox")).toHaveValue("stored draft\ntyped early");
+});
+
+it("does not duplicate the stored draft when autosave and a workspace switch both merge", async () => {
+  vi.useFakeTimers();
+  try {
+    drafts.read
+      .mockRejectedValueOnce(new Error("indexeddb unavailable"))
+      .mockResolvedValueOnce({ text: "stored draft", attachments: [] });
+    drafts.save.mockResolvedValue(undefined);
+    render(<Harness />);
+    await act(async () => {});
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "typed after failure" },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(drafts.save).toHaveBeenLastCalledWith({
+      text: "stored draft\ntyped after failure",
+      attachments: [],
+    }, "ws_test", "/chat");
+
+    const pending = switchWorkspace();
+    await expect(Promise.all(pending)).resolves.toBeDefined();
+    expect(drafts.save).toHaveBeenCalledTimes(2);
+    expect(drafts.save).toHaveBeenLastCalledWith({
+      text: "stored draft\ntyped after failure",
+      attachments: [],
+    }, "ws_test", "/chat");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("clears the sent draft under the route it was typed on", async () => {
+  draftLocation.current = { workspaceId: "ws_test", pathname: "/chat/one" };
+  drafts.read.mockResolvedValue(undefined);
+  drafts.save.mockResolvedValue(undefined);
+  const onSend = vi.fn();
+  render(<Harness onSend={onSend} />);
+  await act(async () => {});
+
+  const input = screen.getByRole("textbox");
+  fireEvent.change(input, { target: { value: "send me" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  expect(onSend).toHaveBeenCalledWith("send me");
+  expect(drafts.save).toHaveBeenCalledWith({
+    text: "",
+    attachments: [],
+  }, "ws_test", "/chat/one");
 });

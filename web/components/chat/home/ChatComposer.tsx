@@ -11,9 +11,11 @@ import {
   type RefObject,
 } from "react";
 import {
+  currentWorkspaceDraftLocation,
   saveWorkspaceDraft,
   readWorkspaceDraft,
   type WorkspaceDraft,
+  type WorkspaceDraftLocation,
 } from "@/lib/workspace-drafts";
 import {
   ArrowUp,
@@ -537,19 +539,103 @@ export default memo(function ChatComposer({
   }, [onAddFiles]);
   const restoredDraftRef = useRef(false);
   const restoreFailedRef = useRef(false);
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftDirtyRef = useRef(false);
+  const draftLocationRef = useRef<WorkspaceDraftLocation | null>(null);
+  const draftTextRef = useRef("");
+  const interactedBeforeRestoreRef = useRef(false);
+  const restoreBaseRef = useRef<WorkspaceDraft | undefined | null>(null);
+  const suppressDraftSaveRef = useRef(false);
+
+  const collectDraft = useCallback(
+    (): WorkspaceDraft => ({
+      // Keep the last value in a ref: the imperative handle may already be
+      // detached when the unmount cleanup runs.
+      text: draftTextRef.current,
+      attachments: draftAttachmentsRef.current.map(
+        ({ filename, base64, mimeType }) => ({ filename, base64, mimeType }),
+      ),
+    }),
+    [],
+  );
+
+  const cancelDraftSave = useCallback(() => {
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+    }
+    draftDirtyRef.current = false;
+  }, []);
+
+  const saveDraftInBackground = useCallback(async () => {
+    if (!draftDirtyRef.current) return;
+    const location = draftLocationRef.current;
+    if (!location) return;
+    const draft = collectDraft();
+    draftDirtyRef.current = false;
+    try {
+      if (restoreFailedRef.current) {
+        // The stored draft never reached the composer; merge instead of
+        // overwriting it with only what was typed after the failure.
+        if (restoreBaseRef.current === null) {
+          restoreBaseRef.current = await readWorkspaceDraft(
+            location.workspaceId,
+            location.pathname,
+          );
+        }
+        const base = restoreBaseRef.current;
+        await saveWorkspaceDraft(
+          {
+            text: [base?.text, draft.text].filter(Boolean).join("\n"),
+            attachments: [...(base?.attachments ?? []), ...draft.attachments],
+          },
+          location.workspaceId,
+          location.pathname,
+        );
+      } else {
+        await saveWorkspaceDraft(draft, location.workspaceId, location.pathname);
+      }
+    } catch (error) {
+      draftDirtyRef.current = true;
+      console.warn("[ChatComposer] workspace draft autosave failed", error);
+    }
+  }, [collectDraft]);
+
+  const scheduleDraftSave = useCallback(() => {
+    if (!restoredDraftRef.current && !restoreFailedRef.current) return;
+    draftDirtyRef.current = true;
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(() => {
+      draftSaveTimerRef.current = null;
+      void saveDraftInBackground();
+    }, 500);
+  }, [saveDraftInBackground]);
   useEffect(() => {
     let alive = true;
-    const restore = readWorkspaceDraft();
+    const location = currentWorkspaceDraftLocation();
+    draftLocationRef.current = location;
+    const restore = readWorkspaceDraft(location.workspaceId, location.pathname);
     if (!restoredDraftRef.current) {
       void restore
         .then((draft) => {
-          if (!alive || restoredDraftRef.current) return;
+          if (restoredDraftRef.current) return;
           restoredDraftRef.current = true;
-          if (!draft) return;
+          if (!alive) return;
+          if (!draft) {
+            if (interactedBeforeRestoreRef.current) scheduleDraftSave();
+            return;
+          }
           const current = inputHandleRef.current?.getValue() || "";
-          inputHandleRef.current?.setValue(
-            current ? `${draft.text}\n${current}` : draft.text,
-          );
+          const restoredText = current ? `${draft.text}\n${current}` : draft.text;
+          draftTextRef.current = restoredText;
+          // Restoring is not user input; don't queue a save that would write
+          // the draft straight back to storage.
+          suppressDraftSaveRef.current = true;
+          inputHandleRef.current?.setValue(restoredText);
+          queueMicrotask(() => {
+            suppressDraftSaveRef.current = false;
+          });
+          if (interactedBeforeRestoreRef.current) scheduleDraftSave();
           const files = draft.attachments
             .filter((item) => item.base64)
             .map((item) => {
@@ -571,17 +657,10 @@ export default memo(function ChatComposer({
           );
         });
     }
-    const collectDraft = () => ({
-      text: inputHandleRef.current?.getValue() || "",
-      attachments: draftAttachmentsRef.current.map(
-        ({ filename, base64, mimeType }) => ({ filename, base64, mimeType }),
-      ),
-    });
     // The stored draft never made it into the composer, so saving the composer
     // as-is could clobber it. Skip when nothing new was typed; otherwise merge
     // the new input on top of the stored draft. If even the re-read fails,
     // reject the switch (as on main) instead of losing the new input.
-    let storedDraft: WorkspaceDraft | undefined | null = null;
     const saveAfterFailedRestore = () => {
       restoreFailedRef.current = true;
       const draft = collectDraft();
@@ -590,13 +669,14 @@ export default memo(function ChatComposer({
         saveWorkspaceDraft({
           text: [stored?.text, draft.text].filter(Boolean).join("\n"),
           attachments: [...(stored?.attachments ?? []), ...draft.attachments],
-        });
+        }, location.workspaceId, location.pathname);
       // Re-read only once per mount so a retried switch merges the original
-      // stored draft instead of re-appending the composer to itself.
-      if (storedDraft !== null) return merge(storedDraft);
-      return readWorkspaceDraft().then((stored) => {
-        storedDraft = stored ?? { text: "", attachments: [] };
-        return merge(stored);
+      // stored draft instead of re-appending the composer to itself. Autosave
+      // shares the same cache: it may already have written base + typed text.
+      if (restoreBaseRef.current !== null) return merge(restoreBaseRef.current);
+      return readWorkspaceDraft(location.workspaceId, location.pathname).then((stored) => {
+        restoreBaseRef.current = stored ?? { text: "", attachments: [] };
+        return merge(restoreBaseRef.current);
       });
     };
     const save = (event: Event) => {
@@ -604,7 +684,7 @@ export default memo(function ChatComposer({
         restoreFailedRef.current
           ? saveAfterFailedRestore()
           : restore.then(
-              () => saveWorkspaceDraft(collectDraft()),
+              () => saveWorkspaceDraft(collectDraft(), location.workspaceId, location.pathname),
               saveAfterFailedRestore,
             ),
       );
@@ -613,8 +693,53 @@ export default memo(function ChatComposer({
     return () => {
       alive = false;
       window.removeEventListener("deeptutor:before-workspace-switch", save);
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+      if (!draftDirtyRef.current) return;
+      if (restoredDraftRef.current || restoreFailedRef.current) {
+        void saveDraftInBackground();
+        return;
+      }
+      // The composer unmounted before the stored draft arrived. Merge it with
+      // whatever was typed so neither side is lost.
+      void restore
+        .then((draft) => {
+          if (!draftDirtyRef.current) return;
+          const current = collectDraft();
+          void saveWorkspaceDraft({
+            text: [draft?.text, current.text].filter(Boolean).join("\n"),
+            attachments: [...(draft?.attachments ?? []), ...current.attachments],
+          }, location.workspaceId, location.pathname).catch(() => {});
+        })
+        .catch(() => {
+          if (draftDirtyRef.current) {
+            void saveWorkspaceDraft(collectDraft(), location.workspaceId, location.pathname).catch(() => {});
+          }
+        });
     };
-  }, []);
+  }, [collectDraft, saveDraftInBackground, scheduleDraftSave]);
+
+  // Attachments are part of the same draft. Their signature is a cheap way to
+  // react to add/remove without re-saving on every parent render.
+  const attachmentSignature = attachments
+    .map((item) => `${item.filename}:${item.base64?.length ?? 0}:${item.mimeType ?? ""}`)
+    .join("|");
+  const attachmentsInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!attachmentsInitializedRef.current) {
+      attachmentsInitializedRef.current = true;
+      return;
+    }
+    if (suppressDraftSaveRef.current) return;
+    if (!restoredDraftRef.current && !restoreFailedRef.current) {
+      interactedBeforeRestoreRef.current = true;
+      return;
+    }
+    draftLocationRef.current = currentWorkspaceDraftLocation();
+    scheduleDraftSave();
+  }, [attachmentSignature, scheduleDraftSave]);
   if (lastCapMenuOpen !== capMenuOpen) {
     setLastCapMenuOpen(capMenuOpen);
     if (!capMenuOpen) setMoreCapsOpen(false);
@@ -697,9 +822,17 @@ export default memo(function ChatComposer({
   // every keystroke (no `hasContent` in deps), so the memoized ComposerInput
   // doesn't get re-rendered just because we observed a content-empty toggle.
   const handleInputChange = useCallback((val: string) => {
+    draftTextRef.current = val;
     const next = !!val.trim();
     setHasContent((prev) => (prev === next ? prev : next));
-  }, []);
+    if (suppressDraftSaveRef.current) return;
+    if (!restoredDraftRef.current && !restoreFailedRef.current) {
+      interactedBeforeRestoreRef.current = true;
+      return;
+    }
+    draftLocationRef.current = currentWorkspaceDraftLocation();
+    scheduleDraftSave();
+  }, [scheduleDraftSave]);
 
   const doSend = useCallback(
     (content: string) => {
@@ -711,11 +844,24 @@ export default memo(function ChatComposer({
         return false;
       }
       onSend(content);
-      if (!restoreFailedRef.current) {
-        void saveWorkspaceDraft({ text: "", attachments: [] }).catch(() => {});
+      if (restoredDraftRef.current && !restoreFailedRef.current) {
+        const location = draftLocationRef.current ?? currentWorkspaceDraftLocation();
+        void saveWorkspaceDraft(
+          { text: "", attachments: [] },
+          location.workspaceId,
+          location.pathname,
+        ).catch(() => {});
       }
       setHasContent(false);
+      // Suppress the draft save that the clear below would otherwise queue:
+      // the message is sent, so there is nothing left to restore.
+      suppressDraftSaveRef.current = true;
       inputHandleRef.current?.clear();
+      draftTextRef.current = "";
+      queueMicrotask(() => {
+        suppressDraftSaveRef.current = false;
+      });
+      cancelDraftSave();
       // Sending can move focus to the button or rerender the empty-state
       // composer into the conversation layout. Restore it after that update
       // so the user can keep typing, including after switching back to the tab.
@@ -723,7 +869,7 @@ export default memo(function ChatComposer({
       return true;
     },
     [awaitingUserReply, capabilityConfigConfirmed, capabilityNeedsConfig,
-      focusTextarea, isStreaming, onRequestConfigConfirm, onSend],
+      cancelDraftSave, focusTextarea, isStreaming, onRequestConfigConfirm, onSend],
   );
 
   const { board: taskBoard } = useTaskBoard();
