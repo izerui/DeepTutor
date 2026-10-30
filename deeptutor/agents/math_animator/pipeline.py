@@ -7,6 +7,7 @@ import time
 from typing import Any, Callable
 
 from deeptutor.core.context import Attachment
+from deeptutor.services.model_selection.task_agent import task_model_agent
 
 from .agents import (
     CodeGeneratorAgent,
@@ -64,6 +65,12 @@ class MathAnimatorPipeline:
             api_version=api_version,
             language=language,
         )
+        # Repairs are targeted edits to a working script; the task model does them in
+        # seconds where a reasoning chat model can take several minutes.
+        self.repair_agent = (
+            task_model_agent(lambda **kw: CodeGeneratorAgent(language=language, **kw))
+            or self.code_agent
+        )
         self.summary_agent = SummaryAgent(
             api_key=api_key,
             base_url=base_url,
@@ -87,6 +94,7 @@ class MathAnimatorPipeline:
             self.analysis_agent,
             self.design_agent,
             self.code_agent,
+            self.repair_agent,
             self.summary_agent,
             self.visual_review_agent,
         ):
@@ -235,7 +243,7 @@ class MathAnimatorPipeline:
             on_retry=on_retry,
             on_status=on_retry_status,
             review_callback=review_callback,
-            repair_callback=lambda current_code, error_message, attempt: self.code_agent.repair(
+            repair_callback=lambda current_code, error_message, attempt: self.repair_agent.repair(
                 user_input=user_input,
                 output_mode=request_config.output_mode,
                 current_code=current_code,
