@@ -9,6 +9,8 @@ def _parse_language(language: str | None) -> str:
     raw = (language or "en").strip().lower()
     if raw.startswith("zh") or raw in {"cn", "chinese"}:
         return "zh"
+    if raw.startswith("fr") or raw in {"french", "francais", "français"}:
+        return "fr"
     return "en"
 
 
@@ -106,6 +108,71 @@ _MESSAGES: dict[str, dict[str, str]] = {
         "sandbox.command_blocked": "错误：命令被安全防护拦截（匹配危险模式）。",
         "sandbox.disabled_for_account": "你的账号已禁用代码执行。",
         "sandbox.no_backend": "没有可用的沙箱后端",
+    },
+    "fr": {
+        "api.content_required": "le contenu est requis",
+        "api.invalid_channels_config": "Configuration des canaux invalide",
+        "api.partner_already_exists": "Le partenaire « {name} » existe déjà",
+        "api.partner_not_found": "Partenaire introuvable",
+        "api.partner_not_found_or_not_running": "Partenaire introuvable ou non démarré",
+        "api.partner_not_running": "Le partenaire n’est pas démarré",
+        "api.partner_stopped_start_required": (
+            "Le partenaire est arrêté. Démarrez-le avant de discuter."
+        ),
+        "api.persona_already_exists": "Le persona existe déjà : {name}",
+        "api.persona_name_required": "Le nom du persona est requis",
+        "api.persona_not_found": "Persona introuvable : {name}",
+        "api.soul_already_exists": "Le soul « {name} » existe déjà",
+        "api.soul_content_empty": "Le contenu personnalisé du soul est vide",
+        "api.soul_library_not_found": "Soul « {name} » introuvable dans la bibliothèque",
+        "api.soul_not_found": "Soul introuvable",
+        "api.tool_not_found": "Outil « {name} » introuvable",
+        "cli_apps.abi_mismatch": (
+            "L’application CLI {app!r} a été installée pour {installed}, mais ce runtime "
+            "est {current}. Un administrateur doit la réinstaller."
+        ),
+        "cli_apps.args_required": (
+            "{tool} nécessite un tableau « args » — un argument de ligne de commande par élément."
+        ),
+        "cli_apps.entry_admin_only": (
+            "Les applications CLI sont installées par un administrateur ; "
+            "demandez-lui d’ajouter celle-ci."
+        ),
+        "cli_apps.install_in_progress": "Cette application est déjà en cours d’installation.",
+        "cli_apps.not_in_catalog": "Aucune application CLI nommée {id!r} dans le catalogue.",
+        "cli_apps.not_installed": (
+            "L’application CLI {app!r} n’est plus installée sur ce déploiement."
+        ),
+        "cli_apps.still_running": "{app} est toujours en cours d’exécution ({seconds} s)",
+        "mcp.configure_command_or_url": (
+            "Serveur {name!r} : configurez soit une command (stdio), soit une url."
+        ),
+        "mcp.configure_before_testing": (
+            "Configurez une command (stdio) ou une url avant de tester."
+        ),
+        "mcp.server_error": "Serveur {name!r} : {error}",
+        "mcp.server_missing": "Aucun serveur nommé {name!r} dans votre liste.",
+        "mcp.not_oauth": ("Ce serveur n’utilise pas OAuth ; fournissez-lui plutôt un identifiant."),
+        "mcp.oauth_callback_incomplete": "La réponse d’autorisation est incomplète.",
+        "mcp.oauth_callback_unknown": (
+            "Cette autorisation a expiré ou est déjà terminée. Recommencez."
+        ),
+        "mcp.oauth_done": "Autorisé. Vous pouvez fermer cet onglet.",
+        "mcp.oauth_failed": "L’autorisation a échoué.",
+        "mcp.catalog_entry_missing": "Aucun service MCP nommé {id!r} dans le catalogue.",
+        "mcp.entry_admin_only": (
+            "Ce service s’exécute comme commande locale et ne peut être ajouté que "
+            "par un administrateur."
+        ),
+        "mcp.tool_not_available": (
+            "Cet outil n’est pas disponible dans cette conversation. Seuls les outils "
+            "listés dans l’invite peuvent être appelés."
+        ),
+        "sandbox.command_blocked": (
+            "Erreur : commande bloquée par le garde-fou de sécurité (motif dangereux)."
+        ),
+        "sandbox.disabled_for_account": "L’exécution de code est désactivée pour votre compte.",
+        "sandbox.no_backend": "aucun backend de bac à sable disponible",
     },
 }
 

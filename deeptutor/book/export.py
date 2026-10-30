@@ -54,6 +54,19 @@ _LABELS: dict[str, dict[str, str]] = {
         "not_generated": "（本章尚未生成。）",
         "omitted": "（{kind} 无法用文本表示，已省略。）",
     },
+    "fr": {
+        "takeaway": "À retenir",
+        "answer": "Réponse",
+        "front": "Recto",
+        "back": "Verso",
+        "sources": "Sources",
+        "chapters": "Chapitres",
+        "note": "Remarque",
+        "untitled_book": "Livre sans titre",
+        "untitled_chapter": "Chapitre sans titre",
+        "not_generated": "(Ce chapitre n’a pas encore été généré.)",
+        "omitted": "({kind} omis — aucune représentation textuelle.)",
+    },
 }
 
 

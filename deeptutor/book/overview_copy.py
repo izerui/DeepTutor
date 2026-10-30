@@ -74,6 +74,29 @@ _COPY: dict[str, dict[str, Any]] = {
         "chapter_index_title": "章节索引",
         "chapter_index_heading": "## 章节索引",
     },
+    "fr": {
+        "chapter_title": "Comment lire ce livre",
+        "chapter_summary": (
+            "Vue d’ensemble générée automatiquement à partir du graphe de concepts "
+            "et de l’index des chapitres."
+        ),
+        "objectives": [
+            "Voir la carte complète des chapitres en un coup d’œil",
+            "Comprendre les dépendances entre les concepts",
+            "Choisir le parcours de lecture adapté à vos objectifs",
+        ],
+        "intro_title": "Comment lire ce livre",
+        "intro_body": (
+            "Le schéma ci-dessous cartographie les {concepts} concepts clés de ce livre "
+            "et leurs dépendances. L’index des chapitres qui suit liste les {chapters} "
+            "chapitres — lisez de haut en bas pour suivre le parcours recommandé, ou "
+            "allez directement au sujet qui vous intéresse le plus."
+        ),
+        "untitled_book": "Ce livre",
+        "concept_map_title": "Carte des concepts",
+        "chapter_index_title": "Index des chapitres",
+        "chapter_index_heading": "## Index des chapitres",
+    },
 }
 
 

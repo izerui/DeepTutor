@@ -58,6 +58,46 @@ class TestTurnExecution:
         assert notice.metadata["_progress"] is True
 
     @pytest.mark.asyncio
+    async def test_feishu_thinking_notice_uses_the_partner_language(
+        self, partners_root, fake_orchestrator
+    ):
+        fake_orchestrator.script = finish("done")
+        runner = _runner(partners_root, PartnerConfig(name="Ada", language="fr"))
+
+        await runner.process_message(_msg(channel="feishu"))
+
+        notice = await runner.bus.outbound.get()
+        assert notice.content == "🤔 Réflexion…"
+
+    def test_auto_reply_language_follows_the_account_response_language(
+        self, partners_root, monkeypatch
+    ):
+        from deeptutor.services.settings import interface_settings
+
+        monkeypatch.setattr(
+            interface_settings,
+            "get_response_language",
+            lambda default="en": "fr",
+        )
+        runner = _runner(partners_root, PartnerConfig(name="Ada"))
+
+        assert runner._language() == "fr"
+
+    def test_explicit_reply_language_wins_over_the_account_default(
+        self, partners_root, monkeypatch
+    ):
+        from deeptutor.services.settings import interface_settings
+
+        monkeypatch.setattr(
+            interface_settings,
+            "get_response_language",
+            lambda default="en": "fr",
+        )
+        runner = _runner(partners_root, PartnerConfig(name="Ada", language="uk"))
+
+        assert runner._language() == "uk"
+
+    @pytest.mark.asyncio
     async def test_web_turn_never_announces_thinking(self, partners_root, fake_orchestrator):
         fake_orchestrator.script = finish("done")
         runner = _runner(partners_root, PartnerConfig(name="Ada", language="zh"))

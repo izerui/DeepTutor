@@ -46,6 +46,8 @@ _RESPONSE_LANGUAGE_ALIASES: dict[str, str] = {
     "korean": "ko",
     "spanish": "es",
     "french": "fr",
+    "français": "fr",
+    "francais": "fr",
     "german": "de",
     "russian": "ru",
     "portuguese": "pt",
@@ -94,7 +96,7 @@ def _normalize_language(language: Any, default: str = "en") -> str:
     Normalize language codes:
     - en/english -> en
     - zh/chinese/cn -> zh
-    - fr/french -> fr
+    - fr/french/français -> fr
     - de/german/deutsch -> de
     - uk/ukrainian/ua -> uk
     - pl/polish/polski -> pl
@@ -113,7 +115,7 @@ def _normalize_language(language: Any, default: str = "en") -> str:
             return "en"
         if s == "chinese" or base in {"zh", "cn"}:
             return "zh"
-        if s == "french" or base == "fr":
+        if s in {"french", "français", "francais"} or base == "fr":
             return "fr"
         if s in {"german", "deutsch"} or base == "de":
             return "de"
