@@ -20,7 +20,7 @@ instead of file paths so the server never touches disk.
 from __future__ import annotations
 
 import base64
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
 import io
@@ -44,6 +44,7 @@ from deeptutor.utils.document_images import (
     extract_pptx_rich,
     image_index_from_name,
     ordered_pptx_slide_members,
+    render_docx_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -490,7 +491,11 @@ def _extract_docx(data: bytes, filename: str) -> str:
             logger.info("python-docx failed on %s; falling back to raw OOXML: %s", filename, exc)
 
     fallback = _extract_docx_ooxml(data, filename)
-    if fallback.strip() and (not primary_text.strip() or len(fallback) > len(primary_text) * 1.2):
+    # The raw OOXML path shares the namespace-aware renderer used by rich
+    # extraction, so it preserves native math and table content that
+    # python-docx's ``Paragraph.text`` can silently flatten or omit. Prefer it
+    # whenever it succeeds; length is not a correctness signal for equations.
+    if fallback.strip():
         return fallback
     if primary_text.strip():
         return primary_text
@@ -1115,17 +1120,19 @@ def _collect_ooxml_text(node: Any) -> str:
     return "".join(parts).strip()
 
 
-def _extract_paragraph_text(root: Any) -> list[str]:
+def _extract_paragraph_text(
+    root: Any, *, renderer: Callable[[Any], str] = _collect_ooxml_text
+) -> list[str]:
     paragraphs: list[str] = []
     for node in root.iter():
         if _local_name(node.tag) != "p":
             continue
-        text = _collect_ooxml_text(node)
+        text = renderer(node).strip()
         if text:
             paragraphs.append(text)
     if paragraphs:
         return paragraphs
-    text = _collect_ooxml_text(root)
+    text = renderer(root).strip()
     return [text] if text else []
 
 
@@ -1146,7 +1153,7 @@ def _extract_docx_ooxml(data: bytes, filename: str) -> str:
             root = _parse_xml_member(zf, member, filename)
             if root is None:
                 continue
-            chunks.extend(_extract_paragraph_text(root))
+            chunks.extend(_extract_paragraph_text(root, renderer=render_docx_text))
         return "\n\n".join(chunks)
 
 

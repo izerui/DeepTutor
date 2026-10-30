@@ -65,6 +65,20 @@ def _radical(radicand: str, *, degree: str | None = None) -> Any:
     return radical
 
 
+def _delimiter(*expressions: Any, begin: str = "[", end: str = "]", separator: str = "; ") -> Any:
+    delimiter = OxmlElement("m:d")
+    properties = OxmlElement("m:dPr")
+    begin_node = OxmlElement("m:begChr")
+    begin_node.set("{http://schemas.openxmlformats.org/officeDocument/2006/math}val", begin)
+    end_node = OxmlElement("m:endChr")
+    end_node.set("{http://schemas.openxmlformats.org/officeDocument/2006/math}val", end)
+    separator_node = OxmlElement("m:sepChr")
+    separator_node.set("{http://schemas.openxmlformats.org/officeDocument/2006/math}val", separator)
+    properties.extend((begin_node, end_node, separator_node))
+    delimiter.extend((properties, *expressions))
+    return delimiter
+
+
 def native_equation_docx_bytes() -> bytes:
     """Build a valid DOCX with mixed, nested native Word equations."""
     doc = DocxDocument()
@@ -125,10 +139,50 @@ def unsupported_equation_docx_bytes() -> bytes:
     return buffer.getvalue()
 
 
+def equation_chain_docx_bytes() -> bytes:
+    """Build a DOCX covering inline, display, delimiter, and table math."""
+    doc = DocxDocument()
+
+    inline_paragraph = doc.add_paragraph("Inline before ")
+    inline_math = OxmlElement("m:oMath")
+    inline_math.append(_fraction("1", "2"))
+    inline_paragraph._p.append(inline_math)
+    inline_paragraph.add_run(" after.")
+
+    display_paragraph = doc.add_paragraph("Display before")
+    display_container = OxmlElement("m:oMathPara")
+    display_math = OxmlElement("m:oMath")
+    display_expression = OxmlElement("m:e")
+    display_expression.extend((_run("x"), _run(" + "), _run("1")))
+    display_expression_2 = OxmlElement("m:e")
+    display_expression_2.append(_run("y"))
+    display_math.append(_delimiter(display_expression, display_expression_2))
+    display_container.append(display_math)
+    display_paragraph._p.append(display_container)
+    display_paragraph.add_run("after.")
+
+    table = doc.add_table(rows=1, cols=1)
+    cell_paragraph = table.cell(0, 0).paragraphs[0]
+    cell_paragraph.add_run("Cell power: ")
+    cell_math = OxmlElement("m:oMath")
+    cell_math.append(_superscript("y", "2"))
+    cell_paragraph._p.append(cell_math)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
 EXPECTED_EQUATION_PARAGRAPHS = (
     "Fraction: 1/2 + 1/3.",
     "Power: 2^3.",
     "Root: sqrt(9).",
     "Scripts: a_i + x^2/sqrt(y).",
     "Indexed root: root(3, 8).",
+)
+
+EXPECTED_CHAIN_PARAGRAPHS = (
+    "Inline before 1/2 after.",
+    "Display before\n[x + 1; y]\nafter.",
+    "Cell power: y^2",
 )

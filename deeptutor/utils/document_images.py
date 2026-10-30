@@ -305,6 +305,13 @@ def _omml_argument(node: Any, name: str) -> str:
     return _render_omml(child).strip() if child is not None else ""
 
 
+def _omml_property(node: Any, property_name: str, value_name: str) -> str:
+    """Return one ``m:val``-style value from a direct OMML property child."""
+    properties = _child_with_local_name(node, property_name)
+    value_node = _child_with_local_name(properties, value_name) if properties is not None else None
+    return _attribute_with_local_name(value_node, "val") if value_node is not None else ""
+
+
 def _math_atom(text: str) -> str:
     """Parenthesise a compound operand while leaving simple atoms readable."""
     text = text.strip()
@@ -330,7 +337,7 @@ def _render_omml(node: Any) -> str:
         return ""
     name = _local_name(node.tag)
     if _namespace(node.tag) != MATH_NS:
-        return "".join(_render_docx_text(child) for child in node)
+        return "".join(render_docx_text(child) for child in node)
 
     if name == "t":
         return node.text or ""
@@ -338,7 +345,6 @@ def _render_omml(node: Any) -> str:
         return ""
     if name in {
         "oMath",
-        "oMathPara",
         "r",
         "e",
         "num",
@@ -350,6 +356,10 @@ def _render_omml(node: Any) -> str:
         "fName",
     }:
         return _omml_children(node)
+
+    if name == "oMathPara":
+        expression = _omml_children(node).strip()
+        return f"\n{expression}\n" if expression else ""
 
     if name == "f":
         numerator = _omml_argument(node, "num")
@@ -388,11 +398,21 @@ def _render_omml(node: Any) -> str:
             return f"sqrt({expression or '?'})"
         return f"root({degree}, {expression or '?'})"
 
+    if name == "d":
+        begin = _omml_property(node, "dPr", "begChr") or "("
+        end = _omml_property(node, "dPr", "endChr") or ")"
+        separator = _omml_property(node, "dPr", "sepChr") or "|"
+        expressions = [
+            _render_omml(child).strip() for child in node if _local_name(child.tag) == "e"
+        ]
+        content = separator.join(expression for expression in expressions if expression)
+        return f"{begin}{content}{end}"
+
     flattened = _omml_leaf_text(node) or name
     return f"[unsupported equation: {flattened}]"
 
 
-def _render_docx_text(node: Any) -> str:
+def render_docx_text(node: Any) -> str:
     """Render text below one DOCX node without flattening OMML structure."""
     name = _local_name(node.tag)
     namespace = _namespace(node.tag)
@@ -404,7 +424,7 @@ def _render_docx_text(node: Any) -> str:
         return "\t"
     if name in {"br", "cr"}:
         return "\n"
-    return "".join(_render_docx_text(child) for child in node)
+    return "".join(render_docx_text(child) for child in node)
 
 
 def fit_inline_image(ext: str, data: bytes, *, max_edge: int) -> tuple[str, bytes]:
@@ -517,7 +537,7 @@ def extract_docx_rich(data: bytes, *, budget: ImageBudget | None = None) -> Docx
                             by_target[target] = image
                     if image is not None:
                         markers.append(build_marker(image))
-            paragraph = _render_docx_text(node).strip()
+            paragraph = render_docx_text(node).strip()
             if markers:
                 paragraph = (paragraph + "\n" if paragraph else "") + "\n".join(markers)
             if paragraph:

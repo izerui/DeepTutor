@@ -29,7 +29,10 @@ from deeptutor.utils.document_images import (
     reading_image_budget,
 )
 from tests.docx_math_fixture import (
+    EXPECTED_CHAIN_PARAGRAPHS,
     EXPECTED_EQUATION_PARAGRAPHS,
+    _fraction,
+    equation_chain_docx_bytes,
     native_equation_docx_bytes,
     unsupported_equation_docx_bytes,
 )
@@ -150,6 +153,34 @@ def test_docx_rich_marks_unsupported_word_equation_instead_of_flattening() -> No
     rich = extract_docx_rich(unsupported_equation_docx_bytes())
 
     assert rich.paragraphs == ("Unsupported: [unsupported equation: 12]",)
+
+
+def test_docx_rich_preserves_inline_display_delimiter_and_table_math() -> None:
+    rich = extract_docx_rich(equation_chain_docx_bytes())
+
+    assert rich.paragraphs == EXPECTED_CHAIN_PARAGRAPHS
+
+
+def test_docx_rich_keeps_text_equation_and_image_marker_order(png: bytes) -> None:
+    from docx.oxml import OxmlElement
+
+    doc = DocxDocument()
+    doc.add_paragraph("Before")
+    equation_paragraph = doc.add_paragraph("Equation: ")
+    math = OxmlElement("m:oMath")
+    math.append(_fraction("1", "2"))
+    equation_paragraph._p.append(math)
+    doc.add_picture(io.BytesIO(png), width=Inches(2))
+    doc.add_paragraph("After")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+
+    rich = extract_docx_rich(buffer.getvalue())
+    text = "\n".join(rich.paragraphs)
+    marker = build_marker(rich.collection.images[0])
+
+    assert text.index("Before") < text.index("Equation: 1/2")
+    assert text.index("Equation: 1/2") < text.index(marker) < text.index("After")
 
 
 # ---------------------------------------------------------------------------
