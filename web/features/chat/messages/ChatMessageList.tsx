@@ -136,6 +136,10 @@ const CourseHandoffCards = dynamic(
   () => import("@/components/chat/home/CourseHandoffCard").then(module => module.CourseHandoffCards),
   { ssr: false },
 );
+const MasterySourcePages = dynamic(
+  () => import("@/components/chat/home/MasterySourcePresentation").then(module => module.MasterySourcePages),
+  { ssr: false },
+);
 const MasteryHandoffCards = dynamic(
   () => import("@/components/chat/home/MasteryHandoffCard").then(module => module.MasteryHandoffCards),
   { ssr: false },
@@ -439,7 +443,9 @@ function buildMessageBlocks(
   segments.slice(0, answerStart).forEach((segment, index) => {
     if (
       (segment.kind === "ask_user" && !segment.data.resolved) ||
-      segment.kind === "mastery_question"
+      segment.kind === "mastery_question" ||
+      // A presented lesson page is part of the lesson, not working-out.
+      segment.kind === "source_view"
     ) {
       flush();
       blocks.push({ kind: "card", key: segment.key, segment });
@@ -931,6 +937,16 @@ export const AssistantMessage = memo(function AssistantMessage({
         : [],
     [useInlineSegments, msg.events, msg.content, isStreaming],
   );
+  // Pages already drawn at the tool call that presented them; the fallback
+  // below only stacks the ones this layout had no place for.
+  const placedSourcePages = useMemo(() => {
+    const urls = new Set<string>();
+    if (!useInlineSegments) return urls;
+    for (const seg of messageSegments) {
+      if (seg.kind === "source_view") seg.pages.forEach(page => urls.add(page.preview_url));
+    }
+    return urls;
+  }, [useInlineSegments, messageSegments]);
   // Either card kind: a clarifying ask_user, or a posed mastery question.
   const hasInlineCards =
     useInlineSegments &&
@@ -1175,6 +1191,8 @@ export const AssistantMessage = memo(function AssistantMessage({
               <div key={block.key}>
                 {renderMasteryCard(block.segment.question)}
               </div>
+            ) : block.segment.kind === "source_view" ? (
+              <MasterySourcePages key={block.key} pages={block.segment.pages} />
             ) : block.segment.kind === "ask_user" ? (
               <AskUserOptions
                 key={block.key}
@@ -1208,7 +1226,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         Array.isArray(event.metadata.sources) && event.metadata.sources.some(source =>
           source && typeof source === "object" &&
           (source.presentation === "teaching" || source.presentation === "reveal"))) &&
-        <MasterySourcePresentation events={events} />}
+        <MasterySourcePresentation events={events} placed={placedSourcePages} />}
       {/* Non-default branches (quiz, math animator, visualize) keep the
           card below the body. The default branch inlines it via
           ``messageSegments``; the research branch renders its own card

@@ -8,25 +8,17 @@ import { useBinarySource } from "@/components/chat/preview/previewers/useBinaryS
 import { useMasteryTemplate } from "@/components/space/learning/mastery-template-context";
 import { withMasteryTemplate } from "@/lib/mastery-template-scope";
 import { COURSE_UNAVAILABLE_KEY, AUTHOR_PATH_UNAVAILABLE_CODE } from "@/lib/author-path-messages";
+import { presentedPagesFromSources, type PresentedPage } from "@/lib/mastery-source-pages";
 
-type Page = { title: string; preview_url: string };
+type Page = PresentedPage;
 
-function presentedPages(events: StreamEvent[]): Page[] {
+function presentedPages(events: StreamEvent[], placed: ReadonlySet<string>): Page[] {
   const pages = new Map<string, Page>();
   for (const event of events) {
     if (event.type !== "sources" || !["chat", "mastery_path"].includes(event.source)) continue;
-    const sources = event.metadata.sources;
-    if (!Array.isArray(sources)) continue;
-    for (const source of sources) {
-      if (!source || typeof source !== "object") continue;
-      if (source.presentation !== "teaching" && source.presentation !== "reveal") continue;
-      const { title, preview_url } = source;
-      // Authenticated requests must stay on the exact native source-page route.
-      if (typeof title !== "string" || typeof preview_url !== "string" ||
-          !/^\/api\/knowledge-bases\/[A-Za-z0-9_%.-]+\/source-page\?/.test(preview_url)) continue;
-      const parsed = new URL(preview_url, "https://source.invalid");
-      if (parsed.pathname !== preview_url.split("?")[0]) continue;
-      pages.set(preview_url, { title, preview_url });
+    for (const page of presentedPagesFromSources(event.metadata.sources)) {
+      // A page already shown at its tool call is not stacked again below.
+      if (!placed.has(page.preview_url)) pages.set(page.preview_url, page);
     }
   }
   return [...pages.values()].slice(0, 12);
@@ -51,6 +43,17 @@ function SourcePage({ page }: { page: Page }) {
 }
 
 /** Render publication receipts; publication does not prove that a learner viewed a page. */
-export function MasterySourcePresentation({ events }: { events: StreamEvent[] }) {
-  return <>{presentedPages(events).map(page => <SourcePage key={page.preview_url} page={page} />)}</>;
+export function MasterySourcePresentation({ events, placed }: {
+  events: StreamEvent[];
+  /** Preview URLs already rendered where their tool call happened. */
+  placed?: ReadonlySet<string>;
+}) {
+  return <>{presentedPages(events, placed ?? NONE).map(page => <SourcePage key={page.preview_url} page={page} />)}</>;
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
+/** The pages one tool call presented, shown where that call happened. */
+export function MasterySourcePages({ pages }: { pages: PresentedPage[] }) {
+  return <>{pages.map(page => <SourcePage key={page.preview_url} page={page} />)}</>;
 }
