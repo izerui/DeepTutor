@@ -1947,7 +1947,7 @@ export const UserMessage = memo(function UserMessage({
                 }
               />
             ) : null}
-            <div className="whitespace-pre-wrap"><LearningText size={14}>{msg.content}</LearningText></div>
+            <div dir="auto" className="whitespace-pre-wrap"><LearningText size={14}>{msg.content}</LearningText></div>
           </div>
         )}
         {/* Recovery records are local to this browser. Keep their actions
