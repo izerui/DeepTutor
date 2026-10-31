@@ -762,19 +762,27 @@ def ordered_pptx_slide_members(zf: zipfile.ZipFile) -> list[str]:
         root = _parse_xml(zf.read("ppt/presentation.xml"))
     except Exception:
         root = None
-    if root is not None:
-        targets = _office_rels(zf, "ppt/_rels/presentation.xml.rels")
-        ordered: list[str] = []
-        for node in root.iter():
-            if _local_name(node.tag) != "sldId":
-                continue
-            rid = node.get(
-                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-            )
-            target = targets.get(rid or "", "").lstrip("/")
-            if target in names:
-                ordered.append(target)
-        if ordered:
+    if root is not None and _local_name(root.tag) == "presentation":
+        slide_ids = [node for node in root.iter() if _local_name(node.tag) == "sldId"]
+        if not slide_ids:
+            return []
+        rels_member = "ppt/_rels/presentation.xml.rels"
+        try:
+            # An empty mapping can mean valid-but-unresolved relationships or
+            # unreadable metadata. Only unreadable metadata permits fallback.
+            _parse_xml(zf.read(rels_member))
+        except Exception:
+            pass
+        else:
+            targets = _office_rels(zf, rels_member)
+            ordered: list[str] = []
+            for node in slide_ids:
+                rid = node.get(
+                    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+                )
+                target = targets.get(rid or "", "").lstrip("/")
+                if target in names:
+                    ordered.append(target)
             return ordered
     # Keep best-effort extraction for older/minimal archives without usable
     # presentation metadata, rather than requiring python-pptx to read them.

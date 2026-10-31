@@ -65,3 +65,37 @@ def test_metadata_free_fallback_remains_available(malformed: bool) -> None:
         "Second created",
         "Third created",
     )
+
+
+def test_empty_presentation_does_not_resurrect_an_orphan_slide() -> None:
+    empty = io.BytesIO()
+    Presentation().save(empty)
+    output = io.BytesIO()
+    with zipfile.ZipFile(empty) as source, zipfile.ZipFile(output, "w") as target:
+        for member in source.infolist():
+            target.writestr(member, source.read(member))
+        with zipfile.ZipFile(io.BytesIO(_reordered_deck(orphan=False))) as populated:
+            target.writestr("ppt/slides/slide1.xml", populated.read("ppt/slides/slide1.xml"))
+    data = output.getvalue()
+    assert len(Presentation(io.BytesIO(data)).slides) == 0
+    assert _extract_pptx_rich_ooxml(data).slides == ()
+    assert _extract_pptx_ooxml(data, "empty.pptx") == ""
+
+
+def test_external_slide_relationships_are_not_replaced_by_unreferenced_parts() -> None:
+    from xml.etree import ElementTree
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(_reordered_deck(orphan=False))) as source:
+        with zipfile.ZipFile(output, "w") as target:
+            for member in source.infolist():
+                data = source.read(member)
+                if member.filename == "ppt/_rels/presentation.xml.rels":
+                    relationships = ElementTree.fromstring(data)
+                    for relationship in relationships:
+                        if relationship.get("Type", "").endswith("/slide"):
+                            relationship.set("TargetMode", "External")
+                    data = ElementTree.tostring(relationships)
+                target.writestr(member, data)
+    assert _extract_pptx_rich_ooxml(output.getvalue()).slides == ()
+    assert _extract_pptx_ooxml(output.getvalue(), "external.pptx") == ""
