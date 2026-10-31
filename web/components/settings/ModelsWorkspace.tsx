@@ -81,6 +81,7 @@ export function ModelsWorkspace({
   const services = PAGE_SERVICES[page];
   const rows = flattenModels(draft, services);
   const editorRef = useRef<HTMLDivElement>(null);
+  const restoredPage = useRef<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newService, setNewService] = useState<ServiceName>(
@@ -93,9 +94,10 @@ export function ModelsWorkspace({
   // The add panel and the selected row are what the URL says they are, so a
   // refresh cannot silently swap one surface for the other.
   const syncQuery = (updates: Record<string, string | null>) => {
+    restoredPage.current = page;
     const params = new URLSearchParams(window.location.search);
     for (const [key, value] of Object.entries(updates)) {
-      if (value) params.set(key, value);
+      if (value !== null) params.set(key, value);
       else params.delete(key);
     }
     const query = params.toString();
@@ -106,6 +108,7 @@ export function ModelsWorkspace({
     );
   };
   useEffect(() => {
+    if (restoredPage.current === page) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("add") === "1") {
       setAdding(true);
@@ -117,15 +120,22 @@ export function ModelsWorkspace({
       const source = provider
         ? selectable.find((p) => p.id === provider)
         : undefined;
+      // A provider may arrive after the initial empty catalog. Retry hydration
+      // until it exists, but never overwrite user edits after that point.
+      if (provider && !source) return;
       if (source) {
         setNewProvider(source.id);
         setNewModelId(
-          defaultModelFor(source, effective, connectionTargets, providers),
+          params.get("model") ?? defaultModelFor(source, effective, connectionTargets, providers),
         );
       }
+      restoredPage.current = page;
     } else {
       const profileId = params.get("profile");
-      if (!profileId) return;
+      if (!profileId) {
+        restoredPage.current = page;
+        return;
+      }
       const modelId = params.get("model");
       const match =
         rows.find(
@@ -133,11 +143,14 @@ export function ModelsWorkspace({
             r.profile.id === profileId &&
             (!modelId || r.model?.id === modelId),
         ) || rows.find((r) => r.profile.id === profileId);
-      if (match) setSelected((current) => current || match.key);
+      if (match) {
+        setSelected(match.key);
+        restoredPage.current = page;
+      }
     }
     // Resolve old profile links after the settings payload arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows.length]);
+  }, [page, draft, providers, connectionTargets]);
   // Apply refused a blank model and named it here, so the owning page opens
   // that row even when the URL stays on the same route.
   useEffect(() => {
@@ -185,13 +198,13 @@ export function ModelsWorkspace({
     (source) => !("managed_by" in source.source && source.source.managed_by),
   );
   const chooseNewProvider = (id: string) => {
-    setNewProvider(id);
     const source = id ? selectable.find((p) => p.id === id) : undefined;
-    setNewModelId(
-      source
-        ? defaultModelFor(source, newService, connectionTargets, providers)
-        : "",
-    );
+    const model = source
+      ? defaultModelFor(source, newService, connectionTargets, providers)
+      : "";
+    setNewProvider(id);
+    setNewModelId(model);
+    syncQuery({ provider: id || null, model });
   };
   const addSource = selectable.find((p) => p.id === newProvider);
   const addModelOptions = addSource
@@ -486,11 +499,15 @@ export function ModelsWorkspace({
                   setNewService(value);
                   setNewProvider("");
                   setNewModelId("");
+                  syncQuery({ service: value, provider: null, model: null });
                 }}
                 provider={newProvider}
                 onProvider={chooseNewProvider}
                 modelId={newModelId}
-                onModelId={setNewModelId}
+                onModelId={(value) => {
+                  setNewModelId(value);
+                  syncQuery({ model: value });
+                }}
                 modelOptions={addModelOptions}
                 sources={selectable}
                 declared={(source) => declared(source, newService)}

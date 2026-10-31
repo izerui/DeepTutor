@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
+import { act } from "@testing-library/react";
 import type {
   Catalog,
   SettingsContextValue,
@@ -664,4 +665,27 @@ it("failed reprobes replace stale discovery instead of retaining a green capabil
   fireEvent.click(screen.getByRole("button", { name: "Test provider" }));
   await waitFor(() => expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ status: "unreachable", models: [] })));
   expect(screen.queryByText("settings.providerServices.catalogListed")).toBeNull();
+});
+
+
+it("preserves the add draft when the catalog gains another model", () => {
+  window.history.replaceState(null, "", "/settings/llm?add=1&service=llm&provider=llm%3Alegacy");
+  render(<Harness page="llm" />);
+  fireEvent.change(screen.getByLabelText("Model ID"), { target: { value: "custom-unsaved" } });
+  act(() => mocks.settings.mutateCatalog((next) => {
+    next.services.llm.profiles[0].models.push({ id: "arrived", name: "Arrived", model: "arrived" });
+  }));
+  expect((screen.getByLabelText("Model ID") as HTMLInputElement).value).toBe("custom-unsaved");
+  expect(new URLSearchParams(window.location.search).get("model")).toBe("custom-unsaved");
+});
+
+it("restores a typed add model across a remount", () => {
+  window.history.replaceState(null, "", "/settings/llm?add=1&service=llm&provider=llm%3Alegacy&model=custom-unsaved");
+  const view = render(<Harness page="llm" />);
+  expect((screen.getByLabelText("Model ID") as HTMLInputElement).value).toBe("custom-unsaved");
+  fireEvent.change(screen.getByLabelText("Configured provider"), { target: { value: "" } });
+  expect(new URLSearchParams(window.location.search).has("provider")).toBe(false);
+  view.unmount();
+  render(<Harness page="llm" />);
+  expect((screen.getByLabelText("Configured provider") as HTMLSelectElement).value).toBe("");
 });
