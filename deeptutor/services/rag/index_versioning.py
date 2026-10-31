@@ -31,7 +31,6 @@ import json
 import logging
 from pathlib import Path
 import re
-import shutil
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -40,10 +39,6 @@ VERSION_PREFIX = "version-"
 LEGACY_VERSION_DIRNAME = "index_versions"
 LEGACY_STORAGE_DIRNAME = "llamaindex_storage"
 META_FILENAME = "meta.json"
-# Readers use the newest ready store for a signature. A few older snapshots
-# stay so a bad publish can still be rolled back. Folder sync used to leave
-# one full snapshot per file (#2173).
-RETAINED_FLAT_VERSIONS = 3
 
 _VERSION_RE = re.compile(r"^version-(\d+)$")
 
@@ -311,56 +306,6 @@ def storage_dir_for_signature(kb_dir: Path, sig_hash: str) -> Path:
     return version_dir_for_signature(kb_dir, sig_hash)
 
 
-def _is_llamaindex_flat_version(path: Path) -> bool:
-    """True for a published LlamaIndex ``version-N`` directory.
-
-    Other providers share the flat ``version-N`` names. Their stores do not
-    carry a LlamaIndex docstore. A directory that still has ``.building.json``
-    and no published meta is an in-progress build and stays untouched.
-    """
-    if not path.is_dir():
-        return False
-    meta = _read_json(path / META_FILENAME) or {}
-    if (path / ".building.json").is_file() and meta.get("state") != "published":
-        return False
-    if meta.get("provider") not in (None, "llamaindex"):
-        return False
-    return (path / "docstore.json").is_file() or (path / "index_store.json").is_file()
-
-
-def prune_flat_versions(
-    kb_dir: Path, *, keep: int = RETAINED_FLAT_VERSIONS, protect: Path | None = None
-) -> list[Path]:
-    """Delete old LlamaIndex snapshots, keeping the newest ``keep`` per signature.
-
-    Version numbers increase on every publish. The newest directory for a
-    signature is the one readers open, so dropping everything before the
-    retained tail does not change the active index. ``protect`` is the
-    directory just published and is never removed.
-    """
-    if keep < 1:
-        raise ValueError("keep must be at least 1")
-    protected = protect.resolve() if protect is not None else None
-    grouped: dict[str, list[Path]] = {}
-    for path in _flat_version_dirs(kb_dir):
-        if not _is_llamaindex_flat_version(path):
-            continue
-        meta = _read_json(path / META_FILENAME) or {}
-        grouped.setdefault(str(meta.get("signature") or ""), []).append(path)
-    removed: list[Path] = []
-    for paths in grouped.values():
-        for path in paths[:-keep]:
-            if protected is not None and path.resolve() == protected:
-                continue
-            try:
-                shutil.rmtree(path)
-            except OSError:
-                logger.warning("Could not remove old index version %s", path, exc_info=True)
-                continue
-            removed.append(path)
-    return removed
-
-
 def write_version_meta(
     kb_dir: Path, signature: EmbeddingSignature, storage_dir: Path | None = None
 ) -> None:
@@ -379,8 +324,6 @@ def write_version_meta(
     if (target / ".building.json").exists():
         payload.update(provider="llamaindex", state="published", readiness_verified=True)
     atomic_write_json(target / META_FILENAME, payload)
-    if target.parent == kb_dir and _VERSION_RE.match(target.name):
-        prune_flat_versions(kb_dir, protect=target)
 
 
 def resolve_storage_dir_for_read(

@@ -17,7 +17,6 @@ from deeptutor.services.embedding import get_embedding_config
 from deeptutor.services.rag.embedding_signature import signature_from_embedding_config
 from deeptutor.services.rag.index_versioning import (
     EmbeddingSignature,
-    prune_flat_versions,
     resolve_storage_dir_for_read,
     resolve_storage_dir_for_rebuild,
     write_version_meta,
@@ -570,7 +569,6 @@ class LlamaIndexPipeline:
                     "readiness_verified": True,
                 },
             )
-            prune_flat_versions(kb_dir, protect=storage_dir)
         if run:
             run.data["usable_version"] = storage_dir.name
             for document in documents:
