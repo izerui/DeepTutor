@@ -321,10 +321,20 @@ def _math_atom(text: str, *, script_operand: bool = False) -> str:
         return f"({text})"
     if re.fullmatch(r"[\w.]+(?:_[\w.]+)?(?:\^[\w.]+)?", text, flags=re.UNICODE):
         return text
-    if re.fullmatch(r"(?:sqrt|root)\(.*\)", text):
-        return text
-    if text.startswith("[") and text.endswith("]"):
-        return text
+    root = re.fullmatch(r"(?:sqrt|root)(\(.*\))", text)
+    grouped = root.group(1) if root else text
+    if grouped.startswith(("(", "[")):
+        opening, closing = ("(", ")") if grouped[0] == "(" else ("[", "]")
+        depth = 0
+        for index, char in enumerate(grouped):
+            if char == opening:
+                depth += 1
+            elif char == closing:
+                depth -= 1
+                if depth == 0:
+                    if index == len(grouped) - 1:
+                        return text
+                    break
     return f"({text})"
 
 

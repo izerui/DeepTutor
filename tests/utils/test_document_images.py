@@ -428,3 +428,19 @@ def test_empty_math_delimiter_is_not_replaced_with_a_default():
         f'<d xmlns="{MATH_NS}" xmlns:m="{MATH_NS}"><dPr><begChr m:val="["/><endChr m:val=""/></dPr><e><r><t>x</t></r></e></d>'
     )
     assert render_docx_text(root) == "[x"
+
+
+@pytest.mark.parametrize("operand", ["sqrt(x) + sqrt(y)", "[x] + [y]"])
+def test_math_compound_delimited_operands_remain_grouped(operand):
+    from xml.etree import ElementTree as ET
+
+    from deeptutor.utils.document_images import MATH_NS, render_docx_text
+
+    node = ET.fromstring(
+        f'<f xmlns="{MATH_NS}"><num><r><t>1</t></r></num><den><r><t>{operand}</t></r></den></f>'
+    )
+    assert render_docx_text(node) == f"1/({operand})"
+    node = ET.fromstring(
+        f'<sSup xmlns="{MATH_NS}"><e><r><t>z</t></r></e><sup><r><t>{operand}</t></r></sup></sSup>'
+    )
+    assert render_docx_text(node) == f"z^({operand})"
