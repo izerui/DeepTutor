@@ -5,10 +5,11 @@ import { MessageSquare } from "lucide-react";
 
 import ChatComposer from "@/components/chat/home/ChatComposer";
 import type { CapabilityDef } from "@/features/capabilities/presentation";
+import type { WorkspaceDraft } from "@/lib/workspace-drafts";
 
 const drafts = vi.hoisted(() => ({
   read: vi.fn<() => Promise<unknown>>(),
-  save: vi.fn<() => Promise<void>>(),
+  save: vi.fn<(draft: WorkspaceDraft) => Promise<void>>(),
 }));
 const draftLocation = vi.hoisted(() => ({
   current: { workspaceId: "ws_test", pathname: "/chat" },
@@ -440,4 +441,71 @@ it("serializes send cleanup after an in-flight autosave", async () => {
     await act(async () => { finishSave(); });
     expect(drafts.save).toHaveBeenLastCalledWith({text: "", attachments: []}, "ws_test", "/chat");
   } finally { vi.useRealTimers(); }
+});
+
+it("serializes workspace-switch persistence after autosave", async () => {
+  vi.useFakeTimers();
+  let finishSave!: () => void;
+  let stored = "";
+  try {
+    drafts.read.mockResolvedValue(undefined);
+    drafts.save.mockImplementationOnce((draft) => new Promise<void>(resolve => {
+      finishSave = () => {stored = draft.text; resolve();};
+    })).mockImplementation(async (draft) => {stored = draft.text;});
+    const { unmount } = render(<Harness />);
+    await act(async () => {});
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "old text" } });
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(drafts.save).toHaveBeenCalledTimes(1);
+    fireEvent.change(input, { target: { value: "new text" } });
+    const pending = switchWorkspace();
+    await act(async () => { await Promise.resolve(); });
+    // Both writes must run in order; an older autosave may not replace the switch's latest draft.
+    await act(async () => {finishSave(); await Promise.all(pending);});
+    expect(stored).toBe("new text");
+    unmount();
+  } finally {vi.useRealTimers();}
+});
+
+it("does not resurrect the source after a workspace draft transfer", async () => {
+  vi.useFakeTimers();
+  let stored = "";
+  try {
+    drafts.read.mockResolvedValue(undefined);
+    drafts.save.mockImplementation(async (draft) => {stored = draft.text;});
+    const { unmount } = render(<Harness />);
+    await act(async () => {});
+    fireEvent.change(screen.getByRole("textbox"), {target: {value: "move this"}});
+    await act(async () => {await Promise.all(switchWorkspace());});
+    expect(stored).toBe("move this");
+    // useWorkspaceBinding's beforeNavigate transfers the saved source and then deletes it.
+    stored = "";
+    unmount();
+    await act(async () => {});
+    expect(stored).toBe("");
+  } finally {vi.useRealTimers();}
+});
+
+it("keeps input typed while a workspace-switch save is pending", async () => {
+  vi.useFakeTimers();
+  let finishSave!: () => void;
+  let stored = "";
+  try {
+    drafts.read.mockResolvedValue(undefined);
+    drafts.save.mockImplementationOnce((draft) => new Promise<void>(resolve => {
+      finishSave = () => {stored = draft.text; resolve();};
+    })).mockImplementation(async (draft) => {stored = draft.text;});
+    const { unmount } = render(<Harness />);
+    await act(async () => {});
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "before switch" } });
+    const pending = switchWorkspace();
+    await act(async () => {});
+    fireEvent.change(input, { target: { value: "typed during save" } });
+    await act(async () => {finishSave(); await Promise.all(pending);});
+    unmount();
+    await act(async () => {});
+    expect(stored).toBe("typed during save");
+  } finally {vi.useRealTimers();}
 });

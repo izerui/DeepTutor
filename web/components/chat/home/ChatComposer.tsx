@@ -541,6 +541,7 @@ export default memo(function ChatComposer({
   const restoreFailedRef = useRef(false);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftDirtyRef = useRef(false);
+  const draftRevisionRef = useRef(0);
   const draftLocationRef = useRef<WorkspaceDraftLocation | null>(null);
   const draftTextRef = useRef("");
   const interactedBeforeRestoreRef = useRef(false);
@@ -689,12 +690,21 @@ export default memo(function ChatComposer({
     };
     const save = (event: Event) => {
       (event as CustomEvent<Promise<void>[]>).detail.push(
-        restoreFailedRef.current
-          ? saveAfterFailedRestore()
-          : restore.then(
-              () => saveWorkspaceDraft(collectDraft(), location.workspaceId, location.pathname),
-              saveAfterFailedRestore,
-            ),
+        enqueueDraftWrite(async () => {
+          // The switch (and any draft transfer before navigation) must wait
+          // for older autosaves, including their asynchronous identity reads.
+          await restore.catch(() => { restoreFailedRef.current = true; });
+          const revision = draftRevisionRef.current;
+          if (restoreFailedRef.current) {
+            await saveAfterFailedRestore();
+          } else {
+            await saveWorkspaceDraft(collectDraft(), location.workspaceId, location.pathname);
+          }
+          // A successful switch already persisted this revision. Do not let
+          // unmount restore a source draft that beforeNavigate just moved.
+          // If the user typed while the save ran, keep that newer input dirty.
+          if (draftRevisionRef.current === revision) cancelDraftSave();
+        }),
       );
     };
     window.addEventListener("deeptutor:before-workspace-switch", save);
@@ -712,24 +722,25 @@ export default memo(function ChatComposer({
       }
       // The composer unmounted before the stored draft arrived. Merge it with
       // whatever was typed so neither side is lost.
-      void restore
-        .then((draft) => {
-          if (!draftDirtyRef.current) return;
-          const current = collectDraft();
-          void saveWorkspaceDraft({
-            text: [draft?.text, current.text].filter(Boolean).join("\n"),
-            attachments: [...(draft?.attachments ?? []), ...current.attachments],
-          }, location.workspaceId, location.pathname).catch(() => {});
-        })
-        .catch(() => {
-          if (draftDirtyRef.current) {
-            void saveAfterFailedRestore().catch((error) => {
-              console.warn("[ChatComposer] could not preserve draft after unmount", error);
-            });
-          }
-        });
+      void enqueueDraftWrite(async () => {
+        let draft: WorkspaceDraft | undefined;
+        try {
+          draft = await restore;
+        } catch {
+          if (draftDirtyRef.current) await saveAfterFailedRestore();
+          return;
+        }
+        if (!draftDirtyRef.current) return;
+        const current = collectDraft();
+        await saveWorkspaceDraft({
+          text: [draft?.text, current.text].filter(Boolean).join("\n"),
+          attachments: [...(draft?.attachments ?? []), ...current.attachments],
+        }, location.workspaceId, location.pathname);
+      }).catch((error) => {
+        console.warn("[ChatComposer] could not preserve draft after unmount", error);
+      });
     };
-  }, [collectDraft, saveDraftInBackground, scheduleDraftSave]);
+  }, [cancelDraftSave, collectDraft, enqueueDraftWrite, saveDraftInBackground, scheduleDraftSave]);
 
   // Attachments are part of the same draft. Their signature is a cheap way to
   // react to add/remove without re-saving on every parent render.
@@ -743,6 +754,7 @@ export default memo(function ChatComposer({
       return;
     }
     if (suppressDraftSaveRef.current) return;
+    draftRevisionRef.current += 1;
     if (!restoredDraftRef.current && !restoreFailedRef.current) {
       interactedBeforeRestoreRef.current = true;
       draftDirtyRef.current = true;
@@ -837,6 +849,7 @@ export default memo(function ChatComposer({
     const next = !!val.trim();
     setHasContent((prev) => (prev === next ? prev : next));
     if (suppressDraftSaveRef.current) return;
+    draftRevisionRef.current += 1;
     if (!restoredDraftRef.current && !restoreFailedRef.current) {
       interactedBeforeRestoreRef.current = true;
       draftDirtyRef.current = true;
