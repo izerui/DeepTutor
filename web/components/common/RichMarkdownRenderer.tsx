@@ -222,7 +222,7 @@ export default function RichMarkdownRenderer({
         {children}
       </div>
     ),
-    pre: ({ children }: any) => <>{children}</>,
+    pre: ({ children }: any) => <div dir="ltr">{children}</div>,
     code: ({ node, children }: any) => (
       <code className="rounded bg-[var(--muted)] px-1 py-0.5 font-mono text-[0.95em] text-[var(--foreground)]/90">
         {String(children).replace(/\n$/, "")}
@@ -422,7 +422,7 @@ export default function RichMarkdownRenderer({
     tr: ({ node, ...props }: any) => (
       <tr className="transition-colors hover:bg-[var(--muted)]/60" {...props} />
     ),
-    pre: ({ children }: any) => <>{children}</>,
+    pre: ({ children }: any) => <div dir="ltr">{children}</div>,
     code: ({ node, className: blockClassName, children, ...props }: any) => {
       const raw = String(children).replace(/\n$/, "");
       const langMatch = /language-([A-Za-z0-9_+#.-]+)/.exec(
@@ -518,6 +518,7 @@ export default function RichMarkdownRenderer({
 
       return (
         <code
+          dir="ltr"
           className="md-inline-code rounded bg-[var(--muted)] px-1.5 py-0.5 font-mono text-[0.875em] text-[var(--foreground)]"
           {...props}
         >

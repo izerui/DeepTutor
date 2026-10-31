@@ -19,7 +19,7 @@ describe("Rich Markdown reading direction", () => {
     for (const p of paragraphs) expect(p).toHaveAttribute("dir", "auto");
     // Formulas stay left-to-right: nothing above them forces a direction.
     for (const formula of container.querySelectorAll(".katex")) {
-      expect(formula.closest("[dir='rtl']")).toBeNull();
+      expect(formula.closest("[dir]")).toHaveAttribute("dir", "ltr");
     }
     expect(container.querySelector(".md-renderer")).not.toHaveAttribute("dir");
   });

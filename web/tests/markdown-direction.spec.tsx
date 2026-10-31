@@ -25,3 +25,10 @@ describe("Markdown reading direction", () => {
     expect(container.querySelector(".md-renderer")).not.toHaveAttribute("dir");
   });
 });
+
+
+it("isolates code nested inside RTL prose", () => {
+  const { container } = render(<SimpleMarkdownRenderer content={"> مرحبا\n>\n> ```js\n> x = 1;\n> y = 2;\n> ```\n\n- عربي `x + y`"} variant="prose" />);
+  for (const code of container.querySelectorAll("code")) expect(code).toHaveAttribute("dir", "ltr");
+  expect(container.querySelector("blockquote")).toHaveAttribute("dir", "auto");
+});

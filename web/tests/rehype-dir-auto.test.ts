@@ -38,7 +38,7 @@ test("prose blocks read their own direction", () => {
   assert.equal(td.properties.dir, "auto");
 });
 
-test("code blocks and inline code are never given a direction", () => {
+test("code blocks and inline code are explicitly left-to-right", () => {
   const tree = run(
     el("div", [
       el("pre", [el("code", [text("x = 1")])]),
@@ -46,12 +46,19 @@ test("code blocks and inline code are never given a direction", () => {
     ]),
   );
   const [pre, p] = tree.children as ReturnType<typeof el>[];
-  assert.equal(pre.properties.dir, undefined);
-  assert.equal((pre.children[0] as ReturnType<typeof el>).properties.dir, undefined);
-  assert.equal((p.children[0] as ReturnType<typeof el>).properties.dir, undefined);
+  assert.equal(pre.properties.dir, "ltr");
+  assert.equal((pre.children[0] as ReturnType<typeof el>).properties.dir, "ltr");
+  assert.equal((p.children[0] as ReturnType<typeof el>).properties.dir, "ltr");
 });
 
 test("a direction set in the reply's own HTML is kept", () => {
   const tree = run(el("div", [el("p", [text("x")], { dir: "ltr" })]));
   assert.equal((tree.children[0] as ReturnType<typeof el>).properties.dir, "ltr");
+});
+
+
+test("math and diagrams are isolated inside explicit RTL quotes", () => {
+  const tree = run(el("blockquote", [el("span", [], {className: ["katex"]}), el("svg")], {dir: "rtl"}));
+  assert.equal(tree.properties.dir, "rtl");
+  for (const child of tree.children as ReturnType<typeof el>[]) assert.equal(child.properties.dir, "ltr");
 });
