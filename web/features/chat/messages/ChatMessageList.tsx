@@ -564,7 +564,7 @@ export function GeneratedFileCards({
   const files = useMemo(() => {
     const merged = mergeGeneratedFiles(attachments, events);
     if (!content) return merged;
-    const unlinked = new Set(unlinkedGeneratedFiles(content, merged));
+    const unlinked = new Set(unlinkedGeneratedFiles(content, merged, { imagesOnly: true }));
     return merged.filter(
       (file) => !file.mime_type?.startsWith("image/") || unlinked.has(file),
     );

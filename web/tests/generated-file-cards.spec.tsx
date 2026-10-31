@@ -67,3 +67,13 @@ describe("generated image cards", () => {
     expect(screen.getByText(/report/i)).toBeTruthy();
   });
 });
+
+
+it.each([
+  "[Download](outputs/chat/turn-a/figure.png)",
+  "Saved to outputs/chat/turn-a/figure.png",
+  "`![figure](outputs/chat/turn-a/figure.png)`",
+])("keeps the image preview when content only provides a link or example: %s", (content) => {
+  render(<GeneratedFileCards attachments={[figure]} content={content} />);
+  expect(screen.getByRole("img", { name: "figure.png" })).toBeTruthy();
+});
