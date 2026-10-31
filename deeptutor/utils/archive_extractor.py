@@ -217,8 +217,9 @@ def _extract_member(
     returned still exceeds the limit so the caller can detect the overflow.
     """
     written = 0
-    with archive.open(info) as source, _remove_on_error([destination]):
-        with open(destination, "wb") as sink:
+    with archive.open(info) as source, open(destination, "xb") as sink:
+        # Register cleanup only after exclusive creation succeeds.
+        with _remove_on_error([destination]):
             while True:
                 chunk = source.read(chunk_size)
                 if not chunk:

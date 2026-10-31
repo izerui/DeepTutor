@@ -255,3 +255,21 @@ def test_bad_zip_raises(tmp_path: Path) -> None:
     bogus.write_bytes(b"this is not a zip")
     with pytest.raises(zipfile.BadZipFile):
         safe_extract_zip(bogus, tmp_path / "out", allowed_extensions=DOC_EXTS)
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_existing_file_is_never_overwritten_or_cleaned_up(tmp_path, readonly):
+    src = _make_zip(tmp_path / "a.zip", [("new.txt", b"new"), ("existing.txt", b"replacement")])
+    out = tmp_path / "out"
+    out.mkdir()
+    existing = out / "existing.txt"
+    existing.write_bytes(b"original")
+    if readonly:
+        existing.chmod(0o444)
+    try:
+        with pytest.raises((FileExistsError, PermissionError)):
+            safe_extract_zip(src, out, allowed_extensions=DOC_EXTS)
+        assert existing.read_bytes() == b"original"
+        assert not (out / "new.txt").exists()
+    finally:
+        existing.chmod(0o644)
