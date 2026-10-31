@@ -431,7 +431,10 @@ async def test_restated_correct_question_is_refused_without_spending_a_request(
     progress = service.store.load("p")
     progress.lesson_evidence["kp1"] = _source_packet("alpha is the first letter")
     monkeypatch.setattr(lesson_evidence, "validate_evidence", lambda *args, **kwargs: None)
-    service.register_question("p", leaf(expected="alpha"))
+    prior = leaf(expected="alpha")
+    prior.source_evidence = _source_packet("alpha is the first letter")
+    service.store.save(progress)
+    service.register_question("p", prior)
     service.grade_interaction("p", answer="alpha", question_id="q1")
     assert service.store.load("p").quiz_attempts[0].is_correct
 
@@ -446,7 +449,7 @@ async def test_restated_correct_question_is_refused_without_spending_a_request(
 
     monkeypatch.setattr(semantic, "_request", request)
     restated = leaf("q2")
-    restated.prompt = "Name this."  # same stem, reworded options would differ
+    restated.prompt = prior.prompt  # Exact source-backed exercise, not a fuzzy match.
     with pytest.raises(semantic.AssessmentUnavailable, match="already answered correctly"):
         await semantic.bind_question(service.store, progress, restated)
     assert not calls
@@ -801,3 +804,51 @@ async def test_citation_normalization_does_not_accept_changed_math_or_words(
     monkeypatch.setattr(semantic, "_request", request)
     with pytest.raises(semantic.AssessmentUnavailable, match="absent"):
         await semantic.bind_question(service.store, progress, leaf())
+
+
+def test_same_answer_does_not_make_different_math_a_duplicate():
+    from deeptutor.learning import semantic_assessment as semantic
+
+    prior = leaf(expected="4")
+    prior.prompt = "What is 2+2?"
+    prior.source_evidence = _source_packet("Exercise sheet")
+    candidate = prior.model_copy(deep=True)
+    candidate.prompt = "What is 2*2?"
+    semantic._refuse_restatement(candidate, [prior])
+
+
+def test_repeated_prompt_on_another_objective_or_source_is_allowed():
+    from deeptutor.learning import semantic_assessment as semantic
+
+    prior = leaf(expected="4")
+    prior.source_evidence = _source_packet("First exercise")
+    candidate = prior.model_copy(deep=True)
+    candidate.knowledge_point_id = "another-objective"
+    semantic._refuse_restatement(candidate, [prior])
+    candidate.knowledge_point_id = prior.knowledge_point_id
+    candidate.source_evidence = _source_packet("Another exercise")
+    semantic._refuse_restatement(candidate, [prior])
+
+
+@pytest.mark.asyncio
+async def test_review_stage_can_repeat_an_answered_question(service, monkeypatch):
+    from deeptutor.learning import lesson_evidence
+    from deeptutor.learning import semantic_assessment as semantic
+
+    progress = service.store.load("p")
+    progress.current_stage = "review"
+    progress.lesson_evidence["kp1"] = _source_packet("alpha is the first letter")
+    prior = leaf(expected="alpha")
+    prior.source_evidence = progress.lesson_evidence["kp1"]
+    service.register_question("p", prior)
+    service.grade_interaction("p", answer="alpha", question_id="q1")
+    monkeypatch.setattr(lesson_evidence, "validate_evidence", lambda *a, **kw: None)
+
+    async def support(*a, **kw):
+        return {
+            "supported": True,
+            "citations": [{"index": 0, "quote": "alpha is the first letter"}],
+        }
+
+    monkeypatch.setattr(semantic, "_request", support)
+    await semantic.bind_question(service.store, progress, leaf("review", expected="alpha"))

@@ -33,13 +33,6 @@ def _comparable(text: str) -> str:
     return " ".join(text.split())
 
 
-# How much two stems must share before a matching answer key reads as a
-# restatement rather than a coincidence. The character-bigram overlap
-# coefficient of the one repeated exam item against its own rewording is
-# ~1.0; unrelated questions on the same objective fall well below this.
-_RESTATEMENT_OVERLAP = 0.6
-
-
 class AssessmentUnavailable(ValueError):
     pass
 
@@ -226,19 +219,18 @@ def _answer_body(question) -> str:
     return question.expected_answer
 
 
-def _stem_bigrams(text: str) -> set[str]:
-    compact = "".join(_comparable(text).casefold().split())
-    if len(compact) < 2:
-        return {compact} if compact else set()
-    return {compact[index : index + 2] for index in range(len(compact) - 1)}
-
-
 def _same_stem(left: str, right: str) -> bool:
-    """Character-bigram overlap coefficient of two stems, at a fixed threshold."""
-    a, b = _stem_bigrams(left), _stem_bigrams(right)
-    if not a or not b:
-        return False
-    return len(a & b) / min(len(a), len(b)) >= _RESTATEMENT_OVERLAP
+    """Only layout-normalized equality is safe for automatic rejection.
+
+    Punctuation and case can change mathematical meaning; lexical similarity
+    and a matching answer are not evidence that two exercises are identical.
+    """
+    return bool(_comparable(left)) and _comparable(left) == _comparable(right)
+
+
+def _source_identity(question) -> str:
+    sources = question.source_evidence.get("sources") or []
+    return json.dumps(sources, sort_keys=True, ensure_ascii=False) if sources else ""
 
 
 def _prior_correct_questions(store, path_id: str) -> list:
@@ -270,16 +262,23 @@ def _prior_correct_questions(store, path_id: str) -> list:
 
 
 def _refuse_restatement(question, prior_correct: list) -> None:
-    body = _comparable(_answer_body(question)).casefold()
+    body = _comparable(_answer_body(question))
     if not body:
         return
+    source = _source_identity(question)
+    if not source:
+        return
     for answered in prior_correct:
-        if _comparable(_answer_body(answered)).casefold() != body:
+        if answered.knowledge_point_id != question.knowledge_point_id:
+            continue
+        if _source_identity(answered) != source:
+            continue
+        if _comparable(_answer_body(answered)) != body:
             continue
         if _same_stem(question.prompt, answered.prompt):
             raise AssessmentUnavailable(
                 "This question restates one the learner already answered correctly "
-                "on this path; it is not fresh evidence. Write a different question, "
+                "for this objective and source; it is not fresh evidence. Write a different question, "
                 "or move on to another step."
             )
 
@@ -310,7 +309,8 @@ async def bind_questions(store, progress, questions, config=None):
         # evidence; refuse it before spending the source check on it.
         if prior_correct is None:
             prior_correct = _prior_correct_questions(store, progress.book_id)
-        _refuse_restatement(question, prior_correct)
+        if progress.current_stage != "review":
+            _refuse_restatement(question, prior_correct)
         sources = [
             {
                 "index": i,
