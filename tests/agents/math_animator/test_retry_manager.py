@@ -230,3 +230,92 @@ async def test_geometry_probe_reaps_cancelled_process(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await layout_probe.geometry_review("class Demo(Scene): pass")
     assert proc.killed and proc.waited
+
+
+@pytest.mark.asyncio
+async def test_geometry_probe_unsupported_subprocess_transport_is_unavailable(monkeypatch):
+    from deeptutor.agents.math_animator import layout_probe
+
+    async def unsupported(*args, **kwargs):
+        raise NotImplementedError("SelectorEventLoop subprocess transport")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", unsupported)
+    assert await layout_probe.geometry_review("class Demo(Scene): pass") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_geometry_probe_reaps_real_process_on_timeout_or_cancel(monkeypatch, cancel):
+    import sys
+
+    from deeptutor.agents.math_animator import layout_probe
+
+    if sys.platform == "win32":
+        pytest.skip("Asyncio subprocess transport is loop-dependent on Windows")
+    create_subprocess = asyncio.create_subprocess_exec
+    started = asyncio.Event()
+    processes = []
+
+    async def create(*args, **kwargs):
+        process = await create_subprocess(
+            sys.executable, "-c", "import time; time.sleep(30)", **kwargs
+        )
+        processes.append(process)
+        started.set()
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(layout_probe, "PROBE_TIMEOUT_S", 30 if cancel else 0.05)
+    task = asyncio.create_task(layout_probe.geometry_review("class Demo(Scene): pass"))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    if cancel:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=5)
+    else:
+        assert await asyncio.wait_for(task, timeout=5) is None
+    assert processes[0].returncode is not None
+
+
+@pytest.mark.asyncio
+async def test_geometry_probe_timeout_preserves_rendered_video(monkeypatch):
+    from deeptutor.agents.math_animator import layout_probe
+
+    class Renderer:
+        async def render(self, **kwargs):
+            return RenderResult(output_mode="video", quality="low")
+
+    async def repair(*args):
+        raise AssertionError("An unavailable advisory check must not repair a valid render")
+
+    async def review(code, result):
+        return await layout_probe.geometry_review(code)
+
+    class Process:
+        returncode = None
+
+        async def communicate(self):
+            await asyncio.sleep(30)
+
+        def kill(self):
+            self.returncode = -9
+
+        async def wait(self):
+            return self.returncode
+
+    async def create(*args, **kwargs):
+        return Process()
+
+    manager = CodeRetryManager(
+        renderer=Renderer(), repair_callback=repair, review_callback=review, max_retries=0
+    )
+    # Keep the real production timeout ordering, at a faster test scale.
+    assert layout_probe.PROBE_TIMEOUT_S < manager.review_timeout_seconds
+    manager.review_timeout_seconds /= 1000
+    monkeypatch.setattr(layout_probe, "PROBE_TIMEOUT_S", layout_probe.PROBE_TIMEOUT_S / 1000)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    _, result = await manager.render_with_retries(
+        initial_code="class Demo(Scene): pass", output_mode="video", quality="low"
+    )
+    assert result.visual_review is None
+    assert result.retry_attempts == 0

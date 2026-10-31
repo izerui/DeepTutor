@@ -18,7 +18,8 @@ import re
 import sys
 import tempfile
 
-PROBE_TIMEOUT_S = 150
+# Finish before the retry manager's 120 s advisory review deadline.
+PROBE_TIMEOUT_S = 90
 _MAX_ISSUES = 12
 _SCENE_RE = re.compile(r"class\s+([A-Za-z_]\w*)\s*\(\s*[\w.]*Scene\s*\)")
 
@@ -203,7 +204,8 @@ async def geometry_review(code: str):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=tmp,
             )
-        except OSError:
+        except (OSError, NotImplementedError):
+            # Windows SelectorEventLoop cannot create asyncio subprocesses.
             return None
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=PROBE_TIMEOUT_S)
