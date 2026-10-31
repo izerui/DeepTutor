@@ -43,6 +43,7 @@ from deeptutor.utils.document_images import (
     extract_pdf_images,
     extract_pptx_rich,
     image_index_from_name,
+    ordered_pptx_slide_members,
 )
 
 logger = logging.getLogger(__name__)
@@ -1230,12 +1231,7 @@ def _extract_xlsx_ooxml(data: bytes, filename: str) -> str:
 
 def _extract_pptx_ooxml(data: bytes, filename: str) -> str:
     with _open_ooxml(data, filename) as zf:
-        slide_members = sorted(
-            (name for name in zf.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", name)),
-            key=lambda name: [
-                int(part) if part.isdigit() else part for part in re.split(r"(\d+)", name)
-            ],
-        )
+        slide_members = ordered_pptx_slide_members(zf)
         slides: list[str] = []
         for index, member in enumerate(slide_members, 1):
             root = _parse_xml_member(zf, member, filename)

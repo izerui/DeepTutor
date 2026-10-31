@@ -679,10 +679,7 @@ def _extract_pptx_rich_ooxml(data: bytes, *, budget: ImageBudget | None = None) 
     slides: list[str] = []
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         names = set(zf.namelist())
-        slide_members = sorted(
-            (name for name in names if _SLIDE_MEMBER_PATTERN.fullmatch(name)),
-            key=_natural_slide_key,
-        )
+        slide_members = ordered_pptx_slide_members(zf)
         for member in slide_members:
             rel_targets = _office_rels(zf, _rels_for(member))
             lines: list[str] = []
@@ -736,6 +733,35 @@ def _extract_pptx_rich_ooxml(data: bytes, *, budget: ImageBudget | None = None) 
 
 
 _SLIDE_MEMBER_PATTERN = re.compile(r"ppt/slides/slide\d+\.xml")
+
+
+def ordered_pptx_slide_members(zf: zipfile.ZipFile) -> list[str]:
+    """Resolve slide parts in presentation order, with a metadata-free fallback."""
+    names = set(zf.namelist())
+    try:
+        root = _parse_xml(zf.read("ppt/presentation.xml"))
+    except Exception:
+        root = None
+    if root is not None:
+        targets = _office_rels(zf, "ppt/_rels/presentation.xml.rels")
+        ordered: list[str] = []
+        for node in root.iter():
+            if _local_name(node.tag) != "sldId":
+                continue
+            rid = node.get(
+                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+            )
+            target = targets.get(rid or "", "").lstrip("/")
+            if target in names:
+                ordered.append(target)
+        if ordered:
+            return ordered
+    # Keep best-effort extraction for older/minimal archives without usable
+    # presentation metadata, rather than requiring python-pptx to read them.
+    return sorted(
+        (name for name in names if _SLIDE_MEMBER_PATTERN.fullmatch(name)),
+        key=_natural_slide_key,
+    )
 
 
 def _natural_slide_key(name: str) -> list[int]:
@@ -848,5 +874,6 @@ __all__ = [
     "reading_image_budget",
     "extract_docx_rich",
     "extract_pptx_rich",
+    "ordered_pptx_slide_members",
     "extract_pdf_images",
 ]
