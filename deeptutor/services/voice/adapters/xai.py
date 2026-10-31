@@ -53,9 +53,8 @@ def _raise_for_provider(resp: httpx.Response, action: str) -> None:
     if resp.status_code < 400:
         return
     body = resp.text or ""
-    detail = body.strip()[:400]
     raise VoiceProviderHTTPError(
-        f"{action} failed with HTTP {resp.status_code}" + (f": {detail}" if detail else "."),
+        f"{action} failed with HTTP {resp.status_code}.",
         status_code=resp.status_code,
         body=body,
     )

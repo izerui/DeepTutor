@@ -141,21 +141,16 @@ async def test_mistral_tts_payload(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mistral_stt_uploads_then_transcribes(monkeypatch) -> None:
+async def test_mistral_stt_transcribes_directly_without_remote_upload(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
         calls.append((request.method, request.url.path))
-        if request.url.path == "/v1/files":
-            assert b'name="purpose"' in request.content
-            assert b'name="file"' in request.content
-            return httpx.Response(200, json={"id": "file_123"})
-        if request.url.path == "/v1/files/file_123/url":
-            assert request.url.params["expiry"] == "24"
-            return httpx.Response(200, json={"url": "https://signed.example/audio.mp3"})
         if request.url.path == "/v1/audio/transcriptions":
-            assert b'name="file_url"' in request.content
-            assert b"https://signed.example/audio.mp3" in request.content
+            assert b'name="file"' in request.content
+            assert b'filename="sample.wav"' in request.content
+            assert b"RIFF" in request.content
+            assert b'name="file_url"' not in request.content
             return httpx.Response(200, json={"text": "Bonjour"})
         raise AssertionError(f"unexpected request: {request.url}")
 
@@ -173,7 +168,20 @@ async def test_mistral_stt_uploads_then_transcribes(monkeypatch) -> None:
     )
     assert text == "Bonjour"
     assert calls == [
-        ("POST", "/v1/files"),
-        ("GET", "/v1/files/file_123/url"),
         ("POST", "/v1/audio/transcriptions"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_mistral_error_does_not_echo_upstream_body(monkeypatch):
+    from deeptutor.services.voice.base import VoiceProviderHTTPError
+
+    transport(monkeypatch, lambda request: httpx.Response(401, text="secret-recording-content"))
+    with pytest.raises(VoiceProviderHTTPError) as caught:
+        await MistralSTTAdapter().transcribe(
+            b"audio",
+            STTConfig(
+                model="voxtral-mini-latest", api_key="test", base_url="https://api.mistral.ai/v1"
+            ),
+        )
+    assert "secret-recording-content" not in str(caught.value)

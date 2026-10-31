@@ -1,11 +1,9 @@
 """Native Mistral Voxtral voice adapters.
 
 Mistral TTS is close to the OpenAI speech shape (``/v1/audio/speech``) but uses
-``voice_id`` and has no ``speed``/``instructions`` fields. Mistral STT is a
-three-step flow: upload the audio to ``/v1/files``, exchange the file id for a
-signed URL, then transcribe that URL via ``/v1/audio/transcriptions``. Both need
-dedicated adapters because the shared ``openai_compat`` pair sends the wrong
-payload for STT and unsupported fields for TTS.
+``voice_id`` and has no ``speed``/``instructions`` fields. STT sends the audio
+as multipart data directly to ``/v1/audio/transcriptions``; it does not create
+persistent uploaded files or signed URLs.
 """
 
 from __future__ import annotations
@@ -52,9 +50,8 @@ def _raise_for_provider(resp: httpx.Response, action: str) -> None:
     if resp.status_code < 400:
         return
     body = resp.text or ""
-    detail = body.strip()[:400]
     raise VoiceProviderHTTPError(
-        f"{action} failed with HTTP {resp.status_code}" + (f": {detail}" if detail else "."),
+        f"{action} failed with HTTP {resp.status_code}.",
         status_code=resp.status_code,
         body=body,
     )
@@ -92,7 +89,7 @@ class MistralTTSAdapter(BaseTTSAdapter):
 
 
 class MistralSTTAdapter(BaseSTTAdapter):
-    """Upload to ``/files``, resolve a signed URL, then transcribe it."""
+    """Transcribe multipart audio without creating a persistent remote file."""
 
     async def transcribe(
         self,
@@ -115,31 +112,8 @@ class MistralSTTAdapter(BaseSTTAdapter):
 
         try:
             async with httpx.AsyncClient(timeout=config.request_timeout) as client:
-                upload = await client.post(
-                    _join(base, "files"),
-                    headers=headers,
-                    files=[
-                        ("purpose", (None, "audio")),
-                        ("file", (filename, audio, content_type)),
-                    ],
-                )
-                _raise_for_provider(upload, "Mistral file upload")
-                file_id = upload.json().get("id") if upload.content else None
-                if not isinstance(file_id, str) or not file_id:
-                    raise VoiceProviderError("Mistral file upload returned no file id.")
-
-                signed = await client.get(
-                    _join(base, f"files/{file_id}/url"),
-                    headers=headers,
-                    params={"expiry": 24},
-                )
-                _raise_for_provider(signed, "Mistral signed URL")
-                signed_url = signed.json().get("url") if signed.content else None
-                if not isinstance(signed_url, str) or not signed_url:
-                    raise VoiceProviderError("Mistral signed URL response had no url.")
-
-                form: list[tuple[str, tuple[None, str]]] = [
-                    ("file_url", (None, signed_url)),
+                form = [
+                    ("file", (filename, audio, content_type)),
                     ("model", (None, model)),
                 ]
                 if config.language:
