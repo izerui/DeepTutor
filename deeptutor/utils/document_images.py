@@ -305,18 +305,20 @@ def _omml_argument(node: Any, name: str) -> str:
     return _render_omml(child).strip() if child is not None else ""
 
 
-def _omml_property(node: Any, property_name: str, value_name: str) -> str:
+def _omml_property(node: Any, property_name: str, value_name: str, default: str = "") -> str:
     """Return one ``m:val``-style value from a direct OMML property child."""
     properties = _child_with_local_name(node, property_name)
     value_node = _child_with_local_name(properties, value_name) if properties is not None else None
-    return _attribute_with_local_name(value_node, "val") if value_node is not None else ""
+    return _attribute_with_local_name(value_node, "val") if value_node is not None else default
 
 
-def _math_atom(text: str) -> str:
+def _math_atom(text: str, *, script_operand: bool = False) -> str:
     """Parenthesise a compound operand while leaving simple atoms readable."""
     text = text.strip()
     if not text:
         return "?"
+    if script_operand and ("^" in text or "_" in text):
+        return f"({text})"
     if re.fullmatch(r"[\w.]+(?:_[\w.]+)?(?:\^[\w.]+)?", text, flags=re.UNICODE):
         return text
     if re.fullmatch(r"(?:sqrt|root)\(.*\)", text):
@@ -369,18 +371,22 @@ def _render_omml(node: Any) -> str:
     if name == "sSup":
         base = _omml_argument(node, "e")
         exponent = _omml_argument(node, "sup")
-        return f"{_math_atom(base)}^{_math_atom(exponent)}"
+        return (
+            f"{_math_atom(base, script_operand=True)}^{_math_atom(exponent, script_operand=True)}"
+        )
 
     if name == "sSub":
         base = _omml_argument(node, "e")
         subscript = _omml_argument(node, "sub")
-        return f"{_math_atom(base)}_{_math_atom(subscript)}"
+        return (
+            f"{_math_atom(base, script_operand=True)}_{_math_atom(subscript, script_operand=True)}"
+        )
 
     if name == "sSubSup":
         base = _omml_argument(node, "e")
         subscript = _omml_argument(node, "sub")
         exponent = _omml_argument(node, "sup")
-        return f"{_math_atom(base)}_{_math_atom(subscript)}^{_math_atom(exponent)}"
+        return f"{_math_atom(base, script_operand=True)}_{_math_atom(subscript, script_operand=True)}^{_math_atom(exponent, script_operand=True)}"
 
     if name == "rad":
         expression = _omml_argument(node, "e")
@@ -399,9 +405,9 @@ def _render_omml(node: Any) -> str:
         return f"root({degree}, {expression or '?'})"
 
     if name == "d":
-        begin = _omml_property(node, "dPr", "begChr") or "("
-        end = _omml_property(node, "dPr", "endChr") or ")"
-        separator = _omml_property(node, "dPr", "sepChr") or "|"
+        begin = _omml_property(node, "dPr", "begChr", "(")
+        end = _omml_property(node, "dPr", "endChr", ")")
+        separator = _omml_property(node, "dPr", "sepChr", "|")
         expressions = [
             _render_omml(child).strip() for child in node if _local_name(child.tag) == "e"
         ]

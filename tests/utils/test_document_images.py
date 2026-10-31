@@ -407,3 +407,24 @@ def test_scanned_page_rides_bounded_but_reads_whole(tmp_path) -> None:
         assert max(fitted.size) <= MAX_INLINE_IMAGE_EDGE
     with PILImage.open(io.BytesIO(stored[0].data)) as whole:
         assert max(whole.size) > MAX_INLINE_IMAGE_EDGE
+
+
+def test_nested_math_scripts_preserve_grouping():
+    from xml.etree import ElementTree as ET
+
+    from deeptutor.utils.document_images import MATH_NS, render_docx_text
+
+    inner = "<sSup><e><r><t>x</t></r></e><sup><r><t>a</t></r></sup></sSup>"
+    root = ET.fromstring(f'<sSup xmlns="{MATH_NS}"><e>{inner}</e><sup><r><t>b</t></r></sup></sSup>')
+    assert render_docx_text(root) == "(x^a)^b"
+
+
+def test_empty_math_delimiter_is_not_replaced_with_a_default():
+    from xml.etree import ElementTree as ET
+
+    from deeptutor.utils.document_images import MATH_NS, render_docx_text
+
+    root = ET.fromstring(
+        f'<d xmlns="{MATH_NS}" xmlns:m="{MATH_NS}"><dPr><begChr m:val="["/><endChr m:val=""/></dPr><e><r><t>x</t></r></e></d>'
+    )
+    assert render_docx_text(root) == "[x"
