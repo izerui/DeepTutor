@@ -80,6 +80,10 @@ def _run_migrations(conn) -> None:
 # ---------------------------------------------------------------------------
 
 
+class FileLibraryContentConflict(ValueError):
+    """Restoring an entry would duplicate another active content hash."""
+
+
 class FileLibraryStore:
     """Persistent file library store.
 
@@ -357,10 +361,23 @@ class FileLibraryStore:
             exists = conn.execute("SELECT 1 FROM library_files WHERE id = ?", (file_id,)).fetchone()
             if exists is None:
                 return False
-            conn.execute(
-                "UPDATE library_files SET is_deleted = 0, deleted_at = NULL, updated_at = ? WHERE id = ? AND is_deleted = 1",
-                (now, file_id),
-            )
+            try:
+                conn.execute(
+                    "UPDATE library_files SET is_deleted = 0, deleted_at = NULL, updated_at = ? WHERE id = ? AND is_deleted = 1",
+                    (now, file_id),
+                )
+            except sqlite3.IntegrityError as exc:
+                if exc.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+                    duplicate = conn.execute(
+                        "SELECT 1 FROM library_files WHERE is_deleted = 0 AND id != ? "
+                        "AND sha256 = (SELECT sha256 FROM library_files WHERE id = ?)",
+                        (file_id, file_id),
+                    ).fetchone()
+                    if duplicate is not None:
+                        raise FileLibraryContentConflict(
+                            "A file with the same content is already active in your library."
+                        ) from exc
+                raise
             conn.commit()
             return True
 
