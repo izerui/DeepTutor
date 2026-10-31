@@ -547,6 +547,13 @@ export default memo(function ChatComposer({
   const restoreBaseRef = useRef<WorkspaceDraft | undefined | null>(null);
   const suppressDraftSaveRef = useRef(false);
 
+  const draftWritesRef = useRef<Promise<void>>(Promise.resolve());
+  const enqueueDraftWrite = useCallback((write: () => Promise<void>) => {
+    const pending = draftWritesRef.current.catch(() => {}).then(write);
+    draftWritesRef.current = pending;
+    return pending;
+  }, []);
+
   const collectDraft = useCallback(
     (): WorkspaceDraft => ({
       // Keep the last value in a ref: the imperative handle may already be
@@ -574,6 +581,7 @@ export default memo(function ChatComposer({
     const draft = collectDraft();
     draftDirtyRef.current = false;
     try {
+      await enqueueDraftWrite(async () => {
       if (restoreFailedRef.current) {
         // The stored draft never reached the composer; merge instead of
         // overwriting it with only what was typed after the failure.
@@ -595,11 +603,12 @@ export default memo(function ChatComposer({
       } else {
         await saveWorkspaceDraft(draft, location.workspaceId, location.pathname);
       }
+      });
     } catch (error) {
       draftDirtyRef.current = true;
       console.warn("[ChatComposer] workspace draft autosave failed", error);
     }
-  }, [collectDraft]);
+  }, [collectDraft, enqueueDraftWrite]);
 
   const scheduleDraftSave = useCallback(() => {
     if (!restoredDraftRef.current && !restoreFailedRef.current) return;
@@ -618,9 +627,8 @@ export default memo(function ChatComposer({
     if (!restoredDraftRef.current) {
       void restore
         .then((draft) => {
-          if (restoredDraftRef.current) return;
+          if (!alive || restoredDraftRef.current) return;
           restoredDraftRef.current = true;
-          if (!alive) return;
           if (!draft) {
             if (interactedBeforeRestoreRef.current) scheduleDraftSave();
             return;
@@ -715,7 +723,9 @@ export default memo(function ChatComposer({
         })
         .catch(() => {
           if (draftDirtyRef.current) {
-            void saveWorkspaceDraft(collectDraft(), location.workspaceId, location.pathname).catch(() => {});
+            void saveAfterFailedRestore().catch((error) => {
+              console.warn("[ChatComposer] could not preserve draft after unmount", error);
+            });
           }
         });
     };
@@ -735,6 +745,7 @@ export default memo(function ChatComposer({
     if (suppressDraftSaveRef.current) return;
     if (!restoredDraftRef.current && !restoreFailedRef.current) {
       interactedBeforeRestoreRef.current = true;
+      draftDirtyRef.current = true;
       return;
     }
     draftLocationRef.current = currentWorkspaceDraftLocation();
@@ -828,6 +839,7 @@ export default memo(function ChatComposer({
     if (suppressDraftSaveRef.current) return;
     if (!restoredDraftRef.current && !restoreFailedRef.current) {
       interactedBeforeRestoreRef.current = true;
+      draftDirtyRef.current = true;
       return;
     }
     draftLocationRef.current = currentWorkspaceDraftLocation();
@@ -846,11 +858,11 @@ export default memo(function ChatComposer({
       onSend(content);
       if (restoredDraftRef.current && !restoreFailedRef.current) {
         const location = draftLocationRef.current ?? currentWorkspaceDraftLocation();
-        void saveWorkspaceDraft(
+        void enqueueDraftWrite(() => saveWorkspaceDraft(
           { text: "", attachments: [] },
           location.workspaceId,
           location.pathname,
-        ).catch(() => {});
+        )).catch(() => {});
       }
       setHasContent(false);
       // Suppress the draft save that the clear below would otherwise queue:
@@ -869,7 +881,7 @@ export default memo(function ChatComposer({
       return true;
     },
     [awaitingUserReply, capabilityConfigConfirmed, capabilityNeedsConfig,
-      cancelDraftSave, focusTextarea, isStreaming, onRequestConfigConfirm, onSend],
+      cancelDraftSave, enqueueDraftWrite, focusTextarea, isStreaming, onRequestConfigConfirm, onSend],
   );
 
   const { board: taskBoard } = useTaskBoard();

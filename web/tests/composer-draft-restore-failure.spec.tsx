@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { StrictMode, useRef } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MessageSquare } from "lucide-react";
@@ -395,9 +395,49 @@ it("clears the sent draft under the route it was typed on", async () => {
   fireEvent.change(input, { target: { value: "send me" } });
   fireEvent.keyDown(input, { key: "Enter" });
 
+  await act(async () => {});
   expect(onSend).toHaveBeenCalledWith("send me");
   expect(drafts.save).toHaveBeenCalledWith({
     text: "",
     attachments: [],
   }, "ws_test", "/chat/one");
+});
+
+// Independent review regressions: these should pass before merge.
+it("review: preserves typing when navigation precedes draft read", async () => {
+  let resolveRead!: (value: unknown) => void;
+  drafts.read.mockReturnValue(new Promise(resolve => { resolveRead = resolve; }));
+  drafts.save.mockResolvedValue(undefined);
+  const { unmount } = render(<Harness />);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "new input" } });
+  unmount();
+  await act(async () => { resolveRead({text:"stored", attachments:[]}); });
+  expect(drafts.save).toHaveBeenCalledWith({text:"stored\nnew input", attachments:[]}, "ws_test", "/chat");
+});
+it("review: restores the draft under StrictMode", async () => {
+  drafts.read.mockResolvedValue({text:"stored", attachments:[]});
+  drafts.save.mockResolvedValue(undefined);
+  render(<StrictMode><Harness /></StrictMode>);
+  await act(async () => {});
+  expect(screen.getByRole("textbox")).toHaveValue("stored");
+});
+
+
+it("serializes send cleanup after an in-flight autosave", async () => {
+  vi.useFakeTimers();
+  try {
+    let finishSave!: () => void;
+    drafts.read.mockResolvedValue(undefined);
+    drafts.save.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; })).mockResolvedValue(undefined);
+    render(<Harness />);
+    await act(async () => {});
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "send me" } });
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(drafts.save).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(drafts.save).toHaveBeenCalledTimes(1);
+    await act(async () => { finishSave(); });
+    expect(drafts.save).toHaveBeenLastCalledWith({text: "", attachments: []}, "ws_test", "/chat");
+  } finally { vi.useRealTimers(); }
 });
