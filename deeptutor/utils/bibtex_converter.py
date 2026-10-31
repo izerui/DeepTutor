@@ -245,9 +245,9 @@ def _scan_entry(text: str, match: re.Match[str]) -> tuple[_Entry | None, int] | 
             brace_depth += 1
         elif char == "}":
             brace_depth -= 1
-        elif char == "(":
+        elif opener == "(" and brace_depth == 0 and char == "(":
             paren_depth += 1
-        elif char == ")":
+        elif opener == "(" and brace_depth == 0 and char == ")":
             paren_depth -= 1
 
         if opener == "{" and brace_depth == 0:
