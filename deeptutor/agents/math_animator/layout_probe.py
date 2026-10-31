@@ -15,7 +15,6 @@ import asyncio
 import json
 from pathlib import Path
 import re
-import subprocess  # nosec B404 - fixed argv: this interpreter + this file
 import sys
 import tempfile
 
@@ -195,17 +194,27 @@ async def geometry_review(code: str):
         path = Path(tmp) / "scene.py"
         path.write_text(code, encoding="utf-8")
         try:
-            proc = await asyncio.to_thread(
-                subprocess.run,
-                [sys.executable, str(Path(__file__).resolve()), str(path), scene],
-                capture_output=True,
-                text=True,
-                timeout=PROBE_TIMEOUT_S,
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                str(Path(__file__).resolve()),
+                str(path),
+                scene,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 cwd=tmp,
-            )  # nosec B603
-        except subprocess.TimeoutExpired:
+            )
+        except OSError:
             return None
-    lines = [ln for ln in proc.stdout.splitlines() if ln.startswith("{")]
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=PROBE_TIMEOUT_S)
+        except (TimeoutError, asyncio.CancelledError) as exc:
+            if proc.returncode is None:
+                proc.kill()
+            await proc.wait()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            return None
+    lines = [ln for ln in stdout.decode(errors="replace").splitlines() if ln.startswith("{")]
     if proc.returncode != 0 or not lines:
         return None
     issues = json.loads(lines[-1]).get("issues") or []

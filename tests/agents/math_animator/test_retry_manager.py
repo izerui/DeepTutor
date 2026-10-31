@@ -183,3 +183,50 @@ async def test_retry_manager_returns_best_effort_result_when_visual_review_still
     assert status_messages[-1] == (
         "Visual review still found issues after all retries. Returning the best available result with a warning."
     )
+
+
+@pytest.mark.asyncio
+async def test_unavailable_review_is_not_recorded_as_passed():
+    class Renderer:
+        async def render(self, **kwargs):
+            return RenderResult(output_mode="video", quality="low")
+
+    async def repair(*args):
+        raise AssertionError("unavailable review is not a layout failure")
+
+    async def review(*args):
+        return None
+
+    manager = CodeRetryManager(renderer=Renderer(), repair_callback=repair, review_callback=review)
+    _, result = await manager.render_with_retries(
+        initial_code="scene", output_mode="video", quality="low"
+    )
+    assert result.visual_review is None
+
+
+@pytest.mark.asyncio
+async def test_geometry_probe_reaps_cancelled_process(monkeypatch):
+    from deeptutor.agents.math_animator import layout_probe
+
+    class Process:
+        returncode = None
+        killed = waited = False
+
+        async def communicate(self):
+            raise asyncio.CancelledError
+
+        def kill(self):
+            self.killed = True
+
+        async def wait(self):
+            self.waited = True
+
+    proc = Process()
+
+    async def create(*args, **kwargs):
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    with pytest.raises(asyncio.CancelledError):
+        await layout_probe.geometry_review("class Demo(Scene): pass")
+    assert proc.killed and proc.waited

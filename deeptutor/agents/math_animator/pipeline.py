@@ -225,13 +225,12 @@ class MathAnimatorPipeline:
 
             async def _geometry_callback(
                 current_code: str, render_result: RenderResult
-            ) -> VisualReviewResult:
+            ) -> VisualReviewResult | None:
                 # Record-only: what the rendered scene still has, for the result payload.
                 review = await geometry_review(current_code)
                 if review is None:
-                    return VisualReviewResult(passed=True, summary="Layout check unavailable.")
+                    return None
                 if not review.passed:
-                    review.passed = True
                     review.summary = "Layout issues remain after repair rounds: " + review.summary
                 return review
 
