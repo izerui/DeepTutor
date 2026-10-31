@@ -689,3 +689,17 @@ it("restores a typed add model across a remount", () => {
   render(<Harness page="llm" />);
   expect((screen.getByLabelText("Configured provider") as HTMLSelectElement).value).toBe("");
 });
+
+
+it("restores a model draft before a provider has been selected", () => {
+  window.history.replaceState(null, "", "/settings/llm?add=1&service=llm");
+  const view = render(<Harness page="llm" />);
+  fireEvent.change(screen.getByLabelText("Model ID"), {
+    target: { value: "custom-unsaved" },
+  });
+  expect(new URLSearchParams(window.location.search).get("model")).toBe("custom-unsaved");
+  view.unmount();
+  render(<Harness page="llm" />);
+  expect((screen.getByLabelText("Configured provider") as HTMLSelectElement).value).toBe("");
+  expect((screen.getByLabelText("Model ID") as HTMLInputElement).value).toBe("custom-unsaved");
+});

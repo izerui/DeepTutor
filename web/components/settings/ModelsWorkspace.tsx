@@ -123,12 +123,11 @@ export function ModelsWorkspace({
       // A provider may arrive after the initial empty catalog. Retry hydration
       // until it exists, but never overwrite user edits after that point.
       if (provider && !source) return;
-      if (source) {
-        setNewProvider(source.id);
-        setNewModelId(
-          params.get("model") ?? defaultModelFor(source, effective, connectionTargets, providers),
-        );
-      }
+      setNewProvider(source?.id ?? "");
+      setNewModelId(
+        params.get("model") ??
+          (source ? defaultModelFor(source, effective, connectionTargets, providers) : ""),
+      );
       restoredPage.current = page;
     } else {
       const profileId = params.get("profile");
