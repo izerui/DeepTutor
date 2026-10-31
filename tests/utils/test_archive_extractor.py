@@ -273,3 +273,58 @@ def test_existing_file_is_never_overwritten_or_cleaned_up(tmp_path, readonly):
         assert not (out / "new.txt").exists()
     finally:
         existing.chmod(0o644)
+
+
+@pytest.mark.parametrize("failure", ["read", "close"])
+def test_failed_member_closes_before_cleanup(tmp_path, monkeypatch, failure):
+    """Simulate Windows deny-delete sharing and buffered flush/close failure."""
+    import io
+
+    import deeptutor.utils.archive_extractor as extractor
+
+    destination = tmp_path / "partial.txt"
+    real_open = open
+    real_unlink = Path.unlink
+    sinks = []
+
+    class Sink:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def write(self, data):
+            return self.handle.write(data)
+
+        def __exit__(self, *args):
+            self.handle.close()
+            if failure == "close":
+                raise OSError("flush failed")
+
+    class Source(io.BytesIO):
+        def read(self, size=-1):
+            if failure == "read" and self.tell():
+                raise zipfile.BadZipFile("CRC mismatch")
+            return super().read(size)
+
+    class Archive:
+        def open(self, _info):
+            return Source(b"partial contents")
+
+    def tracked_open(*args, **kwargs):
+        sink = Sink(real_open(*args, **kwargs))
+        sinks.append(sink)
+        return sink
+
+    def windows_unlink(path, *args, **kwargs):
+        if path == destination and any(not sink.handle.closed for sink in sinks):
+            raise PermissionError("cannot delete an open file")
+        return real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(extractor, "open", tracked_open, raising=False)
+    monkeypatch.setattr(Path, "unlink", windows_unlink)
+    with pytest.raises((zipfile.BadZipFile, OSError)):
+        extractor._extract_member(Archive(), object(), destination, 100)
+    assert sinks and all(sink.handle.closed for sink in sinks)
+    assert not destination.exists()
