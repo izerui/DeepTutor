@@ -255,6 +255,23 @@ def test_uploaded_markdown_with_fewer_than_two_headings_keeps_flat_fallback(
     assert all(row.synthesised is True for row in store.outline(manifest.material_id))
 
 
+@pytest.mark.parametrize(
+    ("name", "content_format"),
+    [("notes.md", "web_markdown"), ("notes.markdown", "web_markdown"), ("notes.txt", "plain_text")],
+)
+def test_uploaded_markdown_renders_as_markdown_and_plain_text_stays_literal(
+    store: ReadingStore, tmp_path: Path, name: str, content_format: str
+) -> None:
+    path = tmp_path / name
+    path.write_text("# Mean\n\nThe mean is $\\bar x$.", encoding="utf-8")
+
+    manifest = store.ingest(path)
+
+    assert manifest.content_format == content_format
+    assert manifest.source_type == "upload"
+    assert store.manifest(manifest.material_id).content_format == content_format
+
+
 def test_epub_preserves_spine_units_source_hrefs_and_nested_outline(tmp_path: Path) -> None:
     extraction = extract_material(_write_epub(tmp_path / "book.epub"))
 

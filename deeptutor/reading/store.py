@@ -42,7 +42,7 @@ import time
 from typing import Any, Iterator, Literal, Mapping, Sequence
 import uuid
 
-from deeptutor.reading.extract import extract_material, synthesise_outline
+from deeptutor.reading.extract import MARKDOWN_SUFFIXES, extract_material, synthesise_outline
 from deeptutor.reading.models import (
     MAX_TEXT_SELECTOR_CHARS,
     Annotation,
@@ -379,6 +379,11 @@ class ReadingStore:
                 has_raw_view=extraction.render_mode == "pdf",
                 render_mode=extraction.render_mode,
                 media_count=len(media_rows),
+                # Markdown files are written to be rendered; showing their
+                # source leaves every formula as raw ``$...$``.
+                content_format=(
+                    "web_markdown" if path.suffix.lower() in MARKDOWN_SUFFIXES else "plain_text"
+                ),
             )
             # Manifest last: its presence is the "this material is usable"
             # signal, so it must not appear before the units it describes.

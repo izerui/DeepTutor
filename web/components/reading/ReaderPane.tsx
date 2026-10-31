@@ -1265,6 +1265,7 @@ export function ReaderPane({
               unit={material.unit}
               unitCount={material.unit_count}
               contentFormat={material.content_format}
+              sourceType={material.source_type}
               annotations={annotations}
               jump={materialJump}
               highlightedAnnotationId={activeAnnotationId}
