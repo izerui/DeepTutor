@@ -90,6 +90,8 @@ def apply_revision(progress: LearningProgress, revision: TemplateRevision) -> di
         progress.reassessment_required.pop(kp_id, None)
         progress.kp_redefined_at.pop(kp_id, None)
     progress.modules = modules
+    # The teacher's standard travels with the revision; students never set it.
+    progress.pass_standard = revision.outline.pass_standard
     for module in modules:
         for point in module.knowledge_points:
             progress.knowledge_types[point.id] = point.type

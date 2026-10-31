@@ -1625,6 +1625,28 @@
         "title": "ChangeBlockTypeRequest",
         "type": "object"
       },
+      "ChangeOwnPassword": {
+        "properties": {
+          "current_password": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangeOwnPassword",
+        "type": "object"
+      },
       "ChannelOnboardingStartRequest": {
         "properties": {
           "channel": {
@@ -7717,6 +7739,25 @@
           "session_key"
         ],
         "title": "PartnerSeatRetryRequest",
+        "type": "object"
+      },
+      "PassStandardRequest": {
+        "description": "How strict the path's scored gate is (``learning.pass_standard``).",
+        "properties": {
+          "pass_standard": {
+            "enum": [
+              "relaxed",
+              "standard",
+              "strict"
+            ],
+            "title": "Pass Standard",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pass_standard"
+        ],
+        "title": "PassStandardRequest",
         "type": "object"
       },
       "PasswordReset": {
@@ -15649,6 +15690,84 @@
           }
         },
         "summary": "Put Current Learner Profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/profile/password": {
+      "put": {
+        "description": "Change one's own password (e.g. after an administrator or teacher reset it).\n\nEvery other session and paired device ends; this browser gets a fresh\nsession so the person stays signed in here.",
+        "operationId": "change_own_password_api_auth_profile_password_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeOwnPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Change Own Password Api Auth Profile Password Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Own Password",
         "tags": [
           "auth"
         ]
@@ -34259,6 +34378,89 @@
           }
         },
         "summary": "Set Learner Override",
+        "tags": [
+          "mastery-path"
+        ]
+      }
+    },
+    "/api/mastery-paths/topics/{path_id}/pass-standard": {
+      "put": {
+        "description": "The learner's own path only: a teacher path's copy keeps the teacher's standard.",
+        "operationId": "update_pass_standard_api_mastery_paths_topics__path_id__pass_standard_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path_id",
+            "required": true,
+            "schema": {
+              "title": "Path Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PassStandardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pass Standard",
         "tags": [
           "mastery-path"
         ]

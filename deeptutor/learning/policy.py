@@ -71,11 +71,19 @@ def path_display_name(progress: LearningProgress) -> str:
     return first_module or progress.book_id
 
 
-def gate_threshold(kp_type: KnowledgeType) -> float:
+def gate_threshold(kp_type: KnowledgeType, progress: LearningProgress | None = None) -> float:
     """The quantitative mastery bar for *kp_type* (qualitative types report
-    their pass-display value so callers have a single number to show)."""
+    their pass-display value so callers have a single number to show).
+
+    With *progress*, the path's chosen standard sets the bar (local
+    extension, ``learning.pass_standard``); "strict" is the original one.
+    """
     if kp_type in QUALITATIVE_TYPES:
         return _QUALITATIVE_PASS_DISPLAY
+    if progress is not None:
+        from deeptutor.learning.pass_standard import threshold
+
+        return threshold(progress.pass_standard)
     return QUANTITATIVE_GATE.get(kp_type, 0.9)
 
 
@@ -89,7 +97,9 @@ def is_assessed_mastered(progress: LearningProgress, kp: KnowledgePoint) -> bool
         return False
     if kp.type in QUALITATIVE_TYPES:
         return bool(progress.qualitative_mastery.get(kp.id, False))
-    return progress.mastery_levels.get(kp.id, 0.0) >= gate_threshold(kp.type)
+    # The weighted average lands on a bar as 0.7999…; float noise must not fail it.
+    level = progress.mastery_levels.get(kp.id, 0.0)
+    return level >= gate_threshold(kp.type, progress) - 1e-9
 
 
 def visual_achievements(progress: LearningProgress, kp_id: str) -> list[str]:
@@ -326,7 +336,7 @@ def next_objective(
             status=objective_status(progress, kp) if kp else "learning",
             gate=gate_kind(kp) if kp else "",
             mastery=display_mastery(progress, kp) if kp else 0.0,
-            threshold=gate_threshold(kp.type) if kp else 0.0,
+            threshold=gate_threshold(kp.type, progress) if kp else 0.0,
             reason="A posed question is awaiting the learner's answer; grade it with mastery_grade.",
             pending_prompt=pending.prompt,
             pending_question=public_pending_question(pending),
@@ -353,7 +363,7 @@ def next_objective(
                 status=objective_status(progress, kp),
                 gate=gate_kind(kp),
                 mastery=display_mastery(progress, kp),
-                threshold=gate_threshold(kp.type),
+                threshold=gate_threshold(kp.type, progress),
                 reason=(task.reason or "This objective is due for spaced-repetition review."),
                 forgetting_risk=task.forgetting_risk,
             )
@@ -386,7 +396,7 @@ def next_objective(
                 status=status,
                 gate=gate,
                 mastery=display_mastery(progress, kp),
-                threshold=gate_threshold(kp.type),
+                threshold=gate_threshold(kp.type, progress),
                 reason=(
                     (
                         "Untouched objective — teach before assessing, as the learner requested."
@@ -563,7 +573,7 @@ def objective_report(
             else ""
         ),
         "mastery": round(display_mastery(progress, kp), 3),
-        "threshold": round(gate_threshold(kp.type), 3),
+        "threshold": round(gate_threshold(kp.type, progress), 3),
         "attempts": attempts,
         "correct_count": sum(
             1 for attempt in attempts if attempt["is_correct"] and not attempt["voided"]

@@ -1,4 +1,5 @@
 import { apiFetch, apiUrl } from "./api";
+import type { PassStandard } from "./learning-api";
 
 /** Teacher templates are system-level: these routes are never workspace-scoped. */
 const BASE = "/api/mastery-paths/teaching";
@@ -106,6 +107,9 @@ export interface PublishPreview {
     first_publish: boolean;
     items: ChangeSuggestion[];
     removed: { kp_id: string; name: string }[];
+    pass_standard?: PassStandard;
+    /** Null on a first publication. */
+    previous_pass_standard?: PassStandard | null;
   };
   module_count: number;
   knowledge_point_count: number;

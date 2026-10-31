@@ -5918,5 +5918,17 @@
   "Current password": "当前密码",
   "Password changed. Other devices were signed out.": "密码已修改，其他设备已退出登录。",
   "Current password is incorrect.": "当前密码不正确。",
-  "Failed to change password": "修改密码失败"
+  "Failed to change password": "修改密码失败",
+  "Pass standard": "通过标准",
+  "Relaxed": "宽松",
+  "Strict": "严格",
+  "Set by your teacher": "由老师设定",
+  "Two right answers pass; one mistake rarely sets you back.": "答对 2 次即可通过，偶尔答错一次一般不会掉。",
+  "Two right answers in a row pass; after a mistake, three more.": "连续答对 2 次通过；答错一次后，需要再连续答对 3 次。",
+  "Three right answers in a row pass; after a mistake, five more.": "连续答对 3 次通过；答错一次后，需要再连续答对 5 次。",
+  "Explanation questions are judged by the tutor either way.": "讲解类问题仍由 AI 导师判断，不受此设置影响。",
+  "If you published this path, students get the new standard with your next update.": "如果这条路径已发布给学生，改动要在下次发布更新后才对学生生效。",
+  "Could not save the pass standard. Try again.": "通过标准保存失败，请重试。",
+  "Pass standard for students: {{from}} → {{to}}": "学生的通过标准：{{from}} → {{to}}",
+  "Pass standard for students: {{standard}}": "学生的通过标准：{{standard}}"
 }

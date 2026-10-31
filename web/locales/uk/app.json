@@ -5964,5 +5964,17 @@
   "Current password": "Поточний пароль",
   "Password changed. Other devices were signed out.": "Пароль змінено. Інші пристрої вийшли з облікового запису.",
   "Current password is incorrect.": "Поточний пароль неправильний.",
-  "Failed to change password": "Не вдалося змінити пароль"
+  "Failed to change password": "Не вдалося змінити пароль",
+  "Pass standard": "Поріг зарахування",
+  "Relaxed": "М'який",
+  "Strict": "Суворий",
+  "Set by your teacher": "Встановлено вчителем",
+  "Two right answers pass; one mistake rarely sets you back.": "Достатньо двох правильних відповідей; одна помилка рідко відкидає назад.",
+  "Two right answers in a row pass; after a mistake, three more.": "Достатньо двох правильних відповідей поспіль; після помилки — ще три.",
+  "Three right answers in a row pass; after a mistake, five more.": "Достатньо трьох правильних відповідей поспіль; після помилки — ще п'ять.",
+  "Explanation questions are judged by the tutor either way.": "Питання з поясненням і далі оцінює тьютор.",
+  "If you published this path, students get the new standard with your next update.": "Якщо цей шлях опубліковано, учні отримають новий поріг із наступним оновленням.",
+  "Could not save the pass standard. Try again.": "Не вдалося зберегти поріг зарахування. Спробуйте ще раз.",
+  "Pass standard for students: {{from}} → {{to}}": "Поріг зарахування для учнів: {{from}} → {{to}}",
+  "Pass standard for students: {{standard}}": "Поріг зарахування для учнів: {{standard}}"
 }

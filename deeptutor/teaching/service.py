@@ -491,6 +491,9 @@ class TeachingService:
             "first_publish": template.current_revision == 0,
             "items": [],
             "removed": [],
+            # How strict the scored gate is for students, and what it was.
+            "pass_standard": progress.pass_standard,
+            "previous_pass_standard": None,
         }
         try:
             outline = snapshot_outline(progress, topic, template.kp_aliases)
@@ -499,6 +502,7 @@ class TeachingService:
             outline = None
         if outline is not None and template.current_revision > 0:
             previous = await asyncio.to_thread(self._current_revision, template)
+            changes["previous_pass_standard"] = previous.outline.pass_standard
             diff = diff_outlines(previous.outline.modules, outline.modules)
             # The model call stays async and outside every writer.
             suggestions = await suggest_changes(diff, language=_language())

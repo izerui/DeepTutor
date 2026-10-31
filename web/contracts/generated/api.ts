@@ -371,6 +371,29 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/auth/profile/password": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /**
+     * Change Own Password
+     * @description Change one's own password (e.g. after an administrator or teacher reset it).
+     *
+     *     Every other session and paired device ends; this browser gets a fresh
+     *     session so the person stays signed in here.
+     */
+    readonly put: operations["change_own_password_api_auth_profile_password_put"];
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/auth/register": {
     readonly parameters: {
       readonly query?: never;
@@ -4494,6 +4517,26 @@ export interface paths {
     readonly put?: never;
     /** Set Learner Override */
     readonly post: operations["set_learner_override_api_mastery_paths_topics__path_id__objectives__kp_id__override_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/mastery-paths/topics/{path_id}/pass-standard": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /**
+     * Update Pass Standard
+     * @description The learner's own path only: a teacher path's copy keeps the teacher's standard.
+     */
+    readonly put: operations["update_pass_standard_api_mastery_paths_topics__path_id__pass_standard_put"];
+    readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -12813,6 +12856,13 @@ export interface components {
         readonly [key: string]: unknown;
       } | null;
     };
+    /** ChangeOwnPassword */
+    readonly ChangeOwnPassword: {
+      /** Current Password */
+      readonly current_password: string;
+      /** New Password */
+      readonly new_password: string;
+    };
     /** ChannelOnboardingStartRequest */
     readonly ChannelOnboardingStartRequest: {
       /**
@@ -15655,6 +15705,17 @@ export interface components {
     readonly PartnerSeatRetryRequest: {
       /** Session Key */
       readonly session_key: string;
+    };
+    /**
+     * PassStandardRequest
+     * @description How strict the path's scored gate is (``learning.pass_standard``).
+     */
+    readonly PassStandardRequest: {
+      /**
+       * Pass Standard
+       * @enum {string}
+       */
+      readonly pass_standard: "relaxed" | "standard" | "strict";
     };
     /** PasswordReset */
     readonly PasswordReset: {
@@ -18538,6 +18599,8 @@ export type SchemaCategoryRenameRequest =
   components["schemas"]["CategoryRenameRequest"];
 export type SchemaChangeBlockTypeRequest =
   components["schemas"]["ChangeBlockTypeRequest"];
+export type SchemaChangeOwnPassword =
+  components["schemas"]["ChangeOwnPassword"];
 export type SchemaChannelOnboardingStartRequest =
   components["schemas"]["ChannelOnboardingStartRequest"];
 export type SchemaChapterImport = components["schemas"]["ChapterImport"];
@@ -18817,6 +18880,8 @@ export type SchemaPartnerInvocationActionRequest =
   components["schemas"]["PartnerInvocationActionRequest"];
 export type SchemaPartnerSeatRetryRequest =
   components["schemas"]["PartnerSeatRetryRequest"];
+export type SchemaPassStandardRequest =
+  components["schemas"]["PassStandardRequest"];
 export type SchemaPasswordReset = components["schemas"]["PasswordReset"];
 export type SchemaPauseBookRequest = components["schemas"]["PauseBookRequest"];
 export type SchemaPersonRef = components["schemas"]["PersonRef"];
@@ -19768,6 +19833,45 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["LearnerProfileRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly change_own_password_api_auth_profile_password_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ChangeOwnPassword"];
       };
     };
     readonly responses: {
@@ -28697,6 +28801,45 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["LearnerOverrideRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_pass_standard_api_mastery_paths_topics__path_id__pass_standard_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly path_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["PassStandardRequest"];
       };
     };
     readonly responses: {

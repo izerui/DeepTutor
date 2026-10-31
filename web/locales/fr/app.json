@@ -6308,5 +6308,17 @@
   "Current password": "Mot de passe actuel",
   "Password changed. Other devices were signed out.": "Mot de passe modifié. Les autres appareils ont été déconnectés.",
   "Current password is incorrect.": "Le mot de passe actuel est incorrect.",
-  "Failed to change password": "Échec du changement de mot de passe"
+  "Failed to change password": "Échec du changement de mot de passe",
+  "Pass standard": "Niveau de réussite",
+  "Relaxed": "Souple",
+  "Strict": "Strict",
+  "Set by your teacher": "Défini par votre enseignant",
+  "Two right answers pass; one mistake rarely sets you back.": "Deux bonnes réponses suffisent ; une erreur vous fait rarement reculer.",
+  "Two right answers in a row pass; after a mistake, three more.": "Deux bonnes réponses d'affilée suffisent ; après une erreur, trois de plus.",
+  "Three right answers in a row pass; after a mistake, five more.": "Trois bonnes réponses d'affilée suffisent ; après une erreur, cinq de plus.",
+  "Explanation questions are judged by the tutor either way.": "Les questions d'explication restent évaluées par le tuteur.",
+  "If you published this path, students get the new standard with your next update.": "Si vous avez publié ce parcours, les élèves recevront le nouveau niveau avec votre prochaine mise à jour.",
+  "Could not save the pass standard. Try again.": "Impossible d'enregistrer le niveau de réussite. Réessayez.",
+  "Pass standard for students: {{from}} → {{to}}": "Niveau de réussite des élèves : {{from}} → {{to}}",
+  "Pass standard for students: {{standard}}": "Niveau de réussite des élèves : {{standard}}"
 }

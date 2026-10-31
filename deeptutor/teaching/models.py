@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from deeptutor.learning.models import LearningModule, TopicSource
+from deeptutor.learning.pass_standard import PassStandard
 
 TemplateStatus = Literal["draft", "published", "archived"]
 AssignmentStatus = Literal["active", "revoked"]
@@ -47,6 +48,9 @@ class TemplateOutline(BaseModel):
     description: str = ""
     emoji: str = "🧭"
     modules: list[LearningModule] = Field(default_factory=list)
+    #: How strict the scored gate is for students (``learning.pass_standard``).
+    #: Revisions published before the setting existed read as "strict".
+    pass_standard: PassStandard = "strict"
 
 
 class TemplateDocRef(BaseModel):

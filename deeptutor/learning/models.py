@@ -689,6 +689,9 @@ class LearningProgress(BaseModel):
     # One target per learning path; older aggregates load at the baseline 0.9.
     # It is copied into each repetition state when that state is created.
     desired_retention: float = Field(default=0.9, ge=0.7, le=0.99, allow_inf_nan=False)
+    # How strict the scored gate is (``learning.pass_standard``). Older
+    # aggregates load as "strict", the original bar.
+    pass_standard: Literal["relaxed", "standard", "strict"] = "strict"
     repetition_states: dict[str, RepetitionState] = Field(default_factory=dict)
     review_queue: list[ReviewTask] = Field(default_factory=list)
     # A learner may explicitly claim prior mastery.  Policy exposes this as a

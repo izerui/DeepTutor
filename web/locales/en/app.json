@@ -5918,5 +5918,17 @@
   "Current password": "Current password",
   "Password changed. Other devices were signed out.": "Password changed. Other devices were signed out.",
   "Current password is incorrect.": "Current password is incorrect.",
-  "Failed to change password": "Failed to change password"
+  "Failed to change password": "Failed to change password",
+  "Pass standard": "Pass standard",
+  "Relaxed": "Relaxed",
+  "Strict": "Strict",
+  "Set by your teacher": "Set by your teacher",
+  "Two right answers pass; one mistake rarely sets you back.": "Two right answers pass; one mistake rarely sets you back.",
+  "Two right answers in a row pass; after a mistake, three more.": "Two right answers in a row pass; after a mistake, three more.",
+  "Three right answers in a row pass; after a mistake, five more.": "Three right answers in a row pass; after a mistake, five more.",
+  "Explanation questions are judged by the tutor either way.": "Explanation questions are judged by the tutor either way.",
+  "If you published this path, students get the new standard with your next update.": "If you published this path, students get the new standard with your next update.",
+  "Could not save the pass standard. Try again.": "Could not save the pass standard. Try again.",
+  "Pass standard for students: {{from}} → {{to}}": "Pass standard for students: {{from}} → {{to}}",
+  "Pass standard for students: {{standard}}": "Pass standard for students: {{standard}}"
 }

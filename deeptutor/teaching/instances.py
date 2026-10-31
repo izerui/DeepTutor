@@ -174,6 +174,7 @@ def materialize_instance(
         sources, modules = instance_outline(path_id, revision)
         tx.progress.name = revision.outline.name[:200]
         tx.progress.origin = PathOrigin(template_id=template.id, revision=revision.revision)
+        tx.progress.pass_standard = revision.outline.pass_standard
         tx.put_topic(metadata, sources)
         LearningService(store).replace_modules(tx.progress, modules)
         tx.progress.current_module_id = modules[0].id if modules else ""

@@ -1829,7 +1829,7 @@ class MasteryGradeTool(BaseTool):
             "knowledge_point_id": pending.knowledge_point_id,
             "question_id": pending.question_id,
             "mastery": round(display_mastery(progress, kp), 3) if kp else 0.0,
-            "threshold": round(gate_threshold(kp.type), 3) if kp else 0.0,
+            "threshold": round(gate_threshold(kp.type, progress), 3) if kp else 0.0,
             # Which gate that number is being read against. Without it a
             # qualitative objective reports mastery 1.0 / threshold 1.0 /
             # mastered false, which is not a reading anyone can act on.

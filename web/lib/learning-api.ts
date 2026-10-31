@@ -518,6 +518,8 @@ export interface MasteryTopicOrigin {
   materials_available: boolean | null;
 }
 
+export type PassStandard = "relaxed" | "standard" | "strict";
+
 export interface MasteryTopic extends LearningOrigin {
   path_id: string;
   name: string;
@@ -528,6 +530,8 @@ export interface MasteryTopic extends LearningOrigin {
   map: MasteryMap;
   reviews: TopicReview[];
   review_settings?: MasteryReviewSettings;
+  /** How strict the scored mastery check is; absent reads as "strict". */
+  pass_standard?: PassStandard;
   /** Null until the tutor has asked the learner about themselves. */
   learner_profile: LearnerProfile | null;
   session_count: number;
@@ -754,6 +758,22 @@ export function updateMasteryReviewSettings(
       body: JSON.stringify({ desired_retention: desiredRetention }),
     },
     "update review target",
+  );
+}
+
+/** The learner's own path only; a teacher path keeps the teacher's standard. */
+export function updateMasteryPassStandard(
+  pathId: string,
+  passStandard: PassStandard,
+): Promise<MasteryTopic> {
+  return masteryJson(
+    `/api/mastery-paths/topics/${encodeURIComponent(pathId)}/pass-standard`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pass_standard: passStandard }),
+    },
+    "update pass standard",
   );
 }
 

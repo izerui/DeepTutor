@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useModalDialog } from "@/hooks/useModalDialog";
-import type { MasteryTopic } from "@/lib/learning-api";
+import type { MasteryTopic, PassStandard } from "@/lib/learning-api";
 import {
   listAssignments,
   previewPublish,
@@ -34,6 +34,12 @@ import {
   teachingErrorMessage,
   type Message,
 } from "./teaching";
+
+const PASS_STANDARD_LABELS: Record<PassStandard, string> = {
+  relaxed: "Relaxed",
+  standard: "Standard",
+  strict: "Strict",
+};
 
 const CHOICES = ["make_public", "reference_only"] as const;
 
@@ -232,6 +238,20 @@ export function PublishTemplateDialog({
           {loadError && (
             <p role="alert" className="text-xs text-red-600">
               {say(loadError)}
+            </p>
+          )}
+
+          {preview && !published && preview.changes.pass_standard && (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {preview.changes.previous_pass_standard &&
+              preview.changes.previous_pass_standard !== preview.changes.pass_standard
+                ? t("Pass standard for students: {{from}} → {{to}}", {
+                    from: t(PASS_STANDARD_LABELS[preview.changes.previous_pass_standard]),
+                    to: t(PASS_STANDARD_LABELS[preview.changes.pass_standard]),
+                  })
+                : t("Pass standard for students: {{standard}}", {
+                    standard: t(PASS_STANDARD_LABELS[preview.changes.pass_standard]),
+                  })}
             </p>
           )}
 

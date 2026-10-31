@@ -44,6 +44,7 @@ import { TeacherMaterialsNotice } from "@/components/space/learning/TeacherMater
 import { TeacherPathBanner } from "@/components/space/learning/TeacherPathBanner";
 import { isTeacherInstance } from "@/components/space/learning/teaching";
 import { ReviewTrail } from "@/components/space/learning/ReviewTrail";
+import { PassStandardControl } from "@/components/space/learning/PassStandardControl";
 import { SessionCamp } from "@/components/space/learning/SessionCamp";
 import { useMasteryPathActivity } from "@/hooks/useMasteryPathActivity";
 import {
@@ -404,6 +405,14 @@ export default function MasteryTopicPage() {
                 </p>
               </div>
             </div>
+            <PassStandardControl
+              topic={topic}
+              locked={teacherLocked}
+              onSaved={(next) => {
+                setTopic(next);
+                activity.refresh();
+              }}
+            />
             {teacherLocked ? (
               <div className="mt-3">
                 <TeacherPathBanner topic={topic} />

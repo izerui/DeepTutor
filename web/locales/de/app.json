@@ -5918,5 +5918,17 @@
   "Current password": "Aktuelles Passwort",
   "Password changed. Other devices were signed out.": "Passwort geändert. Andere Geräte wurden abgemeldet.",
   "Current password is incorrect.": "Das aktuelle Passwort ist falsch.",
-  "Failed to change password": "Passwort konnte nicht geändert werden"
+  "Failed to change password": "Passwort konnte nicht geändert werden",
+  "Pass standard": "Bestehensstandard",
+  "Relaxed": "Locker",
+  "Strict": "Streng",
+  "Set by your teacher": "Von deiner Lehrkraft festgelegt",
+  "Two right answers pass; one mistake rarely sets you back.": "Zwei richtige Antworten reichen; ein Fehler wirft dich selten zurück.",
+  "Two right answers in a row pass; after a mistake, three more.": "Zwei richtige Antworten in Folge reichen; nach einem Fehler drei weitere.",
+  "Three right answers in a row pass; after a mistake, five more.": "Drei richtige Antworten in Folge reichen; nach einem Fehler fünf weitere.",
+  "Explanation questions are judged by the tutor either way.": "Erklärungsfragen beurteilt der Tutor in jedem Fall selbst.",
+  "If you published this path, students get the new standard with your next update.": "Wenn du diesen Pfad veröffentlicht hast, erhalten Lernende den neuen Standard mit deinem nächsten Update.",
+  "Could not save the pass standard. Try again.": "Der Bestehensstandard konnte nicht gespeichert werden. Versuch es noch einmal.",
+  "Pass standard for students: {{from}} → {{to}}": "Bestehensstandard für Lernende: {{from}} → {{to}}",
+  "Pass standard for students: {{standard}}": "Bestehensstandard für Lernende: {{standard}}"
 }

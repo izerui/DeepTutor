@@ -451,4 +451,5 @@ def snapshot_outline(
         description=topic.metadata.description,
         emoji=topic.metadata.emoji,
         modules=remap_modules(progress.modules, aliases),
+        pass_standard=progress.pass_standard,
     )

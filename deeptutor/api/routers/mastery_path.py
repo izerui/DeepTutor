@@ -35,6 +35,7 @@ from deeptutor.learning.objective_relations import (
     normalize_refs,
     runnable_module_issues,
 )
+from deeptutor.learning.pass_standard import PassStandard
 from deeptutor.learning.service import LearningService
 from deeptutor.learning.storage import LearningStore
 from deeptutor.learning.topic_generation import MAX_MODULE_LIMIT
@@ -294,6 +295,12 @@ class ReviewSettingsRequest(BaseModel):
     desired_retention: float = Field(..., ge=0.7, le=0.99, allow_inf_nan=False)
 
 
+class PassStandardRequest(BaseModel):
+    """How strict the path's scored gate is (``learning.pass_standard``)."""
+
+    pass_standard: PassStandard
+
+
 class ChapterImport(BaseModel):
     title: str
     knowledge_points: list[str] = []
@@ -494,6 +501,7 @@ def _topic_payload_from_snapshot(
             "desired_retention": progress.desired_retention,
             "scope": "path",
         },
+        "pass_standard": progress.pass_standard,
         # Who this goal is for. Null until intake has happened, which is also
         # what the dashboard renders as "not asked yet".
         "learner_profile": (
@@ -766,6 +774,32 @@ async def update_review_settings(path_id: str, body: ReviewSettingsRequest):
             await asyncio.to_thread(store.mutate, path_id, update)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Mastery topic not found") from exc
+    return await asyncio.to_thread(_topic_payload, LearningStore(), path_id)
+
+
+@router.put("/topics/{path_id}/pass-standard", dependencies=_OUTLINE_WRITE)
+async def update_pass_standard(path_id: str, body: PassStandardRequest):
+    """The learner's own path only: a teacher path's copy keeps the teacher's standard."""
+    async with _exclusive_path_mutation(path_id):
+        store = LearningStore()
+
+        def update(tx):
+            from deeptutor.teaching.instances import OUTLINE_LOCKED, OutlineLockedError
+
+            if tx.progress.origin is not None:
+                raise OutlineLockedError(OUTLINE_LOCKED)
+            if tx.progress.pass_standard == body.pass_standard:
+                return
+            tx.progress.pass_standard = body.pass_standard
+            tx.touch()
+            tx.emit("path.pass_standard_changed", {"pass_standard": body.pass_standard})
+
+        try:
+            await asyncio.to_thread(store.mutate, path_id, update)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Mastery topic not found") from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
     return await asyncio.to_thread(_topic_payload, LearningStore(), path_id)
 
 
