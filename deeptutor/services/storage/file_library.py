@@ -119,6 +119,12 @@ class FileLibraryStore:
 
         conn = sqlite3.connect(str(self._db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
+        conn.create_function(
+            "unicode_casefold",
+            1,
+            lambda value: value.casefold() if isinstance(value, str) else value,
+            deterministic=True,
+        )
         try:
             with conn:
                 yield conn
@@ -415,13 +421,13 @@ class FileLibraryStore:
             return []
         # Escape LIKE metacharacters so '_' and '%' in the query match
         # literally (substring search), not as single-char / any-run wildcards.
-        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        escaped = query.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped}%"
         with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM library_files
-                WHERE is_deleted = 0 AND filename LIKE ? ESCAPE '\\'
+                WHERE is_deleted = 0 AND unicode_casefold(filename) LIKE ? ESCAPE '\\'
                 ORDER BY created_at DESC, id DESC
                 """,
                 (pattern,),
