@@ -5918,5 +5918,16 @@
   "Learn this knowledge point": "Étudier cette notion",
   "Start this review": "Commencer cette révision",
   "Answer in the original session": "Répondre dans la session d'origine",
-  "Keep exploring": "Continuer à explorer"
+  "Keep exploring": "Continuer à explorer",
+  "Experience Enhancement": "Amélioration de l'expérience",
+  "User-toggleable. Switch on or off to shape the chat agent's behavior.": "Au choix de l'utilisateur. Activez ou désactivez ces outils pour façonner le comportement de l'agent de conversation.",
+  "Built-in Tools": "Outils intégrés",
+  "Mounted automatically by the chat agent when needed. Not user-toggleable.": "Montés automatiquement par l'agent de conversation au besoin. Non modifiables par l'utilisateur.",
+  "{{label}} · Capability Tools": "{{label}} · Outils de capacité",
+  "Tools specific to this capability; mounted only when it runs.": "Outils propres à cette capacité ; montés uniquement lorsqu'elle s'exécute.",
+  "Choose a provider in Search settings first. DuckDuckGo needs no API key.": "Choisissez d'abord un fournisseur dans les paramètres de recherche. DuckDuckGo ne nécessite aucune clé API.",
+  "Credentials missing": "Identifiants manquants",
+  "The selected search provider needs credentials. Check Search settings.": "Le fournisseur de recherche sélectionné nécessite des identifiants. Vérifiez les paramètres de recherche.",
+  "This tool's runtime service is unavailable.": "Le service d'exécution de cet outil est indisponible.",
+  "Theme, learning text, and code blocks": "Thème, texte d’apprentissage et blocs de code"
 }

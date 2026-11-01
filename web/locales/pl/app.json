@@ -5689,7 +5689,6 @@
   "Delete the review by {{name}}": "Usuń opinię użytkownika {{name}}",
   "Delete this review?": "Usunąć tę opinię?",
   "Delete your review?": "Usunąć twoją opinię?",
-  "Downloading…": "Pobieranie…",
   "Edit reply": "Edytuj odpowiedź",
   "Edit review": "Edytuj opinię",
   "Favorite": "Ulubione",
@@ -5943,5 +5942,16 @@
   "Historical conversation database": "Historyczna baza danych rozmów",
   "Historical agent outputs": "Historyczne wyniki agentów",
   "Historical output folder": "Historyczny folder wyników",
-  "Historical archives": "Archiwa historyczne"
+  "Historical archives": "Archiwa historyczne",
+  "Experience Enhancement": "Ulepszenia komfortu użytkowania",
+  "User-toggleable. Switch on or off to shape the chat agent's behavior.": "Przełączane przez użytkownika. Włącz lub wyłącz, aby kształtować zachowanie agenta czatu.",
+  "Built-in Tools": "Wbudowane narzędzia",
+  "Mounted automatically by the chat agent when needed. Not user-toggleable.": "Montowane automatycznie przez agenta czatu w razie potrzeby. Nie można ich przełączać ręcznie.",
+  "{{label}} · Capability Tools": "{{label}} · Narzędzia możliwości",
+  "Tools specific to this capability; mounted only when it runs.": "Narzędzia specyficzne dla tej możliwości; montowane tylko podczas jej działania.",
+  "Choose a provider in Search settings first. DuckDuckGo needs no API key.": "Najpierw wybierz dostawcę w ustawieniach wyszukiwania. DuckDuckGo nie wymaga klucza API.",
+  "Credentials missing": "Brak poświadczeń",
+  "The selected search provider needs credentials. Check Search settings.": "Wybrany dostawca wyszukiwania wymaga poświadczeń. Sprawdź ustawienia wyszukiwania.",
+  "This tool's runtime service is unavailable.": "Usługa środowiska uruchomieniowego tego narzędzia jest niedostępna.",
+  "Theme, learning text, and code blocks": "Motyw, tekst do nauki i bloki kodu"
 }

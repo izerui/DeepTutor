@@ -5689,7 +5689,6 @@
   "Delete the review by {{name}}": "Видалити відгук {{name}}",
   "Delete this review?": "Видалити цей відгук?",
   "Delete your review?": "Видалити ваш відгук?",
-  "Downloading…": "Завантаження…",
   "Edit reply": "Змінити відповідь",
   "Edit review": "Змінити відгук",
   "Favorite": "В обране",
@@ -5943,5 +5942,16 @@
   "Historical conversation database": "База даних історичних чатів",
   "Historical agent outputs": "Історичні результати агентів",
   "Historical output folder": "Історична тека результатів",
-  "Historical archives": "Історичні архіви"
+  "Historical archives": "Історичні архіви",
+  "Experience Enhancement": "Покращення досвіду",
+  "User-toggleable. Switch on or off to shape the chat agent's behavior.": "Перемикається користувачем. Вмикайте або вимикайте, щоб налаштувати поведінку агента чату.",
+  "Built-in Tools": "Вбудовані інструменти",
+  "Mounted automatically by the chat agent when needed. Not user-toggleable.": "Автоматично підключається агентом чату за потреби. Не перемикається користувачем.",
+  "{{label}} · Capability Tools": "{{label}} · Інструменти можливості",
+  "Tools specific to this capability; mounted only when it runs.": "Інструменти, специфічні для цієї можливості; підключаються лише під час її роботи.",
+  "Choose a provider in Search settings first. DuckDuckGo needs no API key.": "Спершу виберіть провайдера в налаштуваннях пошуку. DuckDuckGo не потребує API-ключа.",
+  "Credentials missing": "Бракує облікових даних",
+  "The selected search provider needs credentials. Check Search settings.": "Вибраний провайдер пошуку потребує облікових даних. Перевірте налаштування пошуку.",
+  "This tool's runtime service is unavailable.": "Служба виконання цього інструмента недоступна.",
+  "Theme, learning text, and code blocks": "Тема, навчальний текст і блоки коду"
 }
