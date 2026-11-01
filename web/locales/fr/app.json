@@ -5633,7 +5633,6 @@
   "Delete the review by {{name}}": "Supprimer l'avis de {{name}}",
   "Delete this review?": "Supprimer cet avis ?",
   "Delete your review?": "Supprimer votre avis ?",
-  "Downloading…": "Téléchargement…",
   "Edit reply": "Modifier la réponse",
   "Edit review": "Modifier l'avis",
   "Favorite": "Favori",
@@ -5907,5 +5906,17 @@
   "Historical conversation database": "Base de données historique des conversations",
   "Historical agent outputs": "Sorties historiques des agents",
   "Historical output folder": "Dossier de sorties historiques",
-  "Historical archives": "Archives historiques"
+  "Historical archives": "Archives historiques",
+  "Teach first, then check understanding": "Expliquer d'abord, puis vérifier la compréhension",
+  "Start with a probe and test out if you already know it": "Commencez par une question de diagnostic pour voir si vous maîtrisez déjà ce point",
+  "Learn this knowledge point before checking understanding": "Étudiez cette notion avant de vérifier votre compréhension",
+  "Practice until you reliably clear the mastery gate": "Entraînez-vous jusqu'à franchir de façon fiable le seuil de maîtrise",
+  "Explain this clearly in your own words": "Expliquez cela clairement avec vos propres mots",
+  "Revisit this memory beacon": "Révisez cette balise de mémoire",
+  "Complete the answer your tutor is waiting for": "Complétez la réponse qu'attend votre tuteur",
+  "The whole territory is illuminated": "Tout le territoire est illuminé",
+  "Learn this knowledge point": "Étudier cette notion",
+  "Start this review": "Commencer cette révision",
+  "Answer in the original session": "Répondre dans la session d'origine",
+  "Keep exploring": "Continuer à explorer"
 }
