@@ -79,8 +79,12 @@ export function useMasteryStudySession(
 
   useEffect(() => {
     let active = true;
+    // Another path starts empty, so its screen never shows the old topic. A
+    // refresh of the same path (every graded answer moves its revision) keeps
+    // the current one on screen: clearing it swapped the whole study screen
+    // for a spinner and dropped the learner back to the top of the conversation.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the route-owned request state before fetching.
-    setTopic(null);
+    setTopic((current) => (current?.path_id === pathId ? current : null));
     setTopicError(null);
     setTopicClosed(false);
     void fetchMasteryTopic(pathId, { cache: "no-store" })

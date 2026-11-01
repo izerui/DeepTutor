@@ -52,9 +52,10 @@ vi.mock("@/features/chat/ChatStateAdapter", () => ({
   }),
 }));
 
+const activity = vi.hoisted(() => ({ revision: 0 }));
 vi.mock("@/hooks/useMasteryPathActivity", () => ({
   useMasteryPathActivity: () => ({
-    revision: 0,
+    revision: activity.revision,
     unavailable: false,
     connection: "live",
     refresh: vi.fn(),
@@ -107,6 +108,7 @@ describe("T15-M5 topic cleared on path switch", () => {
     mockFetchTopic.mockReset();
     mockFetchTopic.mockImplementation(() => new Promise(() => {}));
     mockNewSession.mockClear();
+    activity.revision = 0;
   });
 
   it("nulls topic immediately when pathId changes, before the new fetch resolves", async () => {
@@ -150,5 +152,30 @@ describe("T15-M5 topic cleared on path switch", () => {
       bDeferred.resolve(topicB);
     });
     expect(result.current.topic?.path_id).toBe("path-b");
+  });
+
+  it("keeps the topic on screen while the same path refreshes after an answer", async () => {
+    mockFetchTopic.mockImplementationOnce(() => Promise.resolve(minimalTopic("path-a")));
+    const { result, rerender } = renderHook(
+      ({ pathId }: { pathId: string }) => useMasteryStudySession(pathId),
+      { initialProps: { pathId: "path-a" } },
+    );
+    await waitFor(() => expect(result.current.topic?.path_id).toBe("path-a"));
+
+    // A graded answer moves the path's revision; the refetch is still in flight.
+    const refreshed = deferred<ReturnType<typeof minimalTopic>>();
+    mockFetchTopic.mockImplementationOnce(() => refreshed.promise);
+    activity.revision = 1;
+    act(() => {
+      rerender({ pathId: "path-a" });
+    });
+    expect(mockFetchTopic).toHaveBeenCalledTimes(2);
+    // Clearing it here swapped the study screen for a spinner (back to the top).
+    expect(result.current.topic?.path_id).toBe("path-a");
+
+    await act(async () => {
+      refreshed.resolve({ ...minimalTopic("path-a"), path_revision: 2 });
+    });
+    expect(result.current.topic?.path_revision).toBe(2);
   });
 });
