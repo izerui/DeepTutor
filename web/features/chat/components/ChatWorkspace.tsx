@@ -39,6 +39,7 @@ import type { SelectedHistorySession } from "@/components/chat/HistorySessionPic
 import type { SelectedQuestionEntry } from "@/components/chat/QuestionBankPicker";
 import ChatComposer from "@/components/chat/home/ChatComposer";
 import { ChatMessageList } from "@/features/chat/messages";
+import { PlayAudioButton } from "@/components/voice/SpeechButton";
 import { TurnNavigator } from "@/components/chat/home/TurnNavigator";
 import SessionLoadingView from "@/components/chat/home/SessionLoadingView";
 import {
@@ -1712,7 +1713,8 @@ export default function ChatWorkspace() {
       rects.length > 0
         ? rects[rects.length - 1]
         : range.getBoundingClientRect();
-    const buttonWidth = 118;
+    // Read-aloud (41px) + "Ask Little Tutor" (118px).
+    const buttonWidth = 159;
     const buttonHeight = 38;
     const left = Math.max(
       12,
@@ -2622,20 +2624,38 @@ export default function ChatWorkspace() {
                     </div>
                   </div>
                   {selectionTutorPrompt ? (
-                    <button
-                      type="button"
+                    <div
+                      role="toolbar"
+                      aria-label={t("Selected text")}
                       onPointerDown={(event) => event.preventDefault()}
-                      onClick={openSelectionTutor}
-                      aria-label={t("Ask Little Tutor")}
-                      className="fixed z-[45] inline-flex h-[38px] items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--foreground)] px-3 text-[12px] font-medium text-[var(--background)] shadow-lg transition-transform hover:-translate-y-0.5"
+                      className="fixed z-[45] inline-flex h-[38px] items-stretch overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--foreground)] text-[var(--background)] shadow-lg"
                       style={{
                         left: selectionTutorPrompt.left,
                         top: selectionTutorPrompt.top,
                       }}
                     >
-                      <GraduationCap size={15} strokeWidth={1.8} />
-                      {t("Ask Little Tutor")}
-                    </button>
+                      {/* Upstream 70031420a: read only the selected passage aloud. */}
+                      <PlayAudioButton
+                        key={selectionTutorPrompt.text}
+                        content={selectionTutorPrompt.text}
+                        autoPlayFresh={false}
+                        selection
+                        className="inline-flex w-10 items-center justify-center transition hover:opacity-80"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="my-2 w-px bg-[color-mix(in_srgb,var(--background)_22%,transparent)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={openSelectionTutor}
+                        aria-label={t("Ask Little Tutor")}
+                        className="inline-flex items-center gap-1.5 px-3 text-[12px] font-medium transition hover:opacity-80"
+                      >
+                        <GraduationCap size={15} strokeWidth={1.8} />
+                        {t("Ask Little Tutor")}
+                      </button>
+                    </div>
                   ) : null}
                   <TurnNavigator
                     entries={chatOutline}

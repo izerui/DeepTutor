@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ChatMessageList } from "@/features/chat/messages";
+import { SelectionSpeechToolbar } from "@/components/voice/SelectionSpeechToolbar";
 import { ChatViewerBridges } from "@/components/chat/home/ChatViewerBridges";
 import { buildSessionActivity } from "@/lib/session-activity";
 import { TurnNavigator } from "@/components/chat/home/TurnNavigator";
@@ -878,6 +879,7 @@ export function MasteryStudy({
               onJump={jumpToTurn}
               onJumpToBottom={resumeFollowingLatest}
             />
+            <SelectionSpeechToolbar rootRef={messagesContainerRef} />
           </div>
 
           {!sessionError && (

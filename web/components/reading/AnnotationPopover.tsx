@@ -18,6 +18,7 @@ import {
   ANNOTATION_SWATCH,
   type AnnotationColor,
 } from "@/lib/reading-api";
+import { PlayAudioButton } from "@/components/voice/SpeechButton";
 
 export interface AnnotationPopoverProps {
   /** Viewport coordinates of the selection's end. */
@@ -170,6 +171,15 @@ export function AnnotationPopover({
   const body = (
     <>
       <div className="flex items-center gap-1">
+        <div onPointerDown={event => event.preventDefault()}>
+          <PlayAudioButton
+            key={quote}
+            content={quote}
+            autoPlayFresh={false}
+            selection
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--foreground)] transition hover:bg-[var(--muted)]"
+          />
+        </div>
         <div className="flex items-center gap-0.5 pr-1">
           {ANNOTATION_COLORS.map((swatch) => (
             <Tooltip key={swatch} label={t(swatchLabel(swatch))} side="top">
