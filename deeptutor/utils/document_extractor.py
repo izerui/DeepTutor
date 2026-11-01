@@ -130,6 +130,8 @@ _EPUB_BLOCK_TAGS: frozenset[str] = frozenset(
         "h6",
         "li",
         "blockquote",
+        "td",
+        "th",
         "tr",
         "table",
         "section",
