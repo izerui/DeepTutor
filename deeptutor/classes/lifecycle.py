@@ -62,6 +62,38 @@ def after_role_change(user_id: str, old_role: str, new_role: str) -> None:
         reconcile_student_quietly(user_id)
 
 
+def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
+    """A teacher who stops teaching hands what they published to an administrator.
+
+    Spec 2026-11-02 §6.1: like an account deletion, but the account lives on,
+    so only what reached others moves — public or referenced knowledge bases
+    and books, Mastery Paths ever published, practice sets ever published.
+    Drafts and private items stay theirs. Every step is idempotent and raises
+    on failure, so the caller changes the role only after this succeeded.
+    """
+    from deeptutor.book import sharing as book_sharing
+    from deeptutor.knowledge import registry as kb_registry
+    from deeptutor.practice_sets import store as practice_store
+    from deeptutor.teaching.store import TeachingStore
+
+    moved = {
+        "knowledge_bases": len(kb_registry.transfer_ownership(user_id, successor_id)),
+        "books": len(book_sharing.transfer_ownership(user_id, successor_id, shared_only=True)),
+        "teacher_paths": TeachingStore().transfer_owner(user_id, successor_id, published_only=True),
+        "practice_sets": 0,
+    }
+    if practice_store.practice_db_path().exists():
+        with practice_store.write() as conn:
+            moved["practice_sets"] = int(conn.execute(
+                "UPDATE practice_sets SET owner_user_id = ?, updated_at = ? "
+                "WHERE owner_user_id = ? AND current_revision > 0",
+                (successor_id, time.time(), user_id),
+            ).rowcount)
+    if any(moved.values()):
+        logger.info("Handed what %s published to %s: %s", user_id, successor_id, moved)
+    return moved
+
+
 def forget_deleted_account(user_id: str) -> None:
     """Hand-over stage ``classes``: the deleted id teaches and attends nothing."""
     _leave_classes(user_id, as_teacher=True, as_student=True)
@@ -95,6 +127,7 @@ def transfer_practice_sets(user_id: str, successor_id: str) -> int:
 
 __all__ = [
     "after_role_change",
+    "hand_over_published",
     "forget_deleted_account",
     "forget_publish_targets",
     "transfer_practice_sets",

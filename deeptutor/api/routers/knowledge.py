@@ -150,6 +150,8 @@ async def deny_student_kb_writes(request: Request) -> None:
         )
 
 
+from deeptutor.api.routers.publishing import ScopeChoice
+from deeptutor.publishing.scope import ScopeError
 from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
 
 router = APIRouter(
@@ -3974,6 +3976,8 @@ class KbVisibilityRequest(BaseModel):
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
+    #: First publication: who receives it (spec 2026-11-02 §4.1).
+    scope: ScopeChoice | None = None
 
 
 def _registered_record(kb_name: str):
@@ -4004,7 +4008,10 @@ async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
         )
     if payload.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
-    return await asyncio.to_thread(_apply_kb_visibility, record.kb_id, payload)
+    from deeptutor.api.routers.publishing import chosen
+
+    with chosen(payload.scope):
+        return await asyncio.to_thread(_apply_kb_visibility, record.kb_id, payload)
 
 
 def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, str]:
@@ -4028,6 +4035,8 @@ def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, 
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except registry.KbRegistryError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScopeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return {"kb_id": updated.kb_id, "ref": updated.ref, "visibility": updated.visibility}
 
 

@@ -1,3 +1,4 @@
+import type { Provenance } from "./provenance";
 import { apiFetch, apiUrl } from "./api";
 
 /** Practice sets are system-level: never workspace-scoped (spec 2026-10-29 §8). */
@@ -43,6 +44,8 @@ export interface PracticeSetDraft extends PracticeSetSummary {
 
 export interface AssignedSet extends PracticeSetSummary {
   teacher: string;
+  /** Where it comes from (spec 2026-11-02 §3.1). */
+  provenance?: Provenance;
   submissions: number;
   best_score: number | null;
   max_score: number | null;
@@ -148,10 +151,14 @@ export const updateSet = (
   const body = due_at === undefined ? rest : due_at === null ? { ...rest, clear_due: true } : { ...rest, due_at };
   return call<{ set: PracticeSetDraft }>(id(setId), send("PUT", body)).then((r) => r.set);
 };
-export const publishSet = (setId: string) =>
-  call<{ set: PracticeSetDraft }>(`${id(setId)}/publish`, send("POST")).then((r) => r.set);
+/** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
+export const publishSet = (setId: string, scope?: { everyone: boolean; users: string[]; classes: string[] }) =>
+  call<{ set: PracticeSetDraft }>(`${id(setId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.set);
 export const archiveSet = (setId: string) =>
   call<{ set: PracticeSetDraft }>(`${id(setId)}/archive`, send("POST")).then((r) => r.set);
+/** Administrators: other people's published sets, which they may only withdraw (D10). */
+export const listWithdrawable = () =>
+  call<{ sets: (PracticeSetSummary & { owner: string })[] }>("/withdrawable").then((r) => r.sets);
 export const deleteSet = (setId: string) => call<{ ok: boolean }>(id(setId), send("DELETE"));
 export const generateQuestions = (body: {
   topic: string;

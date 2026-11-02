@@ -1,5 +1,6 @@
 import type { OtherReferences } from "@/lib/withdrawal-confirmation";
 import type { LearningOrigin } from "@/lib/learning-library";
+import type { Provenance } from "./provenance";
 // Type definitions mirroring deeptutor.book.models on the backend.
 // Kept loose (Record<string, unknown>) where the payload is block-type
 // specific so we don't have to keep these in lock-step.
@@ -267,6 +268,8 @@ export interface Book extends LearningOrigin {
   visibility?: BookVisibility;
   owner_id?: string;
   group?: "mine" | "public";
+  /** Where it comes from (spec 2026-11-02 §3.1). */
+  provenance?: Provenance;
   can_set_visibility?: boolean;
   kb_refs?: string[];
   generation?: GenerationOverview;

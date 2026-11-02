@@ -19,6 +19,9 @@ transaction has committed.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 import logging
 import time
@@ -47,6 +50,13 @@ class ScopeNotFound(ScopeError):
 
 class ScopeForbidden(ScopeError):
     status_code = 403
+
+
+class ScopeRequired(ScopeError):
+    """A first publication by someone who teaches no class names no receivers."""
+
+    def __init__(self) -> None:
+        super().__init__("Choose who receives this before publishing it.")
 
 
 class ScopeNeedsConfirmation(ScopeError):
@@ -237,27 +247,67 @@ def taught_class_ids(user_id: str) -> list[str]:
         )
 
 
+#: The receivers the publisher chose for this publication (see :func:`chosen_scope`).
+_chosen: ContextVar[Scope | None] = ContextVar("publish_chosen_scope", default=None)
+
+
+@contextmanager
+def chosen_scope(scope: Scope | None) -> Iterator[None]:
+    """Publish inside this block to the receivers the publisher chose.
+
+    Set by the publish routes around the visibility change, so the scope is
+    written in the same step as the publication; materials made public along
+    with a book or a path get the same receivers.
+    """
+    token = _chosen.set(scope)
+    try:
+        yield
+    finally:
+        _chosen.reset(token)
+
+
 def default_scope_on_publish(kind: str, item_id: str) -> None:
-    """Spec §7.1: a first publication reaches the publisher's own classes.
+    """Spec 2026-11-02 §4.1: a first publication names its receivers.
 
     Runs where an item becomes public or published, inside that write, so an
     item is never readable by everyone in between; a failure aborts the
-    publication. A publisher who teaches no class (most administrators) gets
-    no scope row, i.e. "everyone" for books and knowledge bases — never a
-    silent "nobody" — and narrows it in the scope editor (decided 2026-10-30).
-    A practice set always gets a row: without classes it reaches nobody until
-    its author chooses. An item that already has a scope keeps it; code
-    without a request user (migrations, maintenance) adds none.
+    publication. The receivers are, in order:
+
+    * the ones the publisher chose (:func:`chosen_scope`), checked like any
+      scope change;
+    * otherwise the classes the publisher teaches;
+    * otherwise none can be assumed: :class:`ScopeRequired` is raised and
+      nothing is published ("everyone" is only ever an explicit choice).
+
+    An item that already has a scope keeps it. Code without a request user
+    (migrations, maintenance) adds none, i.e. the old "everyone".
     """
     from deeptutor.multi_user.context import get_current_user_or_none
 
     user = get_current_user_or_none()
     if user is None or get_scope(kind, item_id) is not None:
         return
+    chosen = _chosen.get()
+    if chosen is not None:
+        from deeptutor.publishing.service import PublishService
+
+        validated = PublishService(user)._validated(
+            kind, chosen.everyone, chosen.users, chosen.classes, Scope()
+        )
+        if validated.empty:
+            raise ScopeRequired()
+        _store_scope(kind, item_id, validated, actor_id=user.id)
+        return
     classes = taught_class_ids(user.id)
-    if not classes and kind != PRACTICE_SET:
+    if not classes:
+        _no_receivers(kind, item_id)
         return
     _store_scope(kind, item_id, Scope(classes=classes), actor_id=user.id)
+
+
+def _no_receivers(kind: str, item_id: str) -> None:
+    """Nothing chosen and no class to default to: publish nothing."""
+    raise ScopeRequired()
 
 
 def forget(kind: str, item_id: str) -> None:
@@ -393,7 +443,9 @@ __all__ = [
     "ScopeForbidden",
     "ScopeNeedsConfirmation",
     "ScopeNotFound",
+    "ScopeRequired",
     "allows",
+    "chosen_scope",
     "audience",
     "forget",
     "get_scope",

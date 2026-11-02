@@ -3,6 +3,7 @@
 import { KB_DETAIL_SECTIONS, knowledgeBaseMatches, knowledgeBaseRef, type KbDetailSection, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
+import type { ScopeUpdate } from "@/lib/publish-api";
 import {
   describeOtherReferences,
   runWithWithdrawalConfirmation,
@@ -312,7 +313,11 @@ export default function KnowledgePage() {
   );
 
   const handleVisibilityChange = useCallback(
-    async (name: string, visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact }) => {
+    async (
+      name: string,
+      visibility: KnowledgeBaseVisibility,
+      options?: { confirmed?: WithdrawalImpact; scope?: ScopeUpdate },
+    ) => {
       await setKnowledgeBaseVisibility(name, visibility, options);
       await refresh({ force: true, showSpinner: false });
     },

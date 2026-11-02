@@ -27,6 +27,12 @@ import type { TeacherTemplate } from '@/lib/teaching-api'
 import { topicDisplayName } from './format'
 import { TeacherCardActions, UnlistedTeacherTemplates } from './TeacherCardActions'
 import { isTeacherInstance, splitAssignedTopics, templateForTopic } from './teaching'
+import { SourceBadge } from '@/components/common/SourceBadge'
+import { groupByProvenance, provenanceGroupTitle, type Provenance } from '@/lib/provenance'
+
+/** A teacher path's copy comes from its teacher, or the school once handed over (§3.1). */
+const topicProvenance = (topic: MasteryTopic): Provenance =>
+  topic.origin?.provenance ?? { kind: 'teacher', name: topic.origin?.teacher_name ?? '' }
 import { TopicMapCard } from './TopicMapCard'
 
 export function TopicAtlas({
@@ -157,16 +163,16 @@ export function TopicAtlas({
         <LearningSkeleton count={6} />
       ) : activeTopics.length > 0 ? (
         <>
-          {assigned.length > 0 && (
-            <section aria-labelledby="mastery-assigned-heading" className="mt-9">
+          {groupByProvenance(assigned, topicProvenance).map(group => (
+            <section key={group.kind} aria-labelledby={`mastery-${group.kind}-heading`} className="mt-9">
               <h2
-                id="mastery-assigned-heading"
+                id={`mastery-${group.kind}-heading`}
                 className="text-[12px] font-semibold text-[var(--foreground)]"
               >
-                {t('Assigned by your teachers')}
+                {provenanceGroupTitle(group.kind, t, true)}
               </h2>
               <div className={`mt-3 ${pageGridClass(3)}`}>
-                {assigned.map(topic => (
+                {group.items.map(topic => (
                   <TopicMapCard
                     key={libraryItemKey(topic, topic.path_id)}
                     topic={topic}
@@ -177,13 +183,7 @@ export function TopicAtlas({
                       '',
                       topic.content_workspace_id ?? ''
                     )}
-                    badge={
-                      <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
-                        {t('From {{teacher}}', {
-                          teacher: topic.origin?.teacher_name || t('Teacher'),
-                        })}
-                      </span>
-                    }
+                    badge={<SourceBadge provenance={topicProvenance(topic)} className="text-[10px]" />}
                     footer={
                       topic.next.knowledge_point_name ? (
                         <div className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--muted-foreground)]">
@@ -195,7 +195,7 @@ export function TopicAtlas({
                 ))}
               </div>
             </section>
-          )}
+          ))}
           {own.length > 0 && (
             <section
               aria-label={t('Active learning topics')}

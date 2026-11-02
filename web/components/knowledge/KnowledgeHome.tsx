@@ -1,7 +1,14 @@
 "use client";
 
 import { FeaturePage, PageHeader, pageActionClass, pageGridClass } from '@/components/layout/FeaturePage'
+import { SourceBadge } from "@/components/common/SourceBadge";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { groupKnowledgeBases, knowledgeBaseRef } from "@/lib/knowledge-helpers";
+import { groupByProvenance, provenanceGroupTitle, type Provenance } from "@/lib/provenance";
+
+/** The server's provenance; older payloads without it fall back on ``owned``. */
+const kbProvenance = (kb: { provenance?: Provenance; owned?: boolean; created_by_name?: string }): Provenance =>
+  kb.provenance ?? { kind: kb.owned === false ? "shared" : "own", name: kb.created_by_name ?? "" };
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -125,6 +132,7 @@ export default function KnowledgeHome({
     return kbs.filter((kb) => kb.name.toLowerCase().includes(q));
   }, [kbs, query]);
   const groups = groupKnowledgeBases(filteredKbs);
+  const { isAdmin, isTeacher } = useAuthStatus();
 
   const groupedProviders = useMemo(
     () => ({
@@ -353,10 +361,17 @@ export default function KnowledgeHome({
             ) : (
               <div className="space-y-6">
                 {([
-                  [t("Public knowledge bases"), Globe, groups.publicKbs],
-                  [t("My private knowledge bases"), Lock, groups.privateKbs],
-                  [t("My connectors"), Plug, groups.connectors],
-                ] as const).map(([title, Icon, items]) => items.length > 0 && (
+                  // Spec 2026-11-02 §3.1: one grouping by where each comes from.
+                  ...groupByProvenance(
+                    filteredKbs.filter((kb) => !kb.connector),
+                    kbProvenance,
+                  ).map((group) => [
+                    provenanceGroupTitle(group.kind, t, !(isAdmin || isTeacher)),
+                    group.kind === "own" ? Lock : Globe,
+                    group.items,
+                  ] as const),
+                  [t("My connectors"), Plug, groups.connectors] as const,
+                ]).map(([title, Icon, items]) => items.length > 0 && (
                 <section key={title} className="space-y-3">
                   <h3 className="flex items-center gap-2 text-sm font-medium">
                     <Icon className="h-3.5 w-3.5" />{title}<span>{items.length}</span>
@@ -364,9 +379,6 @@ export default function KnowledgeHome({
                   <div className={pageGridClass(2)}>
                 {items.map((kb) => {
                   const docs = kbDocCount(kb);
-                  const provenance = kb.owned === false && kb.created_by_name
-                    ? t("Shared by {{name}}", { name: kb.created_by_name })
-                    : kb.provenance_label;
                   return (
                     <button
                       key={knowledgeBaseRef(kb)}
@@ -395,7 +407,12 @@ export default function KnowledgeHome({
                               />
                             )}
                           </div>
-                          {provenance && <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">{provenance}</p>}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <SourceBadge provenance={kbProvenance(kb)} />
+                            {kbProvenance(kb).kind === "own" && kb.visibility === "public" && (
+                              <span className="text-[11px] text-[var(--muted-foreground)]">{t("Published")}</span>
+                            )}
+                          </div>
                           <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
                             <span className="rounded-full border border-[var(--border)] px-1.5 py-0.5">
                               {providerName(kbProvider(kb))}

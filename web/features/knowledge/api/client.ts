@@ -1627,7 +1627,12 @@ export class KbFileDeleteBlockedError extends Error {
 export async function setKnowledgeBaseVisibility(
   ref: string,
   visibility: "public" | "private",
-  options?: { force?: boolean; confirmed?: WithdrawalImpact | null },
+  options?: {
+    force?: boolean;
+    confirmed?: WithdrawalImpact | null;
+    /** First publication: who receives it (spec 2026-11-02 §4.1). */
+    scope?: { everyone: boolean; users: string[]; classes: string[] };
+  },
 ): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {
     method: "PUT",
@@ -1636,6 +1641,7 @@ export async function setKnowledgeBaseVisibility(
       visibility,
       force: Boolean(options?.force),
       ...confirmationFields(options?.confirmed),
+      ...(options?.scope ? { scope: options.scope } : {}),
     }),
   });
   await throwIfWithdrawalNeedsConfirmation(res);

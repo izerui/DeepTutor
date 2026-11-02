@@ -1,6 +1,7 @@
 import type { LearningOrigin } from "@/lib/learning-library";
 import { apiUrl, apiFetch } from "./api";
 import { TEACHER_PATH_UNAVAILABLE_CODE } from "./teacher-path-messages";
+import type { Provenance } from "./provenance";
 
 export interface ModuleInit {
   id: string;
@@ -513,6 +514,8 @@ export interface MasteryTopicOrigin {
   revision: number;
   /** Empty when the teacher's account no longer exists. */
   teacher_name: string;
+  /** Who it comes from now (spec 2026-11-02 §3.1); a transferred path reads "school". */
+  provenance?: Provenance;
   update_notice: TeacherUpdateNoticeData | null;
   /** Null when not checked (lists); false means the tutor will not continue. */
   materials_available: boolean | null;

@@ -1218,6 +1218,16 @@
             "title": "Kb Choices",
             "type": "object"
           },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "visibility": {
             "enum": [
               "public",
@@ -4793,6 +4803,16 @@
             "default": false,
             "title": "Force",
             "type": "boolean"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "visibility": {
             "enum": [
@@ -8385,6 +8405,22 @@
         "title": "PublicRegisterRequest",
         "type": "object"
       },
+      "PublishBody": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopeChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "PublishBody",
+        "type": "object"
+      },
       "PublishRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9645,6 +9681,34 @@
           "recovery_interval_seconds"
         ],
         "title": "RuntimeStatus",
+        "type": "object"
+      },
+      "ScopeChoice": {
+        "description": "The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1).",
+        "properties": {
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Classes",
+            "type": "array"
+          },
+          "everyone": {
+            "default": false,
+            "title": "Everyone",
+            "type": "boolean"
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "title": "ScopeChoice",
         "type": "object"
       },
       "ScopeUpdate": {
@@ -46173,6 +46237,70 @@
         ]
       }
     },
+    "/api/practice-sets/withdrawable": {
+      "get": {
+        "description": "Administrators: other people's published sets, which they may only withdraw (D10).",
+        "operationId": "withdrawable_sets_api_practice_sets_withdrawable_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdrawable Sets",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
     "/api/practice-sets/{set_id}": {
       "delete": {
         "operationId": "delete_set_api_practice_sets__set_id__delete",
@@ -46513,6 +46641,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

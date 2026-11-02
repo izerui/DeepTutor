@@ -200,10 +200,13 @@ it("requires explicit admin consent before force deleting a pinned document", as
 it("groups public/private/connectors and removes creation and external connection entry points", () => {
   const common = { providers: [], onOpenKb: vi.fn(), onSectionChange: vi.fn() };
   const { rerender } = render(<KnowledgeHome {...common} activeSection="knowledge-bases" kbs={[
-    owned, { name: "atlas", visibility: "public", owned: false, created_by_name: "teacher" },
+    owned,
+    { name: "atlas", visibility: "public", owned: false, provenance: { kind: "teacher", name: "teacher" } },
+    { name: "rules", visibility: "public", owned: false, provenance: { kind: "school", name: "" } },
     { name: "vault", connector: true },
   ]} />);
-  for (const name of ["Public knowledge bases", "My private knowledge bases", "My connectors"]) {
+  // Spec 2026-11-02 §3.1: grouped by where each comes from, labelled the same way.
+  for (const name of ["From other teachers", "Published by the school", "Mine", "My connectors"]) {
     expect(screen.getByRole("heading", { name: new RegExp(name) })).toBeTruthy();
   }
   expect(screen.getByText("Shared by teacher")).toBeTruthy();

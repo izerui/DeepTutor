@@ -2186,14 +2186,8 @@ async def admin_reset_password(
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
-    target = get_user(username)
-    if target is not None and _is_primary_admin_record(target) and username != current.username:
-        # Resetting it would let another administrator sign in as the first one
-        # and read the legacy admin root; they change it on their profile.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the first administrator can change their own password.",
-        )
+    # Any account, the first administrator's included: otherwise a forgotten
+    # first-admin password could never be recovered (D20, 2026-11-02).
     record = await asyncio.to_thread(set_password, username, hash_password(body.new_password))
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -2233,6 +2227,21 @@ async def update_user_role(
             detail="The first administrator's role cannot be changed.",
         )
     old_role = str(target.get("role") or "")
+    if old_role == "teacher" and body.role == "student":
+        from deeptutor.classes.lifecycle import hand_over_published
+
+        # Spec 2026-11-02 §6.1: what they published goes to this administrator
+        # first; a failure leaves the role unchanged, so the change can be retried.
+        try:
+            await asyncio.to_thread(
+                hand_over_published, str(target.get("id") or ""), current.user_id or current.username
+            )
+        except Exception as exc:
+            logger.exception("Could not hand over what '%s' published", username)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not hand over what this teacher published. Nothing was changed; try again.",
+            ) from exc
 
     updated = set_role(username, body.role)
     if not updated:

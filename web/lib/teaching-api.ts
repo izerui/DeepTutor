@@ -115,6 +115,10 @@ export interface PublishPreview {
   knowledge_point_count: number;
   affected_students: number;
   can_publish: boolean;
+  /** Other people's books or knowledge bases some recipients cannot read (spec 2026-11-02 §4.6). */
+  material_warnings?: { kind: string; id: string; name: string; missing: number }[];
+  /** The publisher teaches no class: students must be picked (spec 2026-11-02 §4.1). */
+  needs_students?: boolean;
 }
 
 export interface KpDecision {

@@ -59,6 +59,7 @@ from deeptutor.multi_user.book_access import (
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.runtime.stream_bus import StreamBus
 
+from deeptutor.api.routers.publishing import ScopeChoice
 from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
 
 router = APIRouter(dependencies=[Depends(enter_mastery_template_scope)])
@@ -393,6 +394,13 @@ def _book_payload(
 ) -> dict[str, Any]:
     data = book.model_dump(mode="json")
     data.update(resolved.capabilities())
+    from deeptutor.publishing.provenance import provenance
+
+    # Spec 2026-11-02 §3.1: own / school / teacher / shared.
+    data["provenance"] = (
+        provenance(resolved.record.created_by, get_current_user())
+        if resolved.record is not None else {"kind": "own", "name": ""}
+    )
     data["kb_refs"] = (
         book_registry.kb_refs_for(book.id, list(book.knowledge_bases))
         if resolved.record is not None else list(book.knowledge_bases)
@@ -1127,6 +1135,8 @@ class BookVisibilityRequest(BaseModel):
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
     kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
+    #: First publication: who receives it (and the knowledge bases made public with it).
+    scope: ScopeChoice | None = None
 
 
 def _record_matches_storage(resolved: ResolvedBook, record: book_registry.BookRecord) -> bool:
@@ -1271,9 +1281,15 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 
     from deeptutor.teaching.access import WithdrawalConsentRequired
 
+    from deeptutor.api.routers.publishing import chosen
+    from deeptutor.publishing.scope import ScopeError
+
     try:
         # Registry writers and the teaching-store counting stay off the event loop.
-        updated, plan = await asyncio.to_thread(run)
+        with chosen(req.scope):
+            updated, plan = await asyncio.to_thread(run)
+    except ScopeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except WithdrawalConsentRequired as exc:
         raise HTTPException(status_code=409, detail=exc.detail) from exc
     except book_registry.BookRegistryError as exc:

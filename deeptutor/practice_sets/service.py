@@ -221,10 +221,14 @@ def _withheld(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     a score) would let a student find the key by resubmitting variations.
     """
     return [
-        {"question_id": r["question_id"], "result": PENDING, "points": None,
-         "max_points": r["max_points"], **({"answer": r["answer"]} if "answer" in r else {})}
+        {"question_id": r["question_id"], "result": PENDING, "points": None, "max_points": r["max_points"]}
         for r in rows
     ]
+
+
+def _results_only(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Stored per-question rows without an answer text (a few early rows kept one)."""
+    return [{k: v for k, v in r.items() if k != "answer"} for r in rows]
 
 
 # ── service ────────────────────────────────────────────────
@@ -245,6 +249,17 @@ class PracticeSetService:
         if row is None or row["owner_user_id"] != self.actor.id:
             raise PracticeNotFound("Practice set not found.")
         return row
+
+    def _withdrawable(self, conn, set_id: str):
+        """The author's own set, or (D10) any published set for an administrator."""
+        row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
+        if row is None:
+            raise PracticeNotFound("Practice set not found.")
+        if row["owner_user_id"] == self.actor.id:
+            return row
+        if _role(self.actor) == "admin" and row["current_revision"] > 0:
+            return row
+        raise PracticeNotFound("Practice set not found.")
 
     def _reaches_me(self, set_id: str) -> bool:
         from deeptutor.publishing.scope import PRACTICE_SET, _reaches, get_scope
@@ -345,6 +360,13 @@ class PracticeSetService:
     def publish(self, set_id: str) -> dict[str, Any]:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
         self._require_author()
+        with store.read() as conn:
+            self._owned(conn, set_id)
+        from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
+
+        # Spec 2026-11-02 §4.1: the receivers are settled before anything is
+        # published (chosen, or the author's classes); without them nothing is.
+        default_scope_on_publish(PRACTICE_SET, set_id)
         with store.write() as conn:
             row = self._owned(conn, set_id)
             if row["status"] == "archived":
@@ -366,23 +388,44 @@ class PracticeSetService:
                 "WHERE id = ?",
                 (revision, now, set_id),
             )
-        from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
-
-        # Spec §7.1: by default the set reaches the classes its author teaches.
-        default_scope_on_publish(PRACTICE_SET, set_id)
         return self.get(set_id)
 
     def archive(self, set_id: str) -> dict[str, Any]:
+        """Withdraw a set: its author, or an administrator for anyone's published set (D10)."""
         self._require_author()
         with store.write() as conn:
-            self._owned(conn, set_id)
+            row = self._withdrawable(conn, set_id)
             conn.execute(
                 "UPDATE practice_sets SET status = 'archived', updated_at = ? WHERE id = ?", (_now(), set_id)
             )
+        if row["owner_user_id"] != self.actor.id:
+            # An administrator sees what they withdrew, never its questions or results.
+            return {**self._summary(row), "status": "archived"}
         return self.get(set_id)
+
+    def withdrawable(self) -> list[dict[str, Any]]:
+        """For administrators: other people's published sets, which they may only withdraw."""
+        if _role(self.actor) != "admin":
+            return []
+        with store.read() as conn:
+            if conn is None:
+                return []
+            rows = conn.execute(
+                "SELECT * FROM practice_sets WHERE owner_user_id != ? AND status = 'published' "
+                "ORDER BY updated_at DESC",
+                (self.actor.id,),
+            ).fetchall()
+        names = _usernames()
+        return [{**self._summary(r), "owner": names.get(r["owner_user_id"], "")} for r in rows]
 
     def delete(self, set_id: str) -> None:
         self._require_author()
+        with store.read() as conn:
+            row = self._withdrawable(conn, set_id)
+        if row["owner_user_id"] != self.actor.id:
+            # D10: an administrator's "delete" withdraws; only the author deletes.
+            self.archive(set_id)
+            return
         with store.write() as conn:
             row = self._owned(conn, set_id)
             if row["current_revision"] > 0:
@@ -504,6 +547,10 @@ class PracticeSetService:
                 f"WHERE student_id = ? AND set_id IN ({marks})",
                 (self.actor.id, *ids),
             ).fetchall()
+        from deeptutor.classes.service import _accounts
+        from deeptutor.publishing.provenance import provenance
+
+        accounts = _accounts()
         progress: dict[str, list] = {}
         for submission in mine:
             progress.setdefault(submission["set_id"], []).append(submission)
@@ -515,6 +562,7 @@ class PracticeSetService:
             out.append({
                 **self._summary(row),
                 "teacher": names.get(row["owner_user_id"], ""),
+                "provenance": provenance(row["owner_user_id"], self.actor, accounts=accounts),
                 "submissions": len(done),
                 "best_score": best["score"] if best else None,
                 "max_score": best["max_score"] if best else None,
@@ -535,7 +583,7 @@ class PracticeSetService:
         graded = self._reveal(row, True)
         questions = json.loads(revision["questions_json"])
         latest = submissions[-1] if submissions else None
-        latest_rows = json.loads(latest["results_json"]) if latest else []
+        latest_rows = _results_only(json.loads(latest["results_json"])) if latest else []
         return {
             **self._summary(row),
             "title": revision["title"],
@@ -600,9 +648,7 @@ class PracticeSetService:
         late = row["due_at"] is not None and now > row["due_at"]
         rows = [
             {"question_id": q["question_id"], "result": results[q["question_id"]]["result"],
-             "points": _points(q, results[q["question_id"]]["result"]), "max_points": q["points"],
-             # The student's own answer, so a reopened page can show what they wrote.
-             "answer": given[q["question_id"]]}
+             "points": _points(q, results[q["question_id"]]["result"]), "max_points": q["points"]}
             for q in questions
         ]
         score = sum(r["points"] for r in rows)
@@ -676,6 +722,26 @@ class PracticeSetService:
         except Exception:
             # The submission and its score stand; only the bank copy is missing.
             logger.exception("Could not save practice set %s answers to the question bank", row["id"])
+
+    async def with_my_answers(self, view: dict[str, Any]) -> dict[str, Any]:
+        """Fill the latest attempt's answers back in from the student's own bank.
+
+        The answers are the student's personal data: the practice store keeps
+        only results, and the bank (their own) keeps what they wrote.
+        """
+        from deeptutor.services.session.sqlite_store import get_sqlite_session_store
+
+        revision = view.get("latest_revision")
+        if not revision or not view.get("latest_results"):
+            return view
+        bank = get_sqlite_session_store()
+        rows = []
+        for row in view["latest_results"]:
+            entry = await bank.find_notebook_entry_by_origin(
+                "practice_set", f"practice_set:{view['id']}", row["question_id"], turn_id=f"rev{revision}",
+            )
+            rows.append({**row, "answer": str((entry or {}).get("user_answer") or "")})
+        return {**view, "latest_results": rows}
 
     async def reveal_in_bank(self, set_id: str) -> None:
         """Once answers may show, complete the bank entries saved without them.

@@ -6,6 +6,17 @@ import type { Book } from "@/lib/book-types";
 
 const fixture = vi.hoisted(() => ({ sharing: vi.fn(), setVisibility: vi.fn(), t: (key: string) => key }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
+// Spec 2026-11-02 §4.1: a first publication preselects the classes the publisher teaches.
+const scopeFixture = vi.hoisted(() => ({ getScope: vi.fn() }));
+vi.mock("@/lib/publish-api", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/publish-api")>("@/lib/publish-api")),
+  getScope: scopeFixture.getScope,
+}));
+const unscoped = (suggested: string[]) => ({
+  kind: "book", item_id: "same", published: false, audience_size: 0,
+  scope: { everyone: false, users: [], classes: [], managed: false },
+  choices: { classes: [{ id: "c1", name: "Class 1" }] }, suggested_classes: suggested,
+});
 vi.mock("@/lib/book-api", async () => ({
   ...(await vi.importActual<typeof import("@/lib/book-api")>("@/lib/book-api")),
   bookApi: { sharing: fixture.sharing, setVisibility: fixture.setVisibility },
@@ -19,6 +30,7 @@ const sharing = {
 beforeEach(() => {
   fixture.sharing.mockReset().mockResolvedValue(sharing);
   fixture.setVisibility.mockReset().mockResolvedValue({});
+  scopeFixture.getScope.mockReset().mockResolvedValue(unscoped(["c1"]));
 });
 it("defaults private KB choices to the server plan and submits reference-only using the bound scope", async () => {
   const close = vi.fn();
@@ -26,11 +38,22 @@ it("defaults private KB choices to the server plan and submits reference-only us
   const select = await screen.findByRole("combobox", { name: "Physics" });
   expect(select).toHaveValue("make_public");
   fireEvent.change(select, { target: { value: "reference_only" } });
+  await screen.findByRole("checkbox", { name: "Class 1" });
   fireEvent.click(screen.getByRole("button", { name: "Make public" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenCalledWith("book:same", {
     visibility: "public", kb_choices: { kb1: "reference_only" }, force: false,
+    scope: { everyone: false, users: [], classes: ["c1"] },
   }, "w");
+});
+it("asks someone who teaches no class to choose receivers before publishing", async () => {
+  scopeFixture.getScope.mockResolvedValue(unscoped([]));
+  render(<BookShareDialog book={book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
+  const classBox = await screen.findByRole("checkbox", { name: "Class 1" });
+  expect(classBox).not.toBeChecked();
+  expect(screen.getByRole("button", { name: "Make public" })).toBeDisabled();
+  fireEvent.click(classBox);
+  expect(screen.getByRole("button", { name: "Make public" })).toBeEnabled();
 });
 it("keeps dismissal available after loading failure and never enables submission", async () => {
   fixture.sharing.mockRejectedValue(new Error("Unavailable"));
@@ -83,9 +106,10 @@ it("blocks publication issues until an administrator explicitly chooses force", 
   const { rerender } = render(<BookShareDialog book={book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
   await screen.findByText(/Personal connectors/);
   expect(screen.getByRole("button", { name: "Make public" })).toBeDisabled();
-  expect(screen.queryByRole("checkbox")).toBeNull();
+  const force = /Publish anyway/;
+  expect(screen.queryByRole("checkbox", { name: force })).toBeNull();
   rerender(<BookShareDialog book={book} isAdmin onClose={vi.fn()} onChanged={vi.fn()} />);
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("checkbox", { name: force }));
   expect(screen.getByRole("button", { name: "Make public" })).toBeEnabled();
 });
 it("lets the owner withdraw a referenced book after confirming teacher-path counts (R1)", async () => {

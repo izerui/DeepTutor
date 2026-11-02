@@ -3,7 +3,10 @@
 import { pageGridClass } from '@/components/layout/FeaturePage'
 import { useLibraryFilter, WorkspaceLabel } from '@/components/learning/LibraryWorkspace'
 import { libraryItemKey } from '@/lib/learning-library'
-import { bookRequestRef, groupBooks } from '@/lib/book-sharing'
+import { bookRequestRef } from '@/lib/book-sharing'
+import { SourceBadge } from '@/components/common/SourceBadge'
+import { useAuthStatus } from '@/hooks/useAuthStatus'
+import { groupByProvenance, provenanceGroupTitle } from '@/lib/provenance'
 import { LearningCardContent } from '@/components/learning/LearningCard'
 
 import {
@@ -122,11 +125,16 @@ export default function BookLibrary({
     return { total, ready, inProgress, chapters }
   }, [books])
 
-  const groups = groupBooks(filtered)
-  const sections = [
-    { key: 'mine', label: t('My books'), books: groups.mine },
-    { key: 'public', label: t('Public books'), books: groups.public },
-  ].filter(section => section.books.length > 0)
+  // Spec 2026-11-02 §3.1: one grouping by where each book comes from.
+  const { isAdmin, isTeacher } = useAuthStatus()
+  const sections = groupByProvenance(
+    filtered,
+    book => book.provenance ?? { kind: book.group === 'public' ? 'shared' : 'own', name: '' },
+  ).map(group => ({
+    key: group.kind,
+    label: provenanceGroupTitle(group.kind, t, !(isAdmin || isTeacher)),
+    books: group.items,
+  }))
 
   return (
     <LearningShell
@@ -335,6 +343,8 @@ export default function BookLibrary({
                           <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
                             {t('Public')}
                           </span>
+                        ) : book.provenance && book.provenance.kind !== 'own' ? (
+                          <SourceBadge provenance={book.provenance} className="text-[10px]" />
                         ) : null}
                         <span className="inline-flex items-center gap-1">
                           <Layers size={11} />

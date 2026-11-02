@@ -78,7 +78,11 @@ export function TeacherPathBanner({
       {!compact && (
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-[var(--muted-foreground)]">
           <GraduationCap aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-          <span>{t('From {{teacher}}', { teacher: origin.teacher_name || t('Teacher') })}</span>
+          <span>
+            {origin.provenance?.kind === 'school'
+              ? t('Published by the school')
+              : t('From {{teacher}}', { teacher: origin.teacher_name || t('Teacher') })}
+          </span>
           <span aria-hidden="true">·</span>
           <span>{t('The outline is set by your teacher')}</span>
         </p>

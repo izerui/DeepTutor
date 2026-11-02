@@ -534,7 +534,65 @@ class TeachingService:
             "knowledge_point_count": sum(len(m.knowledge_points) for m in progress.modules),
             "affected_students": affected,
             "can_publish": not issues and not plan.issues,
+            # Spec 2026-11-02 §4.6: other people's materials students cannot use.
+            "material_warnings": await asyncio.to_thread(self._material_reach, template, plan),
+            # §4.1: no class to default to, so the publisher must pick students.
+            "needs_students": await asyncio.to_thread(self._needs_students, template),
         }
+
+    @staticmethod
+    def _needs_students(template: MasteryTemplate) -> bool:
+        from deeptutor.publishing import scope as scopes
+
+        return (
+            template.current_revision == 0
+            and scopes.get_scope(scopes.MASTERY_PATH, template.id) is None
+            and not scopes.taught_class_ids(template.owner_user_id)
+        )
+
+    def _material_reach(self, template: MasteryTemplate, plan: SourcePlan) -> list[dict[str, Any]]:
+        """Cited books and knowledge bases of someone else that some recipients cannot read.
+
+        Recipients are the path's current scope, or (first publication) the
+        students of the teacher's classes. Only a warning: the teacher may
+        still publish, or replace the material with their own.
+        """
+        from deeptutor.book import registry as book_registry
+        from deeptutor.classes.service import teacher_student_ids
+        from deeptutor.knowledge import registry as kb_registry
+        from deeptutor.publishing import scope as scopes
+
+        owner = template.owner_user_id
+        current = scopes.get_scope(scopes.MASTERY_PATH, template.id)
+        recipients = (
+            scopes.audience(current, students_only=True, owner_id=owner)
+            if current is not None else set(teacher_student_ids(owner))
+        )
+        if not recipients:
+            return []
+        cited: list[tuple[str, str, str, str, str]] = []
+        for kb_id in plan.kb_refs:
+            record = kb_registry.get_kb(kb_id)
+            if record is not None:
+                cited.append((scopes.KNOWLEDGE_BASE, kb_id, record.name, record.created_by, record.visibility))
+        for book_id, title in plan.books.items():
+            record = book_registry.get_book(book_id)
+            if record is not None:
+                cited.append((scopes.BOOK, book_id, title or book_id, record.created_by, record.visibility))
+        warnings = []
+        for kind, item_id, name, created_by, visibility in cited:
+            if created_by == owner:
+                continue  # the teacher's own material reaches the path's students (D8)
+            scope = scopes.get_scope(kind, item_id)
+            if visibility == "public" and scope is None:
+                continue  # an unscoped public item reaches everyone
+            readers = (
+                scopes.audience(scope, students_only=True) if visibility == "public" and scope else set()
+            )
+            missing = recipients - readers
+            if missing:
+                warnings.append({"kind": kind, "id": item_id, "name": name, "missing": len(missing)})
+        return warnings
 
     @staticmethod
     def _check_still_present(plan: SourcePlan) -> None:
@@ -750,6 +808,21 @@ class TeachingService:
         if issues or plan.issues:
             raise _blocked(issues, [asdict(issue) for issue in plan.issues])
         students = await asyncio.to_thread(self._validate_students, request.student_ids)
+        from deeptutor.publishing import scope as scopes
+
+        if template.current_revision == 0 and not students and not await asyncio.to_thread(
+            lambda: scopes.get_scope(scopes.MASTERY_PATH, template.id) is not None
+            or bool(scopes.taught_class_ids(user.id))
+        ):
+            # Spec 2026-11-02 §4.1: with no class to default to, the receivers are chosen.
+            try:
+                scopes._no_receivers(scopes.MASTERY_PATH, template.id)
+            except scopes.ScopeRequired as exc:
+                raise TemplateConflict(
+                    "Choose the students who receive this path before publishing it."
+                ) from exc
+        # Materials made public with the path reach the same receivers.
+        chosen = scopes.Scope(users=list(students)) if students else None
         try:
             outline = snapshot_outline(progress, topic, template.kp_aliases)
         except SnapshotError as exc:
@@ -796,7 +869,8 @@ class TeachingService:
         done: list[str] = []
         steps = self._share_steps(plan, kb_choices, book_choices, explicit_kbs)
         try:
-            await asyncio.to_thread(self._run_steps, template, steps, done)
+            with scopes.chosen_scope(chosen):
+                await asyncio.to_thread(self._run_steps, template, steps, done)
         except _StepFailed as exc:
             raise _blocked(
                 [],

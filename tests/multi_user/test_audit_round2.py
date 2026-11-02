@@ -39,30 +39,24 @@ def _admin(teaching_users, name: str):
 # ── accounts ───────────────────────────────────────────────
 
 
-def test_another_admin_can_neither_delete_nor_reset_the_first_admin(teaching_users):
-    from fastapi import HTTPException
-
+def test_another_admin_resets_but_never_deletes_the_first_admin(teaching_users, monkeypatch):
     from deeptutor.api.routers import auth as auth_router
     from deeptutor.multi_user.admin_accounts import primary_admin_id
     from deeptutor.multi_user.identity import set_role
+    from deeptutor.services import auth
 
+    monkeypatch.setattr(auth, "AUTH_SECRET", "s" * 48)
     assert primary_admin_id() == teaching_users["adam"]["id"]
     set_role("tom", "admin")
     tom = _admin(teaching_users, "tom")
-    with pytest.raises(HTTPException) as refused:
-        asyncio.run(auth_router.admin_reset_password(
-            "adam", auth_router.AdminPasswordReset(new_password="taken-over-1"), current=tom,
-        ))
-    assert refused.value.status_code == 403
+    old = auth.create_token("adam", role="admin")
+    # D20: a forgotten first-admin password is recoverable by another administrator.
+    asyncio.run(auth_router.admin_reset_password(
+        "adam", auth_router.AdminPasswordReset(new_password="recovered-1"), current=tom,
+    ))
+    assert auth.decode_token(old) is None
+    assert auth.authenticate("adam", "recovered-1") is not None
     assert auth_router._delete_admin_user("adam", tom)[0] == 400
-    # The first administrator still resets their own, and anyone else's.
-    adam = _admin(teaching_users, "adam")
-    asyncio.run(auth_router.admin_reset_password(
-        "adam", auth_router.AdminPasswordReset(new_password="still-mine-1"), current=adam,
-    ))
-    asyncio.run(auth_router.admin_reset_password(
-        "tom", auth_router.AdminPasswordReset(new_password="reset-by-adam"), current=adam,
-    ))
 
 
 def test_a_name_registered_twice_at_once_never_takes_over_the_first(teaching_users):
@@ -224,7 +218,16 @@ def test_right_or_wrong_waits_for_the_deadline_too(after_due_set, as_account):
         taken = PracticeSetService().take(set_id)
         assert taken["submissions"][0]["score"] is None
         assert taken["latest_results"][0]["result"] == "pending"
-        assert taken["latest_results"][0]["answer"] == "B"  # their own answer comes back
+        assert "answer" not in taken["latest_results"][0]
+        # Their own answer comes back from their own question bank (spec 2026-11-02 §9.3).
+        restored = asyncio.run(PracticeSetService().with_my_answers(taken))
+        assert restored["latest_results"][0]["answer"] == "B"
+    from deeptutor.practice_sets import store as practice_store
+
+    with practice_store.read() as conn:
+        [stored] = conn.execute("SELECT results_json FROM practice_submissions").fetchall()
+    assert "answer" not in stored["results_json"]
+    with as_account("sara"):
         assert PracticeSetService().assigned()[0]["best_score"] is None
     [entry] = _bank(as_account, set_id)
     assert entry["result"] == "ungraded" and entry["correct_answer"] == ""

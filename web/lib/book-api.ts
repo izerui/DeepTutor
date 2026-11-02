@@ -202,6 +202,8 @@ export const bookApi = {
       expected_paths?: number;
       expected_students?: number;
       kb_choices?: Record<string, BookKbChoice>;
+      /** First publication: who receives it (spec 2026-11-02 §4.1). */
+      scope?: { everyone: boolean; users: string[]; classes: string[] };
     },
     workspaceId = activeWorkspaceId(),
   ) => request<{ book_id: string; ref: string; visibility: BookVisibility; kbs: BookSharingPlan }>(

@@ -1,5 +1,7 @@
 import type { TFunction } from "i18next";
 
+import type { Provenance } from "./provenance";
+
 export interface KnowledgeUploadPolicy {
   extensions: string[];
   accept: string;
@@ -228,6 +230,8 @@ export interface KnowledgeBase {
   created_by?: string;
   created_by_name?: string;
   owned?: boolean;
+  /** Where it comes from (spec 2026-11-02 §3.1). */
+  provenance?: Provenance;
   kind?: string;
   connector?: boolean;
 }

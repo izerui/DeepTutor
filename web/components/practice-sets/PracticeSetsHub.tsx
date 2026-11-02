@@ -5,11 +5,14 @@ import { useTranslation } from "react-i18next";
 import { ClipboardList, Plus } from "lucide-react";
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { SourceBadge } from "@/components/common/SourceBadge";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
+  archiveSet,
   createSet,
   listAssigned,
   listMySets,
+  listWithdrawable,
   type AssignedSet,
   type PracticeSetSummary,
 } from "@/lib/practice-sets-api";
@@ -51,6 +54,7 @@ const statusLabel: Record<PracticeSetSummary["status"], string> = {
 
 function AuthorView() {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
   const [sets, setSets] = useState<PracticeSetSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -122,6 +126,7 @@ function AuthorView() {
             ))}
           </ul>
         )}
+        {isAdmin && <WithdrawSection />}
       </aside>
       <section className="min-w-0">
         {selected ? (
@@ -134,6 +139,50 @@ function AuthorView() {
         )}
       </section>
     </div>
+  );
+}
+
+/** Administrators withdraw other people's published sets; they never edit them (D10). */
+function WithdrawSection() {
+  const { t } = useTranslation();
+  const [sets, setSets] = useState<(PracticeSetSummary & { owner: string })[] | null>(null);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(() => {
+    listWithdrawable()
+      .then(setSets)
+      .catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
+  }, [t]);
+  useEffect(refresh, [refresh]);
+
+  if (!sets?.length && !error) return null;
+  return (
+    <section className="space-y-2 border-t border-[var(--border)] pt-3">
+      <h2 className="text-[12px] font-medium text-[var(--muted-foreground)]">{t("Published by others")}</h2>
+      {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
+      <ul className="space-y-1">
+        {(sets ?? []).map((set) => (
+          <li key={set.id} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13px]">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium text-[var(--foreground)]">{set.title}</span>
+              <span className="text-[11.5px] text-[var(--muted-foreground)]">{set.owner}</span>
+            </span>
+            <button
+              type="button"
+              className={actionClass}
+              onClick={() => {
+                if (!window.confirm(t("Withdraw this practice set? Students will no longer see it."))) return;
+                archiveSet(set.id)
+                  .then(refresh)
+                  .catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
+              }}
+            >
+              {t("Withdraw")}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -170,14 +219,16 @@ function StudentView() {
       {sets.map((set) => (
         <li key={set.id} className="space-y-1.5 rounded-xl border border-[var(--border)] p-4">
           <p className="text-[14px] font-medium text-[var(--foreground)]">{set.title}</p>
-          <p className="text-[12px] text-[var(--muted-foreground)]">
-            {set.teacher}
-            {set.due_at ? ` · ${t("Due {{date}}", { date: formatDate(set.due_at) })}` : ""}
+          <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]">
+            <SourceBadge provenance={set.provenance ?? { kind: "teacher", name: set.teacher }} />
+            {set.due_at ? t("Due {{date}}", { date: formatDate(set.due_at) }) : ""}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
-            {set.submissions > 0
-              ? t("Best score {{score}} / {{max}}", { score: set.best_score, max: set.max_score })
-              : t("Not answered yet")}
+            {set.submissions === 0
+              ? t("Not answered yet")
+              : set.best_score === null
+                ? t("Submitted · results after the deadline")
+                : t("Best score {{score}} / {{max}}", { score: set.best_score, max: set.max_score })}
           </p>
           <button type="button" className={primaryClass} onClick={() => setSelected(set.id)}>
             {set.submissions > 0 ? t("Answer again") : t("Start")}

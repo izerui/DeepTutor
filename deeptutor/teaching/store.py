@@ -399,8 +399,13 @@ class TeachingStore:
         with _write(self.db_path) as conn:
             conn.execute("DELETE FROM mastery_templates WHERE id = ?", (template_id,))
 
-    def transfer_owner(self, from_user_id: str, to_user_id: str) -> int:
+    def transfer_owner(
+        self, from_user_id: str, to_user_id: str, *, published_only: bool = False
+    ) -> int:
         """Hand every template of a deleted account to its successor.
+
+        With *published_only* (a teacher who became a student keeps their
+        account): only templates ever published move; drafts stay theirs.
 
         The draft lived in the deleted account's workspace, so it is detached:
         the successor can keep assigning, revoking and archiving, but a new
@@ -427,22 +432,23 @@ class TeachingStore:
                 (from_user_id,),
             ).fetchone() is None:
                 return 0
+        published = " AND current_revision > 0" if published_only else ""
         with _joint_write(self.db_path) as conn:
             template_ids = [
                 row["id"]
                 for row in conn.execute(
-                    "SELECT id FROM main.mastery_templates WHERE owner_user_id = ?",
+                    f"SELECT id FROM main.mastery_templates WHERE owner_user_id = ?{published}",  # nosec B608
                     (from_user_id,),
                 )
             ]
-            conn.execute(
+            conn.executemany(
                 """
                 UPDATE main.mastery_templates
                 SET owner_user_id = ?, draft_path_id = '', draft_workspace_id = '',
                     updated_at = ?
-                WHERE owner_user_id = ?
+                WHERE id = ?
                 """,
-                (to_user_id, time.time(), from_user_id),
+                [(to_user_id, time.time(), template_id) for template_id in template_ids],
             )
             for table, kind in (
                 ("kb.kb_references", kb_access.REFERRER_KIND),

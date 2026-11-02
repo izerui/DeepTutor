@@ -6,6 +6,7 @@ import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
+import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
 import { listKnowledgeBases } from "@/features/knowledge/api/catalog";
 import {
@@ -73,6 +74,8 @@ export function SetEditor({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [picking, setPicking] = useState(false);
+  // Spec 2026-11-02 §4.1: the first publication names who receives the set.
+  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
 
   useEffect(() => {
     let alive = true;
@@ -146,12 +149,15 @@ export function SetEditor({
           <button
             type="button"
             className={primaryClass}
-            disabled={draft.questions.length === 0 || draft.status === "archived"}
+            disabled={
+              draft.questions.length === 0 || draft.status === "archived" ||
+              (saved.current_revision === 0 && !firstPublish.ready)
+            }
             onClick={() =>
               void run(async () => {
                 await save();
-                return publishSet(setId);
-              }, t("Published. Choose who receives it below."))
+                return publishSet(setId, saved.current_revision === 0 ? firstPublish.scope : undefined);
+              }, t("Published."))
             }
           >
             <Send size={13} />
@@ -164,6 +170,9 @@ export function SetEditor({
           ? t("Published v{{revision}}. Changes reach students only after you publish a new version; earlier submissions keep their version.", { revision: saved.current_revision })
           : t("Draft. Students see nothing until you publish.")}
       </p>
+      {saved.current_revision === 0 && (
+        <FirstPublishScope kind="practice_set" itemId={setId} onChange={setFirstPublish} />
+      )}
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
       {notice && <p role="status" className="text-[12px] text-[var(--muted-foreground)]">{notice}</p>}
 

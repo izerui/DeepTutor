@@ -30,6 +30,10 @@ from deeptutor.multi_user.models import CurrentUser, UserScope
 root, mode, book_id = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 books.DB_PATH_OVERRIDE = root / "books.sqlite3"
 kbs.DB_PATH_OVERRIDE = root / "kbs.sqlite3"
+# Written before 2026-11-02: a publisher with no class reached everyone (see
+# tests/conftest.py ``_legacy_first_publish``, which a child process lacks).
+from deeptutor.publishing import scope as _publish_scope
+_publish_scope._no_receivers = lambda kind, item_id: None
 set_current_user(CurrentUser(
     # spec 2026-10-29 D2: the publisher is the owner; admins no longer write others' private books.
     id="owner", username="owner", role="admin",

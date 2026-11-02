@@ -268,6 +268,13 @@ def _teacher_name(owner_user_id: str) -> str:
     return found[0] if found else ""
 
 
+def _provenance(owner_user_id: str) -> dict[str, str]:
+    from deeptutor.multi_user.context import get_current_user
+    from deeptutor.publishing.provenance import provenance
+
+    return provenance(owner_user_id, get_current_user())
+
+
 def origin_payload(
     progress: LearningProgress,
     template: MasteryTemplate,
@@ -281,6 +288,8 @@ def origin_payload(
         "template_id": origin.template_id,
         "revision": origin.revision,
         "teacher_name": _teacher_name(template.owner_user_id),
+        # Spec 2026-11-02 §3.1: who it comes from now (a transferred path reads "school").
+        "provenance": _provenance(template.owner_user_id),
         "update_notice": (
             origin.update_notice.model_dump(mode="json") if origin.update_notice else None
         ),

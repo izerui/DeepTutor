@@ -167,7 +167,10 @@ export function PublishTemplateDialog({
   const removed = preview?.changes.removed ?? [];
   const removedNames = Object.fromEntries(removed.map((point) => [point.kp_id, point.name]));
   const duplicates = duplicateContinuations(decisions);
-  const canSubmit = !blocked && !published && canSubmitPublish(preview, decisions, busy);
+  // Spec 2026-11-02 §4.1: with no class to default to, the students are picked.
+  const missingStudents = Boolean(preview?.needs_students) && studentIds.length === 0;
+  const canSubmit =
+    !blocked && !published && !missingStudents && canSubmitPublish(preview, decisions, busy);
 
   const submit = async () => {
     if (!preview || !canSubmit) return;
@@ -485,6 +488,27 @@ export function PublishTemplateDialog({
                 exclude={assignedIds}
                 disabled={busy}
               />
+              {missingStudents && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  {t("You teach no class yet, so pick the students who receive this path.")}
+                </p>
+              )}
+            </section>
+          )}
+
+          {preview && !published && (preview.material_warnings ?? []).length > 0 && (
+            <section role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+              <h3 className="font-medium">{t("Some students cannot read these materials")}</h3>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {(preview.material_warnings ?? []).map((item) => (
+                  <li key={`${item.kind}:${item.id}`}>
+                    {t("{{name}}: {{count}} students cannot read it", { name: item.name, count: item.missing })}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[var(--muted-foreground)]">
+                {t("Ask its owner to widen who receives it, or use your own material instead.")}
+              </p>
             </section>
           )}
 

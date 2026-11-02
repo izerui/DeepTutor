@@ -134,10 +134,10 @@ describe('TopicAtlas for students', () => {
         onRetry={() => {}}
       />
     )
-    const assigned = screen.getByRole('region', { name: 'Assigned by your teachers' })
+    const assigned = screen.getByRole('region', { name: 'From my teachers' })
     const link = within(assigned).getByRole('link', { name: /C15 Waves/ })
     expect(link.getAttribute('href')).toBe('/learning/mastery/assigned_tpl1/sessions')
-    expect(within(assigned).getByText('From tina')).toBeInTheDocument()
+    expect(within(assigned).getByText('Assigned by tina')).toBeInTheDocument()
     expect(within(assigned).getByText('Next: Wavelength')).toBeInTheDocument()
     const own = screen.getByRole('region', { name: 'Active learning topics' })
     expect(within(own).getByRole('heading', { name: 'My topics' })).toBeInTheDocument()
@@ -156,7 +156,7 @@ describe('TopicAtlas for students', () => {
         onCreate={onCreate}
       />
     )
-    expect(screen.queryByRole('region', { name: 'Assigned by your teachers' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'From my teachers' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'My topics' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /New topic/ }))
     expect(onCreate).toHaveBeenCalledTimes(1)

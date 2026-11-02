@@ -24,6 +24,26 @@ async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+class ScopeChoice(BaseModel):
+    """The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1)."""
+
+    everyone: bool = False
+    users: list[str] = Field(default_factory=list, max_length=1000)
+    classes: list[str] = Field(default_factory=list, max_length=200)
+
+    def to_scope(self):
+        from deeptutor.publishing.scope import Scope
+
+        return Scope(everyone=self.everyone, users=list(self.users), classes=list(self.classes))
+
+
+def chosen(choice: ScopeChoice | None):
+    """``with chosen(body.scope):`` around a publication."""
+    from deeptutor.publishing.scope import chosen_scope
+
+    return chosen_scope(choice.to_scope() if choice is not None else None)
+
+
 class ScopeUpdate(BaseModel):
     everyone: bool = False
     users: list[str] = Field(default_factory=list, max_length=1000)

@@ -7134,6 +7134,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/practice-sets/withdrawable": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Withdrawable Sets
+     * @description Administrators: other people's published sets, which they may only withdraw (D10).
+     */
+    readonly get: operations["withdrawable_sets_api_practice_sets_withdrawable_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/publish/{kind}/{item_id}/scope": {
     readonly parameters: {
       readonly query?: never;
@@ -12691,6 +12711,7 @@ export interface components {
       readonly kb_choices?: {
         readonly [key: string]: "make_public" | "reference_only";
       };
+      readonly scope?: components["schemas"]["ScopeChoice"] | null;
       /**
        * Visibility
        * @enum {string}
@@ -14247,6 +14268,7 @@ export interface components {
        * @default false
        */
       readonly force: boolean;
+      readonly scope?: components["schemas"]["ScopeChoice"] | null;
       /**
        * Visibility
        * @enum {string}
@@ -16012,6 +16034,10 @@ export interface components {
       /** Username */
       readonly username: string;
     };
+    /** PublishBody */
+    readonly PublishBody: {
+      readonly scope?: components["schemas"]["ScopeChoice"] | null;
+    };
     /** PublishRequest */
     readonly PublishRequest: {
       /** Book Choices */
@@ -16578,6 +16604,21 @@ export interface components {
       readonly worker_count: number;
       /** Worker Id */
       readonly worker_id: string;
+    };
+    /**
+     * ScopeChoice
+     * @description The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1).
+     */
+    readonly ScopeChoice: {
+      /** Classes */
+      readonly classes?: readonly string[];
+      /**
+       * Everyone
+       * @default false
+       */
+      readonly everyone: boolean;
+      /** Users */
+      readonly users?: readonly string[];
     };
     /** ScopeUpdate */
     readonly ScopeUpdate: {
@@ -18913,6 +18954,7 @@ export type SchemaProviderProbePayload =
   components["schemas"]["ProviderProbePayload"];
 export type SchemaPublicRegisterRequest =
   components["schemas"]["PublicRegisterRequest"];
+export type SchemaPublishBody = components["schemas"]["PublishBody"];
 export type SchemaPublishRequest = components["schemas"]["PublishRequest"];
 export type SchemaQuestionBankMaterial =
   components["schemas"]["QuestionBankMaterial"];
@@ -18968,6 +19010,7 @@ export type SchemaRoundSummaryRequest =
   components["schemas"]["RoundSummaryRequest"];
 export type SchemaRunStartRequest = components["schemas"]["RunStartRequest"];
 export type SchemaRuntimeStatus = components["schemas"]["RuntimeStatus"];
+export type SchemaScopeChoice = components["schemas"]["ScopeChoice"];
 export type SchemaScopeUpdate = components["schemas"]["ScopeUpdate"];
 export type SchemaServerPayload = components["schemas"]["ServerPayload"];
 export type SchemaServicePreviewPayload =
@@ -34691,7 +34734,12 @@ export interface operations {
         readonly dt_token?: string | null;
       };
     };
-    readonly requestBody?: never;
+    readonly requestBody?: {
+      readonly content: {
+        readonly "application/json":
+          components["schemas"]["PublishBody"] | null;
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -34930,6 +34978,39 @@ export interface operations {
     };
   };
   readonly list_mine_api_practice_sets_mine_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly withdrawable_sets_api_practice_sets_withdrawable_get: {
     readonly parameters: {
       readonly query?: never;
       readonly header?: {

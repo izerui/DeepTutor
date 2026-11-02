@@ -223,6 +223,28 @@ def fake_llm_config() -> MagicMock:
 
 
 @pytest.fixture(autouse=True)
+def _legacy_first_publish(request, monkeypatch):
+    """Tests written before 2026-11-02 publish as accounts that teach no class.
+
+    Then, such a first publication reached everyone (books, knowledge bases)
+    or nobody yet (practice sets). Those tests are about other rules, so they
+    keep that outcome; tests marked ``first_publish_rule`` get the real rule
+    (choose the receivers, or nothing is published).
+    """
+    if request.node.get_closest_marker("first_publish_rule"):
+        return
+    from deeptutor.publishing import scope
+
+    def legacy(kind: str, item_id: str) -> None:
+        if kind == scope.PRACTICE_SET:
+            from deeptutor.multi_user.context import get_current_user
+
+            scope._store_scope(kind, item_id, scope.Scope(), actor_id=get_current_user().id)
+
+    monkeypatch.setattr(scope, "_no_receivers", legacy)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_llm_config(request, monkeypatch):
     """Give every test the same resolved LLM config, and no cache to inherit.
 

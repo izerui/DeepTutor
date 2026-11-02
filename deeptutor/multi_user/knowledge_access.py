@@ -440,8 +440,12 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
     with admin_retiring():
         # D10: an administrator may withdraw or delete what they cannot edit.
         can_retire = registry.can_write(record, get_current_user())
+    from deeptutor.publishing.provenance import provenance
+
     return {
         "can_retire": can_retire,
+        # Spec 2026-11-02 §3.1: own / school / teacher / shared.
+        "provenance": provenance(record.created_by, get_current_user()),
         "kb_id": record.kb_id,
         "ref": record.ref,
         "legacy_refs": legacy_refs,

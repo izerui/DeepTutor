@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import type { ScopeUpdate } from "@/lib/publish-api";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
 import {
   describeOtherReferences,
@@ -33,7 +35,7 @@ interface KbSettingsSectionProps {
   onMove?: (targetWorkspaceId: string) => Promise<void>;
   /** Rule R1: retried with the confirmed counts after the user accepts the teacher-path impact. */
   onVisibilityChange?: (
-    visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact },
+    visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact; scope?: ScopeUpdate },
   ) => Promise<void>;
 }
 
@@ -64,6 +66,9 @@ export default function KbSettingsSection({
   const canRetire = !canWrite && isAdmin && Boolean(kb.can_retire) && kb.visibility === "public";
   const [references, setReferences] = useState<KnowledgeBaseReferenceSummary | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
+  // Making it public first asks who receives it (spec 2026-11-02 §4.1).
+  const [publishing, setPublishing] = useState(false);
+  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,7 +85,7 @@ export default function KbSettingsSection({
     return () => { alive = false; };
   }, [canManage, sourceId, kb.visibility]);
 
-  const changeVisibility = async (next: KnowledgeBaseVisibility) => {
+  const changeVisibility = async (next: KnowledgeBaseVisibility, scope?: ScopeUpdate) => {
     if (!onVisibilityChange || !(canManage || canRetire)) return;
     setVisibilityBusy(true);
     setVisibilityError(null);
@@ -88,9 +93,15 @@ export default function KbSettingsSection({
       // Rule R1: other accounts never block a withdrawal; published teacher
       // paths only need the owner to confirm the (counts-only) impact.
       await runWithWithdrawalConfirmation(
-        (confirmed) => (confirmed ? onVisibilityChange(next, { confirmed }) : onVisibilityChange(next)),
+        (confirmed) =>
+          confirmed
+            ? onVisibilityChange(next, { confirmed })
+            : scope
+              ? onVisibilityChange(next, { scope })
+              : onVisibilityChange(next),
         t,
       );
+      setPublishing(false);
     } catch (error) {
       setVisibilityError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -284,11 +295,36 @@ export default function KbSettingsSection({
         </p>
         {((canManage && (kb.visibility === "public" || isTeacher)) || canRetire) && onVisibilityChange && !kb.connector && (
           <button type="button" disabled={visibilityBusy || (canManage && references === null)}
-            onClick={() => void changeVisibility(kb.visibility === "public" ? "private" : "public")}
+            onClick={() =>
+              kb.visibility === "public" ? void changeVisibility("private") : setPublishing(true)
+            }
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs disabled:opacity-50">
             {kb.visibility === "public" ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
             {kb.visibility === "public" ? t("Make private") : t("Make public")}
           </button>
+        )}
+        {publishing && kb.visibility !== "public" && kb.kb_id && (
+          <div className="space-y-2">
+            <FirstPublishScope kind="knowledge_base" itemId={kb.kb_id} onChange={setFirstPublish} />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={visibilityBusy || !firstPublish.ready}
+                onClick={() => void changeVisibility("public", firstPublish.scope)}
+                className="rounded-md bg-[var(--primary)] px-2.5 py-1 text-xs text-[var(--primary-foreground)] disabled:opacity-50"
+              >
+                {t("Make public")}
+              </button>
+              <button
+                type="button"
+                disabled={visibilityBusy}
+                onClick={() => setPublishing(false)}
+                className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs"
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+          </div>
         )}
         {canManage && kb.visibility === "public" && !kb.connector && (
           <div className="rounded-lg border border-[var(--border)] p-3">

@@ -14,6 +14,7 @@ import {
   type WithdrawalImpact,
 } from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
+import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
 
 const ISSUE_MESSAGES = {
@@ -65,11 +66,15 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   }, [requestedRef, workspaceId, t]);
 
   const makingPublic = (sharing?.visibility ?? book.visibility) !== "public";
+  // Spec 2026-11-02 §4.1: a first publication names who receives it.
+  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
   const canMakePublic = sharing?.can_make_public ?? true;
   const issues = sharing?.kbs.issues ?? [];
   const otherReferences = sharing?.other_references ?? NO_OTHER_REFERENCES;
   // References never block making a book private (rule R1).
-  const blocked = makingPublic && (!canMakePublic || (issues.length > 0 && !(isAdmin && force)));
+  const blocked = makingPublic && (
+    !canMakePublic || !firstPublish.ready || (issues.length > 0 && !(isAdmin && force))
+  );
   const confirm = async () => {
     if (busy || !sharing?.can_set_visibility || blocked) return;
     setBusy(true);
@@ -78,6 +83,7 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
       await bookApi.setVisibility(requestedRef, {
         visibility: makingPublic ? "public" : "private",
         kb_choices: makingPublic ? choices : {},
+        ...(makingPublic && firstPublish.scope ? { scope: firstPublish.scope } : {}),
         force: makingPublic && isAdmin && force,
         ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
@@ -107,11 +113,14 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     </>}>
     <div className="space-y-3 text-sm">
       <p>{makingPublic
-        ? t("Teachers publish to the classes they teach by default; afterwards you can choose classes, people or everyone. Each reader keeps their own progress.")
+        ? t("Choose who receives this book. Each reader keeps their own progress.")
         : isAdmin && book.group !== "mine"
           ? t("Only the book's owner can open a private book, plus anything that references it.")
           : t("Only you can open a private book, plus anything that references it.")}</p>
       {!sharing && !error && <p role="status">{t("Loading…")}</p>}
+      {makingPublic && sharing?.can_set_visibility && (
+        <FirstPublishScope kind="book" itemId={sharing.book_id} onChange={setFirstPublish} />
+      )}
       {!makingPublic && sharing?.can_set_visibility && <div className="rounded-lg border border-[var(--border)] p-3">
         <PublishScopeEditor kind="book" itemId={sharing.book_id} onSaved={onChanged} />
       </div>}

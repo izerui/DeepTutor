@@ -10,6 +10,9 @@ from typing import Any, TypeVar
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from deeptutor.api.routers.publishing import ScopeChoice, chosen
+from deeptutor.publishing.scope import ScopeError
+
 from deeptutor.practice_sets.service import PracticeError, PracticeSetService
 
 router = APIRouter()
@@ -23,6 +26,8 @@ async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         return await asyncio.to_thread(function, *args, **kwargs)
     except PracticeError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except ScopeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 async def _await(call: Awaitable[T]) -> T:
@@ -69,6 +74,12 @@ class SubmitRequest(BaseModel):
 # ── authoring ──────────────────────────────────────────────
 
 
+@router.get("/withdrawable")
+async def withdrawable_sets():
+    """Administrators: other people's published sets, which they may only withdraw (D10)."""
+    return {"sets": await _call(PracticeSetService().withdrawable)}
+
+
 @router.get("/mine")
 async def list_mine():
     return {"sets": await _call(PracticeSetService().list_mine)}
@@ -100,9 +111,15 @@ async def update_set(set_id: str, body: SetUpdate):
     }
 
 
+class PublishBody(BaseModel):
+    #: First publication: who receives it (spec 2026-11-02 §4.1).
+    scope: ScopeChoice | None = None
+
+
 @router.post("/{set_id}/publish")
-async def publish_set(set_id: str):
-    return {"set": await _call(PracticeSetService().publish, set_id)}
+async def publish_set(set_id: str, body: PublishBody | None = None):
+    with chosen(body.scope if body else None):
+        return {"set": await _call(PracticeSetService().publish, set_id)}
 
 
 @router.post("/{set_id}/archive")
@@ -143,6 +160,11 @@ async def set_report(set_id: str):
 async def take_set(set_id: str):
     service = PracticeSetService()
     view = await _call(service.take, set_id)
+    try:
+        view = await service.with_my_answers(view)
+    except Exception:
+        # The results stand without them; the student can still answer again.
+        logger.exception("Could not read practice set %s answers from the question bank", set_id)
     if view["submissions"]:
         # Answers withheld from the student's bank until now are filled in
         # (it checks the reveal time itself, for every version submitted).

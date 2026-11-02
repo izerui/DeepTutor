@@ -132,18 +132,29 @@ def shared_read() -> Iterator[sqlite3.Connection | None]:
         conn.close()
 
 
-def transfer_ownership(from_user_id: str, to_user_id: str) -> list[books.BookRecord]:
-    """Hand over books and active protection without renewing withdrawn access."""
+def transfer_ownership(
+    from_user_id: str, to_user_id: str, *, shared_only: bool = False
+) -> list[books.BookRecord]:
+    """Hand over books and active protection without renewing withdrawn access.
+
+    With *shared_only* (the account lives on, e.g. a teacher who became a
+    student): only public or referenced books move; private ones stay theirs.
+    """
+    shared = (
+        " AND (visibility = 'public' OR book_id IN (SELECT book_id FROM books.book_references))"
+        if shared_only else ""
+    )
     with shared_write() as conn:
         rows = conn.execute(
-            "SELECT * FROM books.book_registry WHERE created_by = ? ORDER BY title, book_id",
+            f"SELECT * FROM books.book_registry WHERE created_by = ?{shared} "  # nosec B608
+            "ORDER BY title, book_id",
             (from_user_id,),
         ).fetchall()
         if from_user_id != to_user_id:
-            conn.execute(
+            conn.executemany(
                 "UPDATE books.book_registry SET created_by = ?, transferred_from = ?, "
-                "updated_at = ? WHERE created_by = ?",
-                (to_user_id, from_user_id, books._now(), from_user_id),
+                "updated_at = ? WHERE book_id = ?",
+                [(to_user_id, from_user_id, books._now(), row["book_id"]) for row in rows],
             )
             # Do not rebuild protection: fixed targets, document limits and
             # historical revocations must survive account deletion unchanged.
