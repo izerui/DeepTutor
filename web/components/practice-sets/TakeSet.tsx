@@ -13,13 +13,39 @@ const RESULT_LABEL: Record<ResultValue, string> = {
   partial: "Partly correct",
   incorrect: "Incorrect",
   ungraded: "Not graded",
+  pending: "Submitted",
 };
 const RESULT_TONE: Record<ResultValue, string> = {
   correct: "text-emerald-600",
   partial: "text-amber-600",
   incorrect: "text-red-600",
   ungraded: "text-[var(--muted-foreground)]",
+  pending: "text-[var(--muted-foreground)]",
 };
+
+/** The latest attempt of a reopened set, shown as if just submitted. */
+function restored(view: TakeView): SubmitResult | null {
+  const latest = view.submissions[view.submissions.length - 1];
+  if (!latest || latest.revision !== view.latest_revision) return null;
+  const answers = new Map(
+    view.questions.map((question) => [question.question_id, question] as const),
+  );
+  return {
+    submission_id: latest.id,
+    revision: latest.revision,
+    score: latest.score,
+    max_score: latest.max_score,
+    late: Boolean(latest.late),
+    // Answers of this version show only when the attempt was on this version.
+    answers_revealed: view.answers_revealed && latest.revision === view.current_revision,
+    results: view.latest_results.map((row) => {
+      const question = answers.get(row.question_id);
+      return view.answers_revealed && latest.revision === view.current_revision && question
+        ? { ...row, correct_answer: question.correct_answer, explanation: question.explanation }
+        : row;
+    }),
+  };
+}
 
 /** A student answers a practice set; every submission is graded and kept (spec §8.3). */
 export function TakeSet({ setId }: { setId: string }) {
@@ -34,7 +60,16 @@ export function TakeSet({ setId }: { setId: string }) {
   useEffect(() => {
     let alive = true;
     takeSet(setId)
-      .then((next) => alive && setView(next))
+      .then((next) => {
+        if (!alive) return;
+        setView(next);
+        // Reopening shows the last attempt instead of a blank sheet (and needs no resubmission).
+        const last = restored(next);
+        if (last) {
+          setResult(last);
+          setAnswers(Object.fromEntries(last.results.map((row) => [row.question_id, row.answer ?? ""])));
+        }
+      })
       .catch((err) => alive && setError(err instanceof Error ? t(err.message) : String(err)));
     return () => {
       alive = false;
@@ -81,7 +116,9 @@ export function TakeSet({ setId }: { setId: string }) {
       {result && (
         <div role="status" className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-4 text-[13px]">
           <p className="text-[15px] font-semibold">
-            {t("Score {{score}} / {{max}}", { score: result.score, max: result.max_score })}
+            {result.score === null
+              ? t("Submitted")
+              : t("Score {{score}} / {{max}}", { score: result.score, max: result.max_score })}
             {result.late && <span className="ml-2 text-[12px] text-amber-600">{t("Late")}</span>}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
@@ -113,7 +150,8 @@ export function TakeSet({ setId }: { setId: string }) {
               {graded && (
                 <div className="space-y-1 text-[12.5px]">
                   <p className={RESULT_TONE[graded.result]}>
-                    {t(RESULT_LABEL[graded.result])} · {graded.points} / {graded.max_points}
+                    {t(RESULT_LABEL[graded.result])}
+                    {graded.points !== null && ` · ${graded.points} / ${graded.max_points}`}
                   </p>
                   {graded.feedback && <p className="text-[var(--muted-foreground)]">{graded.feedback}</p>}
                   {graded.correct_answer !== undefined && (

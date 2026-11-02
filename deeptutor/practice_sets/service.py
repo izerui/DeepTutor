@@ -200,6 +200,33 @@ def _points(question: dict[str, Any], result: str) -> float:
     return question["points"] if result == "correct" else question["points"] / 2 if result == "partial" else 0.0
 
 
+def _ratio(submission) -> float:
+    return submission["score"] / submission["max_score"] if submission["max_score"] else 0.0
+
+
+def best_submission(submissions):
+    """The best attempt by share of its own version's maximum (§8.5: versions
+    may change questions and points, so raw scores do not compare)."""
+    return max(submissions, key=_ratio) if submissions else None
+
+
+#: Shown instead of a result until the answers may be revealed.
+PENDING = "pending"
+
+
+def _withheld(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-question rows with nothing that tells right from wrong.
+
+    With answers shown only after the deadline, right/wrong per question (or
+    a score) would let a student find the key by resubmitting variations.
+    """
+    return [
+        {"question_id": r["question_id"], "result": PENDING, "points": None,
+         "max_points": r["max_points"], **({"answer": r["answer"]} if "answer" in r else {})}
+        for r in rows
+    ]
+
+
 # ── service ────────────────────────────────────────────────
 
 
@@ -473,21 +500,24 @@ class PracticeSetService:
                 ids,
             ).fetchall()
             mine = conn.execute(
-                f"SELECT set_id, COUNT(*) AS n, MAX(score) AS best, MAX(max_score) AS max_score "
-                f"FROM practice_submissions WHERE student_id = ? AND set_id IN ({marks}) GROUP BY set_id",
+                f"SELECT set_id, score, max_score FROM practice_submissions "
+                f"WHERE student_id = ? AND set_id IN ({marks})",
                 (self.actor.id, *ids),
             ).fetchall()
-        progress = {r["set_id"]: r for r in mine}
+        progress: dict[str, list] = {}
+        for submission in mine:
+            progress.setdefault(submission["set_id"], []).append(submission)
         names = _usernames()
         out = []
         for row in rows:
-            done = progress.get(row["id"])
+            done = progress.get(row["id"], [])
+            best = best_submission(done) if self._reveal(row, True) else None
             out.append({
                 **self._summary(row),
                 "teacher": names.get(row["owner_user_id"], ""),
-                "submissions": done["n"] if done else 0,
-                "best_score": done["best"] if done else None,
-                "max_score": done["max_score"] if done else None,
+                "submissions": len(done),
+                "best_score": best["score"] if best else None,
+                "max_score": best["max_score"] if best else None,
             })
         return out
 
@@ -501,8 +531,11 @@ class PracticeSetService:
             ).fetchall()
         # A submission to an earlier version does not reveal this version's answers.
         reveal = self._reveal(row, any(s["revision"] == row["current_revision"] for s in submissions))
+        # Scores of what was submitted show on the same terms as the answers.
+        graded = self._reveal(row, True)
         questions = json.loads(revision["questions_json"])
         latest = submissions[-1] if submissions else None
+        latest_rows = json.loads(latest["results_json"]) if latest else []
         return {
             **self._summary(row),
             "title": revision["title"],
@@ -511,10 +544,13 @@ class PracticeSetService:
             "answers_revealed": reveal,
             "questions": [_for_student(q, reveal=reveal) for q in questions],
             "submissions": [
-                {k: s[k] for k in ("id", "revision", "submitted_at", "late", "score", "max_score")}
+                {**{k: s[k] for k in ("id", "revision", "submitted_at", "late", "max_score")},
+                 "score": s["score"] if graded else None}
                 for s in submissions
             ],
-            "latest_results": json.loads(latest["results_json"]) if latest else [],
+            # The latest attempt, so a reopened page shows it (its version may be older).
+            "latest_revision": latest["revision"] if latest else None,
+            "latest_results": latest_rows if graded else _withheld(latest_rows),
         }
 
     @staticmethod
@@ -564,7 +600,9 @@ class PracticeSetService:
         late = row["due_at"] is not None and now > row["due_at"]
         rows = [
             {"question_id": q["question_id"], "result": results[q["question_id"]]["result"],
-             "points": _points(q, results[q["question_id"]]["result"]), "max_points": q["points"]}
+             "points": _points(q, results[q["question_id"]]["result"]), "max_points": q["points"],
+             # The student's own answer, so a reopened page can show what they wrote.
+             "answer": given[q["question_id"]]}
             for q in questions
         ]
         score = sum(r["points"] for r in rows)
@@ -585,16 +623,17 @@ class PracticeSetService:
         await self._to_my_bank(row, revision, questions, given, results, reveal=reveal)
         return {
             "submission_id": submission_id,
-            "score": score,
+            "revision": revision["revision"],
+            "score": score if reveal else None,
             "max_score": max_score,
             "late": late,
             "answers_revealed": reveal,
             "results": [
                 # AI feedback can quote the key, so it waits for the answers too.
-                {**r, "feedback": results[r["question_id"]]["feedback"] if reveal else "",
-                 **({"correct_answer": q["correct_answer"], "explanation": q["explanation"]} if reveal else {})}
+                {**r, "feedback": results[r["question_id"]]["feedback"],
+                 "correct_answer": q["correct_answer"], "explanation": q["explanation"]}
                 for r, q in zip(rows, questions)
-            ],
+            ] if reveal else _withheld(rows),
         }
 
     @staticmethod
@@ -612,8 +651,9 @@ class PracticeSetService:
             "correct_answer": question["correct_answer"] if reveal else "",
             "explanation": question["explanation"] if reveal else "",
             "user_answer": answer,
-            "is_correct": result == "correct",
-            "result": result,
+            # Right or wrong waits for the reveal too; it would give the key away.
+            "is_correct": reveal and result == "correct",
+            "result": result if reveal else "ungraded",
             "source": "practice_set",
             "material_id": row["id"],
             "material_title": revision["title"],
@@ -638,29 +678,60 @@ class PracticeSetService:
             logger.exception("Could not save practice set %s answers to the question bank", row["id"])
 
     async def reveal_in_bank(self, set_id: str) -> None:
-        """Once answers may show, complete the bank entries saved without them."""
+        """Once answers may show, complete the bank entries saved without them.
+
+        Every version the student submitted is completed, not only the current
+        one: a set republished after their attempt must not leave that attempt's
+        mistakes without answers forever.
+        """
         import asyncio
 
         from deeptutor.services.session.sqlite_store import get_sqlite_session_store
 
         def load():
             with store.read() as conn:
-                return self._published(conn, set_id)
+                row, _current = self._published(conn, set_id)
+                latest: dict[int, Any] = {}
+                for submission in conn.execute(
+                    "SELECT revision, results_json FROM practice_submissions "
+                    "WHERE set_id = ? AND student_id = ? ORDER BY submitted_at",
+                    (set_id, self.actor.id),
+                ):
+                    latest[submission["revision"]] = submission
+                revisions = {
+                    number: conn.execute(
+                        "SELECT * FROM practice_set_revisions WHERE set_id = ? AND revision = ?",
+                        (set_id, number),
+                    ).fetchone()
+                    for number in latest
+                }
+            return row, latest, revisions
 
-        row, revision = await asyncio.to_thread(load)
+        row, latest, revisions = await asyncio.to_thread(load)
+        if not latest or not self._reveal(row, True):
+            return
         bank = get_sqlite_session_store()
         items = []
-        for question in json.loads(revision["questions_json"]):
-            entry = await bank.find_notebook_entry_by_origin(
-                "practice_set", f"practice_set:{set_id}", question["question_id"],
-                turn_id=f"rev{revision['revision']}",
-            )
-            if entry is None or entry.get("correct_answer") or not question["correct_answer"]:
+        for number, submission in latest.items():
+            revision = revisions.get(number)
+            if revision is None:
                 continue
-            items.append(self._bank_item(
-                row, revision, question, answer=str(entry.get("user_answer") or ""),
-                result=str(entry.get("result") or "ungraded"), reveal=True,
-            ))
+            results = {r["question_id"]: r["result"] for r in json.loads(submission["results_json"])}
+            for question in json.loads(revision["questions_json"]):
+                entry = await bank.find_notebook_entry_by_origin(
+                    "practice_set", f"practice_set:{set_id}", question["question_id"],
+                    turn_id=f"rev{number}",
+                )
+                result = results.get(question["question_id"], "ungraded")
+                if entry is None or (
+                    str(entry.get("result") or "") == result
+                    and (entry.get("correct_answer") or not question["correct_answer"])
+                ):
+                    continue
+                items.append(self._bank_item(
+                    row, revision, question, answer=str(entry.get("user_answer") or ""),
+                    result=result, reveal=True,
+                ))
         if items:
             await bank.upsert_notebook_entries(None, items)
 
@@ -668,7 +739,7 @@ class PracticeSetService:
 
     def report(self, set_id: str) -> dict[str, Any]:
         """Results of the students the set reaches, plus anyone who submitted and left it (§8.4)."""
-        from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
+        from deeptutor.publishing.scope import PRACTICE_SET, Scope, audience, get_scope
 
         self._require_author()
         with store.read() as conn:
@@ -682,19 +753,31 @@ class PracticeSetService:
             ).fetchone()
         scope = get_scope(PRACTICE_SET, set_id)
         reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
-        from deeptutor.classes.service import _accounts
+        from deeptutor.classes.service import _accounts, teacher_student_ids
 
+        visible = None
+        if scope is not None and scope.everyone and _role(self.actor) != "admin":
+            # Spec §5: a teacher sees the students of their classes and the people
+            # they named, even when the set went to everyone (decided 2026-11-02).
+            named = Scope(users=scope.users, classes=scope.classes)
+            visible = audience(named, students_only=True, owner_id=row["owner_user_id"]) | (
+                reached & teacher_student_ids(self.actor.id)
+            )
+            reached = visible
         accounts = _accounts()
         names = {user_id: account["username"] for user_id, account in accounts.items()}
         by_student: dict[str, list] = {}
         for submission in submissions:
             # A deleted account or one that is no longer a student is not reported.
+            if visible is not None and submission["student_id"] not in visible:
+                continue
             if (accounts.get(submission["student_id"]) or {}).get("role") == "student":
                 by_student.setdefault(submission["student_id"], []).append(submission)
         students = []
         for student_id in sorted(reached | set(by_student), key=lambda s: names.get(s, s)):
             mine = by_student.get(student_id, [])
             first = mine[0] if mine else None
+            best = best_submission(mine)
             students.append({
                 "id": student_id,
                 "username": names.get(student_id, student_id),
@@ -703,7 +786,9 @@ class PracticeSetService:
                 "completed": bool(mine),
                 "attempts": len(mine),
                 "first_score": first["score"] if first else None,
-                "best_score": max(s["score"] for s in mine) if mine else None,
+                # Each score with its own version's maximum (versions may differ).
+                "best_score": best["score"] if best else None,
+                "best_max_score": best["max_score"] if best else None,
                 "max_score": first["max_score"] if first else None,
                 "minutes": round((first["submitted_at"] - first["started_at"]) / 60, 1)
                 if first and first["started_at"] else None,

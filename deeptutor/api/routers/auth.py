@@ -592,7 +592,39 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
         reset_current_user(user_token)
         await ws.close(code=4004)
         return ws_auth_failed
+    # The same learning-surface policy the HTTP routes enforce; a socket must
+    # not open what its REST twin refuses (e.g. creating a book over /ws/books).
+    from starlette._utils import get_route_path
+
+    from deeptutor.multi_user.learning_access import assert_learning_surface
+
+    try:
+        assert_learning_surface(_learning_surface_for_socket(get_route_path(ws.scope)))
+    except PermissionError:
+        reset_current_user(user_token)
+        await ws.close(code=4003)
+        return ws_auth_failed
     return user_token
+
+
+#: WebSocket roots and the learning surface their HTTP twins belong to.
+_SOCKET_SURFACES = (
+    ("/ws/books", "books"),
+    ("/ws/questions", "chat"),
+    ("/ws/mastery-paths", "chat"),
+    ("/ws/knowledge-bases", "reading"),
+)
+
+
+def _learning_surface_for_socket(path: str) -> str:
+    normalized = "/" + str(path or "").lstrip("/")
+    if normalized == "/ws":  # the unified chat socket; turns apply the policy again
+        return "chat"
+    for root, surface in _SOCKET_SURFACES:
+        if normalized == root or normalized.startswith(f"{root}/"):
+            return surface
+    # Partners, partner groups and anything new: denied like their REST routes.
+    return ""
 
 
 async def require_admin(
@@ -988,6 +1020,14 @@ async def device_login(body: DeviceLoginRequest, response: Response) -> dict:
     }
 
 
+def _credentials_version(username: str) -> int | None:
+    """The account's password version; ``None`` for a missing or disabled account."""
+    record = get_user(username)
+    if record is None or record.get("disabled"):
+        return None
+    return int(record.get("credentials_version") or 0)
+
+
 @router.post("/session-handoff")
 async def create_session_handoff(
     body: SessionHandoffCreateRequest,
@@ -1031,6 +1071,8 @@ async def create_session_handoff(
                     "user_id": payload.user_id,
                     "device_credential_id": payload.device_credential_id,
                     "device_session_nonce": payload.device_session_nonce,
+                    # A password change before the handoff completes voids it.
+                    "credentials_version": _credentials_version(payload.username),
                 }
             )
         ticket = encrypt_ticket_payload(ticket_claims)
@@ -1135,6 +1177,10 @@ async def complete_session_handoff(
             if not token or decode_token(token) is None:
                 raise HandoffRejected("Invalid handoff ticket")
         elif mode == "builtin":
+            if _credentials_version(str(claims.get("username") or "")) != claims.get(
+                "credentials_version", 0
+            ):
+                raise HandoffRejected("Invalid handoff ticket")
             token = create_token(
                 str(claims.get("username") or ""),
                 str(claims.get("role") or "user"),
@@ -1277,7 +1323,12 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
             detail="Username already taken",
         )
 
-    add_user(body.username, body.password, role="student")
+    from deeptutor.multi_user.identity import UsernameTaken
+
+    try:
+        add_user(body.username, body.password, role="student", only_new=True)
+    except UsernameTaken:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken") from None
     user_id = ""
     role = "student"
     for item in list_users():
@@ -1782,7 +1833,12 @@ def _create_admin_user(
     if any(item.get("username") == body.username for item in list_users()):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
 
-    add_user(body.username, body.password, role=body.role, preset=body.preset)
+    from deeptutor.multi_user.identity import UsernameTaken
+
+    try:
+        add_user(body.username, body.password, role=body.role, preset=body.preset, only_new=True)
+    except UsernameTaken:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken") from None
     created = next(
         (item for item in list_users() if item.get("username") == body.username),
         None,
@@ -1974,6 +2030,13 @@ async def admin_import_users(
     }
 
 
+def _is_primary_admin_record(record: dict) -> bool:
+    from deeptutor.multi_user.admin_accounts import primary_admin_id
+
+    primary = primary_admin_id()
+    return bool(primary) and str(record.get("id") or "") == primary
+
+
 def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int, str]:
     """Delete one account, then hand its libraries, books and paths to the admin.
 
@@ -1989,6 +2052,9 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
 
     # Capture the id before the record disappears so the avatar file can go too.
     info = get_user_info(username)
+    if info and _is_primary_admin_record(info):
+        # Spec 2026-10-29 §3: the first administrator is fixed (and owns the legacy admin root).
+        return 400, "The first administrator cannot be deleted."
 
     removed = delete_user(username)
     if not removed:
@@ -2120,6 +2186,14 @@ async def admin_reset_password(
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
+    target = get_user(username)
+    if target is not None and _is_primary_admin_record(target) and username != current.username:
+        # Resetting it would let another administrator sign in as the first one
+        # and read the legacy admin root; they change it on their profile.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the first administrator can change their own password.",
+        )
     record = await asyncio.to_thread(set_password, username, hash_password(body.new_password))
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

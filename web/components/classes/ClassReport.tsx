@@ -136,8 +136,9 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
             <li key={set.set_id} className="flex flex-wrap gap-x-3">
               <span className="font-medium text-[var(--foreground)]">{set.title}</span>
               <span className="text-[var(--muted-foreground)]">
-                {t("First {{first}} · best {{best}} / {{max}} · {{count}} attempts", {
-                  first: set.first_score, best: set.best_score, max: set.max_score, count: set.attempts,
+                {t("First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts", {
+                  first: set.first_score, max: set.max_score, best: set.best_score,
+                  bestMax: set.best_max_score, count: set.attempts,
                 })}
                 {set.late && ` · ${t("Late")}`}
               </span>

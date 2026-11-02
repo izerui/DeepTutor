@@ -281,7 +281,7 @@ it("manages assignments: revoke, add and archive behind a confirmation", async (
   const close = vi.fn();
   render(
     <TemplateAssignmentsDialog
-      template={template({ status: "published", current_revision: 1, is_owner: false })}
+      template={template({ status: "published", current_revision: 1, is_owner: true })}
       returnFocusRef={createRef()}
       onClose={close}
       onChanged={changed}
@@ -302,6 +302,24 @@ it("manages assignments: revoke, add and archive behind a confirmation", async (
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(api.archiveTemplate).toHaveBeenCalledWith("tpl_1");
   expect(changed).toHaveBeenCalledTimes(3);
+});
+
+it("lets an administrator withdraw another teacher's path but not change who receives it", async () => {
+  api.listAssignments.mockResolvedValue([
+    { student_user_id: "u_sara", username: "sara", status: "active", applied_revision: 1 },
+  ]);
+  render(
+    <TemplateAssignmentsDialog
+      template={template({ status: "published", current_revision: 1, is_owner: false })}
+      returnFocusRef={createRef()}
+      onClose={vi.fn()}
+      onChanged={vi.fn()}
+    />,
+  );
+  expect(await screen.findByText("sara")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Remove access for sara" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Assign students" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Archive" })).toBeVisible();
 });
 
 it("offers publishing only on an own card; other teachers' paths are manage-only with a reason", () => {

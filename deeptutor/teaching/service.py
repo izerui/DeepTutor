@@ -342,8 +342,8 @@ class TeachingService:
             raise TemplateNotFound("Teacher path not found")
         if owner_only:
             raise TemplateForbidden(
-                "Only the teacher who owns this path can edit and publish it (its draft "
-                "lives in their workspace). Admins can assign, revoke, archive or delete it."
+                "Only the teacher who owns this path can edit, publish and assign it (its "
+                "draft lives in their workspace). Admins can archive or delete it."
             )
         return template
 
@@ -646,12 +646,36 @@ class TeachingService:
             warn("book_references", exc)
         if students and archived:
             warn("assignments", TemplateConflict("The path was archived while publishing."))
-        elif students:
-            try:
-                from deeptutor.publishing.scope import path_added_students
+            return warnings
+        from deeptutor.publishing import scope as scopes
 
-                path_added_students(template.id, students, actor_id=user.id)
+        first = revision.revision == 1 and not archived
+        by_class = first and not students
+        if first:
+            try:
+                # Spec 2026-10-29 §7.1: the students picked in the publish dialog
+                # are the scope; with none picked, like books, knowledge bases and
+                # practice sets, a first publication reaches the teacher's classes.
+                if students:
+                    if scopes.get_scope(scopes.MASTERY_PATH, template.id) is None:
+                        scopes._store_scope(
+                            scopes.MASTERY_PATH, template.id, scopes.Scope(users=list(students)),
+                            actor_id=user.id,
+                        )
+                else:
+                    scopes.default_scope_on_publish(scopes.MASTERY_PATH, template.id)
+            except Exception as exc:
+                warn("assignments", exc)
+        if students:
+            try:
+                scopes.path_added_students(template.id, students, actor_id=user.id)
                 self.store.assign(template.id, students, assigned_by=user.id)
+            except Exception as exc:
+                warn("assignments", exc)
+        if by_class:
+            try:
+                # The classes' students get the path now; later joiners on opening their list.
+                scopes.reconcile_template(template.id)
             except Exception as exc:
                 warn("assignments", exc)
         return warnings
@@ -884,7 +908,9 @@ class TeachingService:
         return rows
 
     def assign(self, template_id: str, student_ids: list[str]) -> list[dict]:
-        template = self.get(template_id)
+        # Spec 2026-10-29 D10: who receives a path is its teacher's choice; an
+        # administrator withdraws (archives) or deletes it, never re-targets it.
+        template = self.get(template_id, owner_only=True)
         self._ensure_not_archived(template)
         if template.status != "published":
             raise TemplateConflict("Publish this path before assigning students.")
@@ -908,7 +934,7 @@ class TeachingService:
 
     def revoke(self, template_id: str, student_id: str) -> None:
         """Deny at once; then release old-revision materials nobody else needs."""
-        template = self.get(template_id)
+        template = self.get(template_id, owner_only=True)  # D10, as in :meth:`assign`
         from deeptutor.publishing.scope import ScopeError, path_revoke_allowed
 
         try:

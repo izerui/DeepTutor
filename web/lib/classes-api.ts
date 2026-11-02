@@ -77,6 +77,8 @@ export interface PracticeSetResult {
   attempts: number;
   first_score: number;
   best_score: number;
+  /** The maximum of the version the best score was on. */
+  best_max_score: number;
   max_score: number;
   late: boolean;
   last_submitted_at: number;

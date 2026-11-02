@@ -143,8 +143,9 @@ async def set_report(set_id: str):
 async def take_set(set_id: str):
     service = PracticeSetService()
     view = await _call(service.take, set_id)
-    if view["answers_revealed"]:
-        # Answers withheld from the student's bank until now are filled in.
+    if view["submissions"]:
+        # Answers withheld from the student's bank until now are filled in
+        # (it checks the reveal time itself, for every version submitted).
         try:
             await service.reveal_in_bank(set_id)
         except Exception:

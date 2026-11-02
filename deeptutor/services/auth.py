@@ -150,9 +150,12 @@ def add_user(
     plain_password: str,
     role: Role = "student",
     preset: AccountPreset = "standard",
+    *,
+    only_new: bool = False,
 ) -> None:
     """
-    Add or update a user in data/user/auth_users.json.
+    Add or update a user in data/user/auth_users.json (only add with *only_new*;
+    an existing name then raises ``identity.UsernameTaken``).
 
     The role defaults to 'student'. Pass role='admin' to elevate. When the store
     is empty the first user is automatically promoted to 'admin' regardless of
@@ -167,6 +170,7 @@ def add_user(
         hash_password(plain_password),
         role=role,
         preset=preset,
+        only_new=only_new,
     )
     logger.info(
         "User '%s' saved with role=%r preset=%r",

@@ -1533,6 +1533,32 @@ def _load_builtin_readers() -> None:
             _builtin_readers_loaded = True
 
 
+def _referrer_may_pass_on(record: KbRecord, referrer_id: str) -> bool:
+    """Whether a reference lets the referrer's readers read *record*.
+
+    Only the owner's references do (their books, paths, courses, partners;
+    spec 2026-10-29 §7.3). Someone else who cites a published KB passes on
+    nothing: their readers read it only if its publish scope reaches them
+    (§7.1), so citing can neither widen the scope nor outlive its narrowing.
+    """
+    if referrer_id == record.created_by or record.visibility != "public":
+        # Only its owner can cite a private KB; withdrawal revokes the rest.
+        return True
+    from deeptutor.multi_user.admin_accounts import is_primary_admin_id
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+    from deeptutor.services.partners.scope import PARTNER_USER_PREFIX, is_partner_user_id
+
+    if is_partner_user_id(referrer_id):
+        # A partner cites on behalf of the account that owns it.
+        from deeptutor.multi_user.partner_access import partner_owner_id
+
+        referrer_id = partner_owner_id(referrer_id[len(PARTNER_USER_PREFIX):]) or LOCAL_ADMIN_ID
+        if referrer_id == record.created_by:
+            return True
+    # The primary administrator also owns what was recorded as the local admin.
+    return record.created_by == LOCAL_ADMIN_ID and is_primary_admin_id(referrer_id)
+
+
 def can_read(record: KbRecord, user: CurrentUser) -> bool:
     from deeptutor.multi_user.ownership import owns
 
@@ -1554,6 +1580,8 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
             reference.referrer_kind not in CONNECTOR_REFERRER_KINDS
             or reference.created_by != record.created_by
         ):
+            continue
+        if not connector and not _referrer_may_pass_on(record, reference.created_by):
             continue
         reader = _readers.get(reference.referrer_kind)
         if reader is None:

@@ -5906,7 +5906,7 @@
   "Leave as teacher": "Als Lehrkraft austreten",
   "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.": "Diese Klasse archivieren? Einladungslink und offene Einladungen enden, und Lernende verlieren, was für diese Klasse veröffentlicht wurde. Aufzeichnungen bleiben erhalten.",
   "My practice sets: submitted": "Meine Übungssets: abgegeben",
-  "First {{first}} · best {{best}} / {{max}} · {{count}} attempts": "Erste {{first}} · beste {{best}} / {{max}} · {{count}} Versuche",
+  "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts": "Erste {{first}} / {{max}} · beste {{best}} / {{bestMax}} · {{count}} Versuche",
   "Create their own books": "Eigene Bücher erstellen",
   "Only administrators remove other teachers.": "Nur Admins entfernen andere Lehrkräfte.",
   "Add another teacher before leaving this class.": "Füge eine weitere Lehrkraft hinzu, bevor du diese Klasse verlässt.",
@@ -5930,5 +5930,8 @@
   "If you published this path, students get the new standard with your next update.": "Wenn du diesen Pfad veröffentlicht hast, erhalten Lernende den neuen Standard mit deinem nächsten Update.",
   "Could not save the pass standard. Try again.": "Der Bestehensstandard konnte nicht gespeichert werden. Versuch es noch einmal.",
   "Pass standard for students: {{from}} → {{to}}": "Bestehensstandard für Lernende: {{from}} → {{to}}",
-  "Pass standard for students: {{standard}}": "Bestehensstandard für Lernende: {{standard}}"
+  "Pass standard for students: {{standard}}": "Bestehensstandard für Lernende: {{standard}}",
+  "Only the first administrator can change their own password.": "Nur der erste Admin kann sein eigenes Passwort ändern.",
+  "The first administrator cannot be deleted.": "Der erste Admin kann nicht gelöscht werden.",
+  "Only students and teachers can be chosen.": "Nur Lernende und Lehrkräfte können ausgewählt werden."
 }

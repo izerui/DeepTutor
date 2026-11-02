@@ -297,7 +297,8 @@ def test_only_active_student_accounts_can_be_assigned(
         with pytest.raises(InvalidStudents):
             TeachingService().assign(template_id, [teaching_users["uma"]["id"]])
         rows = TeachingService().assign(template_id, [teaching_users["sam"]["id"]])
-    assert [row["username"] for row in rows] == ["sam"]
+    # Published with nobody picked, it already reached Tina's class (spec §7.1).
+    assert "sam" in [row["username"] for row in rows]
 
 
 def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
@@ -313,7 +314,8 @@ def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
     with as_account("adam"):
         service = TeachingService()
         assert [t["id"] for t in service.list_for_actor()] == [template_id]
-        assert service.assignments(template_id) == []
+        # Published with nobody picked: it reached Tina's class (spec §7.1).
+        assert {row["username"] for row in service.assignments(template_id)} == {"sara", "sam"}
         with pytest.raises(TemplateForbidden):
             asyncio.run(service.preview_publish(template_id))
 

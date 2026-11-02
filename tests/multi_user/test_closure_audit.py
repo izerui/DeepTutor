@@ -282,7 +282,7 @@ def test_answers_stay_out_of_the_bank_until_the_deadline(practice_set, as_accoun
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         result = asyncio.run(PracticeSetService().submit(set_id, {qid: "A"}))
-        assert not result["answers_revealed"] and result["results"][0]["feedback"] == ""
+        assert not result["answers_revealed"] and result["results"][0]["result"] == "pending"
     assert _bank_entry(as_account, "sara", set_id)["correct_answer"] == ""
 
     with as_account("tina"):
@@ -340,12 +340,12 @@ def test_answers_are_graded_against_the_version_the_student_opened(practice_set,
         ))
         with pytest.raises(PracticeError):
             asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}, revision=99))
-    assert result["score"] == 1
+    assert result["revision"] == opened["current_revision"] == 1
     with practice_store.read() as conn:
         [saved] = conn.execute(
-            "SELECT revision FROM practice_submissions WHERE set_id = ?", (set_id,)
+            "SELECT revision, score FROM practice_submissions WHERE set_id = ?", (set_id,)
         ).fetchall()
-    assert saved["revision"] == opened["current_revision"] == 1
+    assert (saved["revision"], saved["score"]) == (1, 1)
 
 
 def test_after_due_needs_a_deadline(as_account):

@@ -239,12 +239,24 @@ def load_users(  # nosec B107 - empty defaults mean "no env fallback supplied".
     return canonical
 
 
+class UsernameTaken(ValueError):
+    """``save_user(..., only_new=True)`` found the name already in use."""
+
+
 def save_user(
     username: str,
     hashed_password: str,
     role: Role = "student",
     preset: AccountPreset = "standard",
+    *,
+    only_new: bool = False,
 ) -> dict[str, Any]:
+    """Create or overwrite one account; with *only_new*, refuse an existing name.
+
+    The existence check happens under the same lock as the write, so two
+    concurrent sign-ups of one name cannot both pass and the later one take
+    over the earlier account.
+    """
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Read-modify-write must be atomic so concurrent first-time registrations
     # cannot each see an empty store and each promote themselves to admin.
@@ -258,6 +270,8 @@ def save_user(
         # promoted — that endpoint documents role="user" (#849). Re-saving the
         # bootstrap admin's own username adopts it into the store instead, and
         # must keep the admin role.
+        if only_new and (username in users or (env_username and env_username == username)):
+            raise UsernameTaken(username)
         account_exists = bool(users) or (bool(env_username) and env_username != username)
         effective_role: Role = role if account_exists else "admin"
         existing = users.get(username) or {}

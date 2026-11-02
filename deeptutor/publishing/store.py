@@ -55,6 +55,15 @@ def scopes_db_path() -> Path:
     return paths.SYSTEM_ROOT / _DB_FILENAME
 
 
+def _marker(path: Path) -> Path:
+    """Left next to the database once it exists, so a lost database is noticed."""
+    return path.with_name(path.name + ".created")
+
+
+class ScopeStoreMissing(RuntimeError):
+    """The database existed once and is gone: unreadable, never "no scopes"."""
+
+
 def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     conn = sqlite3.connect(
         f"{path.resolve().as_uri()}?mode=ro" if readonly else path,
@@ -74,9 +83,15 @@ def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 @contextmanager
 def read() -> Iterator[sqlite3.Connection | None]:
-    """Read-only access; yields ``None`` when the database does not exist yet."""
+    """Read-only access; yields ``None`` when the database does not exist yet.
+
+    A database that existed and is missing now raises: treating it as "never
+    scoped" would open every scoped item to everyone (readers fail closed).
+    """
     path = scopes_db_path()
     if not path.exists():
+        if _marker(path).exists():
+            raise ScopeStoreMissing(f"The publish scope database {path} is missing.")
         yield None
         return
     conn = _open(path, readonly=True)
@@ -95,7 +110,15 @@ def write() -> Iterator[sqlite3.Connection]:
     path = scopes_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with _write_lock:
+        if not path.exists() and _marker(path).exists():
+            # Recreating it empty would quietly unscope every other item.
+            raise ScopeStoreMissing(
+                f"The publish scope database {path} is missing. Restore it from a backup, "
+                f"or delete {_marker(path).name} to start with no scopes (every public "
+                "book and knowledge base then reaches everyone)."
+            )
         conn = _open(path)
+        _marker(path).touch(exist_ok=True)
         _held.writer = True
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -111,4 +134,4 @@ def write() -> Iterator[sqlite3.Connection]:
             conn.close()
 
 
-__all__ = ["DB_PATH_OVERRIDE", "read", "scopes_db_path", "write"]
+__all__ = ["DB_PATH_OVERRIDE", "ScopeStoreMissing", "read", "scopes_db_path", "write"]

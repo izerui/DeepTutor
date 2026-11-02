@@ -5952,7 +5952,7 @@
   "Leave as teacher": "Zrezygnuj z nauczania",
   "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.": "Zarchiwizować tę klasę? Link i oczekujące zaproszenia wygasną, a uczniowie stracą treści opublikowane dla tej klasy. Zapisy zostaną zachowane.",
   "My practice sets: submitted": "Moje zestawy: przesłane",
-  "First {{first}} · best {{best}} / {{max}} · {{count}} attempts": "Pierwszy {{first}} · najlepszy {{best}} / {{max}} · {{count}} podejść",
+  "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts": "Pierwszy {{first}} / {{max}} · najlepszy {{best}} / {{bestMax}} · {{count}} podejść",
   "Create their own books": "Tworzyć własne książki",
   "Only administrators remove other teachers.": "Tylko administratorzy usuwają innych nauczycieli.",
   "Add another teacher before leaving this class.": "Dodaj innego nauczyciela, zanim opuścisz tę klasę.",
@@ -5976,5 +5976,8 @@
   "If you published this path, students get the new standard with your next update.": "Jeśli ta ścieżka została opublikowana, uczniowie otrzymają nowy próg wraz z następną aktualizacją.",
   "Could not save the pass standard. Try again.": "Nie udało się zapisać progu zaliczenia. Spróbuj ponownie.",
   "Pass standard for students: {{from}} → {{to}}": "Próg zaliczenia dla uczniów: {{from}} → {{to}}",
-  "Pass standard for students: {{standard}}": "Próg zaliczenia dla uczniów: {{standard}}"
+  "Pass standard for students: {{standard}}": "Próg zaliczenia dla uczniów: {{standard}}",
+  "Only the first administrator can change their own password.": "Tylko pierwszy administrator może zmienić własne hasło.",
+  "The first administrator cannot be deleted.": "Nie można usunąć pierwszego administratora.",
+  "Only students and teachers can be chosen.": "Można wybrać tylko uczniów i nauczycieli."
 }

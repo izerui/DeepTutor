@@ -541,7 +541,7 @@ function ReportSection({ setId }: { setId: string }) {
                   <tr key={student.id} className="border-t border-[var(--border)]">
                     <td className="px-2 py-1.5 font-medium">{student.username}</td>
                     <td className="px-2 py-1.5">{student.completed ? `${student.first_score} / ${student.max_score}` : t("Not submitted")}</td>
-                    <td className="px-2 py-1.5">{student.completed ? student.best_score : "—"}</td>
+                    <td className="px-2 py-1.5">{student.completed ? `${student.best_score} / ${student.best_max_score}` : "—"}</td>
                     <td className="px-2 py-1.5">{student.attempts}</td>
                     <td className="px-2 py-1.5">{student.minutes ?? "—"}</td>
                     <td className="px-2 py-1.5">

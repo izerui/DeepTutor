@@ -5952,7 +5952,7 @@
   "Leave as teacher": "Припинити викладати",
   "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.": "Архівувати цей клас? Посилання й очікувані запрошення припиняться, а учні втратять доступ до опублікованого для класу. Записи збережуться.",
   "My practice sets: submitted": "Мої набори: надіслано",
-  "First {{first}} · best {{best}} / {{max}} · {{count}} attempts": "Перший {{first}} · найкращий {{best}} / {{max}} · {{count}} спроб",
+  "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts": "Перший {{first}} / {{max}} · найкращий {{best}} / {{bestMax}} · {{count}} спроб",
   "Create their own books": "Створювати власні книги",
   "Only administrators remove other teachers.": "Лише адміністратори вилучають інших викладачів.",
   "Add another teacher before leaving this class.": "Додайте іншого викладача, перш ніж залишити клас.",
@@ -5976,5 +5976,8 @@
   "If you published this path, students get the new standard with your next update.": "Якщо цей шлях опубліковано, учні отримають новий поріг із наступним оновленням.",
   "Could not save the pass standard. Try again.": "Не вдалося зберегти поріг зарахування. Спробуйте ще раз.",
   "Pass standard for students: {{from}} → {{to}}": "Поріг зарахування для учнів: {{from}} → {{to}}",
-  "Pass standard for students: {{standard}}": "Поріг зарахування для учнів: {{standard}}"
+  "Pass standard for students: {{standard}}": "Поріг зарахування для учнів: {{standard}}",
+  "Only the first administrator can change their own password.": "Лише перший адміністратор може змінити власний пароль.",
+  "The first administrator cannot be deleted.": "Першого адміністратора не можна видалити.",
+  "Only students and teachers can be chosen.": "Можна вибрати лише учнів і вчителів."
 }

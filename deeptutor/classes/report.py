@@ -173,15 +173,20 @@ class ReportService:
         for row in rows:
             grouped.setdefault((row["student_id"], row["id"]), []).append(row)
         results: dict[str, list[dict[str, Any]]] = {}
+        from deeptutor.practice_sets.service import best_submission
+
         for (student_id, set_id), mine in grouped.items():
             first = mine[0]
+            best = best_submission(mine)
             results.setdefault(student_id, []).append({
                 "set_id": set_id,
                 "title": first["title"],
                 "attempts": len(mine),
                 "first_score": first["score"],
-                "best_score": max(r["score"] for r in mine),
                 "max_score": first["max_score"],
+                # Each score with its own version's maximum (versions may differ).
+                "best_score": best["score"],
+                "best_max_score": best["max_score"],
                 "late": bool(first["late"]),
                 "last_submitted_at": mine[-1]["submitted_at"],
             })

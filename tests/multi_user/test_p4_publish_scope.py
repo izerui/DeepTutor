@@ -123,7 +123,8 @@ def test_narrowing_a_path_counts_the_students_who_lose_it(
     sara = teaching_users["sara"]["id"]
     with as_account("tina"):
         described = PublishService().describe(MASTERY_PATH, template_id)
-        assert described["scope"]["managed"] is False and described["audience_size"] == 2
+        # The students picked at publishing are its scope.
+        assert described["scope"]["managed"] is True and described["audience_size"] == 2
         with pytest.raises(ScopeNeedsConfirmation) as caught:
             PublishService().set_scope(MASTERY_PATH, template_id, everyone=False, users=[sara], classes=[])
         assert caught.value.affected == 1

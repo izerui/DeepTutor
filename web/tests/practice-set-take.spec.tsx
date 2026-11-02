@@ -45,3 +45,22 @@ it("submits the chosen answers and shows per-question results", async () => {
   expect(screen.getByText("Too short")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Answer again" })).toBeTruthy();
 });
+
+it("reopening a set shows the last attempt, withheld until the deadline", async () => {
+  api.takeSet.mockResolvedValue({
+    ...view,
+    reveal: "after_due",
+    submissions: [{ id: "s1", revision: 1, submitted_at: 1, late: 0, score: null, max_score: 3 }],
+    latest_revision: 1,
+    latest_results: [
+      { question_id: "q1", result: "pending", points: null, max_points: 1, answer: "B" },
+      { question_id: "q2", result: "pending", points: null, max_points: 2, answer: "Things fall" },
+    ],
+  });
+  render(<TakeSet setId="ps1" />);
+  expect(await screen.findByRole("status")).toHaveTextContent("Submitted");
+  expect(screen.getByText("Answers and explanations appear after the deadline.")).toBeTruthy();
+  expect(screen.getByLabelText("Your answer")).toHaveValue("Things fall");
+  expect(screen.queryByText(/Score/)).toBeNull();
+  expect(screen.getByRole("button", { name: "Answer again" })).toBeTruthy();
+});

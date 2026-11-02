@@ -5906,7 +5906,7 @@
   "Leave as teacher": "不再任课",
   "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.": "归档这个班级？邀请链接和未处理的邀请会失效，学生将无法再访问发布给这个班的内容。学习记录会保留。",
   "My practice sets: submitted": "我的练习集：已提交",
-  "First {{first}} · best {{best}} / {{max}} · {{count}} attempts": "首次 {{first}} · 最好 {{best}} / {{max}} · 作答 {{count}} 次",
+  "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts": "首次 {{first}} / {{max}} · 最好 {{best}} / {{bestMax}} · 作答 {{count}} 次",
   "Create their own books": "自建书",
   "Only administrators remove other teachers.": "只有管理员可以移除其他老师。",
   "Add another teacher before leaving this class.": "请先添加另一位任课老师，再退出这个班。",
@@ -5930,5 +5930,8 @@
   "If you published this path, students get the new standard with your next update.": "如果这条路径已发布给学生，改动要在下次发布更新后才对学生生效。",
   "Could not save the pass standard. Try again.": "通过标准保存失败，请重试。",
   "Pass standard for students: {{from}} → {{to}}": "学生的通过标准：{{from}} → {{to}}",
-  "Pass standard for students: {{standard}}": "学生的通过标准：{{standard}}"
+  "Pass standard for students: {{standard}}": "学生的通过标准：{{standard}}",
+  "Only the first administrator can change their own password.": "第一个管理员的密码只能由他本人修改。",
+  "The first administrator cannot be deleted.": "第一个管理员不能删除。",
+  "Only students and teachers can be chosen.": "只能选择学生或老师。"
 }

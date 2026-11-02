@@ -48,13 +48,17 @@ export interface AssignedSet extends PracticeSetSummary {
   max_score: number | null;
 }
 
-export type ResultValue = "correct" | "partial" | "incorrect" | "ungraded";
+/** ``pending``: graded, but withheld until the answers may show (after the deadline). */
+export type ResultValue = "correct" | "partial" | "incorrect" | "ungraded" | "pending";
 
 export interface QuestionResult {
   question_id: string;
   result: ResultValue;
-  points: number;
+  /** Null while the result is withheld. */
+  points: number | null;
   max_points: number;
+  /** What the student answered. */
+  answer?: string;
   feedback?: string;
   correct_answer?: string;
   explanation?: string;
@@ -64,13 +68,18 @@ export interface TakeView extends PracticeSetSummary {
   teacher: string;
   answers_revealed: boolean;
   questions: PracticeQuestion[];
-  submissions: { id: string; revision: number; submitted_at: number; late: number; score: number; max_score: number }[];
+  /** ``score`` is null while results are withheld. */
+  submissions: { id: string; revision: number; submitted_at: number; late: number; score: number | null; max_score: number }[];
+  /** Version of the latest attempt, whose results ``latest_results`` are. */
+  latest_revision: number | null;
   latest_results: QuestionResult[];
 }
 
 export interface SubmitResult {
   submission_id: string;
-  score: number;
+  revision?: number;
+  /** Null while results are withheld (answers show after the deadline). */
+  score: number | null;
   max_score: number;
   late: boolean;
   answers_revealed: boolean;
@@ -88,6 +97,8 @@ export interface PracticeReport {
     attempts: number;
     first_score: number | null;
     best_score: number | null;
+    /** The maximum of the version the best score was on. */
+    best_max_score: number | null;
     max_score: number | null;
     minutes: number | null;
     late: boolean;

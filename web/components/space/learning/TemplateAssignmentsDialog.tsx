@@ -81,7 +81,9 @@ export function TemplateAssignmentsDialog({
     .map((row) => row.student_user_id);
   // The server refuses to delete anything published or ever assigned.
   const deletable = template.current_revision === 0 && rows !== null && rows.length === 0;
-  const canAssign = template.status === "published";
+  // Spec 2026-10-29 D10: who receives a path is its teacher's choice; an
+  // administrator looking at someone else's path archives or deletes it.
+  const canAssign = template.status === "published" && template.is_owner;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--overlay)] p-3 backdrop-blur-[2px] sm:p-5">
@@ -147,7 +149,7 @@ export function TemplateAssignmentsDialog({
                       ? t("Using v{{revision}}", { revision: row.applied_revision })
                       : t("Not started")}
                   </span>
-                  {row.status === "active" && (
+                  {row.status === "active" && template.is_owner && (
                     <button
                       type="button"
                       disabled={busy}

@@ -5906,7 +5906,7 @@
   "Leave as teacher": "Leave as teacher",
   "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.": "Archive this class? Its invite link and pending invitations end, and students lose what was published to this class. Records are kept.",
   "My practice sets: submitted": "My practice sets: submitted",
-  "First {{first}} · best {{best}} / {{max}} · {{count}} attempts": "First {{first}} · best {{best}} / {{max}} · {{count}} attempts",
+  "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts": "First {{first}} / {{max}} · best {{best}} / {{bestMax}} · {{count}} attempts",
   "Create their own books": "Create their own books",
   "Only administrators remove other teachers.": "Only administrators remove other teachers.",
   "Add another teacher before leaving this class.": "Add another teacher before leaving this class.",
@@ -5930,5 +5930,8 @@
   "If you published this path, students get the new standard with your next update.": "If you published this path, students get the new standard with your next update.",
   "Could not save the pass standard. Try again.": "Could not save the pass standard. Try again.",
   "Pass standard for students: {{from}} → {{to}}": "Pass standard for students: {{from}} → {{to}}",
-  "Pass standard for students: {{standard}}": "Pass standard for students: {{standard}}"
+  "Pass standard for students: {{standard}}": "Pass standard for students: {{standard}}",
+  "Only the first administrator can change their own password.": "Only the first administrator can change their own password.",
+  "The first administrator cannot be deleted.": "The first administrator cannot be deleted.",
+  "Only students and teachers can be chosen.": "Only students and teachers can be chosen."
 }

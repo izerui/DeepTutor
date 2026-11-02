@@ -168,6 +168,9 @@ class PublishService:
             account = accounts[user_id]
             if account["disabled"]:
                 raise ScopeError("Only active accounts can receive content.")
+            if account["role"] not in ("student", "teacher"):
+                # Spec §7.1: named receivers are students or teachers.
+                raise ScopeError("Only students and teachers can be chosen.")
             if kind in STUDENT_KINDS and account["role"] != "student":
                 raise ScopeError(
                     "Only students receive Mastery Paths." if kind == MASTERY_PATH
