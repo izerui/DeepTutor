@@ -6023,5 +6023,12 @@
   "Service readiness, diagnostics, and memory usage": "Готовність сервісів, діагностика та використання пам’яті",
   "Partners & agents": "Партнери й агенти",
   "Interface language, response language, and setup help": "Мова інтерфейсу, мова відповідей і довідка з налаштування",
-  "Knowledge & documents": "Знання та документи"
+  "Knowledge & documents": "Знання та документи",
+  "settings.modelImport.title": "Імпорт моделей для цієї служби",
+  "settings.modelImport.selectFiltered": "Вибрати всі результати",
+  "settings.modelImport.clear": "Очистити вибір",
+  "settings.modelImport.unverified": "Деякі моделі не вказують тип. Перевірте їх перед використанням для цієї служби.",
+  "settings.modelImport.draftHint": "Моделі додаються до чернетки. Застосуйте зміни, щоб зберегти їх; типова модель залишається незмінною.",
+  "settings.modelImport.selected": "Вибрано: {{count}}",
+  "Search models…": "Пошук моделей…"
 }

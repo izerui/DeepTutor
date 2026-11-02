@@ -5999,5 +5999,12 @@
   "Service readiness, diagnostics, and memory usage": "Disponibilité des services, diagnostics et utilisation de la mémoire",
   "Partners & agents": "Partenaires et agents",
   "Interface language, response language, and setup help": "Langue de l'interface, langue des réponses et aide à la configuration",
-  "Knowledge & documents": "Connaissances et documents"
+  "Knowledge & documents": "Connaissances et documents",
+  "settings.modelImport.title": "Importer des modèles pour ce service",
+  "settings.modelImport.selectFiltered": "Sélectionner tous les résultats",
+  "settings.modelImport.clear": "Effacer la sélection",
+  "settings.modelImport.unverified": "Certains modèles ne précisent pas leur type. Testez-les avant de les utiliser pour ce service.",
+  "settings.modelImport.draftHint": "Les modèles sont ajoutés au brouillon. Appliquez les modifications pour les enregistrer ; le modèle par défaut reste identique.",
+  "settings.modelImport.selected": "Sélectionnés : {{count}}",
+  "Search models…": "Rechercher des modèles…"
 }
