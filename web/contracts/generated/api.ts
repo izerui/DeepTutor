@@ -17004,6 +17004,8 @@ export interface components {
       readonly answers?: {
         readonly [key: string]: string;
       };
+      /** Revision */
+      readonly revision?: number | null;
       /** Started At */
       readonly started_at?: number | null;
     };

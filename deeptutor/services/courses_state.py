@@ -392,6 +392,12 @@ def withdrawn_book_reason(ref_id: str) -> str | None:
     return "made_private" if record is not None and record.visibility == "private" else None
 
 
+def _pinned_ref(resource: Any) -> str:
+    from deeptutor.services.courses import _resource_kb_ref
+
+    return _resource_kb_ref(resource)
+
+
 def _resource_kb_id(resource: Any) -> str:
     from deeptutor.knowledge import registry
 
@@ -415,7 +421,10 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
     withdrawn = await asyncio.to_thread(withdrawn_kb_reasons, course_id)
     resources: list[dict[str, Any]] = []
     for resource in course.resources:
-        detail = indexes.get(resource.kind, {}).get(resource.ref_id)
+        # A legacy name pinned to its original KB is looked up by that KB's id:
+        # a deleted original must not resolve to a newer KB with the same name.
+        key = _pinned_ref(resource) if resource.kind == "knowledge_base" else resource.ref_id
+        detail = indexes.get(resource.kind, {}).get(key)
         row = {
             **resource.to_dict(),
             "available": detail is not None,

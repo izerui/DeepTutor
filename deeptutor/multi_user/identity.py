@@ -100,6 +100,11 @@ def _canonical_record(
     changed_at = value.get("credentials_changed_at")
     if isinstance(changed_at, (int, float)) and not isinstance(changed_at, bool):
         record["credentials_changed_at"] = float(changed_at)
+    # Every password change bumps it; a token from another version is void
+    # (exact where the whole-second ``credentials_changed_at`` is not).
+    version = value.get("credentials_version")
+    if isinstance(version, int) and not isinstance(version, bool) and version > 0:
+        record["credentials_version"] = version
     return record
 
 
@@ -382,6 +387,7 @@ def set_password(username: str, hashed_password: str) -> dict[str, Any] | None:
         record["hash"] = hashed_password
         # Sessions signed in with the old password end (see services.auth.decode_token).
         record["credentials_changed_at"] = time.time()
+        record["credentials_version"] = int(record.get("credentials_version") or 0) + 1
         _write_users(users)
         return deepcopy(record)
 

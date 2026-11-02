@@ -62,6 +62,8 @@ class FromBankRequest(BaseModel):
 class SubmitRequest(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)
     started_at: float | None = None
+    #: The version the student opened; answers are graded against it.
+    revision: int | None = None
 
 
 # ── authoring ──────────────────────────────────────────────
@@ -152,4 +154,6 @@ async def take_set(set_id: str):
 
 @router.post("/{set_id}/submit")
 async def submit_set(set_id: str, body: SubmitRequest):
-    return await _await(PracticeSetService().submit(set_id, body.answers, started_at=body.started_at))
+    return await _await(PracticeSetService().submit(
+        set_id, body.answers, started_at=body.started_at, revision=body.revision,
+    ))

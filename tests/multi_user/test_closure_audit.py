@@ -60,6 +60,22 @@ def test_tokens_follow_deletion_role_and_password_reset(teaching_users, monkeypa
     assert auth.decode_token(sam) is None
 
 
+def test_a_token_from_the_same_second_as_a_password_reset_also_ends(teaching_users, monkeypatch):
+    from deeptutor.multi_user.identity import set_password
+    from deeptutor.services import auth
+
+    monkeypatch.setattr(auth, "AUTH_SECRET", "s" * 48)
+    # Freeze the clock so issue and reset share one second, where ``iat`` cannot tell them apart.
+    old = auth.create_token("tina", role="teacher")
+    issued = auth.decode_token(old)
+    assert issued is not None
+    second = float(int(time.time()))
+    monkeypatch.setattr("deeptutor.multi_user.identity.time.time", lambda: second)
+    set_password("tina", auth.hash_password("another-password"))
+    assert auth.decode_token(old) is None
+    assert auth.decode_token(auth.create_token("tina", role="teacher")) is not None
+
+
 # ── role changes ───────────────────────────────────────────
 
 
@@ -304,6 +320,32 @@ def test_reports_keep_students_who_left_and_show_practice_in_class_reports(pract
         practice = PracticeSetService().report(set_id)
     left = next(s for s in practice["students"] if s["username"] == "sara")
     assert left["completed"] and left["in_scope"] is False
+
+
+def test_answers_are_graded_against_the_version_the_student_opened(practice_set, as_account):
+    from deeptutor.practice_sets import store as practice_store
+    from deeptutor.practice_sets.service import PracticeError
+
+    set_id, _ = practice_set
+    with as_account("sara"):
+        opened = PracticeSetService().take(set_id)
+    qid = opened["questions"][0]["question_id"]
+    # The teacher changes the key and republishes while Sara is answering.
+    with as_account("tina"):
+        PracticeSetService().update(set_id, questions=[{**QUESTIONS[0], "correct_answer": "A"}])
+        PracticeSetService().publish(set_id)
+    with as_account("sara"):
+        result = asyncio.run(PracticeSetService().submit(
+            set_id, {qid: "B"}, revision=opened["current_revision"],
+        ))
+        with pytest.raises(PracticeError):
+            asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}, revision=99))
+    assert result["score"] == 1
+    with practice_store.read() as conn:
+        [saved] = conn.execute(
+            "SELECT revision FROM practice_submissions WHERE set_id = ?", (set_id,)
+        ).fetchall()
+    assert saved["revision"] == opened["current_revision"] == 1
 
 
 def test_after_due_needs_a_deadline(as_account):

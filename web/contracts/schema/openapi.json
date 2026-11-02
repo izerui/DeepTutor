@@ -10698,6 +10698,17 @@
             "title": "Answers",
             "type": "object"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "started_at": {
             "anyOf": [
               {

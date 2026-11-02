@@ -440,15 +440,19 @@ class PracticeSetService:
 
     # the student side
 
-    def _published(self, conn, set_id: str):
+    def _published(self, conn, set_id: str, revision: int | None = None):
+        """The set and its current revision, or the earlier *revision* a student opened."""
         row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
         if row is None or row["status"] != "published" or not self._reaches_me(set_id):
             raise PracticeNotFound("Practice set not found.")
-        revision = conn.execute(
+        wanted = row["current_revision"] if revision is None else revision
+        frozen = conn.execute(
             "SELECT * FROM practice_set_revisions WHERE set_id = ? AND revision = ?",
-            (set_id, row["current_revision"]),
-        ).fetchone()
-        return row, revision
+            (set_id, wanted),
+        ).fetchone() if 0 < wanted <= row["current_revision"] else None
+        if frozen is None:
+            raise PracticeError("This version of the practice set does not exist.")
+        return row, frozen
 
     def assigned(self) -> list[dict[str, Any]]:
         """Published sets whose scope reaches the student, with their own progress."""
@@ -523,12 +527,17 @@ class PracticeSetService:
             return row["due_at"] is not None and _now() >= row["due_at"]
         return True
 
-    async def submit(self, set_id: str, answers: dict[str, Any], *, started_at: float | None = None) -> dict[str, Any]:
+    async def submit(
+        self, set_id: str, answers: dict[str, Any], *, started_at: float | None = None,
+        revision: int | None = None,
+    ) -> dict[str, Any]:
+        """Grade against the version the student opened (*revision*), not one the
+        teacher published while they were answering; without it, the current one."""
         import asyncio
 
         def load():
             with store.read() as conn:
-                return self._published(conn, set_id)
+                return self._published(conn, set_id, revision)
 
         row, revision = await asyncio.to_thread(load)
         questions = json.loads(revision["questions_json"])

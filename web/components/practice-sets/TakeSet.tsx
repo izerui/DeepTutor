@@ -45,7 +45,8 @@ export function TakeSet({ setId }: { setId: string }) {
     setBusy(true);
     setError("");
     try {
-      setResult(await submitSet(setId, answers, startedAt.current));
+      if (!view) return;
+      setResult(await submitSet(setId, answers, startedAt.current, view.current_revision));
     } catch (err) {
       setError(err instanceof Error ? t(err.message) : String(err));
     } finally {

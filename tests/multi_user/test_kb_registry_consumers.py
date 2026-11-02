@@ -1316,3 +1316,42 @@ def test_move_preserves_default_registry_id_without_overwriting_target(
         with workspace_context(destination):
             assert get_kb_config_service().get_default_kb_id() == (other_id or record.kb_id)
             assert current_kb_manager().get_default() == ("algebra" if target_default else "physics")
+
+
+def test_course_view_keeps_a_deleted_pinned_kb_unavailable_after_a_same_name_replacement(
+    as_user, make_kb, tmp_path, monkeypatch,
+):
+    """A legacy name pinned to its original KB never shows a newer KB of that name."""
+    import asyncio
+
+    from deeptutor.api.routers.knowledge import _delete_kb
+    from deeptutor.services import courses
+    from deeptutor.services.courses import CourseResource, CourseService
+    from deeptutor.services.courses_state import build_course_state
+    from deeptutor.services.file_io import atomic_write_json
+
+    with as_user("u2"):
+        manager = current_kb_manager()
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        original = registry.find_by_location(manager.base_dir, "physics")
+        service = CourseService(root=tmp_path / "courses")
+        course = service.create(name="Legacy")
+        course.resources = [CourseResource("old0", "knowledge_base", "physics", "Physics", 0, 1.0)]
+        payload = course.to_dict()
+        payload["resources"][0].pop("kb_id", None)
+        atomic_write_json(service.index_file, {"courses": [payload]})
+        service.attach_resource(course.id, kind="notebook", ref_id="notes")  # pins kb_id
+        assert service.get(course.id).resources[0].kb_id == original.kb_id
+
+        _delete_kb(original.ref, confirm=True)
+        make_kb(manager, "physics")
+        list_visible_knowledge_bases()
+        replacement = registry.find_by_location(manager.base_dir, "physics")
+        assert replacement.kb_id != original.kb_id
+
+        monkeypatch.setattr(courses, "get_course_service", lambda: CourseService(root=service.root))
+        state = asyncio.run(build_course_state(course.id))
+    [row] = [r for r in state["resources"] if r["kind"] == "knowledge_base"]
+    assert row["available"] is False and row["detail"] == {}
+    assert row["unavailable_reason"] == "kb_deleted"

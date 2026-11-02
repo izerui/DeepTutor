@@ -155,5 +155,10 @@ export const getReport = (setId: string) => call<PracticeReport>(`${id(setId)}/r
 
 export const listAssigned = () => call<{ sets: AssignedSet[] }>("/assigned").then((r) => r.sets);
 export const takeSet = (setId: string) => call<{ set: TakeView }>(`${id(setId)}/take`).then((r) => r.set);
-export const submitSet = (setId: string, answers: Record<string, string>, startedAt: number | null) =>
-  call<SubmitResult>(`${id(setId)}/submit`, send("POST", { answers, started_at: startedAt }));
+/** ``revision`` is the version the student opened: answers are graded against it. */
+export const submitSet = (
+  setId: string,
+  answers: Record<string, string>,
+  startedAt: number | null,
+  revision: number,
+) => call<SubmitResult>(`${id(setId)}/submit`, send("POST", { answers, started_at: startedAt, revision }));

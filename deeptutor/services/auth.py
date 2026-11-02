@@ -267,8 +267,8 @@ def create_token(
     """Create a signed JWT for the given username and role."""
     from jose import jwt
 
+    record = _load_users().get(username) or {}
     if not user_id:
-        record = _load_users().get(username) or {}
         user_id = str(record.get("id") or "")
 
     payload = {
@@ -277,6 +277,8 @@ def create_token(
         "uid": user_id,
         "dcid": device_credential_id,
         "dcs": device_session_nonce,
+        # The password version this token was signed under (see decode_token).
+        "cv": int(record.get("credentials_version") or 0),
         "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS),
         "iat": datetime.now(timezone.utc),
     }
@@ -334,6 +336,9 @@ def decode_token(token: str) -> TokenPayload | None:
         if isinstance(changed_at, (int, float)) and isinstance(issued_at, (int, float)):
             if issued_at < int(changed_at):
                 return None
+        # Exact even within the second of a reset, where ``iat`` cannot tell.
+        if int(payload.get("cv") or 0) != int(record.get("credentials_version") or 0):
+            return None
         device_credential_id = str(payload.get("dcid") or "")
         device_session_nonce = str(payload.get("dcs") or "")
         if device_credential_id:
