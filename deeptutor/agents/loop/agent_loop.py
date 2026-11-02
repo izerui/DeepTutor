@@ -448,6 +448,8 @@ class AgentLoop:
         recovery_tools: frozenset[str] | None = None
         recovery_schemas: list[dict[str, Any]] | None = None
         continued_answer_parts: list[str] = []
+        round_max_tokens = self.pipeline.loop_max_tokens
+        next_round_max_tokens: int | None = None
         while True:
             settling = state.exploration_rounds >= exploration_budget
             if settling:
@@ -475,17 +477,20 @@ class AgentLoop:
                             messages,
                             state,
                             continued_answer_parts=continued_answer_parts,
+                            max_tokens=next_round_max_tokens,
                         )
                 if not settlement_started:
                     await self._begin_settlement(messages)
                     settlement_started = True
+            round_max_tokens = next_round_max_tokens or self.pipeline.loop_max_tokens
+            next_round_max_tokens = None
             try:
                 result = await self._call_llm(
                     messages=messages,
                     label=settlement_label if settling else explore_label,
                     call_kind="agent_loop_round",
                     trace_role="response" if settling else "explore",
-                    max_tokens=self.pipeline.loop_max_tokens,
+                    max_tokens=round_max_tokens,
                     tool_schemas=recovery_schemas
                     if recovery_tools is not None
                     else self.tool_schemas,
@@ -539,16 +544,18 @@ class AgentLoop:
             if not result.tool_calls:
                 final_text = self._clean(result.text)
                 if _finish_was_truncated(result.finish_reason) or _reasoning_budget_exhausted(
-                    result, self.pipeline.loop_max_tokens
+                    result, round_max_tokens
                 ):
-                    if _reasoning_budget_exhausted(result, self.pipeline.loop_max_tokens):
+                    budget_exhausted = _reasoning_budget_exhausted(result, round_max_tokens)
+                    policy = self.pipeline.reasoning_budget_recovery
+                    if budget_exhausted:
                         await self._release_deferred_output(result)
-                        if state.reasoning_budget_recoveries >= 1:
+                        if state.reasoning_budget_recoveries >= 1 or policy.strategy == "stop":
                             message = self.pipeline._t(
                                 "notices.reasoning_budget_exhausted",
                                 default=(
                                     "The model exhausted its output budget on internal "
-                                    "reasoning twice without producing an answer or "
+                                    "reasoning without producing an answer or "
                                     "tool action. Please retry, lower reasoning effort, "
                                     "or split the task into smaller steps."
                                 ),
@@ -566,26 +573,62 @@ class AgentLoop:
                                     "reasoning_chars": result.reasoning_chars,
                                     "completion_tokens": result.usage.get("completion_tokens"),
                                     "reasoning_tokens": result.usage.get("reasoning_tokens"),
+                                    "requested_max_tokens": round_max_tokens,
+                                    "recovery_strategy": policy.strategy,
+                                    "usage": self.pipeline.usage.summary(),
                                 },
                             )
                         state.reasoning_budget_recoveries += 1
+                        next_round_max_tokens = (
+                            policy.max_tokens
+                            if policy.strategy == "increase_output_budget"
+                            else self.pipeline.loop_max_tokens
+                        )
                     # ``length`` is an incomplete generation, not the model's
                     # decision to finish. Keep its visible prefix in protocol
                     # and ask for a continuation. The ordinary exploration /
                     # settlement counters still apply, so repeated truncation
                     # has the same hard upper bound as repeated tool calls.
                     await self._release_deferred_output(result)
-                    await self.stream.progress(
-                        self.pipeline._t(
-                            "notices.output_truncated",
-                            default=(
-                                "The model output reached its token limit; asked it to continue."
+                    if budget_exhausted:
+                        await self.stream.progress(
+                            self.pipeline._t(
+                                "notices.reasoning_budget_increased"
+                                if policy.strategy == "increase_output_budget"
+                                else "notices.reasoning_budget_recovery",
+                                previous_max_tokens=round_max_tokens,
+                                next_max_tokens=next_round_max_tokens,
+                                default=(
+                                    "Internal reasoning used the output budget; applying "
+                                    "the configured recovery policy."
+                                ),
                             ),
-                        ),
-                        source=self.source,
-                        stage=self.stage,
-                        metadata={"trace_kind": "warning"},
-                    )
+                            source=self.source,
+                            stage=self.stage,
+                            metadata={
+                                "trace_kind": "warning",
+                                "recovery_kind": "reasoning_budget",
+                                "recovery_strategy": policy.strategy,
+                                "previous_max_tokens": round_max_tokens,
+                                "next_max_tokens": next_round_max_tokens,
+                                "reasoning_effort": self.pipeline.reasoning_effort,
+                                "recovery_attempt": state.reasoning_budget_recoveries,
+                                "usage": self.pipeline.usage.summary(),
+                            },
+                        )
+                    else:
+                        await self.stream.progress(
+                            self.pipeline._t(
+                                "notices.output_truncated",
+                                default=(
+                                    "The model output reached its token limit; "
+                                    "asked it to continue."
+                                ),
+                            ),
+                            source=self.source,
+                            stage=self.stage,
+                            metadata={"trace_kind": "warning"},
+                        )
                     if result.visible_text:
                         continued_answer_parts.append(result.visible_text)
                     if _has_replayable_assistant_state(result):
@@ -926,7 +969,9 @@ class AgentLoop:
         reason: str = "budget",
         error: str = "",
         continued_answer_parts: list[str] | None = None,
+        max_tokens: int | None = None,
     ) -> LoopOutcome:
+        output_budget = max_tokens or self.pipeline.loop_max_tokens
         # A tool-free salvage reply cannot satisfy an outstanding interaction.
         # Empty text asks capabilities about state, without inventing prose to
         # validate or giving the model another chance to claim completion.
@@ -963,7 +1008,7 @@ class AgentLoop:
                 label=self.pipeline._t("labels.final_response", default="Final response"),
                 call_kind="llm_final_response",
                 trace_role="response",
-                max_tokens=self.pipeline.loop_max_tokens,
+                max_tokens=output_budget,
                 tool_schemas=None,  # tools disabled so the model must finish
             )
         except LLMProviderTransportError:
@@ -992,7 +1037,7 @@ class AgentLoop:
         # it. Everything else that reasoned without answering is a softer
         # miss: the turn still ends, but it says which kind of empty it was
         # rather than reporting an opaque model failure.
-        if _reasoning_budget_exhausted(result, self.pipeline.loop_max_tokens):
+        if _reasoning_budget_exhausted(result, output_budget):
             message = self.pipeline._t(
                 "notices.reasoning_budget_exhausted",
                 default=(
@@ -1008,6 +1053,7 @@ class AgentLoop:
                     "reasoning_chars": result.reasoning_chars,
                     "completion_tokens": result.usage.get("completion_tokens"),
                     "reasoning_tokens": result.usage.get("reasoning_tokens"),
+                    "requested_max_tokens": output_budget,
                 },
             )
         reasoning_without_answer = bool(result.reasoning_content) or bool(

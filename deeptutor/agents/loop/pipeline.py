@@ -299,6 +299,12 @@ class AgenticLoopPipeline:
         if max_tokens is not None:
             self._respond_max_tokens = max(256, int(max_tokens))
 
+        from .reasoning_recovery import ReasoningBudgetRecovery
+
+        self.reasoning_budget_recovery = ReasoningBudgetRecovery.from_config(
+            chat_cfg.get("reasoning_budget_recovery"), base_max_tokens=self.loop_max_tokens
+        )
+
         self._prompts: dict[str, Any] = self._load_prompt_pack()
         self._prompt_assembler = self.prompt_assembler_class(
             prompts=self._prompts,
