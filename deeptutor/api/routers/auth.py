@@ -737,6 +737,10 @@ def _learning_surface_for_path(
         ("/api/classes", "chat"),
         # Answering a teacher's practice set (spec 2026-10-29 §8.3).
         ("/api/practice-sets", "chat"),
+        # Tasks, homework, notifications and the home page (spec 2026-11-03 batch 1).
+        ("/api/tasks", "chat"),
+        ("/api/notifications", "chat"),
+        ("/api/home", "chat"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):
             return surface

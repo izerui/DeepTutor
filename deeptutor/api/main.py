@@ -579,6 +579,9 @@ from deeptutor.api.routers import (
     classes,
     publishing,
     practice_sets,
+    tasks,
+    notifications,
+    home,
     co_writer,
     courses,
     dashboard,
@@ -678,6 +681,10 @@ app.include_router(classes.router, prefix="/api/classes", tags=["classes"], depe
 app.include_router(classes.public_router, prefix="/api/class-invites", tags=["classes"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
 app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
+# Spec 2026-11-03 batch 1: tasks and homework, notifications, the student home.
+app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
+app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"], dependencies=_auth)
+app.include_router(home.router, prefix="/api/home", tags=["home"], dependencies=_auth)
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

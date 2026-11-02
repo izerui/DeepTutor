@@ -58,7 +58,8 @@ import {
   type SidebarNavLayout,
 } from "@/lib/sidebar-layout";
 
-const MODULE_NAV_HREFS = PRIMARY_NAV_HREFS.filter((href) => href !== "/chat");
+// Home and Chat are pinned above the modules (spec 2026-11-03 batch 1 §2).
+const MODULE_NAV_HREFS = PRIMARY_NAV_HREFS.filter((href) => href !== "/chat" && href !== "/start");
 
 const MORE_EXPANDED_KEY = "deeptutor.sidebar.moreExpanded";
 /** One curve and one duration for every part of the "More" disclosure, so the
@@ -548,9 +549,17 @@ export function SidebarHome({
   const active = isNavActive(pathname, entry.href);
   const locked = entry.requires ? !has(entry.requires) : false;
   const lockedTooltip = t("Locked — contact your administrator to get access.");
+  const homeActive = isNavActive(pathname, "/start");
   if (collapsed) {
     return (
-      <div className="mt-1 flex shrink-0 justify-center">
+      <div className="mt-1 flex shrink-0 flex-col items-center gap-1">
+        <RailRow
+          href="/start"
+          active={homeActive}
+          locked={false}
+          lockedTooltip={lockedTooltip}
+          onHomeClick={() => undefined}
+        />
         <RailRow
           href="/chat"
           active={active}
@@ -561,6 +570,7 @@ export function SidebarHome({
       </div>
     );
   }
+  const HomeIcon = NAV_BY_HREF.get("/start")!.icon;
   const Icon = entry.icon;
   const content = (
     <>
@@ -572,6 +582,18 @@ export function SidebarHome({
     "flex min-h-8 items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors";
   return (
     <div className="shrink-0 px-2 pb-1 pt-1">
+      <Link
+        href="/start"
+        prefetch={false}
+        className={`${className} ${
+          homeActive
+            ? "bg-[var(--accent)] font-medium text-[var(--foreground)]"
+            : "text-foreground/85 hover:bg-background/60 hover:text-[var(--foreground)]"
+        }`}
+      >
+        <HomeIcon size={15} strokeWidth={homeActive ? 1.9 : 1.6} className="shrink-0" />
+        <span>{t("Home")}</span>
+      </Link>
       {locked ? (
         <Tooltip
           label={t(entry.label)}

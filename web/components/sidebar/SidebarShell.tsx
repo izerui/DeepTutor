@@ -30,6 +30,7 @@ import type { ReadingCollectionLabel } from "@/lib/reading-workspace-api";
 import type { StudyCourse } from "@/lib/courses-api";
 import { useSidebarResize } from "@/hooks/useSidebarResize";
 import { SidebarHome, SidebarNav } from "@/components/sidebar/SidebarNav";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SECONDARY_NAV, isNavActive } from "@/components/sidebar/nav-entries";
 import Tooltip from "@/shared/ui/Tooltip";
 import {
@@ -242,6 +243,7 @@ export function SidebarShell({
             );
           })}
           {renderedFooter}
+          <NotificationBell collapsed />
           <VersionBadge onNavigate={closeDrawerOnNav} />
         </div>
       </aside>
@@ -381,6 +383,7 @@ export function SidebarShell({
               </Link>
             );
           })}
+          <NotificationBell />
           <VersionBadge onNavigate={closeDrawerOnNav} />
         </div>
       </div>

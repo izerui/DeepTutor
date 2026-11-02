@@ -1,6 +1,7 @@
 'use client'
 
 import { FeaturePage, pageGridClass } from '@/components/layout/FeaturePage'
+import { AssignedLane } from '@/components/tasks/AssignedLane'
 import { useRef, useState } from 'react'
 import {
   Archive,
@@ -171,6 +172,7 @@ export default function KanbanPage() {
           </p>
         )}
 
+        <AssignedLane />
         <div aria-busy={busy || !board} className={pageGridClass('board')}>
           {columns.map((column, index) => (
             <section

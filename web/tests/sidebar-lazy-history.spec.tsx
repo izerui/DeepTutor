@@ -114,9 +114,11 @@ it("keeps Home pinned even when a previous layout folded it into More", () => {
     }),
   );
   render(<SidebarShell />);
+  // Spec 2026-11-03 batch 1 §2: Home (/start) and Chat are both pinned above the modules.
   expect(screen.getAllByRole("link", { name: "Home" })).toHaveLength(1);
-  expect(screen.queryByRole("button", { name: "Arrange Home" })).toBeNull();
-  fireEvent.click(screen.getByRole("link", { name: "Home" }));
+  expect(screen.getAllByRole("link", { name: "Chat" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Arrange Chat" })).toBeNull();
+  fireEvent.click(screen.getByRole("link", { name: "Chat" }));
   expect(fixture.push).toHaveBeenCalledWith("/chat");
 });
 

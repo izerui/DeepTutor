@@ -349,13 +349,40 @@ class PracticeSetService:
             sets.append("reveal = ?")
             values.append(reveal)
         with store.write() as conn:
-            self._owned(conn, set_id)
+            row = self._owned(conn, set_id)
+            new_due = (float(due_at) if due_at is not None else None) if due_at != "" else row["due_at"]
+            if (
+                row["reveal"] == "after_due" and row["due_at"] is not None and _now() >= row["due_at"]
+                and (new_due is None or new_due > row["due_at"])
+            ):
+                # R10: the answers were shown at the deadline; a later one would hide nothing.
+                raise PracticeConflict("The answers were already shown; the deadline can no longer move later.")
             if sets:
                 conn.execute(
                     f"UPDATE practice_sets SET {', '.join(sets)}, updated_at = ? WHERE id = ?",
                     (*values, _now(), set_id),
                 )
+        if due_at != "" and row["status"] == "published" and new_due != row["due_at"]:
+            self._notify_unsubmitted(set_id, row["title"], "task_due_changed", {"due_at": new_due})
         return self.get(set_id)
+
+    def _notify_unsubmitted(self, set_id: str, title: str, kind: str, params: dict[str, Any]) -> None:
+        """Tell the students the set reaches who have not submitted it yet."""
+        from deeptutor.notifications.service import notify
+        from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
+
+        scope = get_scope(PRACTICE_SET, set_id)
+        reached = audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
+        with store.read() as conn:
+            done = {
+                r[0] for r in conn.execute(
+                    "SELECT DISTINCT student_id FROM practice_submissions WHERE set_id = ?", (set_id,)
+                )
+            } if conn else set()
+        notify(
+            reached - done, kind, {"title": title, **params},
+            link=f"/start?task=practice_set:{set_id}", dedupe_key=f"{kind}:practice_set:{set_id}:{params}",
+        )
 
     def publish(self, set_id: str) -> dict[str, Any]:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
@@ -387,6 +414,11 @@ class PracticeSetService:
                 "UPDATE practice_sets SET status = 'published', current_revision = ?, updated_at = ? "
                 "WHERE id = ?",
                 (revision, now, set_id),
+            )
+        if revision == 1:
+            self._notify_unsubmitted(
+                set_id, row["title"], "content_published",
+                {"content": "practice_set", "teacher": self.actor.username},
             )
         return self.get(set_id)
 

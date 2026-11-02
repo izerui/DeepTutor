@@ -35,6 +35,9 @@ ALL_STAGES = (
     "classes",
     "publish_targets",
     "practice_sets",
+    "tasks",
+    "task_records",
+    "notifications",
 )
 
 

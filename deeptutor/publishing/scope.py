@@ -35,9 +35,10 @@ BOOK = "book"
 KNOWLEDGE_BASE = "knowledge_base"
 MASTERY_PATH = "mastery_path"
 PRACTICE_SET = "practice_set"
-KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET)
+TASK = "task"
+KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, TASK)
 #: Kinds whose receivers are students only (they study or answer them).
-STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET)
+STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK)
 
 
 class ScopeError(Exception):
@@ -438,6 +439,7 @@ __all__ = [
     "MASTERY_PATH",
     "PRACTICE_SET",
     "STUDENT_KINDS",
+    "TASK",
     "Scope",
     "ScopeError",
     "ScopeForbidden",

@@ -189,7 +189,10 @@ function WithdrawSection() {
 function StudentView() {
   const { t } = useTranslation();
   const [sets, setSets] = useState<AssignedSet[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // ``?set=`` opens one directly (a task's "go do it" link, spec 2026-11-03 batch 1).
+  const [selected, setSelected] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("set"),
+  );
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {

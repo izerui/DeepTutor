@@ -11,6 +11,9 @@ stages, each in its own transaction:
     :func:`deeptutor.teaching.service.handle_account_deleted`
 ``classes`` / ``publish_targets`` / ``practice_sets``
     :mod:`deeptutor.classes.lifecycle` (spec 2026-10-29 §5, §7, §8)
+``tasks`` / ``task_records`` / ``notifications``
+    :mod:`deeptutor.tasks.service`, :mod:`deeptutor.notifications.service`
+    (spec 2026-11-03 batch 1 §7)
 
 A pending record (in the KB registry, see ``account_handoffs`` there) is
 written before the stages run and narrowed to the failed stages afterwards,
@@ -45,6 +48,10 @@ STAGES: tuple[str, ...] = (
     "classes",
     "publish_targets",
     "practice_sets",
+    # Spec 2026-11-03 batch 1 §7: tasks, homework and notifications follow too.
+    "tasks",
+    "task_records",
+    "notifications",
 )
 _TEACHING_STAGES = frozenset({"teacher_paths", "student_assignments", "path_materials"})
 #: Records one startup pass retries at most.
@@ -59,6 +66,18 @@ class HandoffBlocked(RuntimeError):
     def __init__(self, record: AccountHandoff) -> None:
         super().__init__(record.last_error)
         self.record = record
+
+
+def _tasks():
+    from deeptutor.tasks import service
+
+    return service
+
+
+def _notifications():
+    from deeptutor.notifications import service
+
+    return service
 
 
 def _ordered(stages: Sequence[str]) -> list[str]:
@@ -145,6 +164,9 @@ def run_stages(
         ("classes", lambda: lifecycle.forget_deleted_account(user_id)),
         ("publish_targets", lambda: lifecycle.forget_publish_targets(user_id)),
         ("practice_sets", lambda: lifecycle.transfer_practice_sets(user_id, successor_id)),
+        ("tasks", lambda: _tasks().transfer_tasks(user_id, successor_id)),
+        ("task_records", lambda: _tasks().forget_student(user_id)),
+        ("notifications", lambda: _notifications().forget_user(user_id)),
     ):
         if stage not in stages:
             continue

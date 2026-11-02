@@ -1,12 +1,14 @@
 import { LEARNING_HUB } from '@/lib/learning-routes'
 import {
   Bot,
+  ClipboardCheck,
   ClipboardList,
   GraduationCap,
   HeartHandshake,
   House,
   LayoutGrid,
   ListTodo,
+  MessagesSquare,
   PenLine,
   School,
   Settings,
@@ -40,10 +42,12 @@ export interface NavEntry {
  * the neighbour it follows below rather than at the bottom of their list.
  */
 export const PRIMARY_NAV: NavEntry[] = [
+  // Spec 2026-11-03 batch 1 §2: what is assigned, what the school published, what is one's own.
+  { href: '/start', label: 'Home', icon: House, tooltipKey: 'Home page tooltip', surfaces: ['chat'] },
   {
     href: '/chat',
-    label: 'Home',
-    icon: House,
+    label: 'Chat',
+    icon: MessagesSquare,
     tooltipKey: 'Home tooltip',
     requires: 'llm',
     surfaces: ['chat'],
@@ -73,6 +77,8 @@ export const PRIMARY_NAV: NavEntry[] = [
     tooltipKey: 'Practice sets tooltip',
     surfaces: ['chat'],
   },
+  // Spec 2026-11-03 batch 1: tasks and homework.
+  { href: '/tasks', label: 'Tasks', icon: ClipboardCheck, tooltipKey: 'Tasks tooltip', surfaces: ['chat'] },
   {
     href: '/kanban',
     label: 'Task Board',

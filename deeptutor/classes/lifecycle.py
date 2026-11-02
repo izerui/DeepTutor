@@ -89,6 +89,9 @@ def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
                 "WHERE owner_user_id = ? AND current_revision > 0",
                 (successor_id, time.time(), user_id),
             ).rowcount)
+    from deeptutor.tasks.service import transfer_tasks
+
+    moved["tasks"] = transfer_tasks(user_id, successor_id, published_only=True)
     if any(moved.values()):
         logger.info("Handed what %s published to %s: %s", user_id, successor_id, moved)
     return moved

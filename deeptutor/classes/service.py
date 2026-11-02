@@ -411,6 +411,12 @@ class ClassService:
                 "VALUES (?, ?, ?, ?, ?)",
                 (invitation_id, class_id, student_id, self.actor.id, _now()),
             )
+        from deeptutor.notifications.service import notify
+
+        notify(
+            [student_id], "class_invitation", {"class_name": row["name"], "teacher": self.actor.username},
+            link="/classes", dedupe_key=f"class_invitation:{invitation_id}",
+        )
         return {"id": invitation_id, "status": "pending"}
 
     def cancel_invitation(self, invitation_id: str) -> None:

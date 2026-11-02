@@ -20,6 +20,7 @@ from deeptutor.publishing.scope import (
     MASTERY_PATH,
     PRACTICE_SET,
     STUDENT_KINDS,
+    TASK,
     Scope,
     ScopeError,
     ScopeForbidden,
@@ -58,6 +59,18 @@ class PublishService:
             record = registry.get_kb(item_id)
             found = record is not None and owns(record.created_by, self.actor)
             info = {"owner": record.created_by, "public": record.visibility == "public"} if found else {}
+        elif kind == TASK:
+            from deeptutor.tasks.store import db as task_db
+
+            with task_db.read() as conn:
+                row = conn.execute(
+                    "SELECT owner_user_id, status, kind FROM tasks WHERE id = ?", (item_id,)
+                ).fetchone() if conn else None
+            found = row is not None and row["owner_user_id"] == self.actor.id
+            info = {
+                "owner": row["owner_user_id"], "public": row["status"] == "published",
+                "homework": row["kind"] == "homework",
+            } if found else {}
         elif kind == PRACTICE_SET:
             from deeptutor.practice_sets import store as practice_store
 
@@ -109,8 +122,8 @@ class PublishService:
             return stored
         if kind == MASTERY_PATH:
             return scopes._template_scope(item_id)
-        if kind == PRACTICE_SET:
-            return Scope(managed=False)  # a practice set reaches nobody until its scope is set
+        if kind in (PRACTICE_SET, TASK):
+            return Scope(managed=False)  # reaches nobody until its scope is set
         return Scope(everyone=bool(info["public"]), managed=False)
 
     def _reached(self, kind: str, scope: Scope, info: dict[str, Any]) -> set[str]:
@@ -174,6 +187,7 @@ class PublishService:
             if kind in STUDENT_KINDS and account["role"] != "student":
                 raise ScopeError(
                     "Only students receive Mastery Paths." if kind == MASTERY_PATH
+                    else "Only students receive tasks." if kind == TASK
                     else "Only students receive practice sets."
                 )
             # Spec §5: a teacher names only students of their own classes (any teacher may be named).
@@ -191,6 +205,9 @@ class PublishService:
             raise ScopeError("Publish this path before choosing who receives it.")
         current = self._current(kind, item_id, info)
         new = self._validated(kind, everyone, users, classes, current)
+        if info.get("homework") and new.everyone:
+            # Spec 2026-11-02 R22: homework goes to classes or chosen students only.
+            raise ScopeError("Homework goes to your classes or chosen students, not to everyone.")
         before = self._reached(kind, current, info)
         cut = before - self._reached(kind, new, info)
         if cut and not confirm:
