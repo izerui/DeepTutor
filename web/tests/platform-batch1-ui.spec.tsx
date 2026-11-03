@@ -197,7 +197,8 @@ it("joins, then offers to go study and to leave", async () => {
 it("shows no join button where the account cannot join, nor to the author", () => {
   const { rerender, container } = render(<JoinButton item={detail({ can_join: false })} onChanged={vi.fn()} />);
   expect(screen.queryByRole("button", { name: "Join" })).toBeNull();
-  expect(screen.getByText("Only student accounts can join this for now.")).toBeTruthy();
+  // Platform batch 2 §6: every role may join; ``can_join`` false simply shows nothing.
+  expect(screen.queryByText("Only student accounts can join this for now.")).toBeNull();
   rerender(<JoinButton item={detail({ mine: true, can_join: false })} onChanged={vi.fn()} />);
   expect(container.innerHTML).toBe("");
 });

@@ -176,3 +176,116 @@ async def reject(kind: str, item_id: str, body: ReasonBody) -> dict[str, Any]:
 @router.post("/review/{kind}/{item_id}/take-down")
 async def take_down(kind: str, item_id: str, body: ReasonBody) -> dict[str, Any]:
     return await _call(_listings().take_down, kind, item_id, body.reason)
+
+
+class ClassificationBody(BaseModel):
+    stages: list[str] = Field(default_factory=list, max_length=10)
+    subjects: list[str] = Field(default_factory=list, max_length=10)
+    difficulty: str = Field(default="", max_length=40)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.put("/review/{kind}/{item_id}/classification")
+async def classify(kind: str, item_id: str, body: ClassificationBody) -> dict[str, Any]:
+    return await _call(
+        _listings().classify, kind, item_id, stages=body.stages, subjects=body.subjects,
+        difficulty=body.difficulty, tags=body.tags,
+    )
+
+
+# ── administrators: classification and tags (batch 2 §8) ──
+
+
+class NodeUpdate(BaseModel):
+    name_zh: str | None = Field(default=None, max_length=100)
+    name_en: str | None = Field(default=None, max_length=100)
+    hidden: bool | None = None
+
+
+class NodeCreate(BaseModel):
+    parent: str = Field(default="", max_length=200)
+    name_zh: str = Field(default="", max_length=100)
+    name_en: str = Field(default="", max_length=100)
+
+
+class NodeMove(BaseModel):
+    direction: str = Field(pattern="^(up|down)$")
+
+
+class TagMerge(BaseModel):
+    from_tag: str = Field(max_length=100)
+    to_tag: str = Field(max_length=100)
+
+
+def _require_admin() -> None:
+    from deeptutor.classes.service import _role
+
+    if _role(get_current_user()) != "admin":
+        raise HTTPException(status_code=403, detail="Only administrators manage the classification.")
+
+
+async def _admin(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    from deeptutor.catalog.tags import TagError
+    from deeptutor.catalog.taxonomy import TaxonomyError
+
+    _require_admin()
+    try:
+        return await asyncio.to_thread(function, *args, **kwargs)
+    except (TaxonomyError, TagError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/admin/taxonomy")
+async def admin_taxonomy() -> dict[str, Any]:
+    from deeptutor.catalog.taxonomy import admin_tree
+
+    return await _admin(admin_tree)
+
+
+@router.put("/admin/taxonomy/nodes/{node_id}")
+async def update_node(node_id: str, body: NodeUpdate) -> dict[str, Any]:
+    from deeptutor.catalog.taxonomy import update_node as update
+
+    return await _admin(update, node_id, name_zh=body.name_zh, name_en=body.name_en, hidden=body.hidden)
+
+
+@router.post("/admin/taxonomy/nodes")
+async def add_node(body: NodeCreate) -> dict[str, Any]:
+    from deeptutor.catalog.taxonomy import add_node as add
+
+    return await _admin(add, body.parent, body.name_zh, body.name_en)
+
+
+@router.post("/admin/taxonomy/nodes/{node_id}/move")
+async def move_node(node_id: str, body: NodeMove) -> dict[str, Any]:
+    from deeptutor.catalog.taxonomy import move_node as move
+
+    return await _admin(move, node_id, body.direction)
+
+
+@router.delete("/admin/taxonomy/nodes/{node_id}")
+async def delete_node(node_id: str) -> dict[str, Any]:
+    from deeptutor.catalog.taxonomy import delete_node as delete
+
+    return await _admin(delete, node_id)
+
+
+@router.get("/admin/tags")
+async def admin_tags() -> dict[str, Any]:
+    from deeptutor.catalog.tags import list_tags
+
+    return await _admin(list_tags)
+
+
+@router.post("/admin/tags/merge")
+async def merge_tags(body: TagMerge) -> dict[str, Any]:
+    from deeptutor.catalog.tags import merge
+
+    return await _admin(merge, body.from_tag, body.to_tag)
+
+
+@router.delete("/admin/tags/merge/{tag}")
+async def unmerge_tag(tag: str) -> dict[str, Any]:
+    from deeptutor.catalog.tags import unmerge
+
+    return await _admin(unmerge, tag)

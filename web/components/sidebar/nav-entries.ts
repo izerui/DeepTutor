@@ -12,7 +12,6 @@ import {
   MessagesSquare,
   PenLine,
   PenSquare,
-  School,
   Settings,
   Store,
   type LucideIcon,
@@ -92,8 +91,7 @@ export const PRIMARY_NAV: NavEntry[] = [
     surfaces: ['reading', 'chat', 'books'],
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
-  // Spec 2026-10-29 §5: classes for teachers, students and administrators.
-  { href: '/classes', label: 'Classes', icon: School, tooltipKey: 'Classes tooltip', surfaces: ['chat'] },
+  // Platform batch 2 §3: classes are retired; the /classes page only explains that.
   // Spec 2026-10-29 §8: teachers write practice sets; students answer them.
   {
     href: '/practice-sets',

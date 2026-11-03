@@ -176,8 +176,6 @@ function extractDetail(detail: unknown): string {
 export async function register(
   username: string,
   password: string,
-  /** A class invite token: admits sign-up while public registration is closed. */
-  invite = "",
 ): Promise<{
   ok: boolean;
   role?: string;
@@ -188,7 +186,7 @@ export async function register(
     const res = await apiFetch(apiUrl("/api/auth/register"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(invite ? { username, password, invite } : { username, password }),
+      body: JSON.stringify({ username, password }),
       // Registration validation failures (e.g. 400/401) should surface inline
       // rather than bounce the user through the global login redirect.
       skipAuthRedirect: true,

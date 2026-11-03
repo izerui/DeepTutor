@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getTaxonomy, type Taxonomy, type TaxonomyName } from "@/lib/catalog-api";
+import { getAdminTaxonomy, getTaxonomy, type Taxonomy, type TaxonomyName } from "@/lib/catalog-api";
 
-/** The classification is built in and read-only (platform batch 1 §6): one request per page load. */
+/**
+ * One request per page load (platform batch 1 §6). Administrators may change it
+ * (platform batch 2 §8): :func:`resetTaxonomyCache` makes the next reader fetch again.
+ */
 let cached: Promise<Taxonomy> | null = null;
+/** Every entry, hidden ones too: names for ids the public classification no longer lists. */
+let cachedAll: Promise<Taxonomy> | null = null;
 
 export function loadTaxonomy(): Promise<Taxonomy> {
   if (!cached) {
@@ -18,9 +23,18 @@ export function loadTaxonomy(): Promise<Taxonomy> {
   return cached;
 }
 
-/** Tests start from an empty cache. */
+/** Administrators only; anyone else gets an empty classification (raw ids are shown). */
+export function loadFullTaxonomy(): Promise<Taxonomy> {
+  if (!cachedAll) {
+    cachedAll = getAdminTaxonomy().catch(() => ({ stages: [], difficulties: [] }));
+  }
+  return cachedAll;
+}
+
+/** After an administrator's change, and for tests: the next reader fetches again. */
 export function resetTaxonomyCache() {
   cached = null;
+  cachedAll = null;
 }
 
 export interface TaxonomyIndexEntry {

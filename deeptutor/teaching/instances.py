@@ -217,9 +217,15 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
     from deeptutor.multi_user.roles import current_role
     from deeptutor.services.workspace.context import current_workspace_id
 
-    if current_role() != "student" or current_workspace_id():
+    if current_workspace_id():
         return []
     user_id = get_current_user().id
+    if current_role() != "student":
+        # Teachers and administrators study paths they joined (platform batch 2 §6).
+        from deeptutor.catalog.enrollment import joined_by
+
+        if not any(kind == "mastery_path" for kind, _ in joined_by(user_id)):
+            return []
     from deeptutor.publishing.scope import reconcile_student_quietly
 
     # Spec 2026-10-29 §7.1: paths published to a class or everyone reach later joiners.

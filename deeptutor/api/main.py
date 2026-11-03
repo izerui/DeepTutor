@@ -190,6 +190,13 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(run_at_startup)
     except Exception:
         logger.exception("Market migration failed")
+    # Platform batch 2 §2: receivers become members, then classes stop counting.
+    try:
+        from deeptutor.catalog import retire_classes
+
+        await asyncio.to_thread(retire_classes.run_at_startup)
+    except Exception:
+        logger.exception("Retiring classes failed")
 
 
     # Initialize LLM client early so OPENAI_* env vars are available before

@@ -69,6 +69,26 @@ CREATE TABLE IF NOT EXISTS enrollments (
 CREATE INDEX IF NOT EXISTS idx_enrollments_item ON enrollments(kind, item_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
 
+-- Administrators' changes to the built-in classification, and their own entries (batch 2 §8.1).
+CREATE TABLE IF NOT EXISTS taxonomy_nodes (
+    node_id TEXT PRIMARY KEY,
+    -- '' for a stage; the parent's id otherwise. Only read for administrators' own entries.
+    parent TEXT NOT NULL DEFAULT '',
+    name_zh TEXT NOT NULL DEFAULT '',
+    name_en TEXT NOT NULL DEFAULT '',
+    hidden INTEGER NOT NULL DEFAULT 0,
+    position REAL,
+    custom INTEGER NOT NULL DEFAULT 0
+);
+
+-- A merged tag and the one it became (batch 2 §8.2), keyed by its case-folded spelling.
+CREATE TABLE IF NOT EXISTS tag_aliases (
+    from_key TEXT PRIMARY KEY,
+    from_tag TEXT NOT NULL,
+    to_tag TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS catalog_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -27,8 +27,6 @@ MIGRATED = "migrated"
 COURSE_PREFIX = "course:"
 #: Ways in that count as "joined" (the learner chose it); via a course does not.
 DIRECT = (SELF, MIGRATED)
-#: Kinds that only students may join in batch 1 (their study flows know students only).
-STUDENT_ONLY = (scopes.MASTERY_PATH, scopes.PRACTICE_SET, scopes.COURSE)
 
 
 class EnrollmentError(Exception):
@@ -108,12 +106,6 @@ def joined_by(user_id: str) -> dict[tuple[str, str], str]:
 # ── joining ────────────────────────────────────────────────
 
 
-def _role(user) -> str:
-    from deeptutor.classes.service import _role as live_role
-
-    return live_role(user)
-
-
 def join(user, kind: str, item_id: str) -> dict[str, Any]:
     from deeptutor.catalog import items, listings
 
@@ -127,8 +119,6 @@ def join(user, kind: str, item_id: str) -> dict[str, Any]:
 
     if info.owner in owner_ids(user):
         raise EnrollmentError("This is your own.")
-    if kind in STUDENT_ONLY and _role(user) != "student":
-        raise EnrollmentForbidden("Only student accounts can join this for now.")
     now = time.time()
     with db.write() as conn:
         conn.execute(

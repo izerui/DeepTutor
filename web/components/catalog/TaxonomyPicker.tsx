@@ -1,12 +1,12 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { Taxonomy } from "@/lib/catalog-api";
 
-import { pickName } from "./useTaxonomy";
+import { indexTaxonomy, loadFullTaxonomy, pickName, type TaxonomyIndexEntry } from "./useTaxonomy";
 
 export const MAX_STAGES = 3;
 export const MAX_SUBJECTS = 3;
@@ -54,6 +54,30 @@ export function TaxonomyPicker({
     else if (value.subjects.length < MAX_SUBJECTS) onChange({ ...value, subjects: [...value.subjects, id] });
   };
   const subjectsFull = value.subjects.length >= MAX_SUBJECTS;
+
+  // Platform batch 2 §8.1: an entry an administrator hid stays on what already uses
+  // it. The public classification omits it, so it is kept and shown here by name
+  // (administrators) or by its id, never dropped silently on save.
+  const known = useMemo(() => indexTaxonomy(taxonomy), [taxonomy]);
+  const kept = [...value.stages, ...value.subjects].filter((id) => !known.has(id));
+  const [fullIndex, setFullIndex] = useState<Map<string, TaxonomyIndexEntry> | null>(null);
+  const needFull = kept.length > 0;
+  useEffect(() => {
+    if (!needFull) return;
+    let alive = true;
+    loadFullTaxonomy()
+      .then((full) => alive && setFullIndex(indexTaxonomy(full)))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [needFull]);
+  const keptName = (id: string) => {
+    const found = fullIndex?.get(id);
+    return found ? pickName(found.names, lang) || id : id;
+  };
+  const dropKept = (id: string) =>
+    onChange({ ...value, stages: value.stages.filter((s) => s !== id), subjects: value.subjects.filter((s) => s !== id) });
 
   return (
     <div className="space-y-3">
@@ -122,6 +146,22 @@ export function TaxonomyPicker({
             ))
         )}
       </fieldset>
+
+      {kept.length > 0 && (
+        <fieldset className="space-y-1.5" disabled={disabled} data-testid="taxonomy-kept">
+          <legend className="text-[12.5px] font-medium">{t("No longer offered")}</legend>
+          <p className="text-[11.5px] text-[var(--muted-foreground)]">
+            {t("These stay as they are; they cannot be chosen again once removed.")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {kept.map((id) => (
+              <button key={id} type="button" aria-pressed className={chip(true)} onClick={() => dropKept(id)}>
+                {keptName(id)}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <label className="block space-y-1">
         <span className="text-[12.5px] font-medium">{t("Difficulty")}</span>

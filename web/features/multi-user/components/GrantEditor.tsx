@@ -750,7 +750,7 @@ export function GrantEditor({
                 <SectionTitle>{t("Student permissions")}</SectionTitle>
                 <div className="space-y-1.5 text-xs">
                   <p className="text-[11px] text-[var(--muted-foreground)]">
-                    {t("Default follows the student's classes, then the school default.")}
+                    {t("Default follows the system default.")}
                   </p>
                   {(
                     [

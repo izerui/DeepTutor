@@ -22,7 +22,7 @@ export function usePendingReviews(refresh = 0): number | null {
   return count;
 }
 
-/** The administration pages, side by side: accounts and the market review (with the pending count). */
+/** The administration pages, side by side: accounts, the market review (with the pending count), classification and tags. */
 export function AdminNav({ refresh = 0 }: { refresh?: number }) {
   const { t } = useTranslation();
   const pathname = usePathname() ?? "";
@@ -42,6 +42,7 @@ export function AdminNav({ refresh = 0 }: { refresh?: number }) {
           </span>
         ) : null}
       </Link>
+      <Link href="/admin/catalog" className={tab(pathname.startsWith("/admin/catalog"))}>{t("Classification and tags")}</Link>
     </nav>
   );
 }

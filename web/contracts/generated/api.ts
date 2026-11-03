@@ -1366,6 +1366,126 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/catalog/admin/tags": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Admin Tags */
+    readonly get: operations["admin_tags_api_catalog_admin_tags_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/tags/merge": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Merge Tags */
+    readonly post: operations["merge_tags_api_catalog_admin_tags_merge_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/tags/merge/{tag}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /** Unmerge Tag */
+    readonly delete: operations["unmerge_tag_api_catalog_admin_tags_merge__tag__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/taxonomy": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Admin Taxonomy */
+    readonly get: operations["admin_taxonomy_api_catalog_admin_taxonomy_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/taxonomy/nodes": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Add Node */
+    readonly post: operations["add_node_api_catalog_admin_taxonomy_nodes_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/taxonomy/nodes/{node_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Update Node */
+    readonly put: operations["update_node_api_catalog_admin_taxonomy_nodes__node_id__put"];
+    readonly post?: never;
+    /** Delete Node */
+    readonly delete: operations["delete_node_api_catalog_admin_taxonomy_nodes__node_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/admin/taxonomy/nodes/{node_id}/move": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Move Node */
+    readonly post: operations["move_node_api_catalog_admin_taxonomy_nodes__node_id__move_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/catalog/authors/{author_id}": {
     readonly parameters: {
       readonly query?: never;
@@ -1583,6 +1703,23 @@ export interface paths {
     readonly put?: never;
     /** Approve */
     readonly post: operations["approve_api_catalog_review__kind___item_id__approve_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/review/{kind}/{item_id}/classification": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Classify */
+    readonly put: operations["classify_api_catalog_review__kind___item_id__classification_put"];
+    readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -14152,6 +14289,20 @@ export interface components {
       /** Name */
       readonly name: string;
     };
+    /** ClassificationBody */
+    readonly ClassificationBody: {
+      /**
+       * Difficulty
+       * @default
+       */
+      readonly difficulty: string;
+      /** Stages */
+      readonly stages?: readonly string[];
+      /** Subjects */
+      readonly subjects?: readonly string[];
+      /** Tags */
+      readonly tags?: readonly string[];
+    };
     /** ClassUpdate */
     readonly ClassUpdate: {
       /** Archived */
@@ -16617,6 +16768,38 @@ export interface components {
        */
       readonly public_api_base: string;
     };
+    /** NodeCreate */
+    readonly NodeCreate: {
+      /**
+       * Name En
+       * @default
+       */
+      readonly name_en: string;
+      /**
+       * Name Zh
+       * @default
+       */
+      readonly name_zh: string;
+      /**
+       * Parent
+       * @default
+       */
+      readonly parent: string;
+    };
+    /** NodeMove */
+    readonly NodeMove: {
+      /** Direction */
+      readonly direction: string;
+    };
+    /** NodeUpdate */
+    readonly NodeUpdate: {
+      /** Hidden */
+      readonly hidden?: boolean | null;
+      /** Name En */
+      readonly name_en?: string | null;
+      /** Name Zh */
+      readonly name_zh?: string | null;
+    };
     /** NotebookCaptureRequest */
     readonly NotebookCaptureRequest: {
       /** Material Ids */
@@ -18524,6 +18707,13 @@ export interface components {
       /** Updated */
       readonly updated: number;
     };
+    /** TagMerge */
+    readonly TagMerge: {
+      /** From Tag */
+      readonly from_tag: string;
+      /** To Tag */
+      readonly to_tag: string;
+    };
     /** TaskBoard */
     readonly TaskBoard: {
       /** Cards */
@@ -20039,6 +20229,8 @@ export type SchemaChatResponseTimeoutUpdate =
 export type SchemaChatStarterSettingsUpdate =
   components["schemas"]["ChatStarterSettingsUpdate"];
 export type SchemaClassCreate = components["schemas"]["ClassCreate"];
+export type SchemaClassificationBody =
+  components["schemas"]["ClassificationBody"];
 export type SchemaClassUpdate = components["schemas"]["ClassUpdate"];
 export type SchemaCodexOAuthCallbackPayload =
   components["schemas"]["CodexOAuthCallbackPayload"];
@@ -20283,6 +20475,9 @@ export type SchemaMoveRecordRequest =
   components["schemas"]["MoveRecordRequest"];
 export type SchemaNetworkSettingsUpdate =
   components["schemas"]["NetworkSettingsUpdate"];
+export type SchemaNodeCreate = components["schemas"]["NodeCreate"];
+export type SchemaNodeMove = components["schemas"]["NodeMove"];
+export type SchemaNodeUpdate = components["schemas"]["NodeUpdate"];
 export type SchemaNotebookCaptureRequest =
   components["schemas"]["NotebookCaptureRequest"];
 export type SchemaNotebookEntryItem =
@@ -20480,6 +20675,7 @@ export type SchemaSyncFolderResponse =
 export type SchemaSyncObjectIn = components["schemas"]["SyncObjectIn"];
 export type SchemaSyncRequest = components["schemas"]["SyncRequest"];
 export type SchemaSyncResponse = components["schemas"]["SyncResponse"];
+export type SchemaTagMerge = components["schemas"]["TagMerge"];
 export type SchemaTaskBoard = components["schemas"]["TaskBoard"];
 export type SchemaTaskCard = components["schemas"]["TaskCard"];
 export type SchemaTaskCreate = components["schemas"]["TaskCreate"];
@@ -23537,6 +23733,310 @@ export interface operations {
       };
     };
   };
+  readonly admin_tags_api_catalog_admin_tags_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly merge_tags_api_catalog_admin_tags_merge_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["TagMerge"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly unmerge_tag_api_catalog_admin_tags_merge__tag__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly tag: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly admin_taxonomy_api_catalog_admin_taxonomy_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly add_node_api_catalog_admin_taxonomy_nodes_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["NodeCreate"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_node_api_catalog_admin_taxonomy_nodes__node_id__put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly node_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["NodeUpdate"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_node_api_catalog_admin_taxonomy_nodes__node_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly node_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly move_node_api_catalog_admin_taxonomy_nodes__node_id__move_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly node_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["NodeMove"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly author_api_catalog_authors__author_id__get: {
     readonly parameters: {
       readonly query?: never;
@@ -24088,6 +24588,48 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly classify_api_catalog_review__kind___item_id__classification_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ClassificationBody"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {

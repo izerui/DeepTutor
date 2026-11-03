@@ -254,15 +254,14 @@ def test_archiving_takes_it_out_of_the_market(as_account):
         assert _listings().get("practice_set", set_id)["status"] == "unlisted"
 
 
-def test_only_students_join_practice_sets_for_now(as_account):
-    from deeptutor.catalog.enrollment import EnrollmentError, EnrollmentForbidden
+def test_authors_do_not_join_their_own(as_account):
+    from deeptutor.catalog.enrollment import EnrollmentError
 
     set_id = _market_set(as_account)
     _list(as_account, "practice_set", set_id)
-    with pytest.raises(EnrollmentForbidden):
-        _join(as_account, "tom", "practice_set", set_id)
     with pytest.raises(EnrollmentError):
         _join(as_account, "tina", "practice_set", set_id)  # her own
+    _join(as_account, "tom", "practice_set", set_id)  # batch 2 §6: a teacher may
 
 
 # ── the market ─────────────────────────────────────────────

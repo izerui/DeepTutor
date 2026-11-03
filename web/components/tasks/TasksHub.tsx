@@ -1,20 +1,16 @@
 "use client";
 
-import { Plus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
-import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { bookApi } from "@/lib/book-api";
 import type { Book, Chapter } from "@/lib/book-types";
 import { listMySets, type PracticeSetSummary } from "@/lib/practice-sets-api";
 import {
   archiveTask,
-  createTask,
   deleteTask,
   getTask,
   gradeHomework,
@@ -27,7 +23,6 @@ import {
   type AssignedTask,
   type MyTask,
   type TaskDetail,
-  type TaskKind,
 } from "@/lib/tasks-api";
 import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
 
@@ -54,7 +49,7 @@ export default function TasksHub() {
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Tasks")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
           {isAdmin || isTeacher
-            ? t("Assign work to your classes, collect homework and grade it.")
+            ? t("Edit the tasks of your courses, collect homework and grade it.")
             : t("Everything your teachers assigned to you.")}
         </p>
       </header>
@@ -63,10 +58,15 @@ export default function TasksHub() {
   );
 }
 
-/** Tasks one by one, or courses that lay them out in order (batch 2 §5). */
+/**
+ * Tasks grouped by course, the courses themselves (platform batch 2 §5: tasks
+ * live in courses), and what the author joined to learn (§6).
+ */
 function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"tasks" | "courses">("tasks");
+  // ``?course=`` (a notification about a joined course) opens what the author joined.
+  const courseParam = useSearchParams().get("course");
+  const [tab, setTab] = useState<"tasks" | "courses" | "joined">(courseParam ? "joined" : "tasks");
   const [openTask, setOpenTask] = useState<string | null>(null);
   const tabClass = (on: boolean) =>
     `rounded-lg px-3 py-1.5 text-[13px] ${on ? "bg-[var(--muted)] font-medium text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`;
@@ -79,17 +79,35 @@ function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
         <button type="button" role="tab" aria-selected={tab === "courses"} className={tabClass(tab === "courses")} onClick={() => setTab("courses")}>
           {t("Courses")}
         </button>
+        <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => setTab("joined")}>
+          {t("Courses I joined")}
+        </button>
       </div>
       {tab === "tasks" ? (
-        <AuthorView key={openTask ?? ""} isAdmin={isAdmin} initialTask={openTask} />
-      ) : (
+        <AuthorView key={openTask ?? ""} initialTask={openTask} onGoToCourses={() => setTab("courses")} />
+      ) : tab === "courses" ? (
         <CourseAuthorView isAdmin={isAdmin} onOpenTask={(id) => { setOpenTask(id); setTab("tasks"); }} />
+      ) : (
+        <StudentView />
       )}
     </div>
   );
 }
 
-function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initialTask?: string | null }) {
+/** The author's tasks, by the course that holds them; old loose tasks under "Other tasks". */
+export function groupTasksByCourse(tasks: MyTask[]): { id: string; title: string; tasks: MyTask[] }[] {
+  const groups = new Map<string, { id: string; title: string; tasks: MyTask[] }>();
+  for (const task of tasks) {
+    const key = task.course_id || "";
+    if (!groups.has(key)) groups.set(key, { id: key, title: task.course_title || "", tasks: [] });
+    groups.get(key)!.tasks.push(task);
+  }
+  const loose = groups.get("");
+  groups.delete("");
+  return [...[...groups.values()].sort((a, b) => a.title.localeCompare(b.title)), ...(loose ? [loose] : [])];
+}
+
+function AuthorView({ initialTask = null, onGoToCourses }: { initialTask?: string | null; onGoToCourses: () => void }) {
   const { t } = useTranslation();
   const [tasks, setTasks] = useState<MyTask[] | null>(null);
   // ``?task=`` (a notification's link) opens one task, also when already on this page.
@@ -100,9 +118,6 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
     setSeenParam(taskParam);
     if (taskParam) setSelected(taskParam);
   }
-  // R21: administrators assign no homework, so their first choice is a practice set.
-  const [kind, setKind] = useState<TaskKind>(isAdmin ? "practice_set" : "homework");
-  const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {
@@ -112,77 +127,47 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
   }, [t]);
   useEffect(refresh, [refresh]);
 
-  const kinds: TaskKind[] = isAdmin
-    ? ["practice_set", "mastery_path", "book", "note"] // R21: no homework from administrators
-    : ["homework", "practice_set", "mastery_path", "book", "note"];
-
   return (
     <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
       <aside className="space-y-3">
-        <form
-          className="space-y-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!title.trim()) return;
-            createTask(kind, title.trim())
-              .then((created) => {
-                setTitle("");
-                setSelected(created.id);
-                refresh();
-              })
-              .catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
-          }}
-        >
-          <select
-            aria-label={t("Kind of task")}
-            className={inputClass}
-            value={kind}
-            onChange={(e) => setKind(e.target.value as TaskKind)}
-          >
-            {kinds.map((k) => (
-              <option key={k} value={k}>{t(KIND_LABEL[k])}</option>
-            ))}
-          </select>
-          <div className="flex gap-2">
-            <input
-              className={inputClass}
-              value={title}
-              maxLength={200}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("New task title")}
-            />
-            <button type="submit" className={primaryClass} disabled={!title.trim()} aria-label={t("Create")}>
-              <Plus size={14} />
-            </button>
-          </div>
-        </form>
+        <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-3" data-testid="tasks-in-courses-hint">
+          <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Tasks are added inside a course.")}</p>
+          <button type="button" className={actionClass} onClick={onGoToCourses}>{t("Go to courses")}</button>
+        </div>
         {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
         {tasks === null ? (
           <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
         ) : tasks.length === 0 ? (
           <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No tasks yet.")}</p>
         ) : (
-          <ul className="space-y-1">
-            {tasks.map((task) => (
-              <li key={task.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(task.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-[var(--muted)] ${
-                    selected === task.id ? "bg-[var(--muted)]" : ""
-                  }`}
-                >
-                  <span className="block truncate font-medium text-[var(--foreground)]">{task.title}</span>
-                  <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                    {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
-                    {task.status !== "draft" && ` · ${t("{{done}} / {{total}} done", { done: task.completed, total: task.total })}`}
-                    {task.to_grade > 0 && ` · ${t("{{count}} to grade", { count: task.to_grade })}`}
-                    {!task.target_available && ` · ${t("Content unavailable")}`}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          groupTasksByCourse(tasks).map((group) => (
+            <section key={group.id || "other"} aria-label={group.id ? group.title : t("Other tasks")} className="space-y-1">
+              <h2 className="px-1 text-[12px] font-semibold text-[var(--muted-foreground)]">
+                {group.id ? group.title : t("Other tasks")}
+              </h2>
+              <ul className="space-y-1">
+                {group.tasks.map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(task.id)}
+                      className={`w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-[var(--muted)] ${
+                        selected === task.id ? "bg-[var(--muted)]" : ""
+                      }`}
+                    >
+                      <span className="block truncate font-medium text-[var(--foreground)]">{task.title}</span>
+                      <span className="text-[11.5px] text-[var(--muted-foreground)]">
+                        {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
+                        {task.status !== "draft" && ` · ${t("{{done}} / {{total}} done", { done: task.completed, total: task.total })}`}
+                        {task.to_grade > 0 && ` · ${t("{{count}} to grade", { count: task.to_grade })}`}
+                        {!task.target_available && ` · ${t("Content unavailable")}`}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))
         )}
       </aside>
       <section className="min-w-0">
@@ -190,7 +175,7 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
           <TaskEditor key={selected} taskId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
-            {t("Pick a task or create one.")}
+            {t("Pick a task to edit or grade it.")}
           </div>
         )}
       </section>
@@ -316,7 +301,6 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [first, setFirst] = useState<FirstPublishChoice>({ needed: true, ready: false });
 
   const load = useCallback(() => {
     getTask(taskId).then(setTask).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
@@ -395,11 +379,15 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
         <p className="text-[12.5px]">{t("Asks for: {{title}}", { title: task.target_title })}</p>
       ) : null}
 
-      {draft && <FirstPublishScope kind="task" itemId={task.id} onChange={setFirst} />}
+      {draft && !task.course_id && (
+        <p className="text-[11.5px] text-[var(--muted-foreground)]">
+          {t("This task is in no course. Add it to a course; it is published with the course.")}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
-        {draft && (
-          <button type="button" className={primaryClass} disabled={!first.ready}
-            onClick={() => void run(() => publishTask(task.id, first.scope))}>
+        {/* Platform batch 2 §5: a task goes out with its course, never on its own. */}
+        {draft && task.course_id && (
+          <button type="button" className={primaryClass} onClick={() => void run(() => publishTask(task.id))}>
             {t("Publish")}
           </button>
         )}
@@ -418,11 +406,6 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
       </div>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 
-      {task.status === "published" && (
-        <div className="rounded-xl border border-[var(--border)] p-3">
-          <PublishScopeEditor kind="task" itemId={task.id} onSaved={load} />
-        </div>
-      )}
       {!draft && <StudentsTable task={task} onChanged={(next) => { setTask(next); onChanged(); }} />}
     </fieldset>
   );

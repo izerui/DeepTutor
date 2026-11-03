@@ -105,6 +105,14 @@ def workbench(actor=None) -> dict[str, Any]:
     role = _role(actor)
     if role != "teacher":
         return {"role": role}
+    from deeptutor.publishing.scope import classes_retired
+
+    if classes_retired():
+        # Platform batch 2 §7: no classes; who needs attention moves to course reports (batch 3).
+        return {
+            "role": role, "to_grade": to_grade(actor.id), "attention": [], "attention_total": 0,
+            "classes": [], "sent": _sent(actor),
+        }
     flags = attention.for_teacher(actor.id)
     accounts = _accounts()
     first_class = _first_class(actor.id)

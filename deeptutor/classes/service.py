@@ -566,6 +566,10 @@ class ClassService:
         self._require_student(accounts, student_id)
         if len(new_password or "") < 8:
             raise ClassError("Password must be at least 8 characters.")
+        from deeptutor.publishing.scope import classes_retired
+
+        if not self._is_admin() and classes_retired():
+            raise ClassForbidden("Only administrators reset passwords.")
         if not self._is_admin() and (
             _role(self.actor) != "teacher" or student_id not in teacher_student_ids(self.actor.id)
         ):
@@ -615,7 +619,17 @@ def _live_link(conn, token: str):
 
 
 def teacher_student_ids(teacher_id: str) -> set[str]:
-    """Students in the active classes this teacher teaches."""
+    """Students in the active classes this teacher teaches.
+
+    Once classes are retired (platform batch 2 §2.3): the people who joined
+    this teacher's content.
+    """
+    from deeptutor.publishing.scope import classes_retired
+
+    if classes_retired():
+        from deeptutor.catalog.learners import learners_of
+
+        return learners_of(teacher_id)
     with store.read() as conn:
         if conn is None:
             return set()
@@ -649,7 +663,14 @@ def _class_policy(row) -> dict[str, bool]:
 
 
 def class_student_policy(student_id: str) -> dict[str, bool]:
-    """What the student's active classes say, per key: any allow wins (spec §6)."""
+    """What the student's active classes say, per key: any allow wins (spec §6).
+
+    Nothing once classes are retired (platform batch 2 §2.2: it was kept in personal settings).
+    """
+    from deeptutor.publishing.scope import classes_retired
+
+    if classes_retired():
+        return {}
     with store.read() as conn:
         if conn is None:
             return {}
@@ -671,7 +692,10 @@ def class_student_policy(student_id: str) -> dict[str, bool]:
 def class_ai_daily_tokens(student_id: str) -> int | None:
     """The most generous daily AI limit among the student's active classes, if any sets one."""
     from deeptutor.multi_user.roles import AI_DAILY_TOKENS, widest_ai_limit
+    from deeptutor.publishing.scope import classes_retired
 
+    if classes_retired():
+        return None
     with store.read() as conn:
         if conn is None:
             return None

@@ -245,7 +245,7 @@ class CourseService:
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)
         try:
-            if scope is None or (scope.empty and not scopes.is_join_only()):
+            if scope is None or (scope.empty and not (scopes.is_join_only() or scopes.classes_retired())):
                 raise scopes.ScopeRequired()
             receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id)
             for task_id in published:
@@ -307,8 +307,7 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     from deeptutor.publishing.provenance import provenance
 
     actor = actor or get_current_user()
-    if _role(actor) != "student":
-        return []
+    student = _role(actor) == "student"
     with db.read() as conn:
         if conn is None:
             return []
@@ -324,8 +323,12 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             )]
             for r in rows
         }
-    classes = scopes.member_class_ids(actor.id)
-    reached = [r for r in rows if (s := scopes.get_scope(scopes.COURSE, r["id"])) and scopes._reaches(s, actor.id, classes)]
+    classes = scopes.member_class_ids(actor.id) if student else set()
+    # Students, and anyone who joined (platform batch 2 §6).
+    reached = [
+        r for r in rows if (s := scopes.get_scope(scopes.COURSE, r["id"])) and r["owner_user_id"] != actor.id
+        and ((student and scopes._reaches(s, actor.id, classes)) or actor.id in s.members)
+    ]
     if not reached:
         return []
     entries = {e["key"]: e for e in StudentTasks(actor).assigned()}

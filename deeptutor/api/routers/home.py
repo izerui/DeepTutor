@@ -71,10 +71,13 @@ async def home() -> dict[str, Any]:
             "history_count": sum(1 for t in tasks if t["state"] in ("completed", "closed")),
         }
         from deeptutor.classes.announcements import AnnouncementService
+        from deeptutor.publishing.scope import classes_retired
 
+        retired = classes_retired()
         for name, loader in (
             ("market", _market), ("mine", _mine), ("mine_courses", _mine_courses),
-            ("announcements", AnnouncementService().for_home),
+            # Platform batch 2 §3: class announcements go with the classes.
+            ("announcements", (lambda: []) if retired else AnnouncementService().for_home),
         ):
             try:
                 sections[name] = loader()

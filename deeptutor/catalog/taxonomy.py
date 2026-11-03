@@ -194,45 +194,124 @@ MAX_SUBJECTS = 3
 
 
 @lru_cache(maxsize=1)
-def tree() -> dict[str, Any]:
-    """The whole classification, as the client receives it."""
+def _preset() -> dict[str, dict[str, Any]]:
+    """The built-in nodes: id -> {parent, names, position}."""
+    out: dict[str, dict[str, Any]] = {}
+    for s_index, (key, zh, en, subjects) in enumerate(_STAGES):
+        out[key] = {"parent": "", "names": {"zh": zh, "en": en}, "position": s_index * 10.0}
+        for j, (sub, szh, sen, children) in enumerate(subjects):
+            sid = f"{key}.{sub}"
+            out[sid] = {"parent": key, "names": {"zh": szh, "en": sen}, "position": j * 10.0}
+            for k, (child, czh, cen) in enumerate(children):
+                out[f"{sid}.{child}"] = {"parent": sid, "names": {"zh": czh, "en": cen}, "position": k * 10.0}
+    return out
+
+
+_merged_cache: dict[str, Any] = {}
+
+
+def _signature() -> tuple[str, int]:
+    from deeptutor.catalog.store import db
+
+    path = db.path()
+    try:
+        return str(path), path.stat().st_mtime_ns
+    except OSError:
+        return str(path), 0
+
+
+def _nodes() -> dict[str, dict[str, Any]]:
+    """Built-in nodes with administrators' changes, plus their own entries.
+
+    Each: {parent, names, position, hidden, custom}. Re-read when the store changes.
+    """
+    signature = _signature()
+    if _merged_cache.get("signature") == signature:
+        return _merged_cache["nodes"]
+    from deeptutor.catalog.store import db
+
+    nodes = {
+        node_id: {**value, "names": dict(value["names"]), "hidden": False, "custom": False}
+        for node_id, value in _preset().items()
+    }
+    try:
+        with db.read() as conn:
+            rows = conn.execute("SELECT * FROM taxonomy_nodes").fetchall() if conn else []
+    except Exception:
+        rows = []  # an unreadable store shows the built-in classification
+    for row in rows:
+        if row["custom"]:
+            nodes[row["node_id"]] = {
+                "parent": row["parent"], "names": {"zh": row["name_zh"], "en": row["name_en"]},
+                "position": row["position"] if row["position"] is not None else 1e6,
+                "hidden": bool(row["hidden"]), "custom": True,
+            }
+            continue
+        found = nodes.get(row["node_id"])
+        if found is None:
+            continue
+        if row["name_zh"]:
+            found["names"]["zh"] = row["name_zh"]
+        if row["name_en"]:
+            found["names"]["en"] = row["name_en"]
+        found["hidden"] = bool(row["hidden"])
+        if row["position"] is not None:
+            found["position"] = row["position"]
+    # An entry under a node that is gone has nowhere to show.
+    nodes = {k: v for k, v in nodes.items() if not v["parent"] or v["parent"] in nodes}
+    _merged_cache.update(signature=signature, nodes=nodes)
+    return nodes
+
+
+def _children(nodes: dict[str, dict[str, Any]], parent: str, include_hidden: bool) -> list[str]:
+    return sorted(
+        (k for k, v in nodes.items() if v["parent"] == parent and (include_hidden or not v["hidden"])),
+        key=lambda k: (nodes[k]["position"], k),
+    )
+
+
+def tree(*, include_hidden: bool = False) -> dict[str, Any]:
+    """The classification as the client receives it; *include_hidden* for administrators."""
+    nodes = _nodes()
+
+    def shape(node_id: str) -> dict[str, Any]:
+        out: dict[str, Any] = {"id": node_id, "names": nodes[node_id]["names"]}
+        if include_hidden:
+            out["hidden"] = nodes[node_id]["hidden"]
+            out["custom"] = nodes[node_id]["custom"]
+        return out
+
     stages = []
-    for key, zh, en, subjects in _STAGES:
-        stages.append({
-            "id": key,
-            "names": {"zh": zh, "en": en},
-            "subjects": [
-                {
-                    "id": f"{key}.{sub}",
-                    "names": {"zh": szh, "en": sen},
-                    "children": [
-                        {"id": f"{key}.{sub}.{child}", "names": {"zh": czh, "en": cen}}
-                        for child, czh, cen in children
-                    ],
-                }
-                for sub, szh, sen, children in subjects
-            ],
-        })
+    for stage in _children(nodes, "", include_hidden):
+        subjects = []
+        for subject in _children(nodes, stage, include_hidden):
+            subjects.append({
+                **shape(subject),
+                "children": [shape(child) for child in _children(nodes, subject, include_hidden)],
+            })
+        stages.append({**shape(stage), "subjects": subjects})
     return {
         "stages": stages,
         "difficulties": [{"id": key, "names": {"zh": zh, "en": en}} for key, zh, en in DIFFICULTIES],
     }
 
 
-@lru_cache(maxsize=1)
 def _index() -> dict[str, dict[str, Any]]:
-    """Every node id -> {kind, stage, parent, names}."""
+    """Every node id, hidden ones too -> {kind, stage, parent, names, hidden}."""
+    nodes = _nodes()
     out: dict[str, dict[str, Any]] = {}
-    for stage in tree()["stages"]:
-        out[stage["id"]] = {"kind": "stage", "stage": stage["id"], "parent": None, "names": stage["names"]}
-        for subject in stage["subjects"]:
-            out[subject["id"]] = {
-                "kind": "subject", "stage": stage["id"], "parent": None, "names": subject["names"],
-            }
-            for child in subject["children"]:
-                out[child["id"]] = {
-                    "kind": "subject", "stage": stage["id"], "parent": subject["id"], "names": child["names"],
-                }
+    for node_id, value in nodes.items():
+        chain = [node_id]
+        while nodes[chain[-1]]["parent"]:
+            chain.append(nodes[chain[-1]]["parent"])
+        stage = chain[-1]
+        out[node_id] = {
+            "kind": "stage" if node_id == stage else "subject",
+            "stage": stage,
+            "parent": value["parent"] if len(chain) == 3 else None,
+            "names": value["names"],
+            "hidden": value["hidden"] or any(nodes[c]["hidden"] for c in chain[1:]),
+        }
     return out
 
 
@@ -271,21 +350,32 @@ class TaxonomyError(ValueError):
     pass
 
 
-def validate(stages: list[str], subjects: list[str], difficulty: str) -> tuple[list[str], list[str], str]:
-    """Clean and check a listing's classification; empty lists are allowed here (drafts)."""
+def validate(
+    stages: list[str], subjects: list[str], difficulty: str, *, keep: tuple[str, ...] | list[str] = (),
+) -> tuple[list[str], list[str], str]:
+    """Clean and check a listing's classification; empty lists are allowed here (drafts).
+
+    A hidden entry is refused unless the listing already had it (*keep*, batch 2 §8.1).
+    """
     stages = list(dict.fromkeys(str(s) for s in stages or []))
     subjects = list(dict.fromkeys(str(s) for s in subjects or []))
     if len(stages) > MAX_STAGES:
         raise TaxonomyError(f"Choose at most {MAX_STAGES} stages.")
     if len(subjects) > MAX_SUBJECTS:
         raise TaxonomyError(f"Choose at most {MAX_SUBJECTS} subjects.")
+    index = _index()
+    for value in (*stages, *subjects):
+        found = index.get(value)
+        if found and found["hidden"] and value not in keep:
+            raise TaxonomyError("This entry of the classification is no longer offered.")
     for stage in stages:
-        if not is_stage(stage):
+        if (index.get(stage) or {}).get("kind") != "stage":
             raise TaxonomyError("Unknown stage.")
     for subject in subjects:
-        if not is_subject(subject):
+        found = index.get(subject)
+        if not found or found["kind"] != "subject":
             raise TaxonomyError("Unknown subject.")
-        if stage_of(subject) not in stages:
+        if found["stage"] not in stages:
             raise TaxonomyError("Each subject must belong to one of the chosen stages.")
     difficulty = str(difficulty or "")
     if difficulty and not is_difficulty(difficulty):
@@ -293,7 +383,140 @@ def validate(stages: list[str], subjects: list[str], difficulty: str) -> tuple[l
     return stages, subjects, difficulty
 
 
+# ── administrators (batch 2 §8.1) ──────────────────────────
+
+NAME_MAX = 40
+
+
+def _in_use() -> dict[str, int]:
+    """How many listings name each node."""
+    import json
+
+    from deeptutor.catalog.store import db
+
+    counts: dict[str, int] = {}
+    with db.read() as conn:
+        rows = conn.execute("SELECT stages_json, subjects_json FROM listings").fetchall() if conn else []
+    for row in rows:
+        for value in {*json.loads(row["stages_json"] or "[]"), *json.loads(row["subjects_json"] or "[]")}:
+            counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def admin_tree() -> dict[str, Any]:
+    counts = _in_use()
+    shaped = tree(include_hidden=True)
+
+    def count(entry: dict[str, Any]) -> dict[str, Any]:
+        entry["in_use"] = counts.get(entry["id"], 0)
+        return entry
+
+    for stage in shaped["stages"]:
+        count(stage)
+        for subject in stage["subjects"]:
+            count(subject)
+            for child in subject["children"]:
+                count(child)
+    return shaped
+
+
+def _clean_name(value: str | None) -> str:
+    name = " ".join(str(value or "").split())
+    if len(name) > NAME_MAX:
+        raise TaxonomyError(f"A name has at most {NAME_MAX} characters.")
+    return name
+
+
+def _upsert(conn, node_id: str, **values: Any) -> None:
+    conn.execute("INSERT INTO taxonomy_nodes (node_id) VALUES (?) ON CONFLICT(node_id) DO NOTHING", (node_id,))
+    for column, value in values.items():
+        conn.execute(f"UPDATE taxonomy_nodes SET {column} = ? WHERE node_id = ?", (value, node_id))  # nosec B608
+
+
+def update_node(node_id: str, *, name_zh: str | None = None, name_en: str | None = None,
+                hidden: bool | None = None) -> dict[str, Any]:
+    from deeptutor.catalog.store import db
+
+    nodes = _nodes()
+    if node_id not in nodes:
+        raise TaxonomyError("Unknown entry.")
+    values: dict[str, Any] = {}
+    if name_zh is not None:
+        values["name_zh"] = _clean_name(name_zh)
+    if name_en is not None:
+        values["name_en"] = _clean_name(name_en)
+    if nodes[node_id]["custom"] and ("name_zh" in values or "name_en" in values):
+        if not (values.get("name_zh", nodes[node_id]["names"]["zh"]) or values.get("name_en", nodes[node_id]["names"]["en"])):
+            raise TaxonomyError("Give it a name.")
+    if hidden is not None:
+        values["hidden"] = int(bool(hidden))
+    with db.write() as conn:
+        _upsert(conn, node_id, **values)
+    return admin_tree()
+
+
+def move_node(node_id: str, direction: str) -> dict[str, Any]:
+    from deeptutor.catalog.store import db
+
+    nodes = _nodes()
+    if node_id not in nodes or direction not in ("up", "down"):
+        raise TaxonomyError("Unknown entry.")
+    siblings = _children(nodes, nodes[node_id]["parent"], True)
+    index = siblings.index(node_id)
+    other = index - 1 if direction == "up" else index + 1
+    if not 0 <= other < len(siblings):
+        return admin_tree()
+    siblings[index], siblings[other] = siblings[other], siblings[index]
+    with db.write() as conn:
+        for position, sibling in enumerate(siblings):
+            _upsert(conn, sibling, position=position * 10.0)
+    return admin_tree()
+
+
+def add_node(parent: str, name_zh: str, name_en: str) -> dict[str, Any]:
+    import uuid
+
+    from deeptutor.catalog.store import db
+
+    nodes = _nodes()
+    parent = str(parent or "")
+    if parent:
+        found = node(parent)
+        if found is None or (found["kind"] == "subject" and found["parent"] is not None):
+            raise TaxonomyError("Entries go under a stage or a first-level subject.")
+    zh, en = _clean_name(name_zh), _clean_name(name_en)
+    if not (zh or en):
+        raise TaxonomyError("Give it a name.")
+    node_id = f"{parent + '.' if parent else ''}custom_{uuid.uuid4().hex[:8]}"
+    last = max((nodes[s]["position"] for s in _children(nodes, parent, True)), default=0.0)
+    with db.write() as conn:
+        conn.execute(
+            "INSERT INTO taxonomy_nodes (node_id, parent, name_zh, name_en, hidden, position, custom) "
+            "VALUES (?, ?, ?, ?, 0, ?, 1)",
+            (node_id, parent, zh, en, last + 10.0),
+        )
+    return admin_tree()
+
+
+def delete_node(node_id: str) -> dict[str, Any]:
+    from deeptutor.catalog.store import db
+
+    nodes = _nodes()
+    if node_id not in nodes:
+        raise TaxonomyError("Unknown entry.")
+    if not nodes[node_id]["custom"]:
+        raise TaxonomyError("Built-in entries cannot be deleted; hide them instead.")
+    under = [k for k in nodes if k == node_id or k.startswith(node_id + ".")]
+    counts = _in_use()
+    if any(counts.get(k) for k in under):
+        raise TaxonomyError("Content uses this entry; hide it instead.")
+    with db.write() as conn:
+        conn.executemany("DELETE FROM taxonomy_nodes WHERE node_id = ?", [(k,) for k in under])
+    return admin_tree()
+
+
 __all__ = [
-    "DIFFICULTIES", "MAX_STAGES", "MAX_SUBJECTS", "TaxonomyError", "ancestors", "is_difficulty", "is_stage",
-    "is_subject", "node", "stage_of", "tree", "validate",
+    "DIFFICULTIES", "MAX_STAGES", "MAX_SUBJECTS", "TaxonomyError", "add_node", "admin_tree", "ancestors",
+    "delete_node", "is_difficulty", "is_stage", "is_subject", "move_node", "node", "stage_of", "tree",
+    "update_node", "validate",
 ]

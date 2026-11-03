@@ -1343,6 +1343,12 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     first_user = is_first_user()
     invite = body.invite.strip()
     invite_error = ""
+    from deeptutor.publishing.scope import classes_retired
+
+    retired = await asyncio.to_thread(classes_retired)
+    if retired:
+        # Platform batch 2 §4: an invite link no longer joins a class nor opens closed sign-up.
+        invite = ""
     from deeptutor.multi_user import rate_limit
 
     address = _client_address(request)
@@ -1366,7 +1372,10 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
         elif not is_open:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Registration is closed. Ask your teacher for an invite link.",
+                detail=(
+                    "Registration is closed. Ask an administrator for an account." if retired
+                    else "Registration is closed. Ask your teacher for an invite link."
+                ),
             )
 
     existing = {u["username"] for u in list_users()}

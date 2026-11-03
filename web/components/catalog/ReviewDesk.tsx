@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
 import {
   approveListing,
+  classifyListing,
   getReviewItem,
   listReviewListed,
   listReviewQueue,
@@ -20,6 +21,8 @@ import {
 import { AdminNav } from "./AdminNav";
 import { authorLabel, catalogError, formatDay, itemHref, kindLabel, STATUS_TONE, statusLabel } from "./catalog-format";
 import { CatalogPreview } from "./CatalogPreview";
+import { TagInput } from "./TagInput";
+import { TaxonomyPicker } from "./TaxonomyPicker";
 import { useTaxonomy } from "./useTaxonomy";
 
 export const REASON_MAX = 500;
@@ -50,10 +53,79 @@ function eventLabel(action: string, t: (key: string) => string): string {
   }
 }
 
+/**
+ * Platform batch 2 §8.3: an administrator corrects the stages, subjects,
+ * difficulty and tags of a listing in the market; never its title, summary or content.
+ */
+export function ClassificationEditor({
+  item,
+  onSaved,
+  onCancel,
+}: {
+  item: CatalogEntry;
+  onSaved: (next: CatalogEntry) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const { taxonomy, error: taxonomyError } = useTaxonomy();
+  const [fields, setFields] = useState({
+    stages: item.stages ?? [],
+    subjects: item.subjects ?? [],
+    difficulty: item.difficulty ?? "",
+    tags: item.tags ?? [],
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      onSaved(await classifyListing(item.kind, item.id, fields));
+    } catch (err) {
+      setError(catalogError(err, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset disabled={busy} className="space-y-3 rounded-xl border border-[var(--border)] p-3" data-testid="classification-editor">
+      <legend className="px-1 text-[12.5px] font-medium">{t("Edit classification")}</legend>
+      {taxonomy ? (
+        <TaxonomyPicker
+          taxonomy={taxonomy}
+          value={{ stages: fields.stages, subjects: fields.subjects, difficulty: fields.difficulty }}
+          onChange={(next) => setFields({ ...fields, ...next })}
+        />
+      ) : taxonomyError ? (
+        <p role="alert" className="text-[12px] text-red-600">{t(taxonomyError)}</p>
+      ) : null}
+      <div className="space-y-1">
+        <span className="text-[12.5px] font-medium">{t("Tags")}</span>
+        <TagInput value={fields.tags} onChange={(tags) => setFields({ ...fields, tags })} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={primaryClass} onClick={() => void save()}>{t("Save")}</button>
+        <button type="button" className={actionClass} onClick={onCancel}>{t("Cancel")}</button>
+      </div>
+      {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
+    </fieldset>
+  );
+}
+
 /** One listing under review: what the author wrote, the whole content read-only, and the decision. */
-export function ReviewDetail({ entry, onDone }: { entry: CatalogEntry; onDone: () => void }) {
+export function ReviewDetail({
+  entry,
+  onDone,
+  canClassify = false,
+}: {
+  entry: CatalogEntry;
+  onDone: () => void;
+  /** The "In the market" tab: the administrator may correct the classification. */
+  canClassify?: boolean;
+}) {
   const { t } = useTranslation();
   const { nameOf } = useTaxonomy();
+  const [classifying, setClassifying] = useState(false);
   const [item, setItem] = useState<ReviewItem | null>(null);
   const [reason, setReason] = useState("");
   const [deciding, setDeciding] = useState<"reject" | "take-down" | null>(null);
@@ -115,6 +187,19 @@ export function ReviewDetail({ entry, onDone }: { entry: CatalogEntry; onDone: (
         <dt className="text-[var(--muted-foreground)]">{t("Tags")}</dt>
         <dd>{item.tags.length ? item.tags.map((tag) => `#${tag}`).join(" ") : "—"}</dd>
       </dl>
+      {canClassify && (classifying ? (
+        <ClassificationEditor
+          item={item}
+          onCancel={() => setClassifying(false)}
+          onSaved={(next) => {
+            setItem({ ...item, ...next, preview: item.preview, events: item.events });
+            setClassifying(false);
+            getReviewItem(item.kind, item.id).then(setItem).catch(() => undefined);
+          }}
+        />
+      ) : (
+        <button type="button" className={actionClass} onClick={() => setClassifying(true)}>{t("Edit classification")}</button>
+      ))}
 
       <CatalogPreview kind={item.kind} itemId={item.id} preview={item.preview ?? {}} full />
 
@@ -256,7 +341,7 @@ export default function ReviewDesk() {
           </div>
           <div className="min-w-0 flex-1">
             {selected ? (
-              <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} onDone={() => {
+              <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} canClassify={tab === "listed"} onDone={() => {
                 setSelected(null);
                 setRefresh((v) => v + 1);
               }} />

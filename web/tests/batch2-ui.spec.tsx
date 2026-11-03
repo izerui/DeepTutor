@@ -75,15 +75,15 @@ it("posts a pinned announcement and gives students no editing", async () => {
   expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 });
 
-it("puts class announcements on the student home", async () => {
+it("keeps class announcements off the student home (platform batch 2: classes retired)", async () => {
   tasks.getHome.mockResolvedValue({
     assigned: [], history_count: 0, can_create_path: false, market: [], mine: [],
     announcements: [{ id: "a1", class_id: "cls_1", class_name: "Physics 1", author: "", text: "Bring a calculator.", pinned: true, created_at: 1, updated_at: 1, can_edit: false }],
   });
   render(<StudentHome />);
-  const block = await screen.findByRole("region", { name: "Class announcements" });
-  expect(within(block).getByText("Bring a calculator.")).toBeTruthy();
-  expect(within(block).getByText(/Physics 1 · Former teacher/)).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "From my teachers" })).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Class announcements" })).toBeNull();
+  expect(screen.queryByText("Bring a calculator.")).toBeNull();
 });
 
 it("shows a task that is not open yet with only its opening and nothing to do", () => {

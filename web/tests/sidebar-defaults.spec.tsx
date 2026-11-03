@@ -26,7 +26,6 @@ it("new profiles see nine primary entries and two folded features", () => {
     "/partners",
     "/learning",
     "/space",
-    "/classes",
     "/practice-sets",
     "/grading",
     "/tasks",

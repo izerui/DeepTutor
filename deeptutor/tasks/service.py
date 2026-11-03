@@ -23,6 +23,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import time
 from typing import Any
 import uuid
@@ -87,6 +88,31 @@ def _accounts() -> dict[str, dict[str, Any]]:
 
 
 # ── targets ────────────────────────────────────────────────
+
+
+def _course_of(task_id: str) -> dict[str, str]:
+    with db.read() as conn:
+        if conn is None:
+            return {"course_id": "", "course_title": ""}
+        try:
+            row = conn.execute(
+                "SELECT c.id, c.title FROM course_items i JOIN courses c ON c.id = i.course_id "
+                "WHERE i.task_id = ? ORDER BY c.created_at LIMIT 1",
+                (task_id,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            row = None  # a task store from before courses
+    return {"course_id": row["id"], "course_title": row["title"]} if row else {"course_id": "", "course_title": ""}
+
+
+def _in_a_course(task_id: str) -> bool:
+    with db.read() as conn:
+        if conn is None:
+            return False
+        try:
+            return conn.execute("SELECT 1 FROM course_items WHERE task_id = ?", (task_id,)).fetchone() is not None
+        except sqlite3.OperationalError:
+            return False  # a task store from before courses
 
 
 def _target_audience(kind: str, target_id: str) -> set[str] | None:
@@ -270,6 +296,8 @@ class TaskService:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "published_at": row["published_at"],
+            # Platform batch 2 §5: tasks live in courses; the first one holding it.
+            **_course_of(row["id"]),
         }
 
     def _check_target(self, kind: str, target_id: str, settings: dict[str, Any]) -> dict[str, Any]:
@@ -446,6 +474,9 @@ class TaskService:
             row = self._owned(conn, task_id)
         if row["status"] != "draft":
             raise TaskConflict("This task was already published.")
+        if not _in_a_course(task_id) and scopes.classes_retired():
+            # Platform batch 2 §5: tasks go out as part of a course.
+            raise TaskError("Add the task to a course; it is published with the course.")
         kind = row["kind"]
         settings = self._check_target(kind, row["target_id"], json.loads(row["settings_json"] or "{}")) \
             if kind not in ("note",) else {}
@@ -455,7 +486,7 @@ class TaskService:
         scopes.default_scope_on_publish(scopes.TASK, task_id)
         scope = scopes.get_scope(scopes.TASK, task_id)
         try:
-            if scope is None or (scope.empty and not scopes.is_join_only()):
+            if scope is None or (scope.empty and not (scopes.is_join_only() or scopes.classes_retired())):
                 raise scopes.ScopeRequired()
             if kind == "homework" and scope.everyone:
                 raise TaskError("Homework goes to your classes or chosen students, not to everyone.")
@@ -713,7 +744,12 @@ class StudentTasks:
         self.actor = actor or get_current_user()
 
     def _is_student(self) -> bool:
-        return _role(self.actor) == "student"
+        """A learner here: a student, or anyone who joined something (platform batch 2 §6)."""
+        if _role(self.actor) == "student":
+            return True
+        from deeptutor.catalog.enrollment import joined_by
+
+        return bool(joined_by(self.actor.id))
 
     def _task_rows(self) -> list:
         """Published or withdrawn tasks that reach the student, or that they worked on."""
@@ -730,11 +766,14 @@ class StudentTasks:
                     (self.actor.id, self.actor.id),
                 )
             }
-        classes = scopes.member_class_ids(self.actor.id)
+        student = _role(self.actor) == "student"
+        classes = scopes.member_class_ids(self.actor.id) if student else set()
         out = []
         for row in rows:
             scope = scopes.get_scope(scopes.TASK, row["id"])
-            reaches = bool(scope) and row["owner_user_id"] != self.actor.id and scopes._reaches(scope, self.actor.id, classes)
+            reaches = bool(scope) and row["owner_user_id"] != self.actor.id and (
+                (student and scopes._reaches(scope, self.actor.id, classes)) or self.actor.id in scope.members
+            )
             if reaches or row["id"] in mine:
                 out.append((row, reaches))
         return out
@@ -872,7 +911,12 @@ class StudentTasks:
                 if entry["submission"] and entry["submission"]["status"] == "returned" and entry["state"] == "completed":
                     entry["state"] = "open"
             entries.append(entry)
-        entries += self._unnamed_content(named)
+        from deeptutor.publishing.scope import classes_retired
+
+        if not classes_retired():
+            # Platform batch 2 §5: once classes are retired, joined practice sets and
+            # paths stay in their own lists and no longer show as tasks.
+            entries += self._unnamed_content(named)
         order = {"overdue": 0, "open": 1, "not_open": 2, "completed": 3, "closed": 4}
         entries.sort(key=lambda e: (order[e["state"]], e["due_at"] or float("inf"), e["title"]))
         return entries

@@ -157,6 +157,15 @@ def _stored_scope(kind: str, item_id: str) -> Scope | None:
     )
 
 
+def classes_retired() -> bool:
+    """Platform batch 2 §2.3: once retired, a class gives nobody anything."""
+    try:
+        from deeptutor.catalog.retire_classes import retired
+    except Exception:
+        return False
+    return retired()
+
+
 def managed_items(kind: str) -> list[str]:
     with store.read() as conn:
         if conn is None:
@@ -171,6 +180,8 @@ def member_class_ids(user_id: str) -> set[str]:
     """Active classes the account is in: as a student if a student, as a teacher if a teacher."""
     from deeptutor.classes import store as class_store
 
+    if classes_retired():
+        return set()
     account = _accounts().get(user_id)
     if account is None or account["disabled"] or account["role"] not in ("student", "teacher"):
         return set()
@@ -241,18 +252,24 @@ def _class_audience(class_ids: list[str], *, students_only: bool) -> set[str]:
 
 
 def audience(scope: Scope, *, students_only: bool = False, owner_id: str = "") -> set[str]:
-    """Active accounts the scope reaches, the owner excluded."""
+    """Active accounts the scope reaches, the owner excluded.
+
+    *students_only* narrows the receivers a publisher named; people who joined
+    count whatever their role (platform batch 2 §6).
+    """
+    active = {user_id: row for user_id, row in _accounts().items() if not row["disabled"]}
     accounts = {
-        user_id: row for user_id, row in _accounts().items()
-        if not row["disabled"] and (not students_only or row["role"] == "student")
+        user_id for user_id, row in active.items() if not students_only or row["role"] == "student"
     }
     if scope.everyone:
         reached = set(accounts)
+    elif classes_retired():
+        reached = set(scope.users)
     else:
         reached = set(scope.users) | _class_audience(sorted(scope.all_classes()), students_only=students_only)
-    reached |= set(scope.members)
+    reached = (reached & accounts) | (set(scope.members) & set(active))
     reached.discard(owner_id)
-    return reached & set(accounts)
+    return reached
 
 
 # ── writing ────────────────────────────────────────────────
@@ -279,6 +296,8 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
 def taught_class_ids(user_id: str) -> list[str]:
     from deeptutor.classes import store as class_store
 
+    if classes_retired():
+        return []
     with class_store.read() as conn:
         if conn is None:
             return []
@@ -352,10 +371,11 @@ def default_scope_on_publish(kind: str, item_id: str) -> None:
     user = get_current_user_or_none()
     if user is None or get_scope(kind, item_id) is not None:
         return
-    if _join_only.get():
+    chosen = _chosen.get()
+    if _join_only.get() or (classes_retired() and (chosen is None or chosen.empty)):
+        # Platform batch 1 §4.4, batch 2 §2.3: nobody receives it until they join.
         _store_scope(kind, item_id, Scope(), actor_id=user.id)
         return
-    chosen = _chosen.get()
     if chosen is not None:
         from deeptutor.publishing.service import PublishService
 
@@ -459,9 +479,9 @@ def reconcile_student(student_id: str) -> None:
         scope = get_scope(MASTERY_PATH, template_id)
         if template is None or scope is None or template.status != "published":
             continue
-        wanted = (
-            is_student and student_id != template.owner_user_id
-            and _reaches(scope, student_id, classes)
+        wanted = student_id != template.owner_user_id and (
+            (is_student and _reaches(scope, student_id, classes))
+            or (bool(account) and not account["disabled"] and student_id in scope.members)
         )
         has = template_id in assigned
         if wanted != has:

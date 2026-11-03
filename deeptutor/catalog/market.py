@@ -191,9 +191,7 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
         "joined": joined.get((kind, item_id)),
         "mine": mine,
         "closed": info.closed,
-        "can_join": row["status"] == "listed" and not mine and not info.closed and (
-            kind not in enrollment.STUDENT_ONLY or _role(viewer) == "student"
-        ),
+        "can_join": row["status"] == "listed" and not mine and not info.closed,
         "preview": items.preview(kind, item_id),
         "study": _study_target(kind, item_id),
     }

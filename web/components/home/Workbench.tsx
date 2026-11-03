@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 
 import { usePendingReviews } from "@/components/catalog/AdminNav";
 import { MyListings } from "@/components/catalog/MyListings";
-import { flagText } from "@/components/classes/attention-format";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getHome, type HomeData } from "@/lib/tasks-api";
 import { getWorkbench, type Workbench } from "@/lib/workbench-api";
@@ -70,7 +69,7 @@ export function TeacherWorkbench() {
       <header>
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {t("What waits for you, who needs attention, and how your classes are doing.")}
+          {t("What waits for you, what you sent out and listed, and your own learning.")}
         </p>
       </header>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
@@ -105,44 +104,7 @@ export function TeacherWorkbench() {
             )}
           </section>
 
-          <section aria-labelledby="wb-attention" className="space-y-2">
-            <h2 id="wb-attention" className="text-[13px] font-semibold">
-              {t("Students who need attention")}{" "}
-              <span className="text-[var(--muted-foreground)]">({board.attention_total ?? 0})</span>
-            </h2>
-            {(board.attention ?? []).length === 0 ? (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Everyone is on track.")}</p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
-                {(board.attention ?? []).map((row) => (
-                  <li key={row.student_id}>
-                    <Link href={`/classes?class=${encodeURIComponent(row.class_id)}&student=${encodeURIComponent(row.student_id)}`}
-                      className="flex flex-wrap items-baseline gap-2 p-2.5 text-[12.5px] hover:bg-[var(--muted)]/40">
-                      <span className="font-medium">{row.username}</span>
-                      <span className="text-[11.5px] text-amber-700 dark:text-amber-300">
-                        {row.flags.map((flag) => flagText(flag, t)).join(" · ")}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section aria-labelledby="wb-classes" className="space-y-2">
-            <h2 id="wb-classes" className="text-[13px] font-semibold">{t("My classes")}</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {(board.classes ?? []).map((row) => (
-                <Link key={row.id} href={`/classes?class=${encodeURIComponent(row.id)}`} className={card}>
-                  <span className="block truncate text-[14px] font-medium">{row.name}</span>
-                  <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                    {t("{{count}} students · {{active}} learned this week", { count: row.student_count, active: row.active_this_week })}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-
+          {/* Platform batch 2 §7: no classes and no "needs attention" (batch 3 brings course reports). */}
           <section aria-labelledby="wb-sent" className="space-y-2">
             <h2 id="wb-sent" className="text-[13px] font-semibold">{t("What I sent out")}</h2>
             {(board.sent ?? []).length === 0 ? (
@@ -185,7 +147,7 @@ export function AdminHome() {
   const { t } = useTranslation();
   const links: [string, string][] = [
     ["/admin/users", "Accounts"],
-    ["/classes", "Classes, departments and grades"],
+    ["/admin/catalog", "Classification and tags"],
     ["/settings", "Models and settings"],
   ];
   const pending = usePendingReviews();

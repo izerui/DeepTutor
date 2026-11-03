@@ -203,19 +203,7 @@ function CourseEditor({
           </ol>
         )}
         {editable && (
-          <div className="flex flex-wrap gap-2">
-            <select aria-label={t("Add an existing task")} className={`${inputClass} w-auto`} value={pick} onChange={(e) => setPick(e.target.value)}>
-              <option value="">{t("Add an existing task…")}</option>
-              {addable.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
-            </select>
-            <button type="button" className={actionClass} disabled={!pick}
-              onClick={() => { const id = pick; setPick(""); void run(() => updateCourse(course.id, { task_ids: [...ids, id] })); }}>
-              {t("Add")}
-            </button>
-          </div>
-        )}
-        {editable && (
-          <form className="flex flex-wrap gap-2" onSubmit={(event) => {
+          <form className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--muted)]/40 p-2" data-testid="course-new-task" onSubmit={(event) => {
             event.preventDefault();
             const name = newTitle.trim();
             setNewTitle("");
@@ -226,8 +214,20 @@ function CourseEditor({
             </select>
             <input className={`${inputClass} w-56`} value={newTitle} maxLength={200} placeholder={t("New task title")}
               onChange={(e) => setNewTitle(e.target.value)} />
-            <button type="submit" className={actionClass} disabled={!newTitle.trim()}>{t("Add new task")}</button>
+            <button type="submit" className={primaryClass} disabled={!newTitle.trim()}>{t("Add new task")}</button>
           </form>
+        )}
+        {editable && (
+          <div className="flex flex-wrap gap-2">
+            <select aria-label={t("Add an existing task")} className={`${inputClass} w-auto`} value={pick} onChange={(e) => setPick(e.target.value)}>
+              <option value="">{t("Add an existing task…")}</option>
+              {addable.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
+            </select>
+            <button type="button" className={actionClass} disabled={!pick}
+              onClick={() => { const id = pick; setPick(""); void run(() => updateCourse(course.id, { task_ids: [...ids, id] })); }}>
+              {t("Add")}
+            </button>
+          </div>
         )}
       </div>
 

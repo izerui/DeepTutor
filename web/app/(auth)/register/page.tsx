@@ -19,11 +19,9 @@ function RegisterPageContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Spec 2026-10-29 §5: a class invite carries its token and returns here after sign-in.
-  const invite = searchParams.get("invite") ?? "";
+  // Platform batch 2 §4: no class invites any more; an ``?invite=`` is ignored.
   const rawNext = searchParams.get("next");
-  // Signing up with an invite already joins the class, so land on the class list.
-  const next = invite ? "/classes" : rawNext ? normalizeInternalReturnPath(rawNext) : "";
+  const next = rawNext ? normalizeInternalReturnPath(rawNext) : "";
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
   const [open, setOpen] = useState<boolean | null>(null);
 
@@ -59,7 +57,7 @@ function RegisterPageContent() {
     }
 
     setLoading(true);
-    const result = await register(username, password, invite);
+    const result = await register(username, password);
 
     if (result.ok) {
       router.replace(`/login?registered=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
@@ -92,9 +90,9 @@ function RegisterPageContent() {
       )}
 
       {/* Card */}
-      {!checkingFirst && !isFirst && open === false && !invite ? (
+      {!checkingFirst && !isFirst && open === false ? (
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm px-8 py-8 text-center text-sm text-[var(--muted-foreground)]">
-          {t("Registration is closed. Ask your teacher for an invite link.")}
+          {t("Registration is closed. Ask an administrator for an account.")}
         </div>
       ) : (
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm px-8 py-8">

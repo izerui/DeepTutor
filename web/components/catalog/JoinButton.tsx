@@ -9,8 +9,6 @@ import { joinItem, leaveItem, type CatalogItemDetail } from "@/lib/catalog-api";
 
 import { catalogError, studyHref } from "./catalog-format";
 
-const STUDENT_ONLY = new Set(["mastery_path", "practice_set", "course"]);
-
 /**
  * Join, go study, leave (platform batch 1 §5.1). Leaving keeps every record;
  * joining again brings it all back. ``onChanged`` reloads the item.
@@ -66,8 +64,6 @@ export function JoinButton({ item, onChanged }: { item: CatalogItemDetail; onCha
           <button type="button" className={primaryClass} disabled={busy} onClick={() => void run(() => joinItem(item.kind, item.id))}>
             {t("Join")}
           </button>
-        ) : item.status === "listed" && STUDENT_ONLY.has(item.kind) && !item.closed ? (
-          <p className="text-[12px] text-[var(--muted-foreground)]">{t("Only student accounts can join this for now.")}</p>
         ) : null}
       </div>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}

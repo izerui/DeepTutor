@@ -80,21 +80,20 @@ it("makes a remedial draft and hands its suggested students to the editor", asyn
   expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
 });
 
-it("lays out the workbench: hand-ins, attention, classes and what was sent", async () => {
+it("lays out the workbench: hand-ins and what was sent, no classes or attention (platform batch 2)", async () => {
   workbench.getWorkbench.mockResolvedValue({
     role: "teacher",
     to_grade: [{ task_id: "t1", task_title: "Essay", student_id: "u_sara", username: "sara", submitted_at: 1, late: true, attempt: 1 }],
-    attention: [{ student_id: "u_sam", username: "sam", class_id: "c1", flags: [{ kind: "inactive", days: 9 }, { kind: "overdue", count: 2 }] }],
-    attention_total: 1,
-    classes: [{ id: "c1", name: "Physics 1", student_count: 2, active_this_week: 1 }],
+    attention: [],
+    attention_total: 0,
+    classes: [],
     sent: [{ kind: "practice_set", id: "ps_1", title: "Week 3", done: 1, total: 2, updated_at: 1 }],
   });
   render(<TeacherWorkbench />);
   expect(await screen.findByText("Essay")).toBeTruthy();
-  expect(screen.getByText("No learning for 9 days · 2 tasks overdue")).toBeTruthy();
-  expect(screen.getByText("2 students · 1 learned this week")).toBeTruthy();
   expect(screen.getByText("1 / 2 done")).toBeTruthy();
-  expect(screen.getByRole("link", { name: /sam/ }).getAttribute("href")).toBe("/classes?class=c1&student=u_sam");
+  expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: /Students who need attention/ })).toBeNull();
 });
 
 it("filters the class report to students who need attention and changes the period", async () => {

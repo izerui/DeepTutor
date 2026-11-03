@@ -304,7 +304,10 @@ class PracticeSetService:
         from deeptutor.publishing.scope import PRACTICE_SET, _reaches, get_scope
 
         scope = get_scope(PRACTICE_SET, set_id)
-        return scope is not None and _role(self.actor) == "student" and _reaches(scope, self.actor.id)
+        # Students, and anyone who joined it (platform batch 2 §6).
+        return scope is not None and (
+            (_role(self.actor) == "student" and _reaches(scope, self.actor.id)) or self.actor.id in scope.members
+        )
 
     @staticmethod
     def _summary(row) -> dict[str, Any]:
@@ -594,8 +597,6 @@ class PracticeSetService:
         """Published sets whose scope reaches the student, with their own progress."""
         from deeptutor.publishing.scope import PRACTICE_SET, managed_items
 
-        if _role(self.actor) != "student":
-            return []
         ids = [i for i in managed_items(PRACTICE_SET) if self._reaches_me(i)]
         if not ids:
             return []
@@ -956,7 +957,8 @@ class PracticeSetService:
             # A deleted account or one that is no longer a student is not reported.
             if visible is not None and submission["student_id"] not in visible:
                 continue
-            if (accounts.get(submission["student_id"]) or {}).get("role") == "student":
+            if (accounts.get(submission["student_id"]) or {}).get("role") == "student" \
+                    or submission["student_id"] in reached:
                 by_student.setdefault(submission["student_id"], []).append(submission)
         students = []
         for student_id in sorted(reached | set(by_student), key=lambda s: names.get(s, s)):

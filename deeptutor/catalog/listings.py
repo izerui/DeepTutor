@@ -106,6 +106,9 @@ def clean_tags(tags: list[str]) -> list[str]:
             continue
         seen.add(key)
         out.append(tag)
+    from deeptutor.catalog.tags import apply_aliases
+
+    out = apply_aliases(out)  # merged tags become the tag they were merged into (batch 2 §8.2)
     if len(out) > TAGS_MAX:
         raise ListingError(f"Add at most {TAGS_MAX} tags.")
     return out
@@ -226,8 +229,10 @@ class ListingService:
             raise ListingError(f"The title has at most {TITLE_MAX} characters.")
         if len(summary) > SUMMARY_MAX:
             raise ListingError(f"The introduction has at most {SUMMARY_MAX} characters.")
+        with db.read() as conn:
+            before = _row(conn, kind, item_id) if conn else None
         try:
-            stages, subjects, difficulty = taxonomy.validate(stages, subjects, difficulty)
+            stages, subjects, difficulty = taxonomy.validate(stages, subjects, difficulty, keep=_classification(before))
         except taxonomy.TaxonomyError as exc:
             raise ListingError(str(exc)) from exc
         tags = clean_tags(tags)
@@ -416,6 +421,31 @@ class ListingService:
         _notify([row["owner_user_id"]], "listing_taken_down", row, reason=reason)
         return describe(row)
 
+    def classify(
+        self, kind: str, item_id: str, *, stages: list[str], subjects: list[str], difficulty: str, tags: list[str],
+    ) -> dict[str, Any]:
+        """An administrator corrects anyone's classification and tags, never the text (batch 2 §8.3)."""
+        self._require_admin()
+        with db.read() as conn:
+            row = _row(conn, kind, item_id) if conn else None
+        if row is None:
+            raise ListingNotFound("Not found.")
+        try:
+            stages, subjects, difficulty = taxonomy.validate(stages, subjects, difficulty, keep=_classification(row))
+        except taxonomy.TaxonomyError as exc:
+            raise ListingError(str(exc)) from exc
+        tags = clean_tags(tags)
+        with db.write() as conn:
+            conn.execute(
+                "UPDATE listings SET stages_json = ?, subjects_json = ?, difficulty = ?, tags_json = ?, updated_at = ? "
+                "WHERE kind = ? AND item_id = ?",
+                (json.dumps(stages), json.dumps(subjects), difficulty, json.dumps(tags, ensure_ascii=False),
+                 time.time(), kind, item_id),
+            )
+            _event(conn, kind, item_id, self.actor.id, "reclassified")
+            row = _row(conn, kind, item_id)
+        return _with_author(describe(row))
+
     def listed(self, q: str = "") -> list[dict[str, Any]]:
         """Everything in the market or taken out by its author, for an administrator."""
         self._require_admin()
@@ -428,6 +458,13 @@ class ListingService:
             rows = [r for r in rows if needle in r["title"].casefold()]
         counts = enrollment.joined_counts([(r["kind"], r["item_id"]) for r in rows])
         return [_with_author(describe(r, learners=counts[(r["kind"], r["item_id"])])) for r in rows[:200]]
+
+
+def _classification(row) -> list[str]:
+    """What a listing already names: kept even if an administrator hid it since."""
+    if row is None:
+        return []
+    return [*json.loads(row["stages_json"] or "[]"), *json.loads(row["subjects_json"] or "[]")]
 
 
 def _missing_fields(row) -> str:

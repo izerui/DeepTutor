@@ -34,8 +34,8 @@ export type LearningPolicy = {
 };
 
 /**
- * What is set for one student; a missing key follows their classes, then the
- * default (spec 2026-10-29 §6; batch 3 §7). ``ai_daily_tokens`` 0 is no limit.
+ * What is set for one student; a missing key follows the system default
+ * (spec 2026-10-29 §6; batch 3 §7; platform batch 2: no class layer). ``ai_daily_tokens`` 0 is no limit.
  */
 export type StudentPolicy = {
   allow_personal_mastery?: boolean;

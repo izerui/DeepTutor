@@ -235,3 +235,69 @@ export const rejectListing = (kind: string, id: string, reason: string) =>
   call<CatalogEntry>(`/review${item(kind, id)}/reject`, send("POST", { reason }));
 export const takeDownListing = (kind: string, id: string, reason: string) =>
   call<CatalogEntry>(`/review${item(kind, id)}/take-down`, send("POST", { reason }));
+
+/** Platform batch 2 §8.3: an administrator changes another author's classification and tags. */
+export interface ClassificationFields {
+  stages: string[];
+  subjects: string[];
+  difficulty: string;
+  tags: string[];
+}
+export const classifyListing = (kind: string, id: string, fields: ClassificationFields) =>
+  call<CatalogEntry>(`/review${item(kind, id)}/classification`, send("PUT", fields));
+
+// ── Administrators: classification and tags (platform batch 2 §8) ──
+
+export interface AdminTaxonomyNode extends TaxonomyNode {
+  hidden: boolean;
+  /** Added by an administrator; built-in entries can only be hidden. */
+  custom: boolean;
+  /** How many listings use it. */
+  in_use: number;
+}
+export interface AdminTaxonomySubject extends AdminTaxonomyNode {
+  children: AdminTaxonomyNode[];
+}
+export interface AdminTaxonomyStage extends AdminTaxonomyNode {
+  subjects: AdminTaxonomySubject[];
+}
+export interface AdminTaxonomy {
+  stages: AdminTaxonomyStage[];
+  difficulties: TaxonomyNode[];
+}
+export interface TaxonomyNodeUpdate {
+  name_zh?: string;
+  name_en?: string;
+  hidden?: boolean;
+}
+
+const node = (nodeId: string) => `/admin/taxonomy/nodes/${encodeURIComponent(nodeId)}`;
+
+export const getAdminTaxonomy = () => call<AdminTaxonomy>("/admin/taxonomy");
+export const updateTaxonomyNode = (nodeId: string, fields: TaxonomyNodeUpdate) =>
+  call<AdminTaxonomy>(node(nodeId), send("PUT", fields));
+/** ``parent`` ``""`` adds a stage; a stage id adds a subject; a first-level subject id a sub-subject. */
+export const addTaxonomyNode = (parent: string, nameZh: string, nameEn: string) =>
+  call<AdminTaxonomy>("/admin/taxonomy/nodes", send("POST", { parent, name_zh: nameZh, name_en: nameEn }));
+export const moveTaxonomyNode = (nodeId: string, direction: "up" | "down") =>
+  call<AdminTaxonomy>(`${node(nodeId)}/move`, send("POST", { direction }));
+export const deleteTaxonomyNode = (nodeId: string) => call<AdminTaxonomy>(node(nodeId), send("DELETE"));
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+export interface TagMergeEntry {
+  from: string;
+  to: string;
+  at: number;
+}
+export interface AdminTags {
+  tags: TagCount[];
+  merges: TagMergeEntry[];
+}
+export const getAdminTags = () => call<AdminTags>("/admin/tags");
+export const mergeTags = (fromTag: string, toTag: string) =>
+  call<AdminTags>("/admin/tags/merge", send("POST", { from_tag: fromTag, to_tag: toTag }));
+export const unmergeTag = (fromTag: string) =>
+  call<AdminTags>(`/admin/tags/merge/${encodeURIComponent(fromTag)}`, send("DELETE"));

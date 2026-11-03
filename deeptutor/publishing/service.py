@@ -188,6 +188,10 @@ class PublishService:
         from deeptutor.classes.service import _accounts, teacher_student_ids
 
         users, classes, groups = _clean_ids(users), _clean_ids(classes), _clean_ids(groups)
+        if scopes.classes_retired() and (
+            [c for c in classes if c not in current.classes] or [g for g in groups if g not in current.groups]
+        ):
+            raise ScopeError("Classes are no longer used. People join from the learning market.")
         added_groups = [g for g in groups if g not in current.groups]
         if added_groups:
             # Spec 2026-11-03 §0: only administrators publish to departments and grades.

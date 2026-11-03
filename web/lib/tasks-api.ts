@@ -32,6 +32,9 @@ export interface TaskSummary {
   created_at: number;
   updated_at: number;
   published_at: number | null;
+  /** Platform batch 2 §5: the course holding it; empty strings when in none. */
+  course_id: string;
+  course_title: string;
 }
 
 export interface MyTask extends TaskSummary {
