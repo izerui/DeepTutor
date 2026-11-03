@@ -19,6 +19,23 @@ type Translate = (key: string, values?: Record<string, unknown>) => string;
 const day = (value: unknown) =>
   typeof value === "number" ? new Date(value * 1000).toLocaleString() : "";
 
+const TRANSFERRED: [string, string][] = [
+  ["tasks", "{{count}} tasks"],
+  ["courses", "{{count}} courses"],
+  ["practice_sets", "{{count}} practice sets"],
+  ["teacher_paths", "{{count}} Mastery Paths"],
+  ["books", "{{count}} books"],
+  ["knowledge_bases", "{{count}} knowledge bases"],
+];
+
+/** Batch 4 §3: one summary of everything a departing teacher handed over. */
+function transferredText(p: Record<string, unknown>, t: Translate): string {
+  const parts = TRANSFERRED.filter(([key]) => Number(p[key]) > 0).map(([key, label]) => t(label, { count: p[key] }));
+  return p.from
+    ? t("{{from}}'s content was handed over to you: {{items}}", { from: p.from, items: parts.join(", ") })
+    : t("Content was handed over to you: {{items}}", { items: parts.join(", ") });
+}
+
 /** One line per notification, in the reader's language (the server stores no text). */
 export function notificationText(item: AppNotification, t: Translate): string {
   const p = item.params;
@@ -56,6 +73,12 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("{{teacher}} published the course “{{title}}”", { teacher: p.teacher, title });
     case "practice_regraded":
       return t("Your score on “{{title}}” was changed by your teacher", { title });
+    case "material_withdrawn":
+      return t("Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students", {
+        material: p.material, title, count: p.count,
+      });
+    case "content_transferred":
+      return transferredText(p, t);
     case "tasks_transferred":
       return t("{{count}} tasks were handed over to you", { count: p.count });
     default:

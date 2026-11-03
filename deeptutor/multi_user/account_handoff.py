@@ -96,7 +96,8 @@ def _ordered(stages: Sequence[str]) -> list[str]:
 
 
 def run_stages(
-    user_id: str, successor_id: str, stages: Sequence[str], *, quiet: bool = False
+    user_id: str, successor_id: str, stages: Sequence[str], *, quiet: bool = False,
+    counts: dict[str, int] | None = None,
 ) -> tuple[list[str], str]:
     """Run the requested stages; return (failed stages, last error).
 
@@ -110,6 +111,8 @@ def run_stages(
     stages = _ordered(stages)
     failed: list[str] = []
     errors: list[str] = []
+    #: What moved to the successor, for one summary notification (batch 4 §3).
+    counts = counts if counts is not None else {}
 
     def failure(message: str) -> None:
         if quiet:
@@ -125,6 +128,7 @@ def run_stages(
             failed.append("knowledge_bases")
             errors.append(f"knowledge_bases: {exc!r}")
         else:
+            counts["knowledge_bases"] = len(moved or [])
             if moved:
                 logger.info(
                     "Transferred %d knowledge base(s) of '%s' to %s",
@@ -139,6 +143,7 @@ def run_stages(
             failed.append("books")
             errors.append(f"books: {exc!r}")
         else:
+            counts["books"] = len(moved_books or [])
             if moved_books:
                 logger.info(
                     "Transferred %d book(s) of '%s' to %s",
@@ -146,6 +151,13 @@ def run_stages(
                 )
 
     teaching = [stage for stage in stages if stage in _TEACHING_STAGES]
+    if "teacher_paths" in teaching:
+        try:
+            from deeptutor.teaching.store import TeachingStore
+
+            counts["teacher_paths"] = len(TeachingStore().list_templates(owner_user_id=user_id))
+        except Exception:
+            pass
     if teaching:
         try:
             from deeptutor.teaching import service as teaching_service
@@ -173,8 +185,9 @@ def run_stages(
     for stage, run in (
         ("classes", lambda: lifecycle.forget_deleted_account(user_id)),
         ("publish_targets", lambda: lifecycle.forget_publish_targets(user_id)),
-        ("practice_sets", lambda: lifecycle.transfer_practice_sets(user_id, successor_id)),
-        ("tasks", lambda: _tasks().transfer_tasks(user_id, successor_id)),
+        ("practice_sets", lambda: counts.__setitem__(
+            "practice_sets", lifecycle.transfer_practice_sets(user_id, successor_id))),
+        ("tasks", lambda: _tasks().transfer_tasks(user_id, successor_id, counts=counts)),
         ("task_records", lambda: _tasks().forget_student(user_id)),
         ("notifications", lambda: _notifications().forget_user(user_id)),
         ("comments", lambda: _comments().forget_student(user_id)),
@@ -212,8 +225,15 @@ def hand_over_deleted_account(user_id: str, successor_id: str, *, username: str 
         logger.exception(
             "Could not record the pending hand-over of deleted user '%s'; continuing", user_id
         )
-    failed, error = run_stages(user_id, successor_id, STAGES)
+    counts: dict[str, int] = {}
+    failed, error = run_stages(user_id, successor_id, STAGES, counts=counts)
     _finish(user_id, username, successor_id, 0, failed, error)
+    try:
+        from deeptutor.notifications.service import notify_handover
+
+        notify_handover(successor_id, user_id, username, counts)
+    except Exception:
+        logger.exception("Could not tell %s about the hand-over of '%s'", successor_id, user_id)
     return failed
 
 

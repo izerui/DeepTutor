@@ -96,6 +96,11 @@ export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onC
                 ? t("Sent back")
                 : t("Waiting for grading")}
             {submission.late ? ` · ${t("Late")}` : ""}
+            {submission.status === "graded" && submission.class_average != null && (
+              <span className="ml-2 font-normal text-[var(--muted-foreground)]">
+                {t("Class average {{score}} / {{max}}", { score: submission.class_average, max: task.settings.max_score ?? 100 })}
+              </span>
+            )}
           </p>
           {submission.comment && <p className="whitespace-pre-line">{submission.comment}</p>}
           {submission.return_reason && <p className="whitespace-pre-line text-amber-700 dark:text-amber-300">{submission.return_reason}</p>}

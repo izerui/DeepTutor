@@ -200,6 +200,22 @@ async def _partner_index() -> ResourceIndex:
     return result
 
 
+async def _teacher_course_index() -> ResourceIndex:
+    """Courses teachers sent the student that still reach them, with progress (batch 4 §5)."""
+    from deeptutor.tasks.courses import assigned_courses
+
+    rows = await asyncio.to_thread(assigned_courses)
+    return {
+        row["id"]: {
+            "title": row["title"],
+            "teacher": str((row.get("provenance") or {}).get("name") or ""),
+            "done": sum(1 for task in row["tasks"] if task.get("state") == "completed"),
+            "total": len(row["tasks"]),
+        }
+        for row in rows
+    }
+
+
 async def resolve_resource_reference(kind: str, ref_id: str) -> dict[str, Any] | None:
     """Look one reference up in the system that owns that kind.
 
@@ -228,6 +244,7 @@ _INDEX_LOADERS: dict[str, Callable[[], Awaitable[ResourceIndex]]] = {
     "mastery_path": _mastery_path_index,
     "reading_workspace": _reading_workspace_index,
     "partner": _partner_index,
+    "teacher_course": _teacher_course_index,
 }
 
 
@@ -335,6 +352,7 @@ def _candidate_label(kind: str, ref_id: str, detail: dict[str, Any]) -> str:
         "reading_workspace": ("title",),
         "partner": ("name",),
         "partner_group": ("name",),
+        "teacher_course": ("title",),
     }
     for field in fields.get(kind, ()):
         label = str(detail.get(field) or "").strip()

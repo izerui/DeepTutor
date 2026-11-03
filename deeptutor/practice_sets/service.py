@@ -35,6 +35,8 @@ SCORE_MODES = ("best", "first")
 SUBJECTIVE_TYPES = ("short_answer", "written", "coding")
 OPTION_TYPES = ("choice", "multi_choice", "concept")
 ATTEMPTS_MAX = 100
+#: Batch 4 §1: fewer scores than this and an average would reveal someone's.
+CLASS_AVERAGE_MIN = 3
 MAX_QUESTIONS = 200
 TITLE_MAX = 200
 #: A single answer longer than this is cut before grading and storage.
@@ -640,6 +642,7 @@ class PracticeSetService:
         questions = json.loads(revision["questions_json"])
         latest = submissions[-1] if submissions else None
         latest_rows = _results_only(json.loads(latest["results_json"])) if latest else []
+        average = self._class_average(row, sum(q["points"] for q in questions)) if graded and submissions else None
         return {
             **self._summary(row),
             "title": revision["title"],
@@ -650,6 +653,8 @@ class PracticeSetService:
                 if _col(row, "attempts_limit") else None
             ),
             "answers_revealed": reveal,
+            # R6 / batch 4 §1: on the current version's full marks; ``None`` with fewer than 3 scores.
+            "class_average": average,
             "questions": [_for_student(q, reveal=reveal) for q in questions],
             "submissions": [
                 {**{k: s[k] for k in ("id", "revision", "submitted_at", "late", "max_score")},
@@ -660,6 +665,27 @@ class PracticeSetService:
             "latest_revision": latest["revision"] if latest else None,
             "latest_results": latest_rows if graded else _withheld(latest_rows),
         }
+
+    def _class_average(self, row, max_score: float) -> float | None:
+        """The average of the students the set reaches, each by the counted attempt's share."""
+        from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
+
+        scope = get_scope(PRACTICE_SET, row["id"])
+        reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
+        with store.read() as conn:
+            rows = conn.execute(
+                "SELECT student_id, score, max_score FROM practice_submissions WHERE set_id = ? ORDER BY submitted_at",
+                (row["id"],),
+            ).fetchall() if conn else []
+        by_student: dict[str, list] = {}
+        for submission in rows:
+            if submission["student_id"] in reached:
+                by_student.setdefault(submission["student_id"], []).append(submission)
+        mode = _col(row, "score_mode", "best") or "best"
+        shares = [_ratio(counted_submission(mine, mode)) for mine in by_student.values()]
+        if len(shares) < CLASS_AVERAGE_MIN:
+            return None
+        return round(sum(shares) / len(shares) * max_score, 1)
 
     @staticmethod
     def _reveal(row, submitted: bool) -> bool:

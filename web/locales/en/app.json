@@ -6252,5 +6252,16 @@
   "Creating your own courses is turned off for your account.": "Creating your own courses is turned off for your account.",
   "Adding your own task cards is turned off for your account.": "Adding your own task cards is turned off for your account.",
   "Only administrators set the AI limit.": "Only administrators set the AI limit.",
-  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Choose a daily limit between 0 (no limit) and 100000000 tokens."
+  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Choose a daily limit between 0 (no limit) and 100000000 tokens.",
+  "Class average {{score}} / {{max}}": "Class average {{score}} / {{max}}",
+  "Content was handed over to you: {{items}}": "Content was handed over to you: {{items}}",
+  "Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students": "Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students",
+  "Teacher's course": "Teacher's course",
+  "Your teacher withdrew this course, or it no longer reaches you. You can remove it.": "Your teacher withdrew this course, or it no longer reaches you. You can remove it.",
+  "{{from}}'s content was handed over to you: {{items}}": "{{from}}'s content was handed over to you: {{items}}",
+  "{{count}} courses": "{{count}} courses",
+  "{{count}} practice sets": "{{count}} practice sets",
+  "{{count}} Mastery Paths": "{{count}} Mastery Paths",
+  "{{count}} books": "{{count}} books",
+  "{{count}} knowledge bases": "{{count}} knowledge bases"
 }

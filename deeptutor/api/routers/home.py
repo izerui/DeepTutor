@@ -74,6 +74,15 @@ def _mine() -> list[dict[str, Any]]:
     return own[:MINE_LIMIT]
 
 
+def _mine_courses() -> list[dict[str, Any]]:
+    """The learner's own courses still in play, most recently changed first (batch 4 §4)."""
+    from deeptutor.services.courses import get_course_service
+
+    rows = [c for c in get_course_service().list_courses() if c.status != "archived"]
+    rows.sort(key=lambda c: c.updated_at, reverse=True)
+    return [{"id": c.id, "name": c.name, "color": c.color, "updated_at": c.updated_at} for c in rows[:MINE_LIMIT]]
+
+
 @router.get("")
 async def home() -> dict[str, Any]:
     from deeptutor.multi_user.roles import can_create_personal_mastery
@@ -87,7 +96,10 @@ async def home() -> dict[str, Any]:
         }
         from deeptutor.classes.announcements import AnnouncementService
 
-        for name, loader in (("school", _school), ("mine", _mine), ("announcements", AnnouncementService().for_home)):
+        for name, loader in (
+            ("school", _school), ("mine", _mine), ("mine_courses", _mine_courses),
+            ("announcements", AnnouncementService().for_home),
+        ):
             try:
                 sections[name] = loader()
             except Exception:

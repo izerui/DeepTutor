@@ -164,6 +164,14 @@ async def attach_course_resource(
     course_id: str,
     payload: AttachCourseResourceRequest,
 ) -> dict[str, object]:
+    if payload.kind == "teacher_course":
+        # Batch 4 §5: only a course a teacher sent this student, and under its own title.
+        from deeptutor.services.courses_state import resolve_resource_reference
+
+        detail = await resolve_resource_reference("teacher_course", payload.ref_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Course not found")
+        payload = payload.model_copy(update={"label": detail["title"]})
     try:
         resource = get_course_service().attach_resource(course_id, **payload.model_dump())
     except CourseNotFoundError as exc:

@@ -17,6 +17,8 @@ export const COURSE_RESOURCE_KINDS = [
   "reading_workspace",
   "partner",
   "partner_group",
+  // Spec 2026-11-03 batch 4 §5: a course a teacher sent, referenced, never copied.
+  "teacher_course",
 ] as const;
 
 export type CourseResourceKind = (typeof COURSE_RESOURCE_KINDS)[number];

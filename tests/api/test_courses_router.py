@@ -155,6 +155,11 @@ def test_state_degrades_when_every_subsystem_fails(
     with TestClient(_build_app()) as client:
         course = _create_course(client, instructions="Use epsilon-delta proofs.")
         for kind in COURSE_RESOURCE_KINDS:
+            if kind == "teacher_course":
+                # Batch 4 §5: the route admits only a course sent to the student,
+                # so a dangling one can only already be stored.
+                course_service.attach_resource(course["id"], kind=kind, ref_id=f"missing-{kind}")
+                continue
             attached = client.post(
                 f"/api/courses/{course['id']}/resources",
                 json={"kind": kind, "ref_id": f"missing-{kind}"},

@@ -241,7 +241,11 @@ class PublishService:
         cut = before - self._reached(kind, new, info)
         if cut and not confirm:
             raise ScopeNeedsConfirmation(len(cut))
-        scopes._store_scope(kind, item_id, new, actor_id=self.actor.id)
+        from deeptutor.teaching.material_watch import watching
+
+        # Batch 4 §2: narrowing a book or knowledge base tells authors of paths citing it.
+        with watching(kind, item_id):
+            scopes._store_scope(kind, item_id, new, actor_id=self.actor.id)
         if kind == MASTERY_PATH:
             scopes.reconcile_template(item_id)
         return self.describe(kind, item_id)

@@ -76,6 +76,8 @@ export interface TakeView extends PracticeSetSummary {
   teacher: string;
   /** ``null`` when the set has no attempt limit. */
   attempts_left?: number | null;
+  /** R6 / batch 4 §1: on the current version's full marks; ``null`` with fewer than 3 scores. */
+  class_average?: number | null;
   answers_revealed: boolean;
   questions: PracticeQuestion[];
   /** ``score`` is null while results are withheld. */

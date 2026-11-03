@@ -1013,12 +1013,16 @@ def set_book_visibility(
     kb_choices: Mapping[str, str] | None = None, confirm: bool = False,
     confirmed_referrers: Collection[str] | None = None,
 ) -> BookRecord:
+    from deeptutor.teaching.material_watch import watching
+
     from .sharing import set_visibility
 
-    return set_visibility(
-        book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
-        confirmed_referrers=confirmed_referrers,
-    )
+    # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
+    with watching("book", book_id):
+        return set_visibility(
+            book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
+            confirmed_referrers=confirmed_referrers,
+        )
 
 
 active_books: ContextVar[frozenset[str]] = ContextVar("active_books", default=frozenset())

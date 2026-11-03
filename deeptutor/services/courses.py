@@ -52,6 +52,8 @@ COURSE_RESOURCE_KINDS: tuple[str, ...] = (
     "reading_workspace",
     "partner",
     "partner_group",
+    # Spec 2026-11-03 batch 4 §5: a course a teacher sent, referenced, never copied.
+    "teacher_course",
 )
 
 #: A course is either in play or put away. Archiving is reversible and never

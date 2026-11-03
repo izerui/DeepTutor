@@ -6641,5 +6641,16 @@
   "Creating your own courses is turned off for your account.": "La création de vos propres cours est désactivée pour votre compte.",
   "Adding your own task cards is turned off for your account.": "L'ajout de vos propres cartes est désactivé pour votre compte.",
   "Only administrators set the AI limit.": "Seuls les administrateurs fixent la limite d'IA.",
-  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Choisissez une limite quotidienne entre 0 (sans limite) et 100000000 jetons."
+  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Choisissez une limite quotidienne entre 0 (sans limite) et 100000000 jetons.",
+  "Class average {{score}} / {{max}}": "Moyenne de la classe {{score}} / {{max}}",
+  "Content was handed over to you: {{items}}": "Du contenu vous a été transmis : {{items}}",
+  "Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students": "Le matériel « {{material}} » cité par « {{title}} » n'atteint plus {{count}} de ses élèves",
+  "Teacher's course": "Cours de l'enseignant",
+  "Your teacher withdrew this course, or it no longer reaches you. You can remove it.": "Votre enseignant a retiré ce cours, ou il ne vous atteint plus. Vous pouvez le retirer.",
+  "{{from}}'s content was handed over to you: {{items}}": "Le contenu de {{from}} vous a été transmis : {{items}}",
+  "{{count}} courses": "{{count}} cours",
+  "{{count}} practice sets": "{{count}} séries d'exercices",
+  "{{count}} Mastery Paths": "{{count}} parcours de maîtrise",
+  "{{count}} books": "{{count}} livres",
+  "{{count}} knowledge bases": "{{count}} bases de connaissances"
 }

@@ -167,10 +167,16 @@ export default function StudentHome() {
                 </Link>
               )}
             </div>
-            {home.mine.length === 0 ? (
+            {home.mine.length === 0 && (home.mine_courses ?? []).length === 0 ? (
               <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("You have not started anything of your own yet.")}</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {(home.mine_courses ?? []).map((course) => (
+                  <Link key={course.id} href={`/courses/${encodeURIComponent(course.id)}`} className={card}>
+                    <span className="block truncate text-[14px] font-medium">{course.name}</span>
+                    <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Course")}</span>
+                  </Link>
+                ))}
                 {home.mine.map((path) => (
                   <Link key={path.path_id} href={masteryTopicRoute(path.path_id, "")} className={card}>
                     <span className="block truncate text-[14px] font-medium">{path.name}</span>

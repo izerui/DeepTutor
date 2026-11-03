@@ -6298,5 +6298,16 @@
   "Creating your own courses is turned off for your account.": "Створення власних курсів вимкнено для вашого облікового запису.",
   "Adding your own task cards is turned off for your account.": "Додавання власних карток вимкнено для вашого облікового запису.",
   "Only administrators set the AI limit.": "Лише адміністратори встановлюють ліміт ШІ.",
-  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Виберіть денний ліміт від 0 (без обмежень) до 100000000 токенів."
+  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "Виберіть денний ліміт від 0 (без обмежень) до 100000000 токенів.",
+  "Class average {{score}} / {{max}}": "Середній бал класу {{score}} / {{max}}",
+  "Content was handed over to you: {{items}}": "Вам передано вміст: {{items}}",
+  "Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students": "Матеріал «{{material}}» зі шляху «{{title}}» більше не доступний для учнів: {{count}}",
+  "Teacher's course": "Курс викладача",
+  "Your teacher withdrew this course, or it no longer reaches you. You can remove it.": "Викладач відкликав цей курс, або він вам більше не доступний. Його можна вилучити.",
+  "{{from}}'s content was handed over to you: {{items}}": "Вам передано вміст {{from}}: {{items}}",
+  "{{count}} courses": "Курсів: {{count}}",
+  "{{count}} practice sets": "Наборів вправ: {{count}}",
+  "{{count}} Mastery Paths": "Шляхів опанування: {{count}}",
+  "{{count}} books": "Книг: {{count}}",
+  "{{count}} knowledge bases": "Баз знань: {{count}}"
 }

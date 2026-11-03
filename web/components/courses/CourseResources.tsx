@@ -8,6 +8,7 @@ import Link from "next/link";
 import {
   BookOpen,
   Bot,
+  ClipboardCheck,
   Database,
   GraduationCap,
   NotebookPen,
@@ -44,6 +45,7 @@ const KIND_ICONS: Record<CourseResourceKind, typeof BookOpen> = {
   reading_workspace: ScrollText,
   partner: Bot,
   partner_group: Users,
+  teacher_course: ClipboardCheck,
 };
 
 function useKindNames(): Record<CourseResourceKind, string> {
@@ -56,6 +58,7 @@ function useKindNames(): Record<CourseResourceKind, string> {
     reading_workspace: t("Reading"),
     partner: t("Partner"),
     partner_group: t("Partner group"),
+    teacher_course: t("Teacher's course"),
   };
 }
 
@@ -204,15 +207,28 @@ export default function CourseResources({
                   className="shrink-0 text-[var(--muted-foreground)]"
                 />
                 <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <span className="truncate text-[12.5px] text-[var(--foreground)]">
-                    {resource.label}
-                  </span>
+                  {resource.kind === "teacher_course" && resource.available ? (
+                    // Batch 4 §5: a teacher's course opens where it lives, with its progress.
+                    <Link href={`/tasks?course=${encodeURIComponent(resource.ref_id)}`}
+                      className="truncate text-[12.5px] text-[var(--foreground)] hover:underline">
+                      {resource.label}
+                      <span className="ml-1.5 text-[10.5px] text-[var(--muted-foreground)]">
+                        {t("{{done}} / {{total}} done", { done: Number(resource.detail.done ?? 0), total: Number(resource.detail.total ?? 0) })}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="truncate text-[12.5px] text-[var(--foreground)]">
+                      {resource.label}
+                    </span>
+                  )}
                   {/* Grouped with the label rather than given its own column:
                       as a separate cell its varying width pushed the kind name
                       to a different x-position on every row. */}
                   {!resource.available ? (
                     <Tooltip
-                      label={resource.unavailable_reason === "made_private"
+                      label={resource.kind === "teacher_course"
+                        ? t("Your teacher withdrew this course, or it no longer reaches you. You can remove it.")
+                        : resource.unavailable_reason === "made_private"
                         ? resource.kind === "book"
                           ? t("Its owner made this book private — remove the reference, or attach another resource.")
                           : t("Its owner made this knowledge base private — remove the reference, or attach another resource.")

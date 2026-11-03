@@ -91,9 +91,16 @@ def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
             ).rowcount)
     from deeptutor.tasks.service import transfer_tasks
 
-    moved["tasks"] = transfer_tasks(user_id, successor_id, published_only=True)
+    counts: dict[str, int] = {}
+    transfer_tasks(user_id, successor_id, published_only=True, counts=counts)
+    moved.update(counts)
     if any(moved.values()):
         logger.info("Handed what %s published to %s: %s", user_id, successor_id, moved)
+        from deeptutor.multi_user.identity import get_user_by_id
+        from deeptutor.notifications.service import notify_handover
+
+        found = get_user_by_id(user_id)
+        notify_handover(successor_id, user_id, str(found[0]) if found else "", moved)
     return moved
 
 

@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 KINDS = ("mastery_path", "practice_set", "book", "homework", "note")
 TITLE_MAX = 200
+#: Batch 4 §1: fewer scores than this and an average would reveal someone's.
+CLASS_AVERAGE_MIN = 3
 TEXT_MAX = 20_000
 MAX_FILES = 5
 FILE_MAX_BYTES = 20 * 1024 * 1024
@@ -865,7 +867,21 @@ class StudentTasks:
             row = conn.execute(
                 "SELECT * FROM task_submissions WHERE task_id = ? AND student_id = ?", (task_id, self.actor.id)
             ).fetchone() if conn else None
-        return TaskService._submission_view(row, for_teacher=False) if row else None
+            graded = [
+                r[0] for r in conn.execute(
+                    "SELECT score FROM task_submissions WHERE task_id = ? AND status = 'graded' AND score IS NOT NULL",
+                    (task_id,),
+                )
+            ] if conn and row is not None and row["status"] == "graded" else []
+        if row is None:
+            return None
+        view = TaskService._submission_view(row, for_teacher=False)
+        # R6 / batch 4 §1: the class average beside one's own grade, never a ranking;
+        # only once enough are graded that it gives nobody's score away.
+        view["class_average"] = (
+            round(sum(graded) / len(graded), 1) if len(graded) >= CLASS_AVERAGE_MIN else None
+        )
+        return view
 
     def get(self, key: str) -> dict[str, Any]:
         for entry in self.assigned():
@@ -1026,7 +1042,9 @@ async def suggest_grade(task_id: str, student_id: str) -> None:
 # ── account events ─────────────────────────────────────────
 
 
-def transfer_tasks(user_id: str, successor_id: str, *, published_only: bool = False) -> int:
+def transfer_tasks(
+    user_id: str, successor_id: str, *, published_only: bool = False, counts: dict[str, int] | None = None,
+) -> int:
     """A departing teacher's tasks: homework to a co-teacher of the class, the rest to *successor_id*.
 
     Spec 2026-11-03 §7: homework goes, if possible, to another teacher of a
@@ -1045,6 +1063,12 @@ def transfer_tasks(user_id: str, successor_id: str, *, published_only: bool = Fa
             (user_id,),
         ).fetchall()
     if not rows:
+        from deeptutor.tasks.courses import transfer_courses
+
+        # Courses go even when no task does (a course may hold none yet).
+        courses = transfer_courses(user_id, successor_id)
+        if counts is not None:
+            counts.update(tasks=0, courses=courses)
         return 0
     accounts = _accounts()
     moves: dict[str, str] = {}
@@ -1074,11 +1098,16 @@ def transfer_tasks(user_id: str, successor_id: str, *, published_only: bool = Fa
 
     from deeptutor.tasks.courses import transfer_courses
 
-    transfer_courses(user_id, successor_id)
-    for target in set(moves.values()):
+    courses = transfer_courses(user_id, successor_id)
+    # The successor hears it in one summary of everything handed over (batch 4 §3);
+    # a co-teacher who took homework hears it here.
+    for target in set(moves.values()) - {successor_id}:
         count = sum(1 for t in moves.values() if t == target)
         notify([target], "tasks_transferred", {"count": count},
                link="/tasks", dedupe_key=f"tasks_transferred:{user_id}:{target}")
+    if counts is not None:
+        counts["tasks"] = sum(1 for t in moves.values() if t == successor_id)
+        counts["courses"] = courses
     return len(moves)
 
 

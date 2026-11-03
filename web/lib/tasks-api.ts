@@ -53,6 +53,8 @@ export interface Submission {
   comment: string;
   return_reason: string;
   graded_at: number | null;
+  /** R6 / batch 4 §1: the class average once 3 or more are graded; never a ranking. */
+  class_average?: number | null;
   /** Teacher only. */
   ai_score?: number | null;
   ai_reason?: string;
@@ -161,6 +163,8 @@ export interface HomeData {
   history_count: number;
   school: { kind: "book" | "knowledge_base"; id: string; ref?: string; title: string; updated_at: string }[];
   mine: { path_id: string; name: string; mastered: number; total: number; updated_at: number }[];
+  /** Batch 4 §4: one's own courses still in play. */
+  mine_courses?: { id: string; name: string; color: string; updated_at: number }[];
   can_create_path: boolean;
 }
 

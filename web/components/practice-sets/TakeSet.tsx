@@ -123,6 +123,11 @@ export function TakeSet({ setId }: { setId: string }) {
               ? t("Submitted")
               : t("Score {{score}} / {{max}}", { score: result.score, max: result.max_score })}
             {result.late && <span className="ml-2 text-[12px] text-amber-600">{t("Late")}</span>}
+            {result.score !== null && view.class_average != null && (
+              <span className="ml-2 text-[12px] font-normal text-[var(--muted-foreground)]">
+                {t("Class average {{score}} / {{max}}", { score: view.class_average, max: result.max_score })}
+              </span>
+            )}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
             {result.answers_revealed

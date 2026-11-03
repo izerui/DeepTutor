@@ -6252,5 +6252,16 @@
   "Creating your own courses is turned off for your account.": "你的账号不能自建课程。",
   "Adding your own task cards is turned off for your account.": "你的账号不能在看板上加自己的卡片。",
   "Only administrators set the AI limit.": "只有管理员能设 AI 用量上限。",
-  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "每天上限请填 0（不限）到 100000000 个 token。"
+  "Choose a daily limit between 0 (no limit) and 100000000 tokens.": "每天上限请填 0（不限）到 100000000 个 token。",
+  "Class average {{score}} / {{max}}": "全班平均 {{score}} / {{max}}",
+  "Content was handed over to you: {{items}}": "有内容转交给了你：{{items}}",
+  "Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students": "「{{title}}」引用的资料「{{material}}」被撤回，有 {{count}} 名学生看不到了",
+  "Teacher's course": "老师的课程",
+  "Your teacher withdrew this course, or it no longer reaches you. You can remove it.": "老师撤回了这门课程，或者你已经收不到它了，可以把它移除。",
+  "{{from}}'s content was handed over to you: {{items}}": "{{from}} 的内容转交给了你：{{items}}",
+  "{{count}} courses": "{{count}} 门课程",
+  "{{count}} practice sets": "{{count}} 套练习集",
+  "{{count}} Mastery Paths": "{{count}} 条精通之路",
+  "{{count}} books": "{{count}} 本书",
+  "{{count}} knowledge bases": "{{count}} 个知识库"
 }
