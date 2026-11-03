@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { useModalDialog } from "@/hooks/useModalDialog";
 import type { MasteryTopic, PassStandard } from "@/lib/learning-api";
 import {
-  listAssignments,
   previewPublish,
   publishTemplate,
   registerTeacherTemplate,
@@ -20,7 +19,6 @@ import {
 } from "@/lib/teaching-api";
 
 import { topicDisplayName, type Translate } from "./format";
-import { StudentPicker } from "./StudentPicker";
 import {
   canSubmitPublish,
   decisionValue,
@@ -61,7 +59,6 @@ export function PublishTemplateDialog({
   const say = (message: Message) => t(message.key, message.values);
   const [templateId, setTemplateId] = useState(template?.id ?? "");
   const [preview, setPreview] = useState<PublishPreview | null>(null);
-  const [assignedIds, setAssignedIds] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<Message | null>(null);
   const [submitError, setSubmitError] = useState<Message | null>(null);
   const [blocked, setBlocked] = useState<PublishBlockedDetail | null>(null);
@@ -74,7 +71,6 @@ export function PublishTemplateDialog({
     template: TeacherTemplate;
     warnings: PublishWarning[];
   } | null>(null);
-  const [studentIds, setStudentIds] = useState<string[]>([]);
   const dialogRef = useModalDialog(onClose, busy, returnFocusRef);
 
   const knownTemplateId = template?.id;
@@ -101,16 +97,10 @@ export function PublishTemplateDialog({
         const registered = knownTemplateId
           ? { id: knownTemplateId }
           : await registerTeacherTemplate(pathId, workspaceId);
-        const [next, assignments] = await Promise.all([
-          previewPublish(registered.id),
-          listAssignments(registered.id).catch(() => []),
-        ]);
+        const next = await previewPublish(registered.id);
         if (!alive) return;
         setTemplateId(registered.id);
         setPreview(next);
-        setAssignedIds(
-          assignments.filter((row) => row.status === "active").map((row) => row.student_user_id),
-        );
         // Defaults come from the server: "make public" the first time, the
         // previous revision's choice on a republish. "Check again" keeps the
         // teacher's own choices for keys that still exist (never silently
@@ -167,10 +157,7 @@ export function PublishTemplateDialog({
   const removed = preview?.changes.removed ?? [];
   const removedNames = Object.fromEntries(removed.map((point) => [point.kp_id, point.name]));
   const duplicates = duplicateContinuations(decisions);
-  // Spec 2026-11-02 §4.1: with no class to default to, the students are picked.
-  const missingStudents = Boolean(preview?.needs_students) && studentIds.length === 0;
-  const canSubmit =
-    !blocked && !published && !missingStudents && canSubmitPublish(preview, decisions, busy);
+  const canSubmit = !blocked && !published && canSubmitPublish(preview, decisions, busy);
 
   const submit = async () => {
     if (!preview || !canSubmit) return;
@@ -182,7 +169,9 @@ export function PublishTemplateDialog({
         kp_decisions: decisions,
         kb_choices: kbChoices,
         book_choices: bookChoices,
-        student_ids: studentIds,
+        // Platform batch 1 §4.4: no receivers are chosen; people join from the market.
+        student_ids: [],
+        join_only: true,
       });
       // Published, but something after the revision failed: say so and let
       // the teacher close the dialog themselves.
@@ -474,26 +463,10 @@ export function PublishTemplateDialog({
             </section>
           )}
 
-          {preview && !published && (
-            <section>
-              <h3 className="font-medium">{t("Students")}</h3>
-              {assignedIds.length > 0 && (
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  {t("{{count}} students assigned", { count: assignedIds.length })}
-                </p>
-              )}
-              <StudentPicker
-                selected={studentIds}
-                onChange={setStudentIds}
-                exclude={assignedIds}
-                disabled={busy}
-              />
-              {missingStudents && (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                  {t("You teach no class yet, so pick the students who receive this path.")}
-                </p>
-              )}
-            </section>
+          {preview && !published && firstPublish && (
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {t("Nobody receives it until they join from the learning market. List it from Manage once it is published.")}
+            </p>
           )}
 
           {preview && !published && (preview.material_warnings ?? []).length > 0 && (

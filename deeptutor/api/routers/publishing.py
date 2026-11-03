@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import contextmanager
 from typing import Any, TypeVar
 
 from fastapi import APIRouter, HTTPException, Query
@@ -31,6 +32,8 @@ class ScopeChoice(BaseModel):
     users: list[str] = Field(default_factory=list, max_length=1000)
     classes: list[str] = Field(default_factory=list, max_length=200)
     groups: list[str] = Field(default_factory=list, max_length=200)
+    #: For the market: nobody receives it until they join (platform batch 1 §4.4).
+    join_only: bool = False
 
     def to_scope(self):
         from deeptutor.publishing.scope import Scope
@@ -40,11 +43,15 @@ class ScopeChoice(BaseModel):
         )
 
 
+@contextmanager
 def chosen(choice: ScopeChoice | None):
     """``with chosen(body.scope):`` around a publication."""
-    from deeptutor.publishing.scope import chosen_scope
+    from deeptutor.publishing.scope import chosen_scope, join_only
 
-    return chosen_scope(choice.to_scope() if choice is not None else None)
+    with join_only(bool(choice and choice.join_only)), chosen_scope(
+        choice.to_scope() if choice is not None else None
+    ):
+        yield
 
 
 class ScopeUpdate(BaseModel):

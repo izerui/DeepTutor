@@ -15,6 +15,10 @@ const fixture = vi.hoisted(() => ({
   files: vi.fn(),
   deleteFile: vi.fn(),
 }));
+// Platform batch 1: the market listing has its own fetches and its own spec.
+vi.mock("@/components/catalog/ListingPanel", () => ({
+  ListingPanel: ({ kind, itemId }: { kind: string; itemId: string }) => <div data-testid="listing-panel">{`${kind}:${itemId}`}</div>,
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)}}/g, (_, name: string) => String(values?.[name] ?? name)),
@@ -206,7 +210,7 @@ it("groups public/private/connectors and removes creation and external connectio
     { name: "vault", connector: true },
   ]} />);
   // Spec 2026-11-02 §3.1: grouped by where each comes from, labelled the same way.
-  for (const name of ["From other teachers", "Published by the school", "Mine", "My connectors"]) {
+  for (const name of ["From other teachers", "Published by the platform", "Mine", "My connectors"]) {
     expect(screen.getByRole("heading", { name: new RegExp(name) })).toBeTruthy();
   }
   expect(screen.getByText("Shared by teacher")).toBeTruthy();

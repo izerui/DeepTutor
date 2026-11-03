@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   archiveTemplate,
-  assignStudents,
   deleteTemplate,
   listAssignments,
   revokeAssignment,
@@ -15,10 +14,9 @@ import {
   type TemplateAssignment,
 } from "@/lib/teaching-api";
 
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { ListingPanel } from "@/components/catalog/ListingPanel";
 
 import { ConfirmDialog } from "./ConfirmDialog";
-import { StudentPicker } from "./StudentPicker";
 import { teachingErrorMessage, type Message } from "./teaching";
 
 type Confirming = "archive" | "delete" | null;
@@ -36,7 +34,6 @@ export function TemplateAssignmentsDialog({
 }) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<TemplateAssignment[] | null>(null);
-  const [adding, setAdding] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
@@ -76,9 +73,6 @@ export function TemplateAssignmentsDialog({
     }
   };
 
-  const activeIds = (rows ?? [])
-    .filter((row) => row.status === "active")
-    .map((row) => row.student_user_id);
   // The server refuses to delete anything published or ever assigned.
   const deletable = template.current_revision === 0 && rows !== null && rows.length === 0;
   // Spec 2026-10-29 D10: who receives a path is its teacher's choice; an
@@ -170,48 +164,15 @@ export function TemplateAssignmentsDialog({
             </ul>
           )}
 
+          {/* Platform batch 1 §4.4: no more picking students; the path is listed in the market. */}
           {canAssign ? (
-            <section>
-              <h3 className="font-medium">{t("Assign students")}</h3>
-              <StudentPicker
-                selected={adding}
-                onChange={setAdding}
-                exclude={activeIds}
-                disabled={busy}
-              />
-              <button
-                type="button"
-                disabled={busy || adding.length === 0}
-                onClick={() =>
-                  void run(async () => {
-                    await assignStudents(templateId, adding);
-                    setAdding([]);
-                  })
-                }
-                className="mt-2 inline-flex h-9 items-center rounded-lg bg-[var(--primary)] px-3 text-xs font-medium text-[var(--primary-foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 disabled:opacity-50"
-              >
-                {t("Assign students")}
-              </button>
-            </section>
+            <ListingPanel kind="mastery_path" itemId={templateId} onChanged={onChanged} />
           ) : (
             template.status === "draft" && (
               <p className="text-xs text-[var(--muted-foreground)]">
-                {t("Publish this path before assigning students.")}
+                {t("Publish this path before listing it in the learning market.")}
               </p>
             )
-          )}
-
-          {canAssign && (
-            <section className="border-t border-[var(--border)] pt-4">
-              <PublishScopeEditor
-                kind="mastery_path"
-                itemId={templateId}
-                onSaved={() => {
-                  onChanged();
-                  setReload((value) => value + 1);
-                }}
-              />
-            </section>
           )}
 
           {error && (

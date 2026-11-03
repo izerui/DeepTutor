@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { usePendingReviews } from "@/components/catalog/AdminNav";
+import { MyListings } from "@/components/catalog/MyListings";
 import { flagText } from "@/components/classes/attention-format";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getHome, type HomeData } from "@/lib/tasks-api";
@@ -172,6 +174,7 @@ export function TeacherWorkbench() {
           </section>
         </>
       )}
+      <MyListings />
       <MyLearning />
     </div>
   );
@@ -185,6 +188,7 @@ export function AdminHome() {
     ["/classes", "Classes, departments and grades"],
     ["/settings", "Models and settings"],
   ];
+  const pending = usePendingReviews();
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-8" data-testid="admin-home">
       <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
@@ -194,8 +198,16 @@ export function AdminHome() {
             <span className="block text-[13px] font-medium">{t(label)}</span>
           </Link>
         ))}
+        {/* Platform batch 1 §5.2: what waits for review. */}
+        <Link href="/admin/review" className={card} data-testid="admin-pending-reviews">
+          <span className="block text-[13px] font-medium">{t("Listing review")}</span>
+          <span className="text-[11.5px] text-[var(--muted-foreground)]">
+            {t("{{count}} waiting for review", { count: pending ?? 0 })}
+          </span>
+        </Link>
       </div>
       <AiLimitSetting />
+      <MyListings />
       <MyLearning />
     </div>
   );

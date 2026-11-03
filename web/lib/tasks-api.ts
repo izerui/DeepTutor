@@ -161,7 +161,8 @@ export interface HomeData {
   announcements?: import("./classes-api").Announcement[];
   assigned: AssignedTask[];
   history_count: number;
-  school: { kind: "book" | "knowledge_base"; id: string; ref?: string; title: string; updated_at: string }[];
+  /** Platform batch 1 §5.3: newly listed in the market (30 days, at most 6). */
+  market?: import("./catalog-api").CatalogEntry[];
   mine: { path_id: string; name: string; mastered: number; total: number; updated_at: number }[];
   /** Batch 4 §4: one's own courses still in play. */
   mine_courses?: { id: string; name: string; color: string; updated_at: number }[];

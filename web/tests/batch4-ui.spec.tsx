@@ -47,7 +47,7 @@ it("words the hand-over summary and the withdrawn-material notice", () => {
 
 it("lists one's own courses among what one is learning", async () => {
   tasks.getHome.mockResolvedValue({
-    assigned: [], history_count: 0, can_create_path: true, school: [], mine: [],
+    assigned: [], history_count: 0, can_create_path: true, market: [], mine: [],
     mine_courses: [{ id: "crs_1", name: "Algebra", color: "#000", updated_at: 1 }],
   });
   render(<StudentHome />);

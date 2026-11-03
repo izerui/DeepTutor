@@ -81,6 +81,15 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return transferredText(p, t);
     case "tasks_transferred":
       return t("{{count}} tasks were handed over to you", { count: p.count });
+    // Platform batch 1 §2: the listing's way through review.
+    case "listing_submitted":
+      return t("“{{title}}” is waiting for review", { title });
+    case "listing_approved":
+      return t("“{{title}}” is in the market", { title });
+    case "listing_rejected":
+      return t("“{{title}}” was not approved: {{reason}}", { title, reason: p.reason });
+    case "listing_taken_down":
+      return t("“{{title}}” was taken out of the market: {{reason}}", { title, reason: p.reason });
     default:
       return item.kind;
   }

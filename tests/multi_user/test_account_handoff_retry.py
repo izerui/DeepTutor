@@ -40,6 +40,7 @@ ALL_STAGES = (
     "notifications",
     "comments",
     "practice_answers",
+    "catalog",
 )
 
 

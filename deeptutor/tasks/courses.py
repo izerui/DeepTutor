@@ -147,8 +147,14 @@ class CourseService:
         if row["status"] == "published" and task_ids is not None:
             # Tasks added to a published course follow its receivers (§5.1); a task
             # already published must already reach them all, as at publication.
-            self._check_coverage(course_id, added)
+            from deeptutor.catalog.enrollment import refresh_course
+            from deeptutor.publishing import scope as scopes
+
+            if not scopes.join_only_scope(scopes._stored_scope(scopes.COURSE, course_id)):
+                self._check_coverage(course_id, added)
             self._publish_drafts(course_id)
+            # Its members get the new tasks and what they cite (platform batch 1 §4.3).
+            refresh_course(course_id)
         return self.get(course_id)
 
     def _check_coverage(self, course_id: str, task_ids: list[str]) -> None:
@@ -195,9 +201,11 @@ class CourseService:
                 items,
             )] if items else []
         done: list[str] = []
+        # A course for the market hands its tasks to its members (platform batch 1 §4.3).
+        market = scopes.join_only_scope(scope)
         try:
             for task_id in drafts:
-                with scopes.chosen_scope(scopes.Scope(
+                with scopes.join_only(market), scopes.chosen_scope(scopes.Scope(
                     everyone=scope.everyone, users=list(scope.users), classes=list(scope.classes),
                     groups=list(scope.groups),
                 ) if scope else None):
@@ -237,7 +245,7 @@ class CourseService:
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)
         try:
-            if scope is None or scope.empty:
+            if scope is None or (scope.empty and not scopes.is_join_only()):
                 raise scopes.ScopeRequired()
             receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id)
             for task_id in published:
@@ -273,6 +281,9 @@ class CourseService:
             ):
                 raise TaskNotFound("Course not found.")
             conn.execute("UPDATE courses SET status = 'archived', updated_at = ? WHERE id = ?", (time.time(), course_id))
+        from deeptutor.catalog.listings import content_closed
+
+        content_closed("course", course_id)  # platform batch 1 §2
         return {"id": course_id, "status": "archived"}
 
     def delete(self, course_id: str) -> None:

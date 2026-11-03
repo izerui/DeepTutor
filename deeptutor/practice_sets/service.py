@@ -493,6 +493,9 @@ class PracticeSetService:
             conn.execute(
                 "UPDATE practice_sets SET status = 'archived', updated_at = ? WHERE id = ?", (_now(), set_id)
             )
+        from deeptutor.catalog.listings import content_closed
+
+        content_closed("practice_set", set_id)  # platform batch 1 §2
         if row["owner_user_id"] != self.actor.id:
             # An administrator sees what they withdrew, never its questions or results.
             return {**self._summary(row), "status": "archived"}

@@ -688,6 +688,9 @@ def unregister_book(book_id: str) -> None:
     from .sharing import unregister
 
     unregister(book_id)
+    from deeptutor.catalog.listings import forget
+
+    forget("book", _validate_id(strip_ref(book_id)))
 
 
 def _relocate_book(conn: sqlite3.Connection, book_id: str, base_dir: Path | str) -> None:
@@ -1019,10 +1022,15 @@ def set_book_visibility(
 
     # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
     with watching("book", book_id):
-        return set_visibility(
+        record = set_visibility(
             book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
             confirmed_referrers=confirmed_referrers,
         )
+    if visibility == "private":
+        from deeptutor.catalog.listings import content_closed
+
+        content_closed("book", record.book_id)  # platform batch 1 §2
+    return record
 
 
 active_books: ContextVar[frozenset[str]] = ContextVar("active_books", default=frozenset())

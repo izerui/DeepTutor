@@ -36,6 +36,8 @@ export interface ScopeUpdate {
   classes: string[];
   groups?: string[];
   confirm?: boolean;
+  /** On a first publication: for the market, nobody receives it until they join (platform batch 1 §4.4). */
+  join_only?: boolean;
 }
 
 export class PublishApiError extends Error {

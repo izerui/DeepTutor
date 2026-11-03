@@ -455,7 +455,7 @@ class TaskService:
         scopes.default_scope_on_publish(scopes.TASK, task_id)
         scope = scopes.get_scope(scopes.TASK, task_id)
         try:
-            if scope is None or scope.empty:
+            if scope is None or (scope.empty and not scopes.is_join_only()):
                 raise scopes.ScopeRequired()
             if kind == "homework" and scope.everyone:
                 raise TaskError("Homework goes to your classes or chosen students, not to everyone.")

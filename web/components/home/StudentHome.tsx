@@ -9,7 +9,8 @@ import { SourceBadge } from "@/components/common/SourceBadge";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import { AiUsageNote } from "./AiUsage";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
-import { bookRoute, MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
+import { authorLabel, itemHref, kindLabel } from "@/components/catalog/catalog-format";
+import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData } from "@/lib/tasks-api";
 
 const card = "rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--ring)]";
@@ -35,7 +36,7 @@ function TaskCard({ task, onOpen, selected }: { task: AssignedTask; onOpen: () =
 
 /**
  * The student home (spec 2026-11-03 batch 1 §6): what teachers assigned,
- * what the school published, and one's own learning — never mixed.
+ * what is new in the learning market, and one's own learning — never mixed.
  */
 export default function StudentHome() {
   const { t } = useTranslation();
@@ -72,7 +73,7 @@ export default function StudentHome() {
         <div>
           <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
           <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-            {t("What your teachers assigned, what the school published, and what you are learning yourself.")}
+            {t("What your teachers assigned, what is new in the market, and what you are learning yourself.")}
           </p>
         </div>
         <Link href="/chat" className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[13px]">
@@ -138,20 +139,18 @@ export default function StudentHome() {
             )}
           </section>
 
-          {home.school.length > 0 && (
-            <section aria-labelledby="home-school" className="space-y-3">
-              <h2 id="home-school" className="text-[13px] font-semibold">{t("Published by the school")}</h2>
+          {(home.market ?? []).length > 0 && (
+            <section aria-labelledby="home-market" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 id="home-market" className="text-[13px] font-semibold">{t("New in the market")}</h2>
+                <Link href="/market" className="text-[12.5px] text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {home.school.map((item) => (
-                  <Link
-                    key={`${item.kind}:${item.id}`}
-                    href={item.kind === "book" ? bookRoute(`book:${item.id}`, null, "") : "/knowledge-bases"}
-                    className={card}
-                  >
-                    <span className="text-[11px] text-[var(--muted-foreground)]">
-                      {item.kind === "book" ? t("Book") : t("Knowledge base")}
-                    </span>
+                {(home.market ?? []).map((item) => (
+                  <Link key={`${item.kind}:${item.id}`} href={itemHref(item.kind, item.id)} className={card}>
+                    <span className="text-[11px] text-[var(--muted-foreground)]">{kindLabel(item.kind, t)}</span>
                     <span className="mt-1 block truncate text-[14px] font-medium">{item.title}</span>
+                    <span className="block truncate text-[11.5px] text-[var(--muted-foreground)]">{authorLabel(item, t)}</span>
                   </Link>
                 ))}
               </div>

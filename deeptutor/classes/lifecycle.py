@@ -94,6 +94,9 @@ def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     transfer_tasks(user_id, successor_id, published_only=True, counts=counts)
     moved.update(counts)
+    from deeptutor.catalog.listings import follow_owners
+
+    follow_owners(user_id)  # platform batch 1: listings follow their content
     if any(moved.values()):
         logger.info("Handed what %s published to %s: %s", user_id, successor_id, moved)
         from deeptutor.multi_user.identity import get_user_by_id

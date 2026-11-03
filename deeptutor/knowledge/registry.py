@@ -771,6 +771,9 @@ def unregister_kb(kb_id: str) -> None:
         record = _record(row)
         _revoke(conn, record, _references_of(conn, record.kb_id), reason="kb_deleted")
         conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
+    from deeptutor.catalog.listings import forget
+
+    forget("knowledge_base", record.kb_id)
 
 
 @contextmanager
@@ -914,6 +917,10 @@ def set_visibility(
     updated = get_kb(record.kb_id)
     if updated is None:
         raise KbRegistryError(f"Knowledge base {kb_id} disappeared after visibility update.")
+    if visibility == "private":
+        from deeptutor.catalog.listings import content_closed
+
+        content_closed("knowledge_base", record.kb_id)  # platform batch 1 §2
     return updated
 
 

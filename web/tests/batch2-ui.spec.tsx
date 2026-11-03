@@ -77,7 +77,7 @@ it("posts a pinned announcement and gives students no editing", async () => {
 
 it("puts class announcements on the student home", async () => {
   tasks.getHome.mockResolvedValue({
-    assigned: [], history_count: 0, can_create_path: false, school: [], mine: [],
+    assigned: [], history_count: 0, can_create_path: false, market: [], mine: [],
     announcements: [{ id: "a1", class_id: "cls_1", class_name: "Physics 1", author: "", text: "Bring a calculator.", pinned: true, created_at: 1, updated_at: 1, can_edit: false }],
   });
   render(<StudentHome />);

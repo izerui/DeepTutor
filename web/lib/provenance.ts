@@ -21,7 +21,7 @@ export const PROVENANCE_ORDER: readonly ProvenanceKind[] = ["teacher", "school",
 export function provenanceLabel(provenance: Provenance | null | undefined, t: Translate, viewerIsStudent: boolean): string {
   switch (provenance?.kind ?? "own") {
     case "school":
-      return t("Published by the school");
+      return t("Published by the platform");
     case "teacher":
       return viewerIsStudent
         ? t("Assigned by {{name}}", { name: provenance?.name ?? "" })
@@ -39,7 +39,7 @@ export function provenanceGroupTitle(kind: ProvenanceKind, t: Translate, viewerI
     case "teacher":
       return viewerIsStudent ? t("From my teachers") : t("From other teachers");
     case "school":
-      return t("Published by the school");
+      return t("Published by the platform");
     case "shared":
       return t("Shared with me");
     default:

@@ -80,7 +80,7 @@ export function TeacherPathBanner({
           <GraduationCap aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
           <span>
             {origin.provenance?.kind === 'school'
-              ? t('Published by the school')
+              ? t('Published by the platform')
               : t('From {{teacher}}', { teacher: origin.teacher_name || t('Teacher') })}
           </span>
           <span aria-hidden="true">·</span>

@@ -81,6 +81,9 @@ class Scope:
     groups: list[str] = field(default_factory=list)
     #: False when the item has never had a scope (the old rule applies).
     managed: bool = True
+    #: Who joined it from the market (platform batch 1 §4.2). Read with the
+    #: scope, never stored with it.
+    members: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,7 +111,31 @@ class Scope:
 
 
 def get_scope(kind: str, item_id: str) -> Scope | None:
-    """The stored scope, or ``None`` when the item has never had one."""
+    """The stored scope with the item's market members, or ``None`` when it never had one.
+
+    An item an administrator took out of the market reaches nobody but its
+    owner (platform batch 1 §2), whatever its scope says.
+    """
+    return _with_members(kind, item_id, _stored_scope(kind, item_id))
+
+
+def _with_members(kind: str, item_id: str, scope: Scope | None) -> Scope | None:
+    try:
+        from deeptutor.catalog.enrollment import access_state
+
+        taken_down, members = access_state(kind, item_id)
+    except Exception:
+        # An unreadable market store must not widen access.
+        logger.exception("Could not read the market members of %s %s", kind, item_id)
+        return Scope()
+    if taken_down:
+        return Scope()
+    if scope is not None:
+        scope.members = members
+    return scope
+
+
+def _stored_scope(kind: str, item_id: str) -> Scope | None:
     with store.read() as conn:
         if conn is None:
             return None
@@ -161,7 +188,7 @@ def member_class_ids(user_id: str) -> set[str]:
 
 
 def _reaches(scope: Scope, user_id: str, classes: set[str] | None = None) -> bool:
-    if scope.everyone or user_id in scope.users:
+    if scope.everyone or user_id in scope.users or user_id in scope.members:
         return True
     if not scope.classes and not scope.groups:
         return False
@@ -223,6 +250,7 @@ def audience(scope: Scope, *, students_only: bool = False, owner_id: str = "") -
         reached = set(accounts)
     else:
         reached = set(scope.users) | _class_audience(sorted(scope.all_classes()), students_only=students_only)
+    reached |= set(scope.members)
     reached.discard(owner_id)
     return reached & set(accounts)
 
@@ -265,6 +293,27 @@ def taught_class_ids(user_id: str) -> list[str]:
 
 #: The receivers the publisher chose for this publication (see :func:`chosen_scope`).
 _chosen: ContextVar[Scope | None] = ContextVar("publish_chosen_scope", default=None)
+#: Published for the market: nobody receives it until they join (platform batch 1 §4.4).
+_join_only: ContextVar[bool] = ContextVar("publish_join_only", default=False)
+
+
+@contextmanager
+def join_only(enabled: bool = True) -> Iterator[None]:
+    """Publish inside this block with no receivers: only people who join reach it."""
+    token = _join_only.set(enabled)
+    try:
+        yield
+    finally:
+        _join_only.reset(token)
+
+
+def is_join_only() -> bool:
+    return _join_only.get()
+
+
+def join_only_scope(scope: Scope | None) -> bool:
+    """Stored without receivers: reached through the market only."""
+    return scope is not None and scope.empty
 
 
 @contextmanager
@@ -302,6 +351,9 @@ def default_scope_on_publish(kind: str, item_id: str) -> None:
 
     user = get_current_user_or_none()
     if user is None or get_scope(kind, item_id) is not None:
+        return
+    if _join_only.get():
+        _store_scope(kind, item_id, Scope(), actor_id=user.id)
         return
     chosen = _chosen.get()
     if chosen is not None:
@@ -427,7 +479,7 @@ def reconcile_student_quietly(student_id: str) -> None:
 
 def path_added_students(template_id: str, student_ids: list[str], *, actor_id: str) -> None:
     """Hand-picked students join a scoped path's audience as named accounts."""
-    scope = get_scope(MASTERY_PATH, template_id)
+    scope = _stored_scope(MASTERY_PATH, template_id)
     if scope is None:
         return
     scope.users = list(dict.fromkeys([*scope.users, *student_ids]))
@@ -436,7 +488,7 @@ def path_added_students(template_id: str, student_ids: list[str], *, actor_id: s
 
 def path_revoke_allowed(template_id: str, student_id: str, *, actor_id: str) -> None:
     """Drop a named student from a scoped path; refuse when a class or everyone still reaches them."""
-    scope = get_scope(MASTERY_PATH, template_id)
+    scope = _stored_scope(MASTERY_PATH, template_id)
     if scope is None:
         return
     scope.users = [u for u in scope.users if u != student_id]
@@ -464,6 +516,9 @@ __all__ = [
     "ScopeRequired",
     "allows",
     "chosen_scope",
+    "is_join_only",
+    "join_only",
+    "join_only_scope",
     "audience",
     "forget",
     "get_scope",

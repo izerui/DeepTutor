@@ -5,6 +5,10 @@ import { BookApiError } from "@/lib/book-api";
 import type { Book } from "@/lib/book-types";
 
 const fixture = vi.hoisted(() => ({ sharing: vi.fn(), setVisibility: vi.fn(), t: (key: string) => key }));
+// Platform batch 1: the market listing has its own fetches and its own spec.
+vi.mock("@/components/catalog/ListingPanel", () => ({
+  ListingPanel: ({ kind, itemId }: { kind: string; itemId: string }) => <div data-testid="listing-panel">{`${kind}:${itemId}`}</div>,
+}));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
 // Spec 2026-11-02 §4.1: a first publication preselects the classes the publisher teaches.
 const scopeFixture = vi.hoisted(() => ({ getScope: vi.fn() }));
@@ -32,28 +36,26 @@ beforeEach(() => {
   fixture.setVisibility.mockReset().mockResolvedValue({});
   scopeFixture.getScope.mockReset().mockResolvedValue(unscoped(["c1"]));
 });
-it("defaults private KB choices to the server plan and submits reference-only using the bound scope", async () => {
+it("defaults private KB choices to the server plan and publishes for the market only", async () => {
   const close = vi.fn();
   render(<BookShareDialog book={book} isAdmin={false} onClose={close} onChanged={vi.fn()} />);
   const select = await screen.findByRole("combobox", { name: "Physics" });
   expect(select).toHaveValue("make_public");
   fireEvent.change(select, { target: { value: "reference_only" } });
-  await screen.findByRole("checkbox", { name: "Class 1" });
+  // Platform batch 1 §4.4: no receivers to pick; nobody receives it until they join.
+  expect(screen.queryByRole("checkbox", { name: "Class 1" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Make public" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenCalledWith("book:same", {
     visibility: "public", kb_choices: { kb1: "reference_only" }, force: false,
-    scope: { everyone: false, users: [], classes: ["c1"], groups: [] },
+    scope: { everyone: false, users: [], classes: [], groups: [], join_only: true },
   }, "w");
 });
-it("asks someone who teaches no class to choose receivers before publishing", async () => {
-  scopeFixture.getScope.mockResolvedValue(unscoped([]));
-  render(<BookShareDialog book={book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
-  const classBox = await screen.findByRole("checkbox", { name: "Class 1" });
-  expect(classBox).not.toBeChecked();
-  expect(screen.getByRole("button", { name: "Make public" })).toBeDisabled();
-  fireEvent.click(classBox);
-  expect(screen.getByRole("button", { name: "Make public" })).toBeEnabled();
+it("shows the market listing instead of receivers once the book is public", async () => {
+  fixture.sharing.mockResolvedValue({ ...sharing, book_id: "same", visibility: "public", kbs: { ...sharing.kbs, private_kbs: [] } });
+  render(<BookShareDialog book={{ ...book, visibility: "public" } as Book} isAdmin={false} onClose={vi.fn()} onChanged={vi.fn()} />);
+  expect((await screen.findByTestId("listing-panel")).textContent).toBe("book:same");
+  expect(screen.queryByRole("checkbox", { name: "Class 1" })).toBeNull();
 });
 it("keeps dismissal available after loading failure and never enables submission", async () => {
   fixture.sharing.mockRejectedValue(new Error("Unavailable"));

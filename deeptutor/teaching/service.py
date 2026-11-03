@@ -803,6 +803,12 @@ class TeachingService:
         return True
 
     async def publish(self, template_id: str, request: PublishRequest) -> dict:
+        from deeptutor.publishing import scope as scopes
+
+        if request.join_only and not scopes.is_join_only():
+            # Platform batch 1 §4.4: for the market, nobody receives it until they join.
+            with scopes.join_only():
+                return await self.publish(template_id, request)
         # 1. Validate everything; nothing below writes until this block passes.
         # Synchronous store/registry sections run in worker threads (never on
         # the event loop), and nothing awaits while holding a writer.
@@ -820,7 +826,7 @@ class TeachingService:
         students = await asyncio.to_thread(self._validate_students, request.student_ids)
         from deeptutor.publishing import scope as scopes
 
-        if template.current_revision == 0 and not students and not await asyncio.to_thread(
+        if template.current_revision == 0 and not students and not scopes.is_join_only() and not await asyncio.to_thread(
             lambda: scopes.get_scope(scopes.MASTERY_PATH, template.id) is not None
             or bool(scopes.taught_class_ids(user.id))
         ):
@@ -1048,6 +1054,9 @@ class TeachingService:
         """Stop offering the path; students keep their records but cannot enter."""
         template = self.get(template_id)
         updated = self.store.update_template(template.id, status="archived")
+        from deeptutor.catalog.listings import content_closed
+
+        content_closed("mastery_path", template.id)  # platform batch 1 §2
         notify_instance_closed(template.id)
         self._release_references(template)
         return updated

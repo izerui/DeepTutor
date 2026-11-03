@@ -7,8 +7,8 @@ import { useTranslation } from "react-i18next";
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
 import { SourceBadge } from "@/components/common/SourceBadge";
-import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { ListingPanel } from "@/components/catalog/ListingPanel";
+import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import {
   addCourseTask,
   archiveCourse,
@@ -117,7 +117,6 @@ function CourseEditor({
   const [pick, setPick] = useState("");
   const [kind, setKind] = useState<TaskKind>(isAdmin ? "practice_set" : "homework");
   const [newTitle, setNewTitle] = useState("");
-  const [first, setFirst] = useState<FirstPublishChoice>({ needed: true, ready: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -235,16 +234,15 @@ function CourseEditor({
       {course.status === "draft" && (
         <>
           <p className="text-[11.5px] text-[var(--muted-foreground)]">
-            {t("Publishing also publishes its draft tasks to the same students. Already published tasks must already reach them.")}
+            {t("Publishing also publishes its draft tasks. Nobody receives the course until they join from the learning market; list it here once it is published.")}
           </p>
-          <FirstPublishScope kind="course" itemId={course.id} onChange={setFirst} />
         </>
       )}
-      {course.status === "published" && <PublishScopeEditor kind="course" itemId={course.id} />}
+      {course.status === "published" && <ListingPanel kind="course" itemId={course.id} onChanged={onChanged} />}
       <div className="flex flex-wrap gap-2">
         {course.status === "draft" && (
-          <button type="button" className={primaryClass} disabled={!first.ready || course.tasks.length === 0}
-            onClick={() => void run(() => publishCourse(course.id, first.scope))}>
+          <button type="button" className={primaryClass} disabled={course.tasks.length === 0}
+            onClick={() => void run(() => publishCourse(course.id, JOIN_ONLY_SCOPE))}>
             {t("Publish")}
           </button>
         )}

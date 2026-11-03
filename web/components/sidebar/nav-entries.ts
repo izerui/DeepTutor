@@ -14,6 +14,7 @@ import {
   PenSquare,
   School,
   Settings,
+  Store,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -65,6 +66,8 @@ export function navVisibleForRole(
 export const PRIMARY_NAV: NavEntry[] = [
   // Spec 2026-11-03 batch 1 §2: what is assigned, what the school published, what is one's own.
   { href: '/start', label: 'Home', icon: House, tooltipKey: 'Home page tooltip', surfaces: ['chat'] },
+  // Platform batch 1 §5.1: the learning market, for everyone.
+  { href: '/market', label: 'Learning market', icon: Store, tooltipKey: 'Learning market tooltip', surfaces: ['chat'] },
   {
     href: '/chat',
     label: 'Chat',

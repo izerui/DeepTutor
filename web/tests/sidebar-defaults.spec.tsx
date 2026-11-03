@@ -21,6 +21,7 @@ it("new profiles see nine primary entries and two folded features", () => {
   );
   expect(resolved.visible).toEqual([
     "/start",
+    "/market",
     "/chat",
     "/partners",
     "/learning",

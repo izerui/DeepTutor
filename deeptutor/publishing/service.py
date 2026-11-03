@@ -234,6 +234,7 @@ class PublishService:
             raise ScopeError("Publish this path before choosing who receives it.")
         current = self._current(kind, item_id, info)
         new = self._validated(kind, everyone, users, classes, current, groups=groups)
+        new.members = list(current.members)  # people who joined stay whatever the publisher picks
         if info.get("homework") and new.everyone:
             # Spec 2026-11-02 R22: homework goes to classes or chosen students only.
             raise ScopeError("Homework goes to your classes or chosen students, not to everyone.")

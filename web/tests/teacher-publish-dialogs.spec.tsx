@@ -17,6 +17,10 @@ const api = vi.hoisted(() => ({
   searchStudents: vi.fn(),
 }));
 
+// Platform batch 1: the market listing has its own fetches and its own spec.
+vi.mock("@/components/catalog/ListingPanel", () => ({
+  ListingPanel: ({ kind, itemId }: { kind: string; itemId: string }) => <div data-testid="listing-panel">{`${kind}:${itemId}`}</div>,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) =>
@@ -117,7 +121,8 @@ it("registers a first publish, defaults private materials to public and sends th
   expect(within(book).getByRole("radio", { name: "Make the book public" })).toBeChecked();
   const kb = screen.getByRole("group", { name: "Answers" });
   fireEvent.click(within(kb).getByRole("radio", { name: "Readable through this path only" }));
-  fireEvent.click(await screen.findByRole("checkbox", { name: "sara" }));
+  // Platform batch 1 §4.4: no students to pick; the path is for the market.
+  expect(screen.queryByRole("checkbox", { name: "sara" })).toBeNull();
   expect(api.registerTeacherTemplate).toHaveBeenCalledWith("topic_waves", "");
   expect(screen.queryByText("What changed")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
@@ -127,7 +132,8 @@ it("registers a first publish, defaults private materials to public and sends th
     kp_decisions: {},
     kb_choices: { kb_1: "reference_only" },
     book_choices: { bk_1: "make_public" },
-    student_ids: ["u_sara"],
+    student_ids: [],
+    join_only: true,
   });
 });
 
@@ -219,8 +225,6 @@ it("shows an update's change list with per-point decisions and the affected stud
   expect(screen.getByRole("heading", { name: "Publish update" })).toBeVisible();
   expect(screen.getByText("2 students will get this update the next time they study")).toBeVisible();
   expect(screen.getByText("Removed: Derivatives")).toBeVisible();
-  // The already-assigned student is not offered again; the revoked one is.
-  await waitFor(() => expect(api.searchStudents).toHaveBeenCalled());
   fireEvent.change(screen.getByRole("combobox", { name: "Derivative rules" }), {
     target: { value: "reworded:kp_d" },
   });
@@ -266,7 +270,7 @@ it("reports a publish that stopped at a step, localized, with what already compl
   expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
 });
 
-it("manages assignments: revoke, add and archive behind a confirmation", async () => {
+it("manages assignments: revoke, list in the market and archive behind a confirmation", async () => {
   api.listAssignments.mockResolvedValue([
     { student_user_id: "u_sara", username: "sara", status: "active", applied_revision: 1 },
   ]);
@@ -289,19 +293,16 @@ it("manages assignments: revoke, add and archive behind a confirmation", async (
   );
   fireEvent.click(await screen.findByRole("button", { name: "Remove access for sara" }));
   await waitFor(() => expect(api.revokeAssignment).toHaveBeenCalledWith("tpl_1", "u_sara"));
-  // Sara still has the path; only Sam is offered.
-  expect(await screen.findByRole("checkbox", { name: "sam" })).toBeVisible();
-  expect(screen.queryByRole("checkbox", { name: "sara" })).toBeNull();
-  fireEvent.click(screen.getByRole("checkbox", { name: "sam" }));
-  fireEvent.click(screen.getByRole("button", { name: "Assign students" }));
-  await waitFor(() => expect(api.assignStudents).toHaveBeenCalledWith("tpl_1", ["u_sam"]));
+  // Platform batch 1 §4.4: no more picking students; the listing takes their place.
+  expect(screen.queryByRole("button", { name: "Assign students" })).toBeNull();
+  expect(screen.getByTestId("listing-panel").textContent).toBe("mastery_path:tpl_1");
   fireEvent.click(screen.getByRole("button", { name: "Archive" }));
   expect(api.archiveTemplate).not.toHaveBeenCalled();
   const confirm = await screen.findByRole("alertdialog");
   fireEvent.click(within(confirm).getByRole("button", { name: "Archive" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(api.archiveTemplate).toHaveBeenCalledWith("tpl_1");
-  expect(changed).toHaveBeenCalledTimes(3);
+  expect(changed).toHaveBeenCalledTimes(2);
 });
 
 it("lets an administrator withdraw another teacher's path but not change who receives it", async () => {

@@ -24,7 +24,7 @@ it("labels a teacher's item as assigned for students and shared for teachers", (
   const tina = { kind: "teacher" as const, name: "tina" };
   expect(provenanceLabel(tina, t, true)).toBe("Assigned by tina");
   expect(provenanceLabel(tina, t, false)).toBe("Shared by tina");
-  expect(provenanceLabel({ kind: "school", name: "" }, t, true)).toBe("Published by the school");
+  expect(provenanceLabel({ kind: "school", name: "" }, t, true)).toBe("Published by the platform");
   expect(provenanceLabel(undefined, t, true)).toBe("Mine");
   expect(provenanceGroupTitle("teacher", t, true)).toBe("From my teachers");
   expect(provenanceGroupTitle("teacher", t, false)).toBe("From other teachers");

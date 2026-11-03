@@ -132,6 +132,8 @@ export interface PublishInput {
   kb_choices: Record<string, KbChoice>;
   book_choices: Record<string, KbChoice>;
   student_ids: string[];
+  /** Platform batch 1 §4.4: published for the market; nobody receives it until they join. */
+  join_only?: boolean;
 }
 
 export interface StudentOption {

@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
-import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { ListingPanel } from "@/components/catalog/ListingPanel";
+import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import type { ScopeUpdate } from "@/lib/publish-api";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
 import {
@@ -66,9 +66,8 @@ export default function KbSettingsSection({
   const canRetire = !canWrite && isAdmin && Boolean(kb.can_retire) && kb.visibility === "public";
   const [references, setReferences] = useState<KnowledgeBaseReferenceSummary | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
-  // Making it public first asks who receives it (spec 2026-11-02 §4.1).
+  // Making it public is confirmed first; nobody receives it until they join from the market (platform batch 1 §4.4).
   const [publishing, setPublishing] = useState(false);
-  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -290,7 +289,7 @@ export default function KbSettingsSection({
         <h3 className="text-sm font-medium">{t("Visibility")}</h3>
         <p className="text-xs text-[var(--muted-foreground)]">
           {kb.connector ? t("Connectors are always private.") : kb.visibility === "public"
-            ? t("Published knowledge bases are readable by the people chosen below and usable in their chat.")
+            ? t("Published knowledge bases are readable by the people who join them from the learning market, and usable in their chat.")
             : t("Only you can see this knowledge base. Items that reference it can still read it.")}
         </p>
         {((canManage && (kb.visibility === "public" || isTeacher)) || canRetire) && onVisibilityChange && !kb.connector && (
@@ -305,12 +304,14 @@ export default function KbSettingsSection({
         )}
         {publishing && kb.visibility !== "public" && kb.kb_id && (
           <div className="space-y-2">
-            <FirstPublishScope kind="knowledge_base" itemId={kb.kb_id} onChange={setFirstPublish} />
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {t("Nobody receives it until they join from the learning market. List it below once it is public.")}
+            </p>
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={visibilityBusy || !firstPublish.ready}
-                onClick={() => void changeVisibility("public", firstPublish.scope)}
+                disabled={visibilityBusy}
+                onClick={() => void changeVisibility("public", JOIN_ONLY_SCOPE)}
                 className="rounded-md bg-[var(--primary)] px-2.5 py-1 text-xs text-[var(--primary-foreground)] disabled:opacity-50"
               >
                 {t("Make public")}
@@ -327,9 +328,7 @@ export default function KbSettingsSection({
           </div>
         )}
         {canManage && kb.visibility === "public" && !kb.connector && (
-          <div className="rounded-lg border border-[var(--border)] p-3">
-            <PublishScopeEditor kind="knowledge_base" itemId={kb.kb_id} />
-          </div>
+          <ListingPanel kind="knowledge_base" itemId={kb.kb_id} />
         )}
         {canManage && references !== null && <div className="text-xs text-[var(--muted-foreground)]">
           <h4 className="font-medium">{t("Referenced by")}</h4>

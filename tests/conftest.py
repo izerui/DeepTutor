@@ -386,6 +386,14 @@ def _isolate_teaching_db(monkeypatch, tmp_path, _isolate_kb_registry, _isolate_b
 
 
 @pytest.fixture(autouse=True)
+def _disable_startup_market_migration(monkeypatch):
+    """The app lifespan must not move the developer's real content into the market."""
+    from deeptutor.catalog import migration
+
+    monkeypatch.setattr(migration, "STARTUP_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def _disable_startup_kb_backfill(monkeypatch):
     """Running the real app lifespan in a test must not walk the developer's data/.
 

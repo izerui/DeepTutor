@@ -183,6 +183,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Knowledge-base registry backfill failed")
 
+    # Platform batch 1 §7: content published to everyone moves into the market once.
+    try:
+        from deeptutor.catalog.migration import run_at_startup
+
+        await asyncio.to_thread(run_at_startup)
+    except Exception:
+        logger.exception("Market migration failed")
+
 
     # Initialize LLM client early so OPENAI_* env vars are available before
     # any downstream provider integrations start.
@@ -584,6 +592,7 @@ from deeptutor.api.routers import (
     home,
     comments,
     ai_usage,
+    catalog,
     remedial,
     co_writer,
     courses,
@@ -694,6 +703,8 @@ app.include_router(comments.router, prefix="/api/comments", tags=["comments"], d
 app.include_router(ai_usage.router, prefix="/api/ai-usage", tags=["ai-usage"], dependencies=_auth)
 # Batch 3 §3.2: a student's remedial questions from their mistakes (in the question bank).
 app.include_router(remedial.router, prefix="/api/question-notebook/remedial", tags=["remedial"], dependencies=_auth)
+# Platform batch 1: the learning market, listings and their review.
+app.include_router(catalog.router, prefix="/api/catalog", tags=["catalog"], dependencies=_auth)
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

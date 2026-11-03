@@ -14,8 +14,8 @@ import {
   type WithdrawalImpact,
 } from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
-import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { ListingPanel } from "@/components/catalog/ListingPanel";
+import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 
 const ISSUE_MESSAGES = {
   connector: "Personal connectors cannot be shared.",
@@ -66,14 +66,12 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   }, [requestedRef, workspaceId, t]);
 
   const makingPublic = (sharing?.visibility ?? book.visibility) !== "public";
-  // Spec 2026-11-02 §4.1: a first publication names who receives it.
-  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
   const canMakePublic = sharing?.can_make_public ?? true;
   const issues = sharing?.kbs.issues ?? [];
   const otherReferences = sharing?.other_references ?? NO_OTHER_REFERENCES;
   // References never block making a book private (rule R1).
   const blocked = makingPublic && (
-    !canMakePublic || !firstPublish.ready || (issues.length > 0 && !(isAdmin && force))
+    !canMakePublic || (issues.length > 0 && !(isAdmin && force))
   );
   const confirm = async () => {
     if (busy || !sharing?.can_set_visibility || blocked) return;
@@ -83,7 +81,8 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
       await bookApi.setVisibility(requestedRef, {
         visibility: makingPublic ? "public" : "private",
         kb_choices: makingPublic ? choices : {},
-        ...(makingPublic && firstPublish.scope ? { scope: firstPublish.scope } : {}),
+        // Platform batch 1 §4.4: nobody receives it until they join from the market.
+        ...(makingPublic ? { scope: JOIN_ONLY_SCOPE } : {}),
         force: makingPublic && isAdmin && force,
         ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
@@ -101,7 +100,7 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   };
 
   return <Dialog open title={makingPublic ? t("Make this book public?") : t("Make this book private?")}
-    onClose={onClose} closeLabel={t("Close")} busy={busy}
+    onClose={onClose} closeLabel={t("Close")} busy={busy} size={makingPublic ? "md" : "lg"}
     footer={<>
       <button type="button" data-autofocus disabled={busy} onClick={onClose}
         className="rounded-lg px-3 py-1.5 text-sm disabled:opacity-40">{t("Cancel")}</button>
@@ -113,17 +112,14 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     </>}>
     <div className="space-y-3 text-sm">
       <p>{makingPublic
-        ? t("Choose who receives this book. Each reader keeps their own progress.")
+        ? t("Once public, you can list it in the learning market. Only people who join can read it; each keeps their own progress.")
         : isAdmin && book.group !== "mine"
           ? t("Only the book's owner can open a private book, plus anything that references it.")
           : t("Only you can open a private book, plus anything that references it.")}</p>
       {!sharing && !error && <p role="status">{t("Loading…")}</p>}
-      {makingPublic && sharing?.can_set_visibility && (
-        <FirstPublishScope kind="book" itemId={sharing.book_id} onChange={setFirstPublish} />
+      {!makingPublic && sharing?.can_set_visibility && (
+        <ListingPanel kind="book" itemId={sharing.book_id} onChanged={onChanged} />
       )}
-      {!makingPublic && sharing?.can_set_visibility && <div className="rounded-lg border border-[var(--border)] p-3">
-        <PublishScopeEditor kind="book" itemId={sharing.book_id} onSaved={onChanged} />
-      </div>}
       {makingPublic && !!sharing?.kbs.private_kbs.length && <fieldset className="space-y-2">
         <legend className="mb-2 font-medium">{t("Private knowledge bases this book uses")}</legend>
         {sharing.kbs.private_kbs.map(kb => <label key={kb.kb_id} className="flex flex-wrap items-center justify-between gap-2">

@@ -7,8 +7,8 @@ import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
 import { CommentEditor } from "@/components/comments/Comments";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
-import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
-import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
+import { ListingPanel } from "@/components/catalog/ListingPanel";
+import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import { listKnowledgeBases } from "@/features/knowledge/api/catalog";
 import {
   archiveSet,
@@ -81,8 +81,9 @@ export function SetEditor({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [picking, setPicking] = useState(false);
-  // Spec 2026-11-02 §4.1: the first publication names who receives the set.
-  const [firstPublish, setFirstPublish] = useState<FirstPublishChoice>({ needed: true, ready: false });
+  // Platform batch 1 §4.4: a first publication goes to nobody until people join from the market;
+  // a remedial set (batch 3 §3.1) still goes to the students who got the questions wrong.
+  const [remedial] = useState(() => takeSuggested(setId));
 
   useEffect(() => {
     let alive = true;
@@ -159,13 +160,15 @@ export function SetEditor({
             type="button"
             className={primaryClass}
             disabled={
-              draft.questions.length === 0 || draft.status === "archived" ||
-              (saved.current_revision === 0 && !firstPublish.ready)
+              draft.questions.length === 0 || draft.status === "archived"
             }
             onClick={() =>
               void run(async () => {
                 await save();
-                return publishSet(setId, saved.current_revision === 0 ? firstPublish.scope : undefined);
+                const scope = remedial.length
+                  ? { everyone: false, users: remedial.map((p) => p.id), classes: [] }
+                  : JOIN_ONLY_SCOPE;
+                return publishSet(setId, saved.current_revision === 0 ? scope : undefined);
               }, t("Published."))
             }
           >
@@ -180,7 +183,11 @@ export function SetEditor({
           : t("Draft. Students see nothing until you publish.")}
       </p>
       {saved.current_revision === 0 && (
-        <FirstPublishScope kind="practice_set" itemId={setId} onChange={setFirstPublish} initialPeople={takeSuggested(setId)} />
+        <p className={hintClass}>
+          {remedial.length
+            ? t("Publishing sends it to the {{count}} students who got these questions wrong.", { count: remedial.length })
+            : t("Nobody receives it until they join from the learning market. List it below once it is published.")}
+        </p>
       )}
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
       {notice && <p role="status" className="text-[12px] text-[var(--muted-foreground)]">{notice}</p>}
@@ -275,7 +282,7 @@ export function SetEditor({
 
       {saved.current_revision > 0 && (
         <section className={sectionClass}>
-          <PublishScopeEditor kind="practice_set" itemId={setId} onSaved={onChanged} />
+          <ListingPanel kind="practice_set" itemId={setId} onChanged={onChanged} />
         </section>
       )}
 

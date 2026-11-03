@@ -30,6 +30,10 @@ const fixture = vi.hoisted(() => ({
   fetch: vi.fn(),
   references: vi.fn(),
 }));
+// Platform batch 1: the market listing has its own fetches and its own spec.
+vi.mock("@/components/catalog/ListingPanel", () => ({
+  ListingPanel: ({ kind, itemId }: { kind: string; itemId: string }) => <div data-testid="listing-panel">{`${kind}:${itemId}`}</div>,
+}));
 vi.mock("next/navigation", () => ({
   useParams: () => fixture.params,
   useSearchParams: () => fixture.search,

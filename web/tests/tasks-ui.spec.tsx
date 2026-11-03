@@ -73,14 +73,14 @@ it("words notifications and marks them all read", async () => {
 it("keeps what teachers assigned apart from the student's own learning", async () => {
   api.getHome.mockResolvedValue({
     assigned: [homework], history_count: 0, can_create_path: true,
-    school: [{ kind: "book", id: "b1", title: "School handbook", updated_at: "2026-11-01" }],
+    market: [{ kind: "book", id: "b1", title: "School handbook", author: "", author_role: "admin" }],
     mine: [{ path_id: "topic_1", name: "My algebra", mastered: 2, total: 5, updated_at: 1 }],
   });
   render(<StudentHome />);
   expect(await screen.findByRole("heading", { name: "From my teachers" })).toBeTruthy();
   expect(screen.getByText("Essay")).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Published by the school" })).toBeTruthy();
-  expect(screen.getByText("School handbook")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "New in the market" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: /School handbook/ }).getAttribute("href")).toBe("/market/item?kind=book&id=b1");
   expect(screen.getByRole("heading", { name: "What I am learning" })).toBeTruthy();
   expect(screen.getByText("My algebra")).toBeTruthy();
 });
