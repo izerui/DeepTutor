@@ -5926,7 +5926,6 @@
   "Two right answers pass; one mistake rarely sets you back.": "Two right answers pass; one mistake rarely sets you back.",
   "Two right answers in a row pass; after a mistake, three more.": "Two right answers in a row pass; after a mistake, three more.",
   "Three right answers in a row pass; after a mistake, five more.": "Three right answers in a row pass; after a mistake, five more.",
-  "Explanation questions are judged by the tutor either way.": "Explanation questions are judged by the tutor either way.",
   "If you published this path, students get the new standard with your next update.": "If you published this path, students get the new standard with your next update.",
   "Could not save the pass standard. Try again.": "Could not save the pass standard. Try again.",
   "Pass standard for students: {{from}} → {{to}}": "Pass standard for students: {{from}} → {{to}}",
@@ -6263,5 +6262,8 @@
   "{{count}} practice sets": "{{count}} practice sets",
   "{{count}} Mastery Paths": "{{count}} Mastery Paths",
   "{{count}} books": "{{count}} books",
-  "{{count}} knowledge bases": "{{count}} knowledge bases"
+  "{{count}} knowledge bases": "{{count}} knowledge bases",
+  "An explanation passes when its core idea is right.": "An explanation passes when its core idea is right.",
+  "An explanation passes when its main points are there without clear mistakes.": "An explanation passes when its main points are there without clear mistakes.",
+  "An explanation must be complete and accurate to pass.": "An explanation must be complete and accurate to pass."
 }

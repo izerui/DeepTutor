@@ -10,7 +10,9 @@ bar a MEMORY / PROCEDURE objective must reach:
 * ``standard`` 0.8 — two right answers; after a mistake, three more.
 * ``relaxed``  0.6 — two right answers; after a mistake, about two more.
 
-CONCEPT / DESIGN objectives keep their qualitative pass and are unaffected.
+CONCEPT / DESIGN objectives keep their qualitative pass, but the standard
+sets what the AI judge asks of an explanation (2026-11-03): see
+:func:`explanation_expectation`.
 A learner sets the standard of their own path; a student's copy of a teacher
 path takes the teacher's, published with the revision, and cannot change it.
 """
@@ -30,9 +32,35 @@ THRESHOLDS: dict[str, float] = {
 }
 
 
+#: What an explanation must show to be judged correct, per standard (2026-11-03).
+#: ``strict`` is the wording every path used before standards reached explanations.
+EXPLANATION_EXPECTATIONS: dict[str, str] = {
+    "relaxed": (
+        "The core idea of the objective, stated correctly in the learner's own words; imprecise wording "
+        "and missing secondary points are acceptable. Do not infer mastery from acknowledgements or requests."
+    ),
+    "standard": (
+        "The main points of the objective, mostly complete and without clear mistakes. "
+        "Do not infer mastery from acknowledgements or requests."
+    ),
+    "strict": (
+        "A complete, accurate explanation of the objective and its relationships; "
+        "do not infer mastery from acknowledgements or requests."
+    ),
+}
+
+
+def explanation_expectation(standard: str | None) -> str:
+    """What the judge expects of an explanation under *standard*; unknown values read as strict."""
+    return EXPLANATION_EXPECTATIONS.get(str(standard or ""), EXPLANATION_EXPECTATIONS[DEFAULT_STANDARD])
+
+
 def threshold(standard: str | None) -> float:
     """The scored mastery bar of *standard*; unknown values read as strict."""
     return THRESHOLDS.get(str(standard or ""), THRESHOLDS[DEFAULT_STANDARD])
 
 
-__all__ = ["DEFAULT_STANDARD", "PassStandard", "THRESHOLDS", "threshold"]
+__all__ = [
+    "DEFAULT_STANDARD", "EXPLANATION_EXPECTATIONS", "PassStandard", "THRESHOLDS", "explanation_expectation",
+    "threshold",
+]

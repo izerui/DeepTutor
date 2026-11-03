@@ -6316,7 +6316,6 @@
   "Two right answers pass; one mistake rarely sets you back.": "Deux bonnes réponses suffisent ; une erreur vous fait rarement reculer.",
   "Two right answers in a row pass; after a mistake, three more.": "Deux bonnes réponses d'affilée suffisent ; après une erreur, trois de plus.",
   "Three right answers in a row pass; after a mistake, five more.": "Trois bonnes réponses d'affilée suffisent ; après une erreur, cinq de plus.",
-  "Explanation questions are judged by the tutor either way.": "Les questions d'explication restent évaluées par le tuteur.",
   "If you published this path, students get the new standard with your next update.": "Si vous avez publié ce parcours, les élèves recevront le nouveau niveau avec votre prochaine mise à jour.",
   "Could not save the pass standard. Try again.": "Impossible d'enregistrer le niveau de réussite. Réessayez.",
   "Pass standard for students: {{from}} → {{to}}": "Niveau de réussite des élèves : {{from}} → {{to}}",
@@ -6652,5 +6651,8 @@
   "{{count}} practice sets": "{{count}} séries d'exercices",
   "{{count}} Mastery Paths": "{{count}} parcours de maîtrise",
   "{{count}} books": "{{count}} livres",
-  "{{count}} knowledge bases": "{{count}} bases de connaissances"
+  "{{count}} knowledge bases": "{{count}} bases de connaissances",
+  "An explanation passes when its core idea is right.": "Une explication est validée quand l'idée principale est juste.",
+  "An explanation passes when its main points are there without clear mistakes.": "Une explication est validée quand les points principaux y sont, sans erreur nette.",
+  "An explanation must be complete and accurate to pass.": "Une explication doit être complète et exacte pour être validée."
 }

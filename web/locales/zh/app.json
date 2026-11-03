@@ -5926,7 +5926,6 @@
   "Two right answers pass; one mistake rarely sets you back.": "答对 2 次即可通过，偶尔答错一次一般不会掉。",
   "Two right answers in a row pass; after a mistake, three more.": "连续答对 2 次通过；答错一次后，需要再连续答对 3 次。",
   "Three right answers in a row pass; after a mistake, five more.": "连续答对 3 次通过；答错一次后，需要再连续答对 5 次。",
-  "Explanation questions are judged by the tutor either way.": "讲解类问题仍由 AI 导师判断，不受此设置影响。",
   "If you published this path, students get the new standard with your next update.": "如果这条路径已发布给学生，改动要在下次发布更新后才对学生生效。",
   "Could not save the pass standard. Try again.": "通过标准保存失败，请重试。",
   "Pass standard for students: {{from}} → {{to}}": "学生的通过标准：{{from}} → {{to}}",
@@ -6263,5 +6262,8 @@
   "{{count}} practice sets": "{{count}} 套练习集",
   "{{count}} Mastery Paths": "{{count}} 条精通之路",
   "{{count}} books": "{{count}} 本书",
-  "{{count}} knowledge bases": "{{count}} 个知识库"
+  "{{count}} knowledge bases": "{{count}} 个知识库",
+  "An explanation passes when its core idea is right.": "讲解类：核心意思对就算过。",
+  "An explanation passes when its main points are there without clear mistakes.": "讲解类：要点基本齐全、没有明显错误就算过。",
+  "An explanation must be complete and accurate to pass.": "讲解类：要点完整、表述准确才算过。"
 }

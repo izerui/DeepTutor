@@ -5972,7 +5972,6 @@
   "Two right answers pass; one mistake rarely sets you back.": "Достатньо двох правильних відповідей; одна помилка рідко відкидає назад.",
   "Two right answers in a row pass; after a mistake, three more.": "Достатньо двох правильних відповідей поспіль; після помилки — ще три.",
   "Three right answers in a row pass; after a mistake, five more.": "Достатньо трьох правильних відповідей поспіль; після помилки — ще п'ять.",
-  "Explanation questions are judged by the tutor either way.": "Питання з поясненням і далі оцінює тьютор.",
   "If you published this path, students get the new standard with your next update.": "Якщо цей шлях опубліковано, учні отримають новий поріг із наступним оновленням.",
   "Could not save the pass standard. Try again.": "Не вдалося зберегти поріг зарахування. Спробуйте ще раз.",
   "Pass standard for students: {{from}} → {{to}}": "Поріг зарахування для учнів: {{from}} → {{to}}",
@@ -6309,5 +6308,8 @@
   "{{count}} practice sets": "Наборів вправ: {{count}}",
   "{{count}} Mastery Paths": "Шляхів опанування: {{count}}",
   "{{count}} books": "Книг: {{count}}",
-  "{{count}} knowledge bases": "Баз знань: {{count}}"
+  "{{count}} knowledge bases": "Баз знань: {{count}}",
+  "An explanation passes when its core idea is right.": "Пояснення зараховується, коли головна ідея правильна.",
+  "An explanation passes when its main points are there without clear mistakes.": "Пояснення зараховується, коли є основні пункти без явних помилок.",
+  "An explanation must be complete and accurate to pass.": "Пояснення має бути повним і точним, щоб зарахувати."
 }

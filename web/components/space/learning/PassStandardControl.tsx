@@ -7,21 +7,25 @@ import { useTranslation } from "react-i18next";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { updateMasteryPassStandard, type MasteryTopic, type PassStandard } from "@/lib/learning-api";
 
-const STANDARDS: { value: PassStandard; label: string; hint: string }[] = [
+/** ``explain``: what the tutor asks of an explanation under this standard (2026-11-03). */
+const STANDARDS: { value: PassStandard; label: string; hint: string; explain: string }[] = [
   {
     value: "relaxed",
     label: "Relaxed",
     hint: "Two right answers pass; one mistake rarely sets you back.",
+    explain: "An explanation passes when its core idea is right.",
   },
   {
     value: "standard",
     label: "Standard",
     hint: "Two right answers in a row pass; after a mistake, three more.",
+    explain: "An explanation passes when its main points are there without clear mistakes.",
   },
   {
     value: "strict",
     label: "Strict",
     hint: "Three right answers in a row pass; after a mistake, five more.",
+    explain: "An explanation must be complete and accurate to pass.",
   },
 ];
 
@@ -98,7 +102,7 @@ export function PassStandardControl({
         {busy && <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin text-[var(--muted-foreground)]" />}
       </div>
       <p className="text-[11.5px] text-[var(--muted-foreground)]">
-        {t(selected.hint)} {t("Explanation questions are judged by the tutor either way.")}
+        {t(selected.hint)} {t(selected.explain)}
         {!locked && (isTeacher || isAdmin) && (
           <> {t("If you published this path, students get the new standard with your next update.")}</>
         )}

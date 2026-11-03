@@ -3154,6 +3154,7 @@ class LearningService:
             objective_fingerprint,
             validate_evidence,
         )
+        from deeptutor.learning.pass_standard import explanation_expectation
         from deeptutor.learning.policy import find_knowledge_point
 
         answer = str(learner_answer or "").strip()
@@ -3190,7 +3191,8 @@ class LearningService:
                     {
                         "question_id": kp_id,
                         "prompt": "Explain this objective in your own words: " + kp.name,
-                        "expected_answer": "A complete, accurate explanation of the objective and its relationships; do not infer mastery from acknowledgements or requests.",
+                        # The path's pass standard sets how much the explanation must show.
+                        "expected_answer": explanation_expectation(progress.pass_standard),
                         "objective": kp.model_dump(),
                         "module_id": module_id,
                         "answer": answer,
