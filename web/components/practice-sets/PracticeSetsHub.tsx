@@ -56,7 +56,10 @@ function AuthorView() {
   const { t } = useTranslation();
   const { isAdmin } = useAuthStatus();
   const [sets, setSets] = useState<PracticeSetSummary[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // ``?set=`` opens one directly (a remedial draft made from a class report, batch 3 §3.1).
+  const [selected, setSelected] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("set"),
+  );
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -130,7 +133,8 @@ function AuthorView() {
       </aside>
       <section className="min-w-0">
         {selected ? (
-          <SetEditor key={selected} setId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }} />
+          <SetEditor key={selected} setId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }}
+            onOpenSet={(id) => { setSelected(id); refresh(); }} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
             <ClipboardList size={16} className="mr-2" />

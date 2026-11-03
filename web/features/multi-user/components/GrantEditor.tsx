@@ -19,6 +19,10 @@ import type {
   StudentPolicy,
 } from "../types";
 import { STUDENT_POLICY_DEFAULTS } from "../types";
+import { AiLimitPicker } from "@/components/home/AiUsage";
+
+/** Age band and persona (for young learners) are kept but not offered for now (batch 3 §7.2). */
+const SHOW_YOUNG_LEARNER_SETTINGS = false;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -445,6 +449,9 @@ export function GrantEditor({
                 />
                 {grant.learning_policy && (
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    {/* Batch 3 §7.2: settings for young learners stay stored but are hidden for now. */}
+                    {SHOW_YOUNG_LEARNER_SETTINGS && (
+                      <>
                     <label className="text-xs text-[var(--foreground)]">
                       <span className="mb-1 block text-[11px] text-[var(--muted-foreground)]">
                         {t("Age band")}
@@ -478,6 +485,8 @@ export function GrantEditor({
                         <option value="teacher">{t("Teacher")}</option>
                       </select>
                     </label>
+                      </>
+                    )}
                     <div className="text-xs">
                       <span className="mb-1 block text-[11px] text-[var(--muted-foreground)]">
                         {t("Modes")}
@@ -740,40 +749,61 @@ export function GrantEditor({
               <section className="min-w-0">
                 <SectionTitle>{t("Student permissions")}</SectionTitle>
                 <div className="space-y-1.5 text-xs">
+                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                    {t("Default follows the student's classes, then the school default.")}
+                  </p>
                   {(
                     [
-                      [
-                        "allow_personal_mastery",
-                        t("Allow personal mastery paths"),
-                        t("The student can create mastery paths of their own besides the ones assigned by teachers."),
-                      ],
-                      [
-                        "allow_private_kb",
-                        t("Allow private knowledge bases"),
-                        t("The student can create knowledge bases and upload documents visible only to themselves."),
-                      ],
-                    ] as Array<[keyof StudentPolicy, string, string]>
-                  ).map(([key, label, description]) => {
-                    const policy = grant.student_policy ?? STUDENT_POLICY_DEFAULTS;
+                      ["allow_personal_mastery", t("Create their own Mastery Paths")],
+                      ["allow_personal_book", t("Create their own books")],
+                      ["allow_private_kb", t("Create their own knowledge bases")],
+                      ["allow_personal_course", t("Create their own courses")],
+                      ["allow_personal_task_card", t("Add their own task cards")],
+                      ["allow_partners", t("Use Partners")],
+                      ["allow_agents", t("Use agents")],
+                      ["allow_co_writer", t("Use Co-Writer")],
+                    ] as Array<[keyof typeof STUDENT_POLICY_DEFAULTS, string]>
+                  ).map(([key, label]) => {
+                    const policy = grant.student_policy ?? {};
                     return (
-                      <CheckRow
-                        key={key}
-                        label={label}
-                        description={description}
-                        checked={policy[key]}
-                        disabled={controlsDisabled}
-                        onToggle={() =>
-                          setGrant((current) => {
-                            const base = current.student_policy ?? STUDENT_POLICY_DEFAULTS;
-                            return {
-                              ...current,
-                              student_policy: { ...base, [key]: !base[key] },
-                            };
-                          })
-                        }
-                      />
+                      <label key={key} className="flex items-center justify-between gap-2">
+                        <span>{label}</span>
+                        <select
+                          aria-label={label}
+                          disabled={controlsDisabled}
+                          value={policy[key] === undefined ? "" : policy[key] ? "allow" : "deny"}
+                          onChange={(event) =>
+                            setGrant((current) => {
+                              const next: StudentPolicy = { ...(current.student_policy ?? {}) };
+                              if (event.target.value === "") delete next[key];
+                              else next[key] = event.target.value === "allow";
+                              return { ...current, student_policy: next };
+                            })
+                          }
+                          className="h-7 rounded-md border border-[var(--border)] bg-[var(--background)] px-1.5"
+                        >
+                          <option value="">{t("Default")}</option>
+                          <option value="allow">{t("Allow")}</option>
+                          <option value="deny">{t("Do not allow")}</option>
+                        </select>
+                      </label>
                     );
                   })}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>{t("Daily AI limit")}</span>
+                    <AiLimitPicker
+                      value={grant.student_policy?.ai_daily_tokens}
+                      inheritLabel={t("Default")}
+                      onChange={(value) =>
+                        setGrant((current) => {
+                          const next: StudentPolicy = { ...(current.student_policy ?? {}) };
+                          if (value === undefined) delete next.ai_daily_tokens;
+                          else next.ai_daily_tokens = value;
+                          return { ...current, student_policy: next };
+                        })
+                      }
+                    />
+                  </div>
                 </div>
               </section>
             )}

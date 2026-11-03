@@ -289,14 +289,11 @@ class ClassService:
         Each key is ``True`` (allow), ``False`` (do not allow) or absent / ``None``
         (inherit the default).
         """
-        from deeptutor.multi_user.roles import STUDENT_POLICY_DEFAULTS
+        from deeptutor.multi_user.roles import normalize_student_policy
 
         if not self._is_admin():
             raise ClassForbidden("Only administrators set student permissions.")
-        cleaned = {
-            key: value for key, value in (policy or {}).items()
-            if key in STUDENT_POLICY_DEFAULTS and isinstance(value, bool)
-        }
+        cleaned = normalize_student_policy(policy or {}) or {}
         with store.write() as conn:
             self._require_manager(conn, class_id)
             conn.execute(
@@ -646,7 +643,9 @@ def _class_policy(row) -> dict[str, bool]:
         value = json.loads(row["student_policy_json"] or "{}")
     except (KeyError, IndexError, ValueError):
         return {}
-    return {k: v for k, v in value.items() if isinstance(v, bool)} if isinstance(value, dict) else {}
+    from deeptutor.multi_user.roles import normalize_student_policy
+
+    return normalize_student_policy(value) or {}
 
 
 def class_student_policy(student_id: str) -> dict[str, bool]:
@@ -659,11 +658,29 @@ def class_student_policy(student_id: str) -> dict[str, bool]:
             "WHERE m.student_id = ? AND c.archived = 0",
             (student_id,),
         ).fetchall()
+    from deeptutor.multi_user.roles import AI_DAILY_TOKENS
+
     combined: dict[str, bool] = {}
     for row in rows:
         for key, value in _class_policy(row).items():
-            combined[key] = combined.get(key, False) or value
+            if key != AI_DAILY_TOKENS:
+                combined[key] = combined.get(key, False) or value
     return combined
+
+
+def class_ai_daily_tokens(student_id: str) -> int | None:
+    """The most generous daily AI limit among the student's active classes, if any sets one."""
+    from deeptutor.multi_user.roles import AI_DAILY_TOKENS, widest_ai_limit
+
+    with store.read() as conn:
+        if conn is None:
+            return None
+        rows = conn.execute(
+            "SELECT c.student_policy_json FROM classes c JOIN class_members m ON m.class_id = c.id "
+            "WHERE m.student_id = ? AND c.archived = 0",
+            (student_id,),
+        ).fetchall()
+    return widest_ai_limit([p[AI_DAILY_TOKENS] for p in map(_class_policy, rows) if AI_DAILY_TOKENS in p])
 
 
 def student_class_ids(student_id: str) -> set[str]:
@@ -684,6 +701,7 @@ __all__ = [
     "ClassForbidden",
     "ClassNotFound",
     "ClassService",
+    "class_ai_daily_tokens",
     "class_student_policy",
     "link_info",
     "student_class_ids",

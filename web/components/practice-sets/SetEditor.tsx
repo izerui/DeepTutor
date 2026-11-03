@@ -15,6 +15,7 @@ import {
   deleteSet,
   generateQuestions,
   getReport,
+  reportExportUrl,
   getSet,
   publishSet,
   questionsFromBank,
@@ -24,8 +25,10 @@ import {
   type PracticeReport,
   type PracticeSetDraft,
   type Reveal,
+  type ScoreMode,
 } from "@/lib/practice-sets-api";
 import { formatDate } from "./PracticeSetsHub";
+import { AttemptReview, BookSource, OptionBars, RemedialFromSet, takeSuggested } from "./SetReview";
 
 const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
 const titleClass = "text-[13.5px] font-medium text-[var(--foreground)]";
@@ -63,10 +66,13 @@ export function SetEditor({
   setId,
   onChanged,
   onDeleted,
+  onOpenSet,
 }: {
   setId: string;
   onChanged: () => void;
   onDeleted: () => void;
+  /** Opens another set, e.g. a remedial draft made from this one (batch 3 §3.1). */
+  onOpenSet?: (setId: string) => void;
 }) {
   const { t } = useTranslation();
   const [saved, setSaved] = useState<PracticeSetDraft | null>(null);
@@ -126,6 +132,8 @@ export function SetEditor({
       questions: draft.questions,
       reveal: draft.reveal,
       due_at: draft.due_at,
+      attempts_limit: draft.attempts_limit ?? null,
+      score_mode: draft.score_mode ?? "best",
     });
   const patch = (update: Partial<PracticeSetDraft>) => setDraft({ ...draft, ...update });
   const setQuestion = (index: number, question: PracticeQuestion) =>
@@ -172,7 +180,7 @@ export function SetEditor({
           : t("Draft. Students see nothing until you publish.")}
       </p>
       {saved.current_revision === 0 && (
-        <FirstPublishScope kind="practice_set" itemId={setId} onChange={setFirstPublish} />
+        <FirstPublishScope kind="practice_set" itemId={setId} onChange={setFirstPublish} initialPeople={takeSuggested(setId)} />
       )}
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
       {notice && <p role="status" className="text-[12px] text-[var(--muted-foreground)]">{notice}</p>}
@@ -206,6 +214,31 @@ export function SetEditor({
               <option value="after_submit">{t("Right after submitting")}</option>
               {/* Without a deadline, "after the deadline" would never come. */}
               <option value="after_due" disabled={!draft.due_at}>{t("After the deadline")}</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-4 text-[12.5px]">
+          <label className="flex items-center gap-2">
+            {t("Attempts allowed")}
+            <input
+              type="number"
+              min={1}
+              max={100}
+              placeholder={t("No limit")}
+              className="h-8 w-24 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2"
+              value={draft.attempts_limit ?? ""}
+              onChange={(e) => patch({ attempts_limit: e.target.value ? Math.max(1, Math.min(100, Number(e.target.value))) : null })}
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            {t("Score counts")}
+            <select
+              className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2"
+              value={draft.score_mode ?? "best"}
+              onChange={(e) => patch({ score_mode: e.target.value as ScoreMode })}
+            >
+              <option value="best">{t("The best attempt")}</option>
+              <option value="first">{t("Only the first attempt")}</option>
             </select>
           </label>
         </div>
@@ -246,7 +279,7 @@ export function SetEditor({
         </section>
       )}
 
-      {saved.current_revision > 0 && <ReportSection setId={setId} />}
+      {saved.current_revision > 0 && <ReportSection setId={setId} onOpenSet={onOpenSet} />}
 
       <div className="flex flex-wrap gap-2">
         {saved.current_revision === 0 ? (
@@ -413,6 +446,9 @@ function GeneratePanel({
   const [kbRef, setKbRef] = useState("");
   const [kbs, setKbs] = useState<{ ref: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  // Batch 3 §4: the material is a knowledge base, or a book and some chapters.
+  const [source, setSource] = useState<"kb" | "book">("kb");
+  const [book, setBook] = useState({ bookRef: "", chapterIds: [] as string[] });
 
   useEffect(() => {
     if (!open) return;
@@ -446,12 +482,23 @@ function GeneratePanel({
       <textarea
         className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"
         rows={2}
-        placeholder={t("What should the questions cover?")}
+        placeholder={source === "book" ? t("What should the questions cover? (optional with a book)") : t("What should the questions cover?")}
         value={topic}
         onChange={(e) => setTopic(e.target.value)}
       />
+      <div className="flex flex-wrap items-center gap-3" role="radiogroup" aria-label={t("Material")}>
+        <label className="flex items-center gap-1">
+          <input type="radio" checked={source === "kb"} onChange={() => setSource("kb")} />
+          {t("Knowledge base")}
+        </label>
+        <label className="flex items-center gap-1">
+          <input type="radio" checked={source === "book"} onChange={() => setSource("book")} />
+          {t("Book")}
+        </label>
+      </div>
+      {source === "book" && <BookSource value={book} onChange={setBook} />}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-1.5">
+        {source === "kb" && <label className="flex items-center gap-1.5">
           {t("Knowledge base")}
           <select
             className="h-8 max-w-[220px] rounded-lg border border-[var(--border)] bg-[var(--background)] px-2"
@@ -463,7 +510,7 @@ function GeneratePanel({
               <option key={kb.ref} value={kb.ref}>{kb.name}</option>
             ))}
           </select>
-        </label>
+        </label>}
         <label className="flex items-center gap-1.5">
           {t("How many")}
           <input
@@ -478,10 +525,15 @@ function GeneratePanel({
         <button
           type="button"
           className={primaryClass}
-          disabled={busy || !topic.trim()}
+          disabled={busy || (source === "book" ? !book.bookRef : !topic.trim())}
           onClick={() => {
             setBusy(true);
-            generateQuestions({ topic: topic.trim(), count, kb_ref: kbRef || null, language: i18n.language?.startsWith("zh") ? "zh" : "en" })
+            generateQuestions({
+              topic: topic.trim(), count, language: i18n.language?.startsWith("zh") ? "zh" : "en",
+              ...(source === "book"
+                ? { book_ref: book.bookRef, chapter_ids: book.chapterIds }
+                : { kb_ref: kbRef || null }),
+            })
               .then((questions) => {
                 onGenerated(questions);
                 setTopic("");
@@ -502,26 +554,41 @@ function GeneratePanel({
   );
 }
 
-function ReportSection({ setId }: { setId: string }) {
+function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId: string) => void }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<PracticeReport | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+  const [reloads, setReloads] = useState(0);
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
     getReport(setId)
-      .then((next) => alive && setReport(next))
+      .then((next) => {
+        if (!alive) return;
+        setReport(next);
+        // Batch 3 §3.1: questions half the class got wrong are picked for remedial practice.
+        setPicked((current) => current.length ? current : next.questions.filter((q) => (q.error_rate ?? 0) >= 0.5).map((q) => q.question_id));
+      })
       .catch((err) => alive && setError(err instanceof Error ? t(err.message) : String(err)));
     return () => {
       alive = false;
     };
-  }, [open, setId, t]);
+  }, [open, setId, t, reloads]);
 
   return (
     <section className={sectionClass}>
-      <h3 className={titleClass}>{t("Results")}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className={titleClass}>{t("Results")}</h3>
+        {open && (
+          <a className={actionClass} href={reportExportUrl(setId)} download>
+            {t("Export CSV")}
+          </a>
+        )}
+      </div>
       {!open ? (
         <button type="button" className={actionClass} onClick={() => setOpen(true)}>
           {t("View results")}
@@ -544,6 +611,7 @@ function ReportSection({ setId }: { setId: string }) {
                   <th className="px-2 py-1.5">{t("Attempts")}</th>
                   <th className="px-2 py-1.5">{t("Minutes")}</th>
                   <th className="px-2 py-1.5">{t("Submitted")}</th>
+                  <th className="px-2 py-1.5">{t("Review")}</th>
                   <th className="px-2 py-1.5">{t("Comment")}</th>
                 </tr>
               </thead>
@@ -561,6 +629,19 @@ function ReportSection({ setId }: { setId: string }) {
                     </td>
                     <td className="px-2 py-1.5">
                       {student.latest_submission_id && (
+                        <button type="button" className="text-[11.5px] text-[var(--primary)] hover:underline"
+                          onClick={() => setReviewing(student.latest_submission_id ?? null)}>
+                          {t("Review answers")}
+                        </button>
+                      )}
+                      {(student.ungraded ?? 0) > 0 && (
+                        <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                          {t("{{count}} to grade", { count: student.ungraded })}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {student.latest_submission_id && (
                         <CommentEditor kind="practice_submission" subject={setId}
                           target={student.latest_submission_id} studentId={student.id} />
                       )}
@@ -570,22 +651,36 @@ function ReportSection({ setId }: { setId: string }) {
               </tbody>
             </table>
           </div>
-          <div>
-            <h4 className="mb-1 text-[12.5px] font-medium">{t("Error rate per question")}</h4>
-            <ol className="space-y-1 text-[12.5px]">
+          {reviewing && (
+            <AttemptReview key={reviewing} setId={setId} submissionId={reviewing}
+              onClose={() => setReviewing(null)} onChanged={() => setReloads((n) => n + 1)} />
+          )}
+          <div className="space-y-2">
+            <h4 className="text-[12.5px] font-medium">{t("Error rate per question")}</h4>
+            <ol className="space-y-2 text-[12.5px]">
               {report.questions.map((question, index) => (
-                <li key={question.question_id} className="flex gap-2">
-                  <span className="w-12 shrink-0 tabular-nums">
-                    {question.error_rate === null ? "—" : `${Math.round(question.error_rate * 100)}%`}
-                  </span>
-                  <span className="min-w-0 truncate">
-                    {index + 1}. {question.question}
-                  </span>
+                <li key={question.question_id}>
+                  <div className="flex gap-2">
+                    <input type="checkbox" aria-label={t("Pick question {{n}} for remedial practice", { n: index + 1 })}
+                      checked={picked.includes(question.question_id)}
+                      onChange={() => setPicked(picked.includes(question.question_id)
+                        ? picked.filter((id) => id !== question.question_id) : [...picked, question.question_id])} />
+                    <span className="w-12 shrink-0 tabular-nums">
+                      {question.error_rate === null ? "—" : `${Math.round(question.error_rate * 100)}%`}
+                    </span>
+                    <span className="min-w-0 truncate">
+                      {index + 1}. {question.question}
+                    </span>
+                  </div>
+                  <OptionBars question={question} />
                 </li>
               ))}
             </ol>
+            {picked.length > 0 && (
+              <RemedialFromSet setId={setId} questionIds={picked} onCreated={(draft) => onOpenSet?.(draft.set.id)} />
+            )}
           </div>
-          <p className={hintClass}>{t("Results only; students' answers stay in their own question bank.")}</p>
+          <p className={hintClass}>{t("Answers to short-answer questions and the options picked are shown to you only.")}</p>
         </div>
       )}
     </section>

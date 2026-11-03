@@ -110,6 +110,7 @@ export default function BankToolbar({
         <option value="partner_chat">{t("Partner Chat")}</option>
         <option value="import">{t("Imported")}</option>
         <option value="practice_set">{t("Practice sets")}</option>
+        <option value="remedial">{t("Remedial practice")}</option>
       </select>
 
       <select

@@ -85,6 +85,14 @@ class StudentPolicyUpdate(BaseModel):
     allow_personal_mastery: bool | None = None
     allow_personal_book: bool | None = None
     allow_private_kb: bool | None = None
+    # Spec 2026-11-03 batch 3 §7.1 and §8.
+    allow_personal_course: bool | None = None
+    allow_personal_task_card: bool | None = None
+    allow_partners: bool | None = None
+    allow_agents: bool | None = None
+    allow_co_writer: bool | None = None
+    #: Tokens per student per day; 0 is no limit.
+    ai_daily_tokens: int | None = Field(default=None, ge=0, le=100_000_000)
 
 
 class PasswordReset(BaseModel):
@@ -301,10 +309,31 @@ async def set_class_student_policy(class_id: str, payload: StudentPolicyUpdate) 
 
 
 @router.get("/{class_id}/report")
-async def class_report(class_id: str) -> dict:
+async def class_report(class_id: str, days: int | None = None) -> dict:
+    """``days`` = 7 or 30 limits the period numbers (batch 3 §6.3)."""
     from deeptutor.classes.report import ReportService
 
-    return await _call(lambda: ReportService().class_report(class_id))
+    return await _call(lambda: ReportService().class_report(class_id, days))
+
+
+@router.get("/{class_id}/report/paths/{template_id}")
+async def class_path_points(class_id: str, template_id: str) -> dict:
+    from deeptutor.classes.report import ReportService
+
+    return await _call(lambda: ReportService().class_path_points(class_id, template_id))
+
+
+@router.get("/{class_id}/report/export")
+async def export_class_report(class_id: str, days: int | None = None):
+    from fastapi.responses import Response
+
+    from deeptutor.classes.report import ReportService
+
+    text = await _call(lambda: ReportService().export_csv(class_id, days))
+    return Response(
+        content="\ufeff" + text, media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{class_id}-report.csv"'},
+    )
 
 
 @router.get("/{class_id}/students/{student_id}/report")

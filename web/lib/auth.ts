@@ -23,6 +23,8 @@ export interface AuthStatus {
   student_policy?: {
     allow_personal_mastery: boolean;
     allow_private_kb: boolean;
+    /** Batch 3 §7.1; older servers omit them. */
+    [key: string]: boolean;
   } | null;
   /** Server-side account preset; null for identities without a local account. */
   preset?: "standard" | "learner" | "custom" | null;

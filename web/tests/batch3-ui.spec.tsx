@@ -1,0 +1,160 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+
+// Spec 2026-11-03 batch 3 §13: review and regrade, options, remedial, the
+// workbench, attention, grading, navigation by role, AI left, similar questions.
+const { practice, workbench, classes, t } = vi.hoisted(() => ({
+  practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn(), remedialFromSet: vi.fn(), remedialFromPath: vi.fn() },
+  workbench: { getWorkbench: vi.fn(), listToGrade: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
+    getSchoolAiLimit: vi.fn(), setSchoolAiLimit: vi.fn(), AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }] },
+  classes: { getClassReport: vi.fn(), getStudentReport: vi.fn(), getClassPathPoints: vi.fn(), classReportExportUrl: vi.fn(() => "/export") },
+  t: (key: string, values?: Record<string, unknown>) =>
+    key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
+}));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
+vi.mock("@/lib/practice-sets-api", () => practice);
+vi.mock("@/lib/workbench-api", () => workbench);
+vi.mock("@/lib/classes-api", () => classes);
+vi.mock("@/lib/tasks-api", () => ({ getHome: vi.fn(() => Promise.resolve({ mine: [] })) }));
+vi.mock("@/lib/book-api", () => ({ bookApi: { list: vi.fn(() => Promise.resolve({ books: [] })), getSpine: vi.fn() } }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }));
+vi.mock("@/components/comments/Comments", () => ({ CommentEditor: () => null, MyComments: () => null }));
+
+import { ClassReportSection } from "@/components/classes/ClassReport";
+import { AiUsageNote } from "@/components/home/AiUsage";
+import { TeacherWorkbench } from "@/components/home/Workbench";
+import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
+import { AttemptReview, OptionBars, RemedialFromSet, takeSuggested } from "@/components/practice-sets/SetReview";
+import { navVisibleForRole } from "@/components/sidebar/nav-entries";
+import GradingQueue from "@/components/tasks/GradingQueue";
+
+beforeEach(() => {
+  [practice, workbench, classes].forEach((group) =>
+    Object.values(group).forEach((fn) => typeof fn === "function" && "mockReset" in fn && (fn as ReturnType<typeof vi.fn>).mockReset()));
+  push.mockReset();
+});
+
+const attempt = {
+  id: "sub_1", set_id: "ps_1", revision: 1, student_id: "u_sara", username: "sara", submitted_at: 1, late: false,
+  score: 1, max_score: 5, regraded_at: null,
+  questions: [
+    { question_id: "q1", question: "Explain gravity.", question_type: "short_answer", options: {}, correct_answer: "Mass attracts.",
+      result: "ungraded", points: 0, max_points: 4, answer: "Things fall.", regraded: false },
+  ],
+};
+
+it("shows a short answer's text and saves a changed score", async () => {
+  practice.getAttempt.mockResolvedValue(attempt);
+  practice.regradeQuestion.mockResolvedValue({ ...attempt, score: 4, questions: [{ ...attempt.questions[0], points: 3, result: "partial", regraded: true }] });
+  const changed = vi.fn();
+  render(<AttemptReview setId="ps_1" submissionId="sub_1" onClose={vi.fn()} onChanged={changed} />);
+  expect(await screen.findByText("Things fall.")).toBeTruthy();
+  expect(screen.getByText("Not graded")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Points for question 1"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save points" }));
+  await waitFor(() => expect(practice.regradeQuestion).toHaveBeenCalledWith("ps_1", "sub_1", "q1", 3));
+  expect(await screen.findByText("Changed by you")).toBeTruthy();
+  expect(changed).toHaveBeenCalled();
+});
+
+it("draws how many picked each option and marks the right one", () => {
+  render(<OptionBars question={{
+    question_id: "q1", question: "2 + 2", answered: 4, error_rate: 0.25, question_type: "choice",
+    options: { A: "3", B: "4" }, correct_answer: "B", option_counts: { A: 1, B: 3 },
+  }} />);
+  const list = screen.getByRole("list", { name: "Option distribution" });
+  expect(within(list).getByText("1 · 25%")).toBeTruthy();
+  expect(within(list).getByText("B. 4").className).toContain("font-semibold");
+});
+
+it("makes a remedial draft and hands its suggested students to the editor", async () => {
+  practice.remedialFromSet.mockResolvedValue({
+    set: { id: "ps_new" }, suggested_students: [{ id: "u_sara", username: "sara" }],
+  });
+  const created = vi.fn();
+  render(<RemedialFromSet setId="ps_1" questionIds={["q1", "q2"]} onCreated={created} />);
+  fireEvent.click(screen.getByRole("button", { name: "Make remedial practice" }));
+  await waitFor(() => expect(practice.remedialFromSet).toHaveBeenCalledWith("ps_1", ["q1", "q2"], 1, "Remedial: "));
+  expect(created).toHaveBeenCalled();
+  expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
+});
+
+it("lays out the workbench: hand-ins, attention, classes and what was sent", async () => {
+  workbench.getWorkbench.mockResolvedValue({
+    role: "teacher",
+    to_grade: [{ task_id: "t1", task_title: "Essay", student_id: "u_sara", username: "sara", submitted_at: 1, late: true, attempt: 1 }],
+    attention: [{ student_id: "u_sam", username: "sam", class_id: "c1", flags: [{ kind: "inactive", days: 9 }, { kind: "overdue", count: 2 }] }],
+    attention_total: 1,
+    classes: [{ id: "c1", name: "Physics 1", student_count: 2, active_this_week: 1 }],
+    sent: [{ kind: "practice_set", id: "ps_1", title: "Week 3", done: 1, total: 2, updated_at: 1 }],
+  });
+  render(<TeacherWorkbench />);
+  expect(await screen.findByText("Essay")).toBeTruthy();
+  expect(screen.getByText("No learning for 9 days · 2 tasks overdue")).toBeTruthy();
+  expect(screen.getByText("2 students · 1 learned this week")).toBeTruthy();
+  expect(screen.getByText("1 / 2 done")).toBeTruthy();
+  expect(screen.getByRole("link", { name: /sam/ }).getAttribute("href")).toBe("/classes?class=c1&student=u_sam");
+});
+
+it("filters the class report to students who need attention and changes the period", async () => {
+  const overall = { path_count: 0, self_study_path_count: 0, kp_total: 0, kp_mastered: 0, attempts: { correct: 0, partial: 0, incorrect: 0 },
+    last_activity: null, question_bank: { total: 0, correct: 0, partial: 0, incorrect: 0 }, study_minutes_total: 0, study_minutes_7d: 0,
+    period_minutes: 12, period_answers: 3, trend: Array(8).fill({ minutes: 1, answers: 0 }) };
+  classes.getClassReport.mockResolvedValue({ class_id: "c1", class_name: "Physics 1", students: [
+    { id: "u_sara", username: "sara", teacher_paths: [], overall, flags: [] },
+    { id: "u_sam", username: "sam", teacher_paths: [], overall, flags: [{ kind: "stuck", kp_id: "k", name: "Limits", days: 9, wrong: 3, template_id: "tpl" }] },
+  ] });
+  render(<ClassReportSection classId="c1" />);
+  fireEvent.click(screen.getByRole("button", { name: "View learning report" }));
+  expect(await screen.findByText("Stuck on “Limits” for 9 days, 3 wrong")).toBeTruthy();
+  expect(classes.getClassReport).toHaveBeenCalledWith("c1", 7);
+  fireEvent.click(screen.getByLabelText("Only students who need attention"));
+  expect(screen.queryByText("sara")).toBeNull();
+  fireEvent.change(screen.getByRole("combobox", { name: "Period" }), { target: { value: "30" } });
+  await waitFor(() => expect(classes.getClassReport).toHaveBeenLastCalledWith("c1", 30));
+});
+
+it("lists every hand-in and filters by task", async () => {
+  workbench.listToGrade.mockResolvedValue([
+    { task_id: "t1", task_title: "Essay", student_id: "a", username: "sara", submitted_at: 1, late: false, attempt: 2 },
+    { task_id: "t2", task_title: "Lab", student_id: "b", username: "sam", submitted_at: 2, late: false, attempt: 1 },
+  ]);
+  render(<GradingQueue />);
+  expect(await screen.findByText("Attempt 2")).toBeTruthy();
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "t2" } });
+  expect(within(screen.getByTestId("grading-queue")).queryByText("Essay")).toBeNull();
+  expect(screen.getByRole("link", { name: /sam/ }).getAttribute("href")).toBe("/tasks?task=t2");
+});
+
+it("shows each role its entries and students only the features allowed to them", () => {
+  expect(navVisibleForRole("/practice-sets", "student", {})).toBe(false);
+  expect(navVisibleForRole("/practice-sets", "teacher", null)).toBe(true);
+  expect(navVisibleForRole("/grading", "teacher", null)).toBe(true);
+  expect(navVisibleForRole("/grading", "admin", null)).toBe(false);
+  expect(navVisibleForRole("/partners", "student", { allow_partners: false })).toBe(false);
+  expect(navVisibleForRole("/partners", "student", { allow_partners: true })).toBe(true);
+  expect(navVisibleForRole("/partners", "teacher", null)).toBe(true);
+  expect(navVisibleForRole("/tasks", "student", {})).toBe(true);
+});
+
+it("tells a limited student how much AI is left, and nothing without a limit", async () => {
+  workbench.getMyAiUsage.mockResolvedValue({ limit: 1000, used: 900, remaining_percent: 10 });
+  const { unmount } = render(<AiUsageNote />);
+  expect((await screen.findByRole("status")).textContent).toBe("AI left today: 10%");
+  unmount();
+  workbench.getMyAiUsage.mockResolvedValue({ limit: 0, used: 900, remaining_percent: null });
+  render(<AiUsageNote />);
+  await waitFor(() => expect(workbench.getMyAiUsage).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("turns chosen mistakes into new questions and starts practising them", async () => {
+  workbench.similarQuestions.mockResolvedValue({ entry_ids: [11, 12, 13], title: "Remedial" });
+  const made = vi.fn();
+  render(<SimilarQuestionsButton ids={[1, 2]} disabled={false} onMade={made} />);
+  fireEvent.change(screen.getByLabelText("How many new questions"), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "New questions like these" }));
+  await waitFor(() => expect(made).toHaveBeenCalledWith([11, 12, 13]));
+  expect(workbench.similarQuestions).toHaveBeenCalledWith([1, 2], 3, "en");
+});

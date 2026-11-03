@@ -1,4 +1,6 @@
 export const FRONTEND_HOST_HEADER = "x-deeptutor-frontend-host";
+/** The browser's address as the ingress saw it, for sign-up and sign-in limits. */
+export const CLIENT_IP_HEADER = "x-deeptutor-client-ip";
 
 const UNTRUSTED_FORWARD_HEADERS = [
   "connection",
@@ -14,6 +16,7 @@ const UNTRUSTED_FORWARD_HEADERS = [
   "x-host",
   "x-original-host",
   FRONTEND_HOST_HEADER,
+  CLIENT_IP_HEADER,
 ];
 
 export function prepareBackendForwardHeaders(
@@ -24,6 +27,10 @@ export function prepareBackendForwardHeaders(
   // and source deployments. The HTTP Host header carries the requested
   // frontend host through Next's proxy, including when TLS ends upstream.
   const frontendHost = source.get("host");
+  // The ingress (nginx) sets X-Real-IP / X-Forwarded-For; only the first hop
+  // is kept, under our own name, and the backend trusts it from this proxy only.
+  const clientIp =
+    source.get("x-real-ip")?.trim() || source.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
   const headers = new Headers(source);
   const connectionTokens = (headers.get("connection") || "")
     .split(",")
@@ -45,5 +52,6 @@ export function prepareBackendForwardHeaders(
     headers.set("upgrade", "websocket");
   }
   if (frontendHost) headers.set(FRONTEND_HOST_HEADER, frontendHost);
+  if (clientIp) headers.set(CLIENT_IP_HEADER, clientIp);
   return headers;
 }

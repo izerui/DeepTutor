@@ -142,6 +142,8 @@ test("backend forwarding replaces client identity headers with frontend host", (
   );
 
   assert.equal(headers.get("x-deeptutor-frontend-host"), "app.example");
+  // The ingress's address of the browser, under our own name only (batch 3 §9).
+  assert.equal(headers.get("x-deeptutor-client-ip"), "1.2.3.4");
   assert.equal(headers.get("cookie"), "dt_token=session");
   for (const name of [
     "connection",
@@ -154,6 +156,14 @@ test("backend forwarding replaces client identity headers with frontend host", (
   ]) {
     assert.equal(headers.has(name), false, name);
   }
+});
+
+test("backend forwarding drops a client-ip header the browser sent itself", () => {
+  const headers = prepareBackendForwardHeaders(new Headers({
+    host: "app.example",
+    "x-deeptutor-client-ip": "9.9.9.9",
+  }));
+  assert.equal(headers.has("x-deeptutor-client-ip"), false);
 });
 
 test("backend forwarding does not invent a frontend host from the Next URL", () => {

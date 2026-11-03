@@ -23,16 +23,37 @@ STUDENT_POLICY_DEFAULTS: dict[str, bool] = {
     "allow_personal_mastery": True,
     "allow_personal_book": True,
     "allow_private_kb": False,
+    # Spec 2026-11-03 batch 3 §7.1: own courses and task cards stay open;
+    # Partners, agents and Co-Writer are off for students unless granted.
+    "allow_personal_course": True,
+    "allow_personal_task_card": True,
+    "allow_partners": False,
+    "allow_agents": False,
+    "allow_co_writer": False,
 }
 
+#: Batch 3 §8: a student's daily AI tokens; ``0`` means no limit.
+AI_DAILY_TOKENS = "ai_daily_tokens"
+AI_DAILY_TOKENS_MAX = 100_000_000
 
-def normalize_student_policy(value: Any) -> dict[str, bool] | None:
+
+def _ai_tokens(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 0 <= value <= AI_DAILY_TOKENS_MAX else None
+
+
+def normalize_student_policy(value: Any) -> dict[str, Any] | None:
     """The items set for this student; missing items inherit (spec 2026-10-29 §6)."""
     if not isinstance(value, dict):
         return None
-    return {
+    cleaned: dict[str, Any] = {
         key: value[key] for key in STUDENT_POLICY_DEFAULTS if isinstance(value.get(key), bool)
     }
+    tokens = _ai_tokens(value.get(AI_DAILY_TOKENS))
+    if tokens is not None:
+        cleaned[AI_DAILY_TOKENS] = tokens
+    return cleaned
 
 
 def current_role() -> str:
@@ -75,6 +96,38 @@ def effective_student_policy(user_id: str) -> dict[str, bool]:
     return policy
 
 
+def widest_ai_limit(limits: list[int]) -> int | None:
+    """The most generous of several limits: no limit (``0``) beats any number."""
+    if not limits:
+        return None
+    return 0 if 0 in limits else max(limits)
+
+
+def effective_ai_daily_tokens(user_id: str) -> int:
+    """A student's daily AI tokens (batch 3 §8); ``0`` is no limit.
+
+    Their own setting wins; otherwise the most generous of their classes;
+    otherwise the school default.
+    """
+    from .grants import GrantStorageError, load_grant
+
+    try:
+        stored = load_grant(user_id).get("student_policy")
+    except GrantStorageError:
+        stored = None
+    own = _ai_tokens(stored.get(AI_DAILY_TOKENS)) if isinstance(stored, dict) else None
+    if own is not None:
+        return own
+    from deeptutor.classes.service import class_ai_daily_tokens
+
+    from_classes = class_ai_daily_tokens(user_id)
+    if from_classes is not None:
+        return from_classes
+    from deeptutor.services.llm.usage_limit import school_default_daily_tokens
+
+    return school_default_daily_tokens()
+
+
 def _student_allows(key: str) -> bool:
     if current_role() != "student":
         return True
@@ -91,3 +144,8 @@ def can_write_private_kb() -> bool:
 
 def can_create_personal_book() -> bool:
     return _student_allows("allow_personal_book")
+
+
+def student_allows(key: str) -> bool:
+    """Whether the caller may use ``key`` (always, unless they are a student it denies)."""
+    return _student_allows(key)

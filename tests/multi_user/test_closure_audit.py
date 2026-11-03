@@ -372,7 +372,10 @@ def test_personal_settings_override_classes_item_by_item(teaching_users, as_acco
         ClassService().set_student_policy(class_id, {"allow_private_kb": True, "allow_personal_book": False})
     save_grant(sara, {**load_grant(sara), "student_policy": {"allow_personal_mastery": False}})
     policy = effective_student_policy(sara)
-    assert policy == {"allow_personal_mastery": False, "allow_personal_book": False, "allow_private_kb": True}
+    from deeptutor.multi_user import roles
+
+    assert policy == {**roles.STUDENT_POLICY_DEFAULTS, "allow_personal_mastery": False, "allow_personal_book": False,
+                      "allow_private_kb": True}
 
 
 # ── registration ───────────────────────────────────────────

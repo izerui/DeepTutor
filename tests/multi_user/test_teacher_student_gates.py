@@ -84,6 +84,11 @@ def test_status_reports_student_policy(status_client):
         "allow_personal_mastery": True,
         "allow_personal_book": True,
         "allow_private_kb": False,
+        "allow_personal_course": True,
+        "allow_personal_task_card": True,
+        "allow_partners": False,
+        "allow_agents": False,
+        "allow_co_writer": False,
     }
 
 

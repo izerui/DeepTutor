@@ -100,3 +100,23 @@ async def home() -> dict[str, Any]:
         return sections
 
     return await asyncio.to_thread(build)
+
+
+@router.get("/workbench")
+async def teacher_workbench() -> dict[str, Any]:
+    """The teacher's home (spec 2026-11-03 batch 3 §5.1); administrators get only their role."""
+    from deeptutor.teaching.workbench import workbench
+
+    return await asyncio.to_thread(workbench)
+
+
+@router.get("/to-grade")
+async def to_grade_list() -> dict[str, Any]:
+    """Batch 3 §5.4: every hand-in waiting for the current teacher."""
+    from deeptutor.classes.service import _role
+    from deeptutor.teaching.workbench import to_grade
+
+    user = get_current_user()
+    if _role(user) != "teacher":
+        return {"items": []}
+    return {"items": await asyncio.to_thread(to_grade, user.id)}

@@ -715,7 +715,7 @@ class StudentTasks:
                 "key": key, "task_id": task_row["id"] if task_row is not None else "", "kind": kind,
                 "title": title, "description": "", "target_id": "", "target_title": "", "settings": {},
                 "due_at": due_at, "open_at": open_at, "state": "not_open", "completed_at": None, "late": False,
-                "provenance": provenance(teacher_id, self.actor),
+                "provenance": provenance(teacher_id, self.actor), "teacher_id": teacher_id,
             }
         if open_ and open_at and task_row is not None:
             from deeptutor.notifications.service import notify
@@ -752,6 +752,8 @@ class StudentTasks:
             "completed_at": completion["completed_at"] if completion else None,
             "late": bool(completion and completion["late"]),
             "provenance": provenance(teacher_id, self.actor),
+            # Who set it (batch 3 §5.3: a teacher's "overdue" counts only their own tasks).
+            "teacher_id": teacher_id,
         }
         if state != "completed" and state != "closed" and due_at and 0 < due_at - now <= DUE_SOON_SECONDS:
             from deeptutor.notifications.service import notify
@@ -996,7 +998,10 @@ async def suggest_grade(task_id: str, student_id: str) -> None:
         "full_mark": max_score,
         "homework": submission["text"][:TEXT_MAX],
     }, ensure_ascii=False)
-    response = await complete(prompt=prompt, system_prompt=system_prompt)
+    from deeptutor.services.llm.usage_limit import exempt
+
+    with exempt():  # the teacher's suggestion is not the student's usage (batch 3 §8)
+        response = await complete(prompt=prompt, system_prompt=system_prompt)
     data = parse_json_response(response, fallback=None)
     if not isinstance(data, dict):
         return

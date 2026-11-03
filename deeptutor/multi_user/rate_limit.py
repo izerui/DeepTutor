@@ -1,0 +1,140 @@
+"""Sign-up and sign-in limits (spec 2026-11-03 batch 3 §9).
+
+Counts live in ``<SYSTEM_ROOT>/rate_limits.sqlite3`` as fixed windows per
+bucket. Addresses are stored only as hashes. Nothing is created until the
+first counted request; an unreadable database never blocks a sign-in (the
+limits are a brake, not a gate).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import time
+
+from deeptutor.multi_user.system_db import SystemDb
+
+db = SystemDb(
+    "rate_limits.sqlite3",
+    """\
+CREATE TABLE IF NOT EXISTS rate_buckets (
+    bucket TEXT PRIMARY KEY,
+    window_start INTEGER NOT NULL,
+    count INTEGER NOT NULL
+);
+""",
+    "Rate limit",
+)
+
+#: (count, window seconds)
+REGISTER_PER_ADDRESS = (5, 3600)
+#: Across the whole site, for when the address is unknown or spoofed.
+REGISTER_SITE_WIDE = (60, 3600)
+LOGIN_FAILURES_PER_USERNAME = (10, 900)
+LOGIN_FAILURES_PER_ADDRESS = (30, 900)
+
+
+class RateLimited(Exception):
+    pass
+
+
+def _now() -> int:
+    return int(time.time())
+
+
+def address_key(address: str) -> str:
+    return hashlib.sha256(f"deeptutor-rate:{address}".encode()).hexdigest()[:32]
+
+
+def _window(limit: tuple[int, int], now: int) -> int:
+    return now - (now % limit[1])
+
+
+def count(bucket: str, limit: tuple[int, int]) -> int:
+    """The current window's count, without counting."""
+    now = _now()
+    try:
+        with db.read() as conn:
+            if conn is None:
+                return 0
+            row = conn.execute("SELECT window_start, count FROM rate_buckets WHERE bucket = ?", (bucket,)).fetchone()
+    except Exception:
+        return 0
+    if row is None or row["window_start"] != _window(limit, now):
+        return 0
+    return int(row["count"])
+
+
+def hit(bucket: str, limit: tuple[int, int]) -> int:
+    """Count one in the bucket's current window and return the new count."""
+    now = _now()
+    start = _window(limit, now)
+    with db.write() as conn:
+        conn.execute("DELETE FROM rate_buckets WHERE window_start < ?", (now - 86400,))
+        conn.execute(
+            "INSERT INTO rate_buckets (bucket, window_start, count) VALUES (?, ?, 1) "
+            "ON CONFLICT(bucket) DO UPDATE SET "
+            "count = CASE WHEN rate_buckets.window_start = excluded.window_start THEN rate_buckets.count + 1 ELSE 1 END, "
+            "window_start = excluded.window_start",
+            (bucket, start),
+        )
+        row = conn.execute("SELECT count FROM rate_buckets WHERE bucket = ?", (bucket,)).fetchone()
+    return int(row["count"])
+
+
+def clear(bucket: str) -> None:
+    if not db.path().exists():
+        return
+    with db.write() as conn:
+        conn.execute("DELETE FROM rate_buckets WHERE bucket = ?", (bucket,))
+
+
+# ── sign-up ────────────────────────────────────────────────
+
+
+def check_registration(address: str) -> None:
+    """Count a sign-up attempt; raise once the address or the site is over its limit."""
+    try:
+        per_address = hit(f"register:{address_key(address)}", REGISTER_PER_ADDRESS)
+        site = hit("register:site", REGISTER_SITE_WIDE)
+    except Exception:
+        return
+    if per_address > REGISTER_PER_ADDRESS[0] or site > REGISTER_SITE_WIDE[0]:
+        raise RateLimited("Too many sign-ups from this network. Try again later.")
+
+
+# ── sign-in ────────────────────────────────────────────────
+
+
+def _login_buckets(username: str, address: str) -> tuple[str, str]:
+    return f"login:user:{username.strip().casefold()}", f"login:addr:{address_key(address)}"
+
+
+def check_login(username: str, address: str) -> None:
+    """Refuse while the username or the address has failed too often (no hint which)."""
+    user_bucket, address_bucket = _login_buckets(username, address)
+    if (
+        count(user_bucket, LOGIN_FAILURES_PER_USERNAME) >= LOGIN_FAILURES_PER_USERNAME[0]
+        or count(address_bucket, LOGIN_FAILURES_PER_ADDRESS) >= LOGIN_FAILURES_PER_ADDRESS[0]
+    ):
+        raise RateLimited("Too many attempts. Try again in 15 minutes.")
+
+
+def login_failed(username: str, address: str) -> None:
+    user_bucket, address_bucket = _login_buckets(username, address)
+    try:
+        hit(user_bucket, LOGIN_FAILURES_PER_USERNAME)
+        hit(address_bucket, LOGIN_FAILURES_PER_ADDRESS)
+    except Exception:
+        return
+
+
+def login_succeeded(username: str) -> None:
+    try:
+        clear(_login_buckets(username, "")[0])
+    except Exception:
+        return
+
+
+__all__ = [
+    "RateLimited", "check_login", "check_registration", "login_failed", "login_succeeded",
+]

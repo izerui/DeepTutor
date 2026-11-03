@@ -114,6 +114,77 @@ def _question_bank(student_id: str) -> dict[str, Any]:
     return {"question_bank": tally, **study}
 
 
+TREND_WEEKS = 8
+PERIODS = (7, 30)
+
+
+def _turn_spans(student_id: str, since: float) -> list[tuple[float, float]]:
+    """(started, seconds) of the student's chat turns since *since*; times only."""
+    conn = _read_only(_student_paths(student_id).get_chat_history_db())
+    if conn is None:
+        return []
+    with closing(conn):
+        try:
+            return [
+                (float(r[0]), min(float(r[1]) - float(r[0]), _TURN_CAP_SECONDS))
+                for r in conn.execute(
+                    "SELECT created_at, finished_at FROM turns "
+                    "WHERE finished_at IS NOT NULL AND finished_at > created_at AND created_at >= ?",
+                    (since,),
+                )
+            ]
+        except sqlite3.Error:
+            return []
+
+
+def _activity(student_id: str, snapshots, *, days: int | None) -> dict[str, Any]:
+    """Study minutes and answers in the period, and the last 8 weeks week by week (batch 3 §6.3)."""
+    now = time.time()
+    trend_start = now - TREND_WEEKS * _WEEK_SECONDS
+    since = now - days * 86400 if days else 0.0
+    spans = _turn_spans(student_id, min(since, trend_start) if days else 0.0)
+    answers = [
+        float(a.timestamp) for progress, _ in snapshots for a in progress.quiz_attempts
+        if not getattr(a, "voided", False) and getattr(a, "timestamp", None)
+    ]
+    weeks = [{"minutes": 0, "answers": 0} for _ in range(TREND_WEEKS)]
+    for start, seconds in spans:
+        if start >= trend_start:
+            weeks[min(TREND_WEEKS - 1, int((start - trend_start) // _WEEK_SECONDS))]["minutes"] += seconds / 60
+    for stamp in answers:
+        if stamp >= trend_start:
+            weeks[min(TREND_WEEKS - 1, int((stamp - trend_start) // _WEEK_SECONDS))]["answers"] += 1
+    return {
+        "period_days": days,
+        "period_minutes": int(sum(sec for start, sec in spans if start >= since) // 60),
+        "period_answers": sum(1 for stamp in answers if stamp >= since),
+        "trend": [{"minutes": int(w["minutes"]), "answers": w["answers"]} for w in weeks],
+    }
+
+
+def _point_stats(progress, kp) -> dict[str, Any]:
+    """How a student has fared on one knowledge point (batch 3 §6.2): times and counts only."""
+    from deeptutor.learning.policy import is_mastered
+
+    tried = [
+        a for a in progress.quiz_attempts
+        if a.knowledge_point_id == kp.id and not getattr(a, "voided", False)
+    ]
+    stamps = [float(a.timestamp) for a in tried if getattr(a, "timestamp", None)]
+    wrong = sum(
+        1 for a in tried
+        if str(getattr(a, "result", "") or ("correct" if a.is_correct else "incorrect")) == "incorrect"
+    )
+    first = min(stamps) if stamps else None
+    return {
+        "answers": len(tried),
+        "wrong": wrong,
+        "first_answered_at": first,
+        "last_answered_at": max(stamps) if stamps else None,
+        "stuck_days": int((time.time() - first) // 86400) if first and not is_mastered(progress, kp) else None,
+    }
+
+
 class ReportService:
     def __init__(self, actor: CurrentUser | None = None) -> None:
         self.actor = actor or get_current_user()
@@ -200,7 +271,9 @@ class ReportService:
             for template in TeachingStore().list_templates(owner_user_id=self.actor.id)
         }
 
-    def _student_report(self, student_id: str, my_templates: dict[str, str], *, detail: bool) -> dict[str, Any]:
+    def _student_report(
+        self, student_id: str, my_templates: dict[str, str], *, detail: bool, days: int | None = None,
+    ) -> dict[str, Any]:
         snapshots = _snapshots(student_id)
         teacher_paths: list[dict[str, Any]] = []
         overall = {"path_count": len(snapshots), "self_study_path_count": 0, "kp_total": 0, "kp_mastered": 0,
@@ -233,29 +306,90 @@ class ReportService:
 
                 entry["knowledge_points"] = [
                     {"id": kp.id, "name": kp.name, "mastery": round(display_mastery(progress, kp), 3),
-                     "mastered": is_mastered(progress, kp)}
+                     "mastered": is_mastered(progress, kp), **_point_stats(progress, kp)}
                     for kp in points
                 ]
             teacher_paths.append(entry)
         overall.update(_question_bank(student_id))
+        overall.update(_activity(student_id, snapshots, days=days))
         return {"teacher_paths": teacher_paths, "overall": overall}
 
-    def class_report(self, class_id: str) -> dict[str, Any]:
+    def class_report(self, class_id: str, days: int | None = None) -> dict[str, Any]:
+        """``days``: 7 or 30 limit the period numbers; ``None`` is all time (batch 3 §6.3)."""
+        from deeptutor.classes import attention
+
         self._require_teacher()
+        if days is not None and days not in PERIODS:
+            days = None
         name, students = self._class_students(class_id)
         accounts = _accounts()
         my_templates = self._my_template_ids()
         practice = self._my_practice_results(students)
+        flags = attention.for_teacher(self.actor.id, students)
         rows = []
         for student_id in students:
-            report = self._student_report(student_id, my_templates, detail=False)
+            report = self._student_report(student_id, my_templates, detail=False, days=days)
             rows.append({
                 "id": student_id,
                 "username": (accounts.get(student_id) or {}).get("username") or student_id,
                 **report,
                 "practice_sets": practice.get(student_id, []),
+                "flags": flags.get(student_id, []),
             })
-        return {"class_id": class_id, "class_name": name, "students": rows}
+        return {"class_id": class_id, "class_name": name, "period_days": days, "students": rows}
+
+    def class_path_points(self, class_id: str, template_id: str) -> dict[str, Any]:
+        """One of this teacher's paths across the class: who has mastered each point (batch 3 §3.1)."""
+        from deeptutor.learning.policy import is_mastered
+
+        self._require_teacher()
+        my_templates = self._my_template_ids()
+        if template_id not in my_templates:
+            raise ClassNotFound("Mastery Path not found.")
+        _name, students = self._class_students(class_id)
+        points: dict[str, dict[str, Any]] = {}
+        for student_id in students:
+            for progress, _topic in _snapshots(student_id):
+                origin = getattr(progress, "origin", None)
+                if origin is None or origin.template_id != template_id:
+                    continue
+                for module in progress.modules:
+                    for kp in module.knowledge_points:
+                        entry = points.setdefault(kp.id, {"id": kp.id, "name": kp.name, "students": 0,
+                                                         "mastered": 0, "not_mastered": []})
+                        entry["students"] += 1
+                        if is_mastered(progress, kp):
+                            entry["mastered"] += 1
+                        else:
+                            entry["not_mastered"].append(student_id)
+        return {"template_id": template_id, "title": my_templates[template_id], "points": list(points.values())}
+
+    def export_csv(self, class_id: str, days: int | None = None) -> str:
+        """The class report as CSV (batch 3 §6.3): numbers only."""
+        import csv
+        import io
+
+        report = self.class_report(class_id, days)
+        out = io.StringIO()
+        writer = csv.writer(out)
+        writer.writerow([
+            "student", "study_minutes", "answers", "kp_mastered", "kp_total",
+            "practice_sets_done", "practice_score_ratio", "attention",
+        ])
+        for row in report["students"]:
+            overall = row["overall"]
+            sets = row["practice_sets"]
+            ratio = (
+                sum(s["best_score"] for s in sets) / sum(s["best_max_score"] for s in sets)
+                if sets and sum(s["best_max_score"] for s in sets) else None
+            )
+            writer.writerow([
+                row["username"], overall["period_minutes"], overall["period_answers"],
+                overall["kp_mastered"], overall["kp_total"], len(sets),
+                f"{ratio:.2f}" if ratio is not None else "",
+                "; ".join(flag["kind"] for flag in row["flags"]),
+            ])
+        return out.getvalue()
 
     def student_report(self, class_id: str, student_id: str) -> dict[str, Any]:
         self._require_teacher()

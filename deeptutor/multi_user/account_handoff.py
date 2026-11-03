@@ -54,6 +54,8 @@ STAGES: tuple[str, ...] = (
     "notifications",
     # Spec 2026-11-03 batch 2 §8: a deleted student's comments go.
     "comments",
+    # Batch 3 §11: the answers they handed in for review go too.
+    "practice_answers",
 )
 _TEACHING_STAGES = frozenset({"teacher_paths", "student_assignments", "path_materials"})
 #: Records one startup pass retries at most.
@@ -176,6 +178,7 @@ def run_stages(
         ("task_records", lambda: _tasks().forget_student(user_id)),
         ("notifications", lambda: _notifications().forget_user(user_id)),
         ("comments", lambda: _comments().forget_student(user_id)),
+        ("practice_answers", lambda: _practice_review().forget_student_answers(user_id)),
     ):
         if stage not in stages:
             continue
@@ -187,6 +190,12 @@ def run_stages(
             errors.append(f"{stage}: {exc!r}")
 
     return _ordered(failed), "; ".join(errors)
+
+
+def _practice_review():
+    from deeptutor.practice_sets import review
+
+    return review
 
 
 def hand_over_deleted_account(user_id: str, successor_id: str, *, username: str = "") -> list[str]:

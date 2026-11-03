@@ -1,5 +1,6 @@
 "use client";
 
+import { AiUsageNote } from "@/components/home/AiUsage";
 import { COMMAND_CONFIRMATION_FAILED } from "@/features/chat/transport/command-delivery";
 
 import { ResourceReuseContext, useResourceReusePolicy } from "@/components/chat/home/ResourceReuse";
@@ -2683,6 +2684,8 @@ export default function ChatWorkspace() {
                   </div>
                 </div>
               ) : null}
+              {/* Batch 3 §8: a student's AI left today (nothing without a limit). */}
+              <div className="mx-auto w-full max-w-[960px] px-6"><AiUsageNote /></div>
               <ChatComposer
                 composerRef={composerRef}
                 capMenuRef={capMenuRef}

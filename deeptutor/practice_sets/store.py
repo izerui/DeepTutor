@@ -5,8 +5,9 @@ Lives in ``<SYSTEM_ROOT>/practice_sets.sqlite3``, outside every account:
 * ``practice_sets``: the teacher's set and its editable draft;
 * ``practice_set_revisions``: each published version, frozen;
 * ``practice_submissions``: one row per submission with per-question
-  results and the score. The answers themselves are written to the student's
-  own question bank, never here (§8.4: teachers see results, not answers).
+  results and the score. Every answer goes to the student's own question
+  bank; only what the set's author reviews is kept here as well — the text
+  of subjective answers and the option picked (batch 3 §2.1).
 
 Same storage contract as the class store: DELETE journal with FULL
 synchronous, ``BEGIN IMMEDIATE`` writers that never nest, read-only
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS practice_submissions (
     late INTEGER NOT NULL DEFAULT 0,
     score REAL NOT NULL,
     max_score REAL NOT NULL,
-    -- [{question_id, result, points}]: results only, never the answer text.
+    -- [{question_id, result, points}]; the reviewable answers are in ``answers_json``.
     results_json TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_practice_submissions_set ON practice_submissions(set_id, student_id);
@@ -92,10 +93,36 @@ def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
         if not readonly:
             conn.execute("PRAGMA synchronous = FULL")
             conn.executescript(_SCHEMA)
+            _add_columns(conn)
         return conn
     except BaseException:
         conn.close()
         raise
+
+
+#: Columns added after the first release (spec 2026-11-03 batch 3 §6.1).
+_ADDED_COLUMNS = {
+    "practice_sets": {
+        # ``NULL``: as many attempts as the student likes.
+        "attempts_limit": "INTEGER",
+        # Which attempt is the student's score: ``best`` or ``first``.
+        "score_mode": "TEXT NOT NULL DEFAULT 'best'",
+    },
+    "practice_submissions": {
+        # Handed to the set's author for review (batch 3 §2.1): the text of
+        # subjective answers and the option picked; nothing else.
+        "answers_json": "TEXT NOT NULL DEFAULT '{}'",
+        "regraded_at": "REAL",
+    },
+}
+
+
+def _add_columns(conn: sqlite3.Connection) -> None:
+    for table, columns in _ADDED_COLUMNS.items():
+        present = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, definition in columns.items():
+            if name not in present:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 @contextmanager

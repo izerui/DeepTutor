@@ -78,7 +78,13 @@ class CallMeasurement:
         self.call_id = uuid.uuid4().hex
         self.started_at = time.time()
         self.ledger = None
+        # Batch 3 §8: a student over today's AI limit is refused before the call.
+        self.exempt = False
         if self.enabled:
+            from .usage_limit import admit_call, is_exempt
+
+            admit_call(self.collector)
+            self.exempt = is_exempt()
             from .usage_ledger import ledger_path
 
             try:
@@ -174,7 +180,8 @@ class CallMeasurement:
                     started_at=self.started_at,
                     session_id=self.collector.session_id if self.collector else "",
                     turn_id=self.collector.turn_id if self.collector else "",
-                    source=self.collector.source if self.collector else "",
+                    source=("exempt:" if self.exempt else "")
+                    + (self.collector.source if self.collector else ""),
                 )
             except Exception:
                 logging.getLogger(__name__).exception("Unable to persist LLM usage")

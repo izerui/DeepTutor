@@ -58,7 +58,10 @@ function ManagerView() {
   const [filter, setFilter] = useState({ department: "", grade: "" });
   const [classes, setClasses] = useState<ClassSummary[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  // ``?class=`` opens one directly (from the teacher's workbench, batch 3 §5.1).
+  const [selected, setSelected] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("class"),
+  );
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");

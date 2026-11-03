@@ -43,7 +43,9 @@ import {
   DEFAULT_COLLAPSED_NAV,
   PRIMARY_NAV_HREFS,
   isNavActive,
+  navVisibleForRole,
   navVisibleUnderPolicy,
+  type NavRole,
 } from "@/components/sidebar/nav-entries";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { Tooltip } from "@/shared/ui/Tooltip";
@@ -112,13 +114,16 @@ export function SidebarNav({
     setMoreExpanded(browserStorage.readRaw("local", MORE_EXPANDED_KEY) === "1");
   }, []);
 
-  const { learningPolicy } = useAuthStatus();
+  const { learningPolicy, isAdmin, isTeacher, authenticated, studentPolicy } = useAuthStatus();
+  // Batch 3 §10: entries for some roles only, and students' features by their permissions.
+  const role: NavRole | null = !authenticated ? null : isAdmin ? "admin" : isTeacher ? "teacher" : "student";
   const moduleHrefs = useMemo(
     () =>
       MODULE_NAV_HREFS.filter((href) =>
-        navVisibleUnderPolicy(href, learningPolicy?.allowedSurfaces ?? null),
+        navVisibleUnderPolicy(href, learningPolicy?.allowedSurfaces ?? null) &&
+        navVisibleForRole(href, role, studentPolicy),
       ),
-    [learningPolicy],
+    [learningPolicy, role, studentPolicy],
   );
   const resolved = useMemo(
     () => resolveNavLayout(moduleHrefs, layout, DEFAULT_COLLAPSED_NAV),

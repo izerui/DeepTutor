@@ -9,7 +9,9 @@
   wrong answer becomes one of their mistakes.
 * The teacher sees, for the students in the scope only, completion, first
   and best score, time taken and lateness, plus each question's error rate
-  (§8.4) — results, never the answers.
+  (§8.4). Of the answers, only what the author reviews is kept for them —
+  subjective answers' text and the option picked (batch 3 §2.1); the
+  review itself is in ``review.py``.
 """
 
 from __future__ import annotations
@@ -28,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 QUESTION_TYPES = ("choice", "multi_choice", "concept", "fill_in_blank", "short_answer", "written", "coding")
 REVEALS = ("after_submit", "after_due")
+SCORE_MODES = ("best", "first")
+#: Answers whose text the author reviews (batch 3 §2.1); choice answers keep the option only.
+SUBJECTIVE_TYPES = ("short_answer", "written", "coding")
+OPTION_TYPES = ("choice", "multi_choice", "concept")
+ATTEMPTS_MAX = 100
 MAX_QUESTIONS = 200
 TITLE_MAX = 200
 #: A single answer longer than this is cut before grading and storage.
@@ -185,8 +192,12 @@ async def _judge(pending: list[tuple[dict[str, Any], str]]) -> dict[str, dict[st
             }
             for question, answer in group
         ]
+        from deeptutor.services.llm.usage_limit import exempt
+
         try:
-            decided = await judge_answers(None, items)
+            # A teacher's set is graded even when the student's own AI is used up (batch 3 §8).
+            with exempt():
+                decided = await judge_answers(None, items)
         except AssessmentUnavailable:
             logger.warning("Practice set grading is unavailable for %d answers", len(group))
             continue
@@ -198,6 +209,32 @@ async def _judge(pending: list[tuple[dict[str, Any], str]]) -> dict[str, dict[st
 
 def _points(question: dict[str, Any], result: str) -> float:
     return question["points"] if result == "correct" else question["points"] / 2 if result == "partial" else 0.0
+
+
+def _col(row, name: str, default: Any = None) -> Any:
+    """A column added later (batch 3), read safely from a database not yet migrated."""
+    return row[name] if name in row.keys() else default
+
+
+def reviewable_answer(question: dict[str, Any], answer: str) -> str | None:
+    """What of one answer is kept for the author (batch 3 §2.1), or ``None``."""
+    kind = question["question_type"]
+    if kind in SUBJECTIVE_TYPES:
+        return answer
+    if kind in ("choice", "multi_choice"):
+        letters = sorted({ch for ch in answer.upper() if ch in question["options"]})
+        return "".join(letters) or None
+    if kind == "concept":
+        truth = _truth(answer)
+        return None if truth is None else "TRUE" if truth else "FALSE"
+    return None
+
+
+def counted_submission(submissions, mode: str):
+    """The attempt that is the student's score: the first, or the best (§6.1)."""
+    if not submissions:
+        return None
+    return submissions[0] if mode == "first" else best_submission(submissions)
 
 
 def _ratio(submission) -> float:
@@ -277,6 +314,8 @@ class PracticeSetService:
             "current_revision": row["current_revision"],
             "due_at": row["due_at"],
             "reveal": row["reveal"],
+            "attempts_limit": _col(row, "attempts_limit"),
+            "score_mode": _col(row, "score_mode", "best") or "best",
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
@@ -324,10 +363,25 @@ class PracticeSetService:
     def update(
         self, set_id: str, *, title: str | None = None, description: str | None = None,
         questions: Any = None, due_at: float | None | str = "", reveal: str | None = None,
+        attempts_limit: int | None | str = "", score_mode: str | None = None,
     ) -> dict[str, Any]:
         self._require_author()
         sets: list[str] = []
         values: list[Any] = []
+        if attempts_limit != "":
+            # Batch 3 §6.1: ``None`` lifts the limit; it counts every version's attempts.
+            if attempts_limit is not None and (
+                isinstance(attempts_limit, bool) or not isinstance(attempts_limit, int)
+                or not 1 <= attempts_limit <= ATTEMPTS_MAX
+            ):
+                raise PracticeError(f"Allow 1 to {ATTEMPTS_MAX} attempts, or no limit.")
+            sets.append("attempts_limit = ?")
+            values.append(attempts_limit)
+        if score_mode is not None:
+            if score_mode not in SCORE_MODES:
+                raise PracticeError("Choose which attempt counts.")
+            sets.append("score_mode = ?")
+            values.append(score_mode)
         if title is not None:
             title = title.strip()
             if not title or len(title) > TITLE_MAX:
@@ -493,52 +547,20 @@ class PracticeSetService:
     async def generate(
         self, *, topic: str, count: int, kb_ref: str | None = None,
         question_types: list[str] | None = None, difficulty: str = "", language: str = "zh",
+        book_ref: str | None = None, chapter_ids: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """AI questions from a knowledge base the author can read (§8.2)."""
-        from deeptutor.agents.question.pipeline import QuestionPipeline
-        from deeptutor.book.blocks.quiz import QuizGenerator
-        from deeptutor.core.context import UnifiedContext
-        from deeptutor.runtime.stream_bus import StreamBus
-
+        """AI questions from a knowledge base the author can read (§8.2), or
+        from a book they can read, whole or some chapters (batch 3 §4)."""
         self._require_author()
         topic = str(topic or "").strip()
-        if not topic:
-            raise PracticeError("Describe what the questions should cover.")
-        kb_name = None
-        if kb_ref:
-            from deeptutor.multi_user.knowledge_access import resolve_kb
-
-            kb_name = resolve_kb(kb_ref).id
-        count = max(1, min(int(count or 5), 20))
-        types = [t for t in (question_types or []) if t in QUESTION_TYPES and t != "multi_choice"]
-        bus = StreamBus()
-        try:
-            result = await QuestionPipeline(language=language, kb_name=kb_name).run(
-                context=UnifiedContext(
-                    session_id=f"practice-set-{self.actor.id}",
-                    user_message=topic,
-                    active_capability="deep_question",
-                    knowledge_bases=[kb_name] if kb_name else [],
-                    language=language,
-                ),
-                user_message=topic,
-                num_questions=count,
-                difficulty=difficulty,
-                question_types=types,
-                stream=bus,
-            )
-        finally:
-            await bus.close()
-        generated = QuizGenerator._extract_questions(dict(result.get("summary") or {}))
-        questions = []
-        for item in generated:
-            try:
-                questions.append(normalize_question({**item, "question_id": ""}))
-            except PracticeError:
-                continue
-        if not questions:
-            raise PracticeError("No questions could be generated. Try another topic.")
-        return questions
+        material = ""
+        if book_ref:
+            topic_from_book, material = book_material(book_ref, chapter_ids or [])
+            topic = topic or topic_from_book
+        return await generate_questions(
+            session_id=f"practice-set-{self.actor.id}", topic=topic, count=count, kb_ref=kb_ref,
+            question_types=question_types, difficulty=difficulty, language=language, material=material,
+        )
 
     # the student side
 
@@ -576,7 +598,7 @@ class PracticeSetService:
             ).fetchall()
             mine = conn.execute(
                 f"SELECT set_id, score, max_score FROM practice_submissions "
-                f"WHERE student_id = ? AND set_id IN ({marks})",
+                f"WHERE student_id = ? AND set_id IN ({marks}) ORDER BY submitted_at",
                 (self.actor.id, *ids),
             ).fetchall()
         from deeptutor.classes.service import _accounts
@@ -590,7 +612,9 @@ class PracticeSetService:
         out = []
         for row in rows:
             done = progress.get(row["id"], [])
-            best = best_submission(done) if self._reveal(row, True) else None
+            best = (
+                counted_submission(done, _col(row, "score_mode", "best")) if self._reveal(row, True) else None
+            )
             out.append({
                 **self._summary(row),
                 "teacher": names.get(row["owner_user_id"], ""),
@@ -621,6 +645,10 @@ class PracticeSetService:
             "title": revision["title"],
             "description": revision["description"],
             "teacher": _usernames().get(row["owner_user_id"], ""),
+            "attempts_left": (
+                max(0, _col(row, "attempts_limit") - len(submissions))
+                if _col(row, "attempts_limit") else None
+            ),
             "answers_revealed": reveal,
             "questions": [_for_student(q, reveal=reveal) for q in questions],
             "submissions": [
@@ -656,6 +684,17 @@ class PracticeSetService:
                 return self._published(conn, set_id, revision)
 
         row, revision = await asyncio.to_thread(load)
+
+        def used() -> int:
+            with store.read() as conn:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM practice_submissions WHERE set_id = ? AND student_id = ?",
+                    (set_id, self.actor.id),
+                ).fetchone()[0]
+
+        limit = _col(row, "attempts_limit")
+        if limit and await asyncio.to_thread(used) >= limit:
+            raise PracticeConflict("You have used all your attempts at this practice set.")
         questions = json.loads(revision["questions_json"])
         given = {
             q["question_id"]: str((answers or {}).get(q["question_id"]) or "")[:ANSWER_MAX]
@@ -688,12 +727,24 @@ class PracticeSetService:
         submission_id = f"sub_{uuid.uuid4().hex[:12]}"
         started = float(started_at) if started_at and 0 < float(started_at) <= now else None
 
+        kept = {
+            q["question_id"]: value for q in questions
+            if (value := reviewable_answer(q, given[q["question_id"]])) is not None
+        }
+
         def save():
             with store.write() as conn:
+                if limit and conn.execute(
+                    "SELECT COUNT(*) FROM practice_submissions WHERE set_id = ? AND student_id = ?",
+                    (set_id, self.actor.id),
+                ).fetchone()[0] >= limit:
+                    raise PracticeConflict("You have used all your attempts at this practice set.")
                 conn.execute(
-                    "INSERT INTO practice_submissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO practice_submissions (id, set_id, revision, student_id, started_at, "
+                    "submitted_at, late, score, max_score, results_json, answers_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (submission_id, set_id, revision["revision"], self.actor.id, started, now,
-                     int(late), score, max_score, json.dumps(rows)),
+                     int(late), score, max_score, json.dumps(rows), json.dumps(kept, ensure_ascii=False)),
                 )
 
         await asyncio.to_thread(save)
@@ -876,6 +927,7 @@ class PracticeSetService:
             mine = by_student.get(student_id, [])
             first = mine[0] if mine else None
             best = best_submission(mine)
+            counted = counted_submission(mine, _col(row, "score_mode", "best") or "best")
             students.append({
                 "id": student_id,
                 "username": names.get(student_id, student_id),
@@ -889,6 +941,13 @@ class PracticeSetService:
                 # Each score with its own version's maximum (versions may differ).
                 "best_score": best["score"] if best else None,
                 "best_max_score": best["max_score"] if best else None,
+                # The attempt that counts under the set's score mode (batch 3 §6.1).
+                "score": counted["score"] if counted else None,
+                "score_max": counted["max_score"] if counted else None,
+                # Answers the AI could not judge, waiting for the teacher (§6.1).
+                "ungraded": sum(
+                    1 for s in mine for r in json.loads(s["results_json"]) if r["result"] == "ungraded"
+                ),
                 "max_score": first["max_score"] if first else None,
                 "minutes": round((first["submitted_at"] - first["started_at"]) / 60, 1)
                 if first and first["started_at"] else None,
@@ -898,10 +957,12 @@ class PracticeSetService:
         # Error rate per question of the current version, over each student's
         # first submission to that version.
         tally: dict[str, list[int]] = {}
+        firsts = []
         for mine in by_student.values():
             current = [s for s in mine if s["revision"] == row["current_revision"]]
             if not current:
                 continue
+            firsts.append(current[0])
             for result in json.loads(current[0]["results_json"]):
                 if result["result"] == "ungraded":
                     continue
@@ -909,10 +970,14 @@ class PracticeSetService:
                 counts[0] += result["result"] == "incorrect"
                 counts[1] += 1
         questions = json.loads(revision["questions_json"]) if revision else []
+        from deeptutor.practice_sets.review import option_counts
+
         return {
             "set_id": set_id,
             "title": row["title"],
             "due_at": row["due_at"],
+            "score_mode": _col(row, "score_mode", "best") or "best",
+            "attempts_limit": _col(row, "attempts_limit"),
             "students": students,
             "questions": [
                 {
@@ -921,10 +986,106 @@ class PracticeSetService:
                     "answered": tally.get(q["question_id"], [0, 0])[1],
                     "error_rate": round(tally[q["question_id"]][0] / tally[q["question_id"]][1], 3)
                     if tally.get(q["question_id"], [0, 0])[1] else None,
+                    "question_type": q["question_type"],
+                    "options": q["options"],
+                    "correct_answer": q["correct_answer"],
+                    # How many picked each option (batch 3 §6.1), first attempts at this version.
+                    "option_counts": option_counts(q, firsts),
                 }
                 for q in questions
             ],
         }
+
+async def generate_questions(
+    *, session_id: str, topic: str, count: int, kb_ref: str | None = None,
+    question_types: list[str] | None = None, difficulty: str = "", language: str = "zh",
+    material: str = "",
+) -> list[dict[str, Any]]:
+    """AI questions in the stored shape; shared by teachers' sets and students' remedial practice."""
+    from deeptutor.agents.question.pipeline import QuestionPipeline
+    from deeptutor.book.blocks.quiz import QuizGenerator
+    from deeptutor.core.context import UnifiedContext
+    from deeptutor.runtime.stream_bus import StreamBus
+
+    topic = str(topic or "").strip()
+    if not topic:
+        raise PracticeError("Describe what the questions should cover.")
+    kb_name = None
+    if kb_ref:
+        from deeptutor.multi_user.knowledge_access import resolve_kb
+
+        kb_name = resolve_kb(kb_ref).id
+    count = max(1, min(int(count or 5), 20))
+    types = [t for t in (question_types or []) if t in QUESTION_TYPES and t != "multi_choice"]
+    bus = StreamBus()
+    try:
+        result = await QuestionPipeline(language=language, kb_name=kb_name).run(
+            context=UnifiedContext(
+                session_id=session_id,
+                user_message=topic,
+                active_capability="deep_question",
+                knowledge_bases=[kb_name] if kb_name else [],
+                language=language,
+            ),
+            user_message=topic,
+            num_questions=count,
+            difficulty=difficulty,
+            question_types=types,
+            conversation_context=material,
+            stream=bus,
+        )
+    finally:
+        await bus.close()
+    generated = QuizGenerator._extract_questions(dict(result.get("summary") or {}))
+    questions = []
+    for item in generated:
+        try:
+            questions.append(normalize_question({**item, "question_id": ""}))
+        except PracticeError:
+            continue
+    if not questions:
+        raise PracticeError("No questions could be generated. Try another topic.")
+    return questions
+
+
+#: Book text handed to the question generator, spread over the chosen chapters.
+BOOK_MATERIAL_CHARS = 24_000
+
+
+def book_material(book_ref: str, chapter_ids: list[str]) -> tuple[str, str]:
+    """``(topic, text)`` from chapters of a book the caller can read (batch 3 §4).
+
+    No chapters means the whole book. Each chapter gets an equal share of the
+    text budget, so a long first chapter does not crowd out the rest.
+    """
+    from deeptutor.book.context import build_book_context
+    from deeptutor.multi_user.book_access import readable_book_storage
+
+    storage = readable_book_storage(book_ref)
+    book_id = str(book_ref).split(":", 1)[-1]
+    spine = storage.load_spine(book_id) if storage is not None else None
+    if storage is None or storage.load_book(book_id) is None or spine is None:
+        raise PracticeNotFound("Book not found.")
+    wanted = set(chapter_ids)
+    chapters = [c for c in spine.chapters if not wanted or c.id in wanted]
+    if not chapters:
+        raise PracticeError("Choose chapters of this book.")
+    share = max(2_000, BOOK_MATERIAL_CHARS // len(chapters))
+    parts = []
+    for chapter in chapters:
+        if not chapter.page_ids:
+            continue
+        result = build_book_context(
+            [{"book_id": book_ref, "page_ids": list(chapter.page_ids)}], storage=storage, max_chars=share,
+        )
+        if result.text.strip():
+            parts.append(result.text.strip())
+    text = "\n\n".join(parts)[:BOOK_MATERIAL_CHARS]
+    if not text:
+        raise PracticeError("The chosen chapters have no content yet.")
+    topic = "; ".join(c.title for c in chapters if getattr(c, "title", ""))[:500]
+    return topic, "Write the questions from this book material only:\n\n" + text
+
 
 def _usernames() -> dict[str, str]:
     from deeptutor.classes.service import _accounts

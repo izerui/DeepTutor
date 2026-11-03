@@ -19,10 +19,16 @@ def test_teaching_roles_are_admin_and_teacher_only():
 
 def test_student_policy_defaults():
     # Spec 2026-10-29 §6: own Mastery Paths and books on, private KBs off.
+    # Batch 3 §7.1: own courses and task cards on; Partners, agents and Co-Writer off.
     assert roles.STUDENT_POLICY_DEFAULTS == {
         "allow_personal_mastery": True,
         "allow_personal_book": True,
         "allow_private_kb": False,
+        "allow_personal_course": True,
+        "allow_personal_task_card": True,
+        "allow_partners": False,
+        "allow_agents": False,
+        "allow_co_writer": False,
     }
 
 

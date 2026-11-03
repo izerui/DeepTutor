@@ -1,5 +1,6 @@
 "use client";
 
+import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -138,18 +139,27 @@ export default function QuestionBankSection({
                 )
               : t("Questions from every source, together with your own imports.")}
           </p>
-          <button
-            type="button"
-            disabled={bank.loading || bank.refreshing || !bank.items.length}
-            onClick={() =>
-              onPractice(selectedIds.length ? selectedIds : bank.items.map(item => item.id))
-            }
-            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-40"
-          >
-            {selectedIds.length
-              ? t("Practice selected ({{count}})", { count: selectedIds.length })
-              : t("Practice this page")}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {mistakesOnly && (
+              <SimilarQuestionsButton
+                ids={(selectedIds.length ? selectedIds : bank.items.map(item => item.id)).slice(0, 20)}
+                disabled={bank.loading || bank.refreshing || !bank.items.length}
+                onMade={onPractice}
+              />
+            )}
+            <button
+              type="button"
+              disabled={bank.loading || bank.refreshing || !bank.items.length}
+              onClick={() =>
+                onPractice(selectedIds.length ? selectedIds : bank.items.map(item => item.id))
+              }
+              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-[var(--muted)] disabled:opacity-40"
+            >
+              {selectedIds.length
+                ? t("Practice selected ({{count}})", { count: selectedIds.length })
+                : t("Practice this page")}
+            </button>
+          </div>
         </div>
       )}
 

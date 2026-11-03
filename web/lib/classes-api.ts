@@ -61,10 +61,22 @@ export interface ClassDetail extends ClassSummary {
   students?: ClassStudent[];
   pending_invitations?: { id: string; username: string; created_at: number }[];
   /** Class-wide student permissions; an absent key inherits the default. */
-  student_policy?: Partial<Record<StudentPolicyKey, boolean>>;
+  student_policy?: StudentPolicy;
 }
 
-export type StudentPolicyKey = "allow_personal_mastery" | "allow_personal_book" | "allow_private_kb";
+/** Per key: allow / deny, or absent to inherit; ``ai_daily_tokens`` 0 is no limit (batch 3 §8). */
+export type StudentPolicy = Partial<Record<StudentPolicyKey, boolean>> & { ai_daily_tokens?: number };
+
+export type StudentPolicyKey =
+  | "allow_personal_mastery"
+  | "allow_personal_book"
+  | "allow_private_kb"
+  // Spec 2026-11-03 batch 3 §7.1.
+  | "allow_personal_course"
+  | "allow_personal_task_card"
+  | "allow_partners"
+  | "allow_agents"
+  | "allow_co_writer";
 
 export interface AttemptTally {
   correct: number;
@@ -81,8 +93,26 @@ export interface TeacherPathReport {
   average_mastery: number;
   attempts: AttemptTally;
   last_activity: number | null;
-  knowledge_points?: { id: string; name: string; mastery: number; mastered: boolean }[];
+  knowledge_points?: {
+    id: string;
+    name: string;
+    mastery: number;
+    mastered: boolean;
+    /** Batch 3 §6.2: answers and wrong answers on this point, and days stuck (not mastered). */
+    answers?: number;
+    wrong?: number;
+    first_answered_at?: number | null;
+    last_answered_at?: number | null;
+    stuck_days?: number | null;
+  }[];
 }
+
+/** Why a student needs attention (spec 2026-11-03 batch 3 §5.3). */
+export type AttentionFlag =
+  | { kind: "inactive"; days: number | null }
+  | { kind: "overdue"; count: number }
+  | { kind: "mistakes_rising"; recent: number; before: number }
+  | { kind: "stuck"; kp_id: string; name: string; days: number; wrong: number; template_id: string };
 
 export interface OverallReport {
   path_count: number;
@@ -94,6 +124,11 @@ export interface OverallReport {
   question_bank: { total: number; correct: number; partial: number; incorrect: number };
   study_minutes_total: number;
   study_minutes_7d: number;
+  /** Batch 3 §6.3: the chosen period (``null``: all time) and the last 8 weeks. */
+  period_days?: number | null;
+  period_minutes?: number;
+  period_answers?: number;
+  trend?: { minutes: number; answers: number }[];
 }
 
 export interface PracticeSetResult {
@@ -116,12 +151,20 @@ export interface StudentReport {
   overall: OverallReport;
   /** Spec D17: this teacher's practice sets the student submitted. */
   practice_sets?: PracticeSetResult[];
+  flags?: AttentionFlag[];
 }
 
 export interface ClassReport {
   class_id: string;
   class_name: string;
+  period_days?: number | null;
   students: StudentReport[];
+}
+
+export interface ClassPathPoints {
+  template_id: string;
+  title: string;
+  points: { id: string; name: string; students: number; mastered: number; not_mastered: string[] }[];
 }
 
 export interface InviteLink {
@@ -191,12 +234,17 @@ export const removeStudent = (id: string, studentId: string) =>
   call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}`, {
     method: "DELETE",
   }).then((r) => r.class);
-export const setClassStudentPolicy = (id: string, policy: Partial<Record<StudentPolicyKey, boolean>>) =>
+export const setClassStudentPolicy = (id: string, policy: StudentPolicy) =>
   call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}/student-policy`, {
     method: "PUT",
     body: JSON.stringify(policy),
   }).then((r) => r.class);
-export const getClassReport = (id: string) => call<ClassReport>(`/${encodeURIComponent(id)}/report`);
+export const getClassReport = (id: string, days?: number | null) =>
+  call<ClassReport>(`/${encodeURIComponent(id)}/report${days ? `?days=${days}` : ""}`);
+export const classReportExportUrl = (id: string, days?: number | null) =>
+  apiUrl(`${BASE}/${encodeURIComponent(id)}/report/export${days ? `?days=${days}` : ""}`);
+export const getClassPathPoints = (id: string, templateId: string) =>
+  call<ClassPathPoints>(`/${encodeURIComponent(id)}/report/paths/${encodeURIComponent(templateId)}`);
 export const getStudentReport = (id: string, studentId: string) =>
   call<StudentReport>(`/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}/report`);
 export const leaveClass = (id: string) => call<{ ok: boolean }>(`/${encodeURIComponent(id)}/leave`, { method: "POST" });

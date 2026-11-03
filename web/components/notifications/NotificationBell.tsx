@@ -54,6 +54,8 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("“{{title}}” is open now", { title });
     case "course_published":
       return t("{{teacher}} published the course “{{title}}”", { teacher: p.teacher, title });
+    case "practice_regraded":
+      return t("Your score on “{{title}}” was changed by your teacher", { title });
     case "tasks_transferred":
       return t("{{count}} tasks were handed over to you", { count: p.count });
     default:

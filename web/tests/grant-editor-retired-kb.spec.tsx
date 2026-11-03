@@ -34,8 +34,10 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(screen.queryByText("Retired KB")).not.toBeInTheDocument();
   // Spec 2026-10-29 D5: partners are not lent through grants, so there is no partner checkbox.
   expect(screen.queryByRole("checkbox", { name: /^Partner One/ })).not.toBeInTheDocument();
-  for (const name of ["Model One", "Skill One", "Enable learning policy", "Allow private knowledge bases"])
+  for (const name of ["Model One", "Skill One", "Enable learning policy"])
     fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${name}`) }));
+  // Batch 3 §7: each permission is default / allow / deny; only what is set is stored.
+  fireEvent.change(screen.getByRole("combobox", { name: "Create their own knowledge bases" }), { target: { value: "allow" } });
   fireEvent.click(screen.getByRole("button", { name: "Save assignments" }));
   await waitFor(() => expect(saveUserGrant).toHaveBeenCalledOnce());
   const saved = vi.mocked(saveUserGrant).mock.calls[0][1];
@@ -44,7 +46,7 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(saved.skills).toEqual([{ skill_id: "Skill One", access: "use", source: "admin" }]);
   expect(saved.partners).toEqual([]);
   expect(saved.learning_policy?.locked_persona).toBe("teacher");
-  expect(saved.student_policy).toEqual({ allow_personal_mastery: true, allow_private_kb: true });
+  expect(saved.student_policy).toEqual({ allow_private_kb: true });
   expect(saved.enabled_tools).toBeNull();
   expect(saved.mcp_tools).toBeNull();
 });

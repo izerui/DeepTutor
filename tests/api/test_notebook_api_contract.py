@@ -33,6 +33,8 @@ PINNED_SOURCES = {
     "import",
     # Spec 2026-10-29 §8.3: answers to a teacher's practice set.
     "practice_set",
+    # Spec 2026-11-03 batch 3 §3.2: a student's own remedial questions.
+    "remedial",
 }
 
 

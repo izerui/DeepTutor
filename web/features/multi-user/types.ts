@@ -33,14 +33,31 @@ export type LearningPolicy = {
   };
 };
 
+/**
+ * What is set for one student; a missing key follows their classes, then the
+ * default (spec 2026-10-29 §6; batch 3 §7). ``ai_daily_tokens`` 0 is no limit.
+ */
 export type StudentPolicy = {
-  allow_personal_mastery: boolean;
-  allow_private_kb: boolean;
+  allow_personal_mastery?: boolean;
+  allow_personal_book?: boolean;
+  allow_private_kb?: boolean;
+  allow_personal_course?: boolean;
+  allow_personal_task_card?: boolean;
+  allow_partners?: boolean;
+  allow_agents?: boolean;
+  allow_co_writer?: boolean;
+  ai_daily_tokens?: number;
 };
 
-export const STUDENT_POLICY_DEFAULTS: StudentPolicy = {
+export const STUDENT_POLICY_DEFAULTS: Required<Omit<StudentPolicy, "ai_daily_tokens">> = {
   allow_personal_mastery: true,
+  allow_personal_book: true,
   allow_private_kb: false,
+  allow_personal_course: true,
+  allow_personal_task_card: true,
+  allow_partners: false,
+  allow_agents: false,
+  allow_co_writer: false,
 };
 
 export type ToolOption = { name: string; description?: string };

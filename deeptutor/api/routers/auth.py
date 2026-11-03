@@ -162,6 +162,27 @@ def _request_frontend_host(request: Request) -> str:
         return ""
 
 
+def _client_address(request: Request) -> str:
+    """The browser's address: the frontend proxy's ``x-deeptutor-client-ip`` from a trusted peer, else the peer."""
+    client = getattr(request, "client", None)
+    peer = client.host if client else ""
+    try:
+        peer_ip = str(ipaddress.ip_address(peer))
+    except ValueError:
+        return peer
+    if peer_ip in TRUSTED_FRONTEND_PROXY_IPS:
+        raw = request.headers.get("x-deeptutor-client-ip", "").strip()
+        try:
+            return str(ipaddress.ip_address(raw))
+        except ValueError:
+            pass
+    return peer_ip
+
+
+def _rate_limited(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc))
+
+
 def _require_private_frontend(request: Request) -> None:
     """Restrict credential endpoints only when private hosts are configured."""
 
@@ -742,6 +763,7 @@ def _learning_surface_for_path(
         ("/api/notifications", "chat"),
         ("/api/home", "chat"),
         ("/api/comments", "chat"),
+        ("/api/ai-usage", "chat"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):
             return surface
@@ -816,6 +838,10 @@ async def require_learning_surface(
                 route_path=route_path,
             )
         )
+        # Batch 3 §7: features a student's policy turns off (Partners, own courses, …).
+        from deeptutor.multi_user.student_features import assert_student_feature
+
+        assert_student_feature(request_path, request.method, route_path)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -961,12 +987,21 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
         }
 
     # Standard JWT + bcrypt mode
+    from deeptutor.multi_user import rate_limit
+
+    address = _client_address(request)
+    try:
+        await asyncio.to_thread(rate_limit.check_login, body.username, address)
+    except rate_limit.RateLimited as exc:
+        raise _rate_limited(exc) from None
     result = authenticate(body.username, body.password)
     if not result:
+        await asyncio.to_thread(rate_limit.login_failed, body.username, address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+    await asyncio.to_thread(rate_limit.login_succeeded, body.username)
 
     token = create_token(result.username, result.role, result.user_id)
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
@@ -1303,6 +1338,12 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     invite = body.invite.strip()
     invite_error = ""
     if not first_user:
+        from deeptutor.multi_user import rate_limit
+
+        try:
+            await asyncio.to_thread(rate_limit.check_registration, _client_address(request))
+        except rate_limit.RateLimited as exc:
+            raise _rate_limited(exc) from None
         from deeptutor.classes.service import ClassError, link_info
         from deeptutor.multi_user.registration import public_registration_open
 

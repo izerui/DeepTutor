@@ -3416,6 +3416,21 @@
         "title": "DeepDiveRequest",
         "type": "object"
       },
+      "DefaultLimit": {
+        "properties": {
+          "daily_tokens": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "title": "Daily Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_tokens"
+        ],
+        "title": "DefaultLimit",
+        "type": "object"
+      },
       "DeleteBlockRequest": {
         "properties": {
           "block_id": {
@@ -4207,6 +4222,26 @@
       },
       "GenerateRequest": {
         "properties": {
+          "book_ref": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Ref"
+          },
+          "chapter_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Chapter Ids",
+            "type": "array"
+          },
           "count": {
             "default": 5,
             "maximum": 20.0,
@@ -4247,15 +4282,12 @@
             "type": "array"
           },
           "topic": {
+            "default": "",
             "maxLength": 2000,
-            "minLength": 1,
             "title": "Topic",
             "type": "string"
           }
         },
-        "required": [
-          "topic"
-        ],
         "title": "GenerateRequest",
         "type": "object"
       },
@@ -7531,7 +7563,8 @@
               "conversation",
               "external_import",
               "document_analysis",
-              "practice_set"
+              "practice_set",
+              "remedial"
             ],
             "title": "Origin Type",
             "type": "string"
@@ -7648,7 +7681,8 @@
               "book",
               "partner_chat",
               "import",
-              "practice_set"
+              "practice_set",
+              "remedial"
             ],
             "title": "Source",
             "type": "string"
@@ -9586,6 +9620,98 @@
         "title": "RegistryEditPayload",
         "type": "object"
       },
+      "RegradeRequest": {
+        "properties": {
+          "points": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Points",
+            "type": "number"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "RegradeRequest",
+        "type": "object"
+      },
+      "RemedialFromPath": {
+        "properties": {
+          "kp_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Kp Ids",
+            "type": "array"
+          },
+          "student_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Student Ids",
+            "type": "array"
+          },
+          "template_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Template Id",
+            "type": "string"
+          },
+          "title_prefix": {
+            "default": "Remedial: ",
+            "maxLength": 40,
+            "title": "Title Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template_id",
+          "kp_ids"
+        ],
+        "title": "RemedialFromPath",
+        "type": "object"
+      },
+      "RemedialFromSet": {
+        "properties": {
+          "question_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Question Ids",
+            "type": "array"
+          },
+          "set_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Set Id",
+            "type": "string"
+          },
+          "similar": {
+            "default": 0,
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Similar",
+            "type": "integer"
+          },
+          "title_prefix": {
+            "default": "Remedial: ",
+            "maxLength": 40,
+            "title": "Title Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "set_id",
+          "question_ids"
+        ],
+        "title": "RemedialFromSet",
+        "type": "object"
+      },
       "RenamePathRequest": {
         "description": "An empty name is a valid request: it restores the derived display name.",
         "properties": {
@@ -10507,6 +10633,24 @@
       },
       "SetUpdate": {
         "properties": {
+          "attempts_limit": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempts Limit"
+          },
+          "clear_attempts_limit": {
+            "default": false,
+            "title": "Clear Attempts Limit",
+            "type": "boolean"
+          },
           "clear_due": {
             "default": false,
             "title": "Clear Due",
@@ -10561,6 +10705,17 @@
               }
             ],
             "title": "Reveal"
+          },
+          "score_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Mode"
           },
           "title": {
             "anyOf": [
@@ -10694,6 +10849,37 @@
           "nav_order"
         ],
         "title": "SidebarNavOrderUpdate",
+        "type": "object"
+      },
+      "SimilarRequest": {
+        "properties": {
+          "count": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 3.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "entry_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Entry Ids",
+            "type": "array"
+          },
+          "language": {
+            "default": "zh",
+            "maxLength": 10,
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_ids"
+        ],
+        "title": "SimilarRequest",
         "type": "object"
       },
       "SkillInstallPayload": {
@@ -10879,6 +11065,52 @@
       },
       "StudentPolicyUpdate": {
         "properties": {
+          "ai_daily_tokens": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Daily Tokens"
+          },
+          "allow_agents": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Agents"
+          },
+          "allow_co_writer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Co Writer"
+          },
+          "allow_partners": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Partners"
+          },
           "allow_personal_book": {
             "anyOf": [
               {
@@ -10890,6 +11122,17 @@
             ],
             "title": "Allow Personal Book"
           },
+          "allow_personal_course": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Personal Course"
+          },
           "allow_personal_mastery": {
             "anyOf": [
               {
@@ -10900,6 +11143,17 @@
               }
             ],
             "title": "Allow Personal Mastery"
+          },
+          "allow_personal_task_card": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Personal Task Card"
           },
           "allow_private_kb": {
             "anyOf": [
@@ -13814,7 +14068,8 @@
               "conversation",
               "external_import",
               "document_analysis",
-              "practice_set"
+              "practice_set",
+              "remedial"
             ],
             "title": "Origin Type",
             "type": "string"
@@ -13883,7 +14138,8 @@
               "book",
               "partner_chat",
               "import",
-              "practice_set"
+              "practice_set",
+              "remedial"
             ],
             "title": "Source",
             "type": "string"
@@ -14997,6 +15253,215 @@
         "summary": "Get Single Agent Config",
         "tags": [
           "agent-config"
+        ]
+      }
+    },
+    "/api/ai-usage/default": {
+      "get": {
+        "operationId": "school_default_api_ai_usage_default_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response School Default Api Ai Usage Default Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "School Default",
+        "tags": [
+          "ai-usage"
+        ]
+      },
+      "put": {
+        "operationId": "set_school_default_api_ai_usage_default_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefaultLimit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set School Default Api Ai Usage Default Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set School Default",
+        "tags": [
+          "ai-usage"
+        ]
+      }
+    },
+    "/api/ai-usage/me": {
+      "get": {
+        "operationId": "my_usage_api_ai_usage_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response My Usage Api Ai Usage Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Usage",
+        "tags": [
+          "ai-usage"
         ]
       }
     },
@@ -22716,6 +23181,7 @@
     },
     "/api/classes/{class_id}/report": {
       "get": {
+        "description": "``days`` = 7 or 30 limits the period numbers (batch 3 §6.3).",
         "operationId": "class_report_api_classes__class_id__report_get",
         "parameters": [
           {
@@ -22725,6 +23191,22 @@
             "schema": {
               "title": "Class Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Days"
             }
           },
           {
@@ -22785,6 +23267,179 @@
           }
         },
         "summary": "Class Report",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/{class_id}/report/export": {
+      "get": {
+        "operationId": "export_class_report_api_classes__class_id__report_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "class_id",
+            "required": true,
+            "schema": {
+              "title": "Class Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Days"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Class Report",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/{class_id}/report/paths/{template_id}": {
+      "get": {
+        "operationId": "class_path_points_api_classes__class_id__report_paths__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "class_id",
+            "required": true,
+            "schema": {
+              "title": "Class Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Class Path Points Api Classes  Class Id  Report Paths  Template Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Class Path Points",
         "tags": [
           "classes"
         ]
@@ -26176,6 +26831,142 @@
           }
         },
         "summary": "Home",
+        "tags": [
+          "home"
+        ]
+      }
+    },
+    "/api/home/to-grade": {
+      "get": {
+        "description": "Batch 3 §5.4: every hand-in waiting for the current teacher.",
+        "operationId": "to_grade_list_api_home_to_grade_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response To Grade List Api Home To Grade Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "To Grade List",
+        "tags": [
+          "home"
+        ]
+      }
+    },
+    "/api/home/workbench": {
+      "get": {
+        "description": "The teacher's home (spec 2026-11-03 batch 3 §5.1); administrators get only their role.",
+        "operationId": "teacher_workbench_api_home_workbench_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Teacher Workbench Api Home Workbench Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Teacher Workbench",
         "tags": [
           "home"
         ]
@@ -48049,6 +48840,153 @@
         ]
       }
     },
+    "/api/practice-sets/remedial/from-path": {
+      "post": {
+        "operationId": "remedial_from_path_api_practice_sets_remedial_from_path_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemedialFromPath"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remedial From Path",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
+    "/api/practice-sets/remedial/from-set": {
+      "post": {
+        "description": "A draft practice set of the picked questions (batch 3 §3.1).",
+        "operationId": "remedial_from_set_api_practice_sets_remedial_from_set_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemedialFromSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remedial From Set",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
     "/api/practice-sets/withdrawable": {
       "get": {
         "description": "Administrators: other people's published sets, which they may only withdraw (D10).",
@@ -48407,6 +49345,78 @@
         ]
       }
     },
+    "/api/practice-sets/{set_id}/export": {
+      "get": {
+        "operationId": "export_results_api_practice_sets__set_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Results",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
     "/api/practice-sets/{set_id}/publish": {
       "post": {
         "operationId": "publish_set_api_practice_sets__set_id__publish_post",
@@ -48563,6 +49573,187 @@
           }
         },
         "summary": "Set Report",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
+    "/api/practice-sets/{set_id}/submissions/{submission_id}": {
+      "get": {
+        "operationId": "review_attempt_api_practice_sets__set_id__submissions__submission_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "title": "Submission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Attempt",
+        "tags": [
+          "practice-sets"
+        ]
+      }
+    },
+    "/api/practice-sets/{set_id}/submissions/{submission_id}/questions/{question_id}": {
+      "put": {
+        "operationId": "regrade_question_api_practice_sets__set_id__submissions__submission_id__questions__question_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "title": "Submission Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Regrade Question",
         "tags": [
           "practice-sets"
         ]
@@ -49369,7 +50560,8 @@
                     "book",
                     "partner_chat",
                     "import",
-                    "practice_set"
+                    "practice_set",
+                    "remedial"
                   ],
                   "type": "string"
                 },
@@ -49678,7 +50870,8 @@
                 "conversation",
                 "external_import",
                 "document_analysis",
-                "practice_set"
+                "practice_set",
+                "remedial"
               ],
               "title": "Origin Type",
               "type": "string"
@@ -51115,6 +52308,83 @@
         "summary": "Summary",
         "tags": [
           "practice"
+        ]
+      }
+    },
+    "/api/question-notebook/remedial/similar": {
+      "post": {
+        "operationId": "similar_api_question_notebook_remedial_similar_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimilarRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Similar Api Question Notebook Remedial Similar Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Similar",
+        "tags": [
+          "remedial"
         ]
       }
     },

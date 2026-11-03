@@ -26,8 +26,10 @@ import {
   type ClassDetail,
   type ClassPerson,
   type InviteLink,
+  type StudentPolicy,
   type StudentPolicyKey,
 } from "@/lib/classes-api";
+import { AiLimitPicker } from "@/components/home/AiUsage";
 import { actionClass, CopyButton, inputClass, primaryClass } from "./ClassesHub";
 import { AnnouncementsSection, ClassOrgFields } from "./ClassOrg";
 import { ClassReportSection } from "./ClassReport";
@@ -337,16 +339,24 @@ const POLICY_ROWS: { key: StudentPolicyKey; label: string }[] = [
   { key: "allow_personal_mastery", label: "Create their own Mastery Paths" },
   { key: "allow_personal_book", label: "Create their own books" },
   { key: "allow_private_kb", label: "Create their own knowledge bases" },
+  // Spec 2026-11-03 batch 3 §7.1.
+  { key: "allow_personal_course", label: "Create their own courses" },
+  { key: "allow_personal_task_card", label: "Add their own task cards" },
+  { key: "allow_partners", label: "Use Partners" },
+  { key: "allow_agents", label: "Use agents" },
+  { key: "allow_co_writer", label: "Use Co-Writer" },
 ];
 
 function StudentPolicySection({ detail, run }: { detail: ClassDetail; run: Run }) {
   const { t } = useTranslation();
   const policy = detail.student_policy ?? {};
+  const save = (next: StudentPolicy) =>
+    void run(() => setClassStudentPolicy(detail.id, next), t("Student permissions saved."));
   const choose = (key: StudentPolicyKey, value: string) => {
-    const next: Partial<Record<StudentPolicyKey, boolean>> = { ...policy };
+    const next: StudentPolicy = { ...policy };
     if (value === "") delete next[key];
     else next[key] = value === "allow";
-    void run(() => setClassStudentPolicy(detail.id, next), t("Student permissions saved."));
+    save(next);
   };
   return (
     <section className={sectionClass}>
@@ -368,6 +378,19 @@ function StudentPolicySection({ detail, run }: { detail: ClassDetail; run: Run }
           </select>
         </label>
       ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-[var(--foreground)]">
+        {t("Daily AI limit")}
+        <AiLimitPicker
+          value={policy.ai_daily_tokens}
+          inheritLabel={t("Default")}
+          onChange={(value) => {
+            const next: StudentPolicy = { ...policy };
+            if (value === undefined) delete next.ai_daily_tokens;
+            else next.ai_daily_tokens = value;
+            save(next);
+          }}
+        />
+      </div>
     </section>
   );
 }

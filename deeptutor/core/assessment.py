@@ -6,8 +6,10 @@ AssessmentSource = Literal[
     "deep_question", "mastery_path", "immersive_reading", "book", "partner_chat", "import",
     # Spec 2026-10-29 §8.3: answers to a teacher's practice set.
     "practice_set",
+    # Spec 2026-11-03 batch 3 §3.2: a student's own remedial questions.
+    "remedial",
 ]
-QuestionOriginType = Literal["conversation", "external_import", "document_analysis", "practice_set"]
+QuestionOriginType = Literal["conversation", "external_import", "document_analysis", "practice_set", "remedial"]
 AssessmentType = Literal["quiz", "focus_check", "qualitative", "review"]
 AssessmentResult = Literal["correct", "incorrect", "partial", "ungraded", "voided"]
 

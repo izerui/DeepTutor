@@ -32,6 +32,8 @@ export interface AuthStatusState {
    * absent instead of offered and then rejected (#1222).
    */
   learningPolicy: LearningPolicyState | null;
+  /** Batch 3 §7: a student's effective permissions (``null`` for everyone else). */
+  studentPolicy: Record<string, boolean> | null;
 }
 
 const INITIAL: AuthStatusState = {
@@ -43,6 +45,7 @@ const INITIAL: AuthStatusState = {
   allowPersonalMastery: false,
   userId: null,
   statusAvailable: false,
+  studentPolicy: null,
   loading: true,
   learningPolicy: null,
 };
@@ -88,6 +91,8 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     statusAvailable: status !== null,
     loading: false,
     learningPolicy: learningPolicyFromStatus(status),
+    studentPolicy: status?.role === "student" && status.student_policy
+      ? (status.student_policy as Record<string, boolean>) : null,
   }));
 }
 

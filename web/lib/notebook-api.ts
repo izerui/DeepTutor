@@ -261,13 +261,15 @@ export type AssessmentSource =
   | "book"
   | "partner_chat"
   | "import"
-  | "practice_set";
+  | "practice_set"
+  | "remedial";
 
 export type QuestionOriginType =
   | "conversation"
   | "external_import"
   | "document_analysis"
-  | "practice_set";
+  | "practice_set"
+  | "remedial";
 
 export type AssessmentType = "quiz" | "focus_check" | "qualitative" | "review";
 

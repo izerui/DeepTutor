@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
+import { AiUsageNote } from "./AiUsage";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
 import { bookRoute, MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData } from "@/lib/tasks-api";
@@ -79,6 +80,7 @@ export default function StudentHome() {
         </Link>
       </header>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
+      <AiUsageNote />
       {selected && (
         <StudentTaskDetail
           key={selected.key}

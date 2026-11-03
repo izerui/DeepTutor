@@ -33,10 +33,15 @@ export interface PracticeSetSummary {
   current_revision: number;
   due_at: number | null;
   reveal: Reveal;
+  /** Batch 3 §6.1: at most this many attempts (``null``: no limit); which attempt counts. */
+  attempts_limit?: number | null;
+  score_mode?: ScoreMode;
   created_at: number;
   updated_at: number;
   submitted_students?: number;
 }
+
+export type ScoreMode = "best" | "first";
 
 export interface PracticeSetDraft extends PracticeSetSummary {
   questions: PracticeQuestion[];
@@ -69,6 +74,8 @@ export interface QuestionResult {
 
 export interface TakeView extends PracticeSetSummary {
   teacher: string;
+  /** ``null`` when the set has no attempt limit. */
+  attempts_left?: number | null;
   answers_revealed: boolean;
   questions: PracticeQuestion[];
   /** ``score`` is null while results are withheld. */
@@ -108,8 +115,58 @@ export interface PracticeReport {
     minutes: number | null;
     late: boolean;
     submitted_at: number | null;
+    in_scope?: boolean;
+    /** The attempt that counts under the set's score mode. */
+    score?: number | null;
+    score_max?: number | null;
+    /** Answers the AI could not judge, waiting for the teacher. */
+    ungraded?: number;
   }[];
-  questions: { question_id: string; question: string; answered: number; error_rate: number | null }[];
+  score_mode?: ScoreMode;
+  attempts_limit?: number | null;
+  questions: {
+    question_id: string;
+    question: string;
+    answered: number;
+    error_rate: number | null;
+    question_type?: PracticeQuestionType;
+    options?: Record<string, string>;
+    correct_answer?: string;
+    /** Picks per option (``TRUE``/``FALSE`` for true-or-false); ``null`` without options. */
+    option_counts?: Record<string, number> | null;
+  }[];
+}
+
+/** One attempt, question by question, for the set's author (batch 3 §6.1). */
+export interface ReviewAttempt {
+  id: string;
+  set_id: string;
+  revision: number;
+  student_id: string;
+  username: string;
+  submitted_at: number;
+  late: boolean;
+  score: number;
+  max_score: number;
+  regraded_at: number | null;
+  questions: {
+    question_id: string;
+    question: string;
+    question_type: PracticeQuestionType;
+    options: Record<string, string>;
+    correct_answer: string;
+    result: ResultValue;
+    points: number;
+    max_points: number;
+    /** Subjective answers' text, or the option picked; ``null`` when not kept. */
+    answer: string | null;
+    regraded: boolean;
+  }[];
+}
+
+export interface RemedialDraft {
+  set: PracticeSetDraft;
+  suggested_students: { id: string; username: string }[];
 }
 
 export class PracticeSetsApiError extends Error {
@@ -145,12 +202,16 @@ export const createSet = (title: string) => call<{ set: PracticeSetDraft }>("", 
 export const getSet = (setId: string) => call<{ set: PracticeSetDraft }>(id(setId)).then((r) => r.set);
 export const updateSet = (
   setId: string,
-  update: Partial<Pick<PracticeSetDraft, "title" | "description" | "questions" | "reveal">> & {
+  update: Partial<Pick<PracticeSetDraft, "title" | "description" | "questions" | "reveal" | "score_mode">> & {
     due_at?: number | null;
+    attempts_limit?: number | null;
   },
 ) => {
-  const { due_at, ...rest } = update;
-  const body = due_at === undefined ? rest : due_at === null ? { ...rest, clear_due: true } : { ...rest, due_at };
+  const { due_at, attempts_limit, ...rest } = update;
+  const body: Record<string, unknown> =
+    due_at === undefined ? rest : due_at === null ? { ...rest, clear_due: true } : { ...rest, due_at };
+  if (attempts_limit === null) body.clear_attempts_limit = true;
+  else if (attempts_limit !== undefined) body.attempts_limit = attempts_limit;
   return call<{ set: PracticeSetDraft }>(id(setId), send("PUT", body)).then((r) => r.set);
 };
 /** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
@@ -168,10 +229,30 @@ export const generateQuestions = (body: {
   kb_ref?: string | null;
   question_types?: string[];
   language?: string;
+  /** Batch 3 §4: from a book (``book:<id>``), whole or some chapters. */
+  book_ref?: string | null;
+  chapter_ids?: string[];
 }) => call<{ questions: PracticeQuestion[] }>("/generate", send("POST", body)).then((r) => r.questions);
 export const questionsFromBank = (entryIds: number[]) =>
   call<{ questions: PracticeQuestion[] }>("/from-bank", send("POST", { entry_ids: entryIds })).then((r) => r.questions);
 export const getReport = (setId: string) => call<PracticeReport>(`${id(setId)}/report`);
+/** The results as a CSV download (batch 3 §6.1). */
+export const reportExportUrl = (setId: string) => apiUrl(`${BASE}${id(setId)}/export`);
+export const getAttempt = (setId: string, submissionId: string) =>
+  call<{ attempt: ReviewAttempt }>(`${id(setId)}/submissions${id(submissionId)}`).then((r) => r.attempt);
+export const regradeQuestion = (setId: string, submissionId: string, questionId: string, points: number) =>
+  call<{ attempt: ReviewAttempt }>(
+    `${id(setId)}/submissions${id(submissionId)}/questions${id(questionId)}`, send("PUT", { points }),
+  ).then((r) => r.attempt);
+/** Batch 3 §3.1: a draft remedial set from the picked questions, or a path's points. */
+export const remedialFromSet = (setId: string, questionIds: string[], similar: number, titlePrefix: string) =>
+  call<RemedialDraft>("/remedial/from-set", send("POST", {
+    set_id: setId, question_ids: questionIds, similar, title_prefix: titlePrefix,
+  }));
+export const remedialFromPath = (templateId: string, kpIds: string[], studentIds: string[], titlePrefix: string) =>
+  call<RemedialDraft>("/remedial/from-path", send("POST", {
+    template_id: templateId, kp_ids: kpIds, student_ids: studentIds, title_prefix: titlePrefix,
+  }));
 
 export const listAssigned = () => call<{ sets: AssignedSet[] }>("/assigned").then((r) => r.sets);
 export const takeSet = (setId: string) => call<{ set: TakeView }>(`${id(setId)}/take`).then((r) => r.set);

@@ -34,10 +34,13 @@ export function FirstPublishScope({
   kind,
   itemId,
   onChange,
+  initialPeople = [],
 }: {
   kind: PublishKind;
   itemId: string;
   onChange: (choice: FirstPublishChoice) => void;
+  /** Batch 3 §3.1: a remedial set starts with the students who got it wrong instead of classes. */
+  initialPeople?: { id: string; username: string }[];
 }) {
   const { t } = useTranslation();
   const [described, setDescribed] = useState<ScopeDescription | null>(null);
@@ -54,7 +57,9 @@ export function FirstPublishScope({
           onChange({ needed: false, ready: true });
           return;
         }
-        const initial = { everyone: false, classes: next.suggested_classes, people: [] };
+        const initial = initialPeople.length
+          ? { everyone: false, classes: [], people: initialPeople }
+          : { everyone: false, classes: next.suggested_classes, people: [] };
         setValue(initial);
         onChange({ needed: true, scope: toScopeUpdate(initial), ready: !isEmptyScope(initial) });
       })
