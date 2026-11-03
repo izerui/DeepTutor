@@ -98,8 +98,11 @@ def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
 
 
 def forget_deleted_account(user_id: str) -> None:
-    """Hand-over stage ``classes``: the deleted id teaches and attends nothing."""
+    """Hand-over stage ``classes``: the deleted id teaches, attends and is listed under nothing."""
     _leave_classes(user_id, as_teacher=True, as_student=True)
+    from deeptutor.classes.org import forget_teacher
+
+    forget_teacher(user_id)
 
 
 def forget_publish_targets(user_id: str) -> None:

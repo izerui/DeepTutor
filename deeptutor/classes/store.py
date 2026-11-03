@@ -72,6 +72,42 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_class_invitations_pending
     ON class_invitations(class_id, student_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_class_invitations_student
     ON class_invitations(student_id, status);
+
+-- Departments and grades (spec 2026-11-03 batch 2 §0): two attributes of a
+-- class, kept apart from ``classes`` so older databases read without a migration.
+CREATE TABLE IF NOT EXISTS departments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS grades (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS class_org (
+    class_id TEXT PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,
+    department_id TEXT NOT NULL DEFAULT '',
+    grade_id TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS teacher_departments (
+    user_id TEXT NOT NULL,
+    department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, department_id)
+);
+
+-- Class announcements (spec 2026-11-03 batch 2 §4).
+CREATE TABLE IF NOT EXISTS class_announcements (
+    id TEXT PRIMARY KEY,
+    class_id TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_class_announcements_class ON class_announcements(class_id, created_at DESC);
 """
 
 #: Tests may point this at a temporary file; ``None`` means ``<SYSTEM_ROOT>/classes.sqlite3``.

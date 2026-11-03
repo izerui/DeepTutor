@@ -409,6 +409,56 @@
         "title": "AnnotationPayload",
         "type": "object"
       },
+      "AnnouncementPost": {
+        "properties": {
+          "pinned": {
+            "default": false,
+            "title": "Pinned",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "AnnouncementPost",
+        "type": "object"
+      },
+      "AnnouncementUpdate": {
+        "properties": {
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "AnnouncementUpdate",
+        "type": "object"
+      },
       "AnswerImageItem": {
         "description": "Persisted reference to one image attached to a learner's answer.\n\nThe bytes live in the AttachmentStore at ``url``; we never round-trip\nbase64 back to the client so notebook lookups stay cheap.",
         "properties": {
@@ -1939,6 +1989,30 @@
             ],
             "title": "Archived"
           },
+          "department_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Id"
+          },
+          "grade_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Id"
+          },
           "name": {
             "anyOf": [
               {
@@ -1992,6 +2066,44 @@
           "model"
         ],
         "title": "CodexReasoningEffortUpdate",
+        "type": "object"
+      },
+      "CommentWrite": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "practice_submission",
+              "path_point"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "maxLength": 300,
+            "minLength": 3,
+            "title": "Ref",
+            "type": "string"
+          },
+          "student_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Student Id",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref",
+          "student_id",
+          "text"
+        ],
+        "title": "CommentWrite",
         "type": "object"
       },
       "CommitRequest": {
@@ -2466,6 +2578,66 @@
           "knowledge_base_id"
         ],
         "title": "ConnectWeKnoraRequest",
+        "type": "object"
+      },
+      "CourseCreate": {
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CourseCreate",
+        "type": "object"
+      },
+      "CourseUpdate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "task_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Ids"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "CourseUpdate",
         "type": "object"
       },
       "CreateBookRequest": {
@@ -7583,6 +7755,21 @@
         "title": "NotebookReference",
         "type": "object"
       },
+      "OrgName": {
+        "properties": {
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "OrgName",
+        "type": "object"
+      },
       "OrganizeNotesRequest": {
         "properties": {
           "material_ids": {
@@ -9758,6 +9945,14 @@
             "title": "Everyone",
             "type": "boolean"
           },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Groups",
+            "type": "array"
+          },
           "users": {
             "items": {
               "type": "string"
@@ -9789,6 +9984,14 @@
             "default": false,
             "title": "Everyone",
             "type": "boolean"
+          },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Groups",
+            "type": "array"
           },
           "users": {
             "items": {
@@ -11421,6 +11624,17 @@
             ],
             "title": "Due At"
           },
+          "open_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open At"
+          },
           "settings": {
             "anyOf": [
               {
@@ -11459,6 +11673,20 @@
           }
         },
         "title": "TaskUpdate",
+        "type": "object"
+      },
+      "TeacherDepartments": {
+        "properties": {
+          "department_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Department Ids",
+            "type": "array"
+          }
+        },
+        "title": "TeacherDepartments",
         "type": "object"
       },
       "TestResponse": {
@@ -20436,6 +20664,166 @@
         ]
       }
     },
+    "/api/classes/announcements/{announcement_id}": {
+      "delete": {
+        "operationId": "delete_announcement_api_classes_announcements__announcement_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "title": "Announcement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Announcement Api Classes Announcements  Announcement Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Announcement",
+        "tags": [
+          "classes"
+        ]
+      },
+      "put": {
+        "operationId": "update_announcement_api_classes_announcements__announcement_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "title": "Announcement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Announcement Api Classes Announcements  Announcement Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Announcement",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
     "/api/classes/invitations/mine": {
       "get": {
         "operationId": "my_invitations_api_classes_invitations_mine_get",
@@ -20803,6 +21191,491 @@
           }
         },
         "summary": "Join Class",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/org": {
+      "get": {
+        "operationId": "org_lists_api_classes_org_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Lists Api Classes Org Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Lists",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/org/teachers": {
+      "get": {
+        "description": "Administrators: which departments each teacher is listed under.",
+        "operationId": "org_teachers_api_classes_org_teachers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Teachers Api Classes Org Teachers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Teachers",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/org/teachers/{user_id}": {
+      "put": {
+        "operationId": "org_set_teacher_api_classes_org_teachers__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeacherDepartments"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Set Teacher Api Classes Org Teachers  User Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Set Teacher",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/org/{kind}": {
+      "post": {
+        "operationId": "org_create_api_classes_org__kind__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Create Api Classes Org  Kind  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Create",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/org/{kind}/{item_id}": {
+      "delete": {
+        "operationId": "org_delete_api_classes_org__kind___item_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Delete Api Classes Org  Kind   Item Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Delete",
+        "tags": [
+          "classes"
+        ]
+      },
+      "put": {
+        "operationId": "org_rename_api_classes_org__kind___item_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgName"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Org Rename Api Classes Org  Kind   Item Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Rename",
         "tags": [
           "classes"
         ]
@@ -21280,6 +22153,166 @@
           }
         },
         "summary": "Update Class",
+        "tags": [
+          "classes"
+        ]
+      }
+    },
+    "/api/classes/{class_id}/announcements": {
+      "get": {
+        "operationId": "class_announcements_api_classes__class_id__announcements_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "class_id",
+            "required": true,
+            "schema": {
+              "title": "Class Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Class Announcements Api Classes  Class Id  Announcements Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Class Announcements",
+        "tags": [
+          "classes"
+        ]
+      },
+      "post": {
+        "operationId": "post_announcement_api_classes__class_id__announcements_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "class_id",
+            "required": true,
+            "schema": {
+              "title": "Class Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementPost"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Announcement Api Classes  Class Id  Announcements Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Announcement",
         "tags": [
           "classes"
         ]
@@ -22267,6 +23300,337 @@
         "summary": "Remove Teacher",
         "tags": [
           "classes"
+        ]
+      }
+    },
+    "/api/comments": {
+      "put": {
+        "operationId": "write_comment_api_comments_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Comment",
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/comments/mine": {
+      "get": {
+        "description": "The current student's comments on one practice set or Mastery Path.",
+        "operationId": "my_comments_api_comments_mine_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "practice_submission",
+                "path_point"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Comments",
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/comments/written": {
+      "get": {
+        "operationId": "written_api_comments_written_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "practice_submission",
+                "path_point"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Student Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Written",
+        "tags": [
+          "comments"
+        ]
+      }
+    },
+    "/api/comments/{comment_id}": {
+      "delete": {
+        "operationId": "delete_comment_api_comments__comment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "title": "Comment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Comment",
+        "tags": [
+          "comments"
         ]
       }
     },
@@ -67634,6 +68998,734 @@
           }
         },
         "summary": "Submit Homework",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/calendar": {
+      "get": {
+        "description": "Opening times and deadlines: what reached a student, or what an author assigned.",
+        "operationId": "calendar_api_tasks_calendar_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calendar",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses": {
+      "post": {
+        "operationId": "create_course_api_tasks_courses_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Course",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/assigned": {
+      "get": {
+        "operationId": "assigned_courses_api_tasks_courses_assigned_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assigned Courses",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/mine": {
+      "get": {
+        "operationId": "my_courses_api_tasks_courses_mine_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Courses",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/{course_id}": {
+      "delete": {
+        "operationId": "delete_course_api_tasks_courses__course_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Course",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "get": {
+        "operationId": "get_course_api_tasks_courses__course_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Course",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "put": {
+        "operationId": "update_course_api_tasks_courses__course_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CourseUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Course",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/{course_id}/archive": {
+      "post": {
+        "operationId": "archive_course_api_tasks_courses__course_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Course",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/{course_id}/publish": {
+      "post": {
+        "operationId": "publish_course_api_tasks_courses__course_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskPublish"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Course",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/courses/{course_id}/tasks": {
+      "post": {
+        "operationId": "add_course_task_api_tasks_courses__course_id__tasks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Course Task",
         "tags": [
           "tasks"
         ]

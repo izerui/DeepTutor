@@ -36,9 +36,10 @@ KNOWLEDGE_BASE = "knowledge_base"
 MASTERY_PATH = "mastery_path"
 PRACTICE_SET = "practice_set"
 TASK = "task"
-KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, TASK)
+COURSE = "course"
+KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
 #: Kinds whose receivers are students only (they study or answer them).
-STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK)
+STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
 
 
 class ScopeError(Exception):
@@ -75,6 +76,9 @@ class Scope:
     everyone: bool = False
     users: list[str] = field(default_factory=list)
     classes: list[str] = field(default_factory=list)
+    #: Departments, grades or both (``department:<id>``, ``grade:<id>``,
+    #: ``department:<id>+grade:<id>``); administrators only (2026-11-03 §0).
+    groups: list[str] = field(default_factory=list)
     #: False when the item has never had a scope (the old rule applies).
     managed: bool = True
 
@@ -83,12 +87,21 @@ class Scope:
             "everyone": self.everyone,
             "users": list(self.users),
             "classes": list(self.classes),
+            "groups": list(self.groups),
             "managed": self.managed,
         }
 
     @property
     def empty(self) -> bool:
-        return not (self.everyone or self.users or self.classes)
+        return not (self.everyone or self.users or self.classes or self.groups)
+
+    def all_classes(self) -> set[str]:
+        """Its classes, and the active classes its groups cover right now."""
+        if not self.groups:
+            return set(self.classes)
+        from deeptutor.classes.org import group_class_ids
+
+        return set(self.classes) | group_class_ids(self.groups)
 
 
 # ── reading ────────────────────────────────────────────────
@@ -113,6 +126,7 @@ def get_scope(kind: str, item_id: str) -> Scope | None:
         everyone=bool(row["everyone"]),
         users=[t["target_id"] for t in targets if t["target_type"] == "user"],
         classes=[t["target_id"] for t in targets if t["target_type"] == "class"],
+        groups=[t["target_id"] for t in targets if t["target_type"] == "group"],
     )
 
 
@@ -149,11 +163,11 @@ def member_class_ids(user_id: str) -> set[str]:
 def _reaches(scope: Scope, user_id: str, classes: set[str] | None = None) -> bool:
     if scope.everyone or user_id in scope.users:
         return True
-    if not scope.classes:
+    if not scope.classes and not scope.groups:
         return False
     if classes is None:
         classes = member_class_ids(user_id)
-    return bool(classes & set(scope.classes))
+    return bool(classes & scope.all_classes())
 
 
 def allows(kind: str, item_id: str, user_id: str) -> bool:
@@ -208,7 +222,7 @@ def audience(scope: Scope, *, students_only: bool = False, owner_id: str = "") -
     if scope.everyone:
         reached = set(accounts)
     else:
-        reached = set(scope.users) | _class_audience(scope.classes, students_only=students_only)
+        reached = set(scope.users) | _class_audience(sorted(scope.all_classes()), students_only=students_only)
     reached.discard(owner_id)
     return reached & set(accounts)
 
@@ -229,7 +243,8 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
         conn.executemany(
             "INSERT INTO publish_targets VALUES (?, ?, ?, ?)",
             [(kind, item_id, "user", u) for u in scope.users]
-            + [(kind, item_id, "class", c) for c in scope.classes],
+            + [(kind, item_id, "class", c) for c in scope.classes]
+            + [(kind, item_id, "group", g) for g in scope.groups],
         )
 
 
@@ -293,7 +308,7 @@ def default_scope_on_publish(kind: str, item_id: str) -> None:
         from deeptutor.publishing.service import PublishService
 
         validated = PublishService(user)._validated(
-            kind, chosen.everyone, chosen.users, chosen.classes, Scope()
+            kind, chosen.everyone, chosen.users, chosen.classes, Scope(), groups=chosen.groups
         )
         if validated.empty:
             raise ScopeRequired()
@@ -434,6 +449,7 @@ def path_revoke_allowed(template_id: str, student_id: str, *, actor_id: str) -> 
 
 __all__ = [
     "BOOK",
+    "COURSE",
     "KINDS",
     "KNOWLEDGE_BASE",
     "MASTERY_PATH",

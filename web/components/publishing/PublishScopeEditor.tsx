@@ -31,6 +31,7 @@ export function PublishScopeEditor({
   const [everyone, setEveryone] = useState(false);
   const [classes, setClasses] = useState<string[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [affected, setAffected] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,6 +44,7 @@ export function PublishScopeEditor({
     setEveryone(next.scope.everyone);
     setClasses(next.scope.classes.map((c) => c.id));
     setPeople(next.scope.users);
+    setGroups(next.scope.groups ?? []);
     setAffected(null);
   };
 
@@ -68,7 +70,9 @@ export function PublishScopeEditor({
     setError("");
     setSaved(false);
     try {
-      load(await setScope(kind, itemId, { everyone, users: people.map((p) => p.id), classes, confirm }));
+      load(await setScope(kind, itemId, {
+        everyone, users: people.map((p) => p.id), classes, groups: groups.map((g) => g.id), confirm,
+      }));
       setSaved(true);
       onSaved?.();
     } catch (err) {
@@ -92,18 +96,21 @@ export function PublishScopeEditor({
     ...described.choices.classes,
     ...described.scope.classes.filter((c) => !described.choices.classes.some((choice) => choice.id === c.id)),
   ];
-  const nothing = !everyone && classes.length === 0 && people.length === 0;
+  const nothing = !everyone && classes.length === 0 && people.length === 0 && groups.length === 0;
 
   return (
     <fieldset disabled={busy} className="space-y-2 text-xs" data-testid="publish-scope-editor">
       <legend className="mb-1 text-sm font-medium">{t("Who receives this")}</legend>
       <ScopePicker
-        value={{ everyone, classes, people }}
+        value={{ everyone, classes, people, groups }}
         classes={knownClasses}
+        departments={described.choices.departments}
+        grades={described.choices.grades}
         onChange={(next) => {
           setEveryone(next.everyone);
           setClasses(next.classes);
           setPeople(next.people);
+          setGroups(next.groups ?? []);
         }}
       />
       {!described.scope.managed && described.published && kind !== "practice_set" && (

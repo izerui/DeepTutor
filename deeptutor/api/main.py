@@ -582,6 +582,7 @@ from deeptutor.api.routers import (
     tasks,
     notifications,
     home,
+    comments,
     co_writer,
     courses,
     dashboard,
@@ -685,6 +686,8 @@ app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["pra
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"], dependencies=_auth)
 app.include_router(home.router, prefix="/api/home", tags=["home"], dependencies=_auth)
+# Spec 2026-11-03 batch 2: teacher comments.
+app.include_router(comments.router, prefix="/api/comments", tags=["comments"], dependencies=_auth)
 app.include_router(
     mastery_path.router,
     prefix="/api/mastery-paths",

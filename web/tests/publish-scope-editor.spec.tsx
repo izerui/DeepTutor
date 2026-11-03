@@ -38,7 +38,7 @@ it("asks before narrowing and retries with confirm", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Save anyway" }));
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2 people receive this"));
   const body = JSON.parse(fetchMock.mock.calls[2][1].body);
-  expect(body).toEqual({ everyone: false, users: [], classes: ["c1"], confirm: true });
+  expect(body).toEqual({ everyone: false, users: [], classes: ["c1"], groups: [], confirm: true });
 });
 
 it("shows nothing to someone who is not the publisher", async () => {

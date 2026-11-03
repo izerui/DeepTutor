@@ -62,6 +62,7 @@ import {
   type TopicSession,
 } from "@/lib/learning-api";
 import { setPendingPrompt } from "@/lib/pending-prompt";
+import { MyComments } from "@/components/comments/Comments";
 import { NEXT_CTA_LABELS, NEXT_LABELS } from "@/components/space/learning/next-step-copy";
 
 export default function MasteryTopicPage() {
@@ -416,6 +417,17 @@ export default function MasteryTopicPage() {
             {teacherLocked ? (
               <div className="mt-3">
                 <TeacherPathBanner topic={topic} />
+                {topic.origin?.template_id && (
+                  <div className="mt-3">
+                    <MyComments
+                      kind="path_point"
+                      subject={topic.origin.template_id}
+                      label={(kp) =>
+                        topic.map.modules.flatMap((m) => m.knowledge_points).find((p) => p.id === kp)?.name ?? ""
+                      }
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <TeacherMaterialsNotice

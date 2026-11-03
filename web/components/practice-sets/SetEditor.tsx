@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { CommentEditor } from "@/components/comments/Comments";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
 import { FirstPublishScope, type FirstPublishChoice } from "@/components/publishing/FirstPublishScope";
 import { PublishScopeEditor } from "@/components/publishing/PublishScopeEditor";
@@ -543,6 +544,7 @@ function ReportSection({ setId }: { setId: string }) {
                   <th className="px-2 py-1.5">{t("Attempts")}</th>
                   <th className="px-2 py-1.5">{t("Minutes")}</th>
                   <th className="px-2 py-1.5">{t("Submitted")}</th>
+                  <th className="px-2 py-1.5">{t("Comment")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -556,6 +558,12 @@ function ReportSection({ setId }: { setId: string }) {
                     <td className="px-2 py-1.5">
                       {formatDate(student.submitted_at) || "—"}
                       {student.late && <span className="ml-1 text-amber-600">{t("Late")}</span>}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {student.latest_submission_id && (
+                        <CommentEditor kind="practice_submission" subject={setId}
+                          target={student.latest_submission_id} studentId={student.id} />
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from deeptutor.classes import org
 from deeptutor.classes.service import ClassError, ClassService, link_info
 
 router = APIRouter()
@@ -26,6 +27,26 @@ async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         return await asyncio.to_thread(function, *args, **kwargs)
     except ClassError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except org.OrgError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+class OrgName(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class TeacherDepartments(BaseModel):
+    department_ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+class AnnouncementPost(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    pinned: bool = False
+
+
+class AnnouncementUpdate(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=5000)
+    pinned: bool | None = None
 
 
 class ClassCreate(BaseModel):
@@ -35,6 +56,9 @@ class ClassCreate(BaseModel):
 class ClassUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     archived: bool | None = None
+    #: Spec 2026-11-03 §0: "" clears it; leave out to keep it.
+    department_id: str | None = Field(default=None, max_length=64)
+    grade_id: str | None = Field(default=None, max_length=64)
 
 
 class PersonRef(BaseModel):
@@ -145,6 +169,89 @@ async def qr_code(data: str = Query(min_length=1, max_length=512)) -> Response:
 # ── one class ────────────────────────────────────────────────────────
 
 
+# ── announcements (spec 2026-11-03 batch 2 §4) ─────────────
+
+
+@router.put("/announcements/{announcement_id}")
+async def update_announcement(announcement_id: str, payload: AnnouncementUpdate) -> dict:
+    from deeptutor.classes.announcements import AnnouncementService
+
+    return {"announcement": await _call(
+        lambda: AnnouncementService().update(announcement_id, text=payload.text, pinned=payload.pinned)
+    )}
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: str) -> dict:
+    from deeptutor.classes.announcements import AnnouncementService
+
+    await _call(lambda: AnnouncementService().delete(announcement_id))
+    return {"ok": True}
+
+
+@router.get("/{class_id}/announcements")
+async def class_announcements(class_id: str) -> dict:
+    from deeptutor.classes.announcements import AnnouncementService
+
+    return {"announcements": await _call(lambda: AnnouncementService().list_for_class(class_id))}
+
+
+@router.post("/{class_id}/announcements")
+async def post_announcement(class_id: str, payload: AnnouncementPost) -> dict:
+    from deeptutor.classes.announcements import AnnouncementService
+
+    return {"announcement": await _call(lambda: AnnouncementService().post(class_id, payload.text, payload.pinned))}
+
+
+# ── departments and grades (spec 2026-11-03 batch 2 §0) ───
+
+
+@router.get("/org")
+async def org_lists() -> dict:
+    return await _call(org.lists)
+
+
+# Before ``/org/{kind}/…``, which would otherwise take ``teachers`` as a kind.
+@router.get("/org/teachers")
+async def org_teachers() -> dict:
+    """Administrators: which departments each teacher is listed under."""
+    from deeptutor.multi_user.context import get_current_user
+
+    if not get_current_user().is_admin:
+        raise HTTPException(status_code=403, detail="Only administrators manage departments and grades.")
+    from deeptutor.classes.service import _accounts
+
+    people = [
+        {"id": user_id, "username": account["username"]}
+        for user_id, account in sorted(_accounts().items(), key=lambda item: item[1]["username"])
+        if account["role"] == "teacher" and not account["disabled"]
+    ]
+    return {"teachers": await _call(org.teacher_departments), "people": people}
+
+
+@router.put("/org/teachers/{user_id}")
+async def org_set_teacher(user_id: str, payload: TeacherDepartments) -> dict:
+    await _call(org.set_teacher_departments, user_id, payload.department_ids)
+    return {"teachers": await _call(org.teacher_departments)}
+
+
+@router.post("/org/{kind}")
+async def org_create(kind: str, payload: OrgName) -> dict:
+    return {"item": await _call(org.create, kind, payload.name)}
+
+
+@router.put("/org/{kind}/{item_id}")
+async def org_rename(kind: str, item_id: str, payload: OrgName) -> dict:
+    await _call(org.rename, kind, item_id, payload.name)
+    return await _call(org.lists)
+
+
+@router.delete("/org/{kind}/{item_id}")
+async def org_delete(kind: str, item_id: str) -> dict:
+    await _call(org.delete, kind, item_id)
+    return await _call(org.lists)
+
+
 @router.get("/{class_id}")
 async def get_class(class_id: str) -> dict:
     return {"class": await _call(lambda: ClassService().get(class_id))}
@@ -153,7 +260,10 @@ async def get_class(class_id: str) -> dict:
 @router.patch("/{class_id}")
 async def update_class(class_id: str, payload: ClassUpdate) -> dict:
     return {"class": await _call(
-        lambda: ClassService().update(class_id, name=payload.name, archived=payload.archived)
+        lambda: ClassService().update(
+            class_id, name=payload.name, archived=payload.archived,
+            department_id=payload.department_id, grade_id=payload.grade_id,
+        )
     )}
 
 

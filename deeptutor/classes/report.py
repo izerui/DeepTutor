@@ -232,7 +232,7 @@ class ReportService:
                 from deeptutor.learning.policy import display_mastery, is_mastered
 
                 entry["knowledge_points"] = [
-                    {"name": kp.name, "mastery": round(display_mastery(progress, kp), 3),
+                    {"id": kp.id, "name": kp.name, "mastery": round(display_mastery(progress, kp), 3),
                      "mastered": is_mastered(progress, kp)}
                     for kp in points
                 ]

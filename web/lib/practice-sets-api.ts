@@ -102,6 +102,8 @@ export interface PracticeReport {
     best_score: number | null;
     /** The maximum of the version the best score was on. */
     best_max_score: number | null;
+    /** What a teacher's comment attaches to: the latest attempt. */
+    latest_submission_id?: string | null;
     max_score: number | null;
     minutes: number | null;
     late: boolean;

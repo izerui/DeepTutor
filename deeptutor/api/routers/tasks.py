@@ -48,11 +48,23 @@ class TaskUpdate(BaseModel):
     settings: dict[str, Any] | None = None
     #: ``None`` clears the deadline; leave the key out to keep it.
     due_at: float | None = None
+    #: Before it, students see only when it opens (spec 2026-11-03 batch 2 §6).
+    open_at: float | None = None
 
 
 class TaskPublish(BaseModel):
     #: First publication: who receives it (spec 2026-11-02 §4.1).
     scope: ScopeChoice | None = None
+
+
+class CourseCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+class CourseUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=20_000)
+    task_ids: list[str] | None = Field(default=None, max_length=200)
 
 
 class Grade(BaseModel):
@@ -62,6 +74,94 @@ class Grade(BaseModel):
 
 class SendBack(BaseModel):
     reason: str = Field(min_length=1, max_length=20_000)
+
+
+# ── courses (spec 2026-11-03 batch 2 §5) ───────────────────
+
+
+def _courses():
+    from deeptutor.tasks.courses import CourseService
+
+    return CourseService()
+
+
+@router.get("/courses/mine")
+async def my_courses():
+    return {"courses": await _call(lambda: _courses().list_mine())}
+
+
+@router.get("/courses/assigned")
+async def assigned_courses():
+    from deeptutor.tasks.courses import assigned_courses as assigned
+
+    return {"courses": await _call(assigned)}
+
+
+@router.post("/courses")
+async def create_course(body: CourseCreate):
+    return {"course": await _call(lambda: _courses().create(body.title))}
+
+
+@router.get("/courses/{course_id}")
+async def get_course(course_id: str):
+    return {"course": await _call(lambda: _courses().get(course_id))}
+
+
+@router.put("/courses/{course_id}")
+async def update_course(course_id: str, body: CourseUpdate):
+    return {"course": await _call(lambda: _courses().update(
+        course_id, title=body.title, description=body.description, task_ids=body.task_ids,
+    ))}
+
+
+@router.post("/courses/{course_id}/tasks")
+async def add_course_task(course_id: str, body: TaskCreate):
+    return {"course": await _call(lambda: _courses().add_new_task(course_id, body.kind, body.title))}
+
+
+@router.post("/courses/{course_id}/publish")
+async def publish_course(course_id: str, body: TaskPublish | None = None):
+    with chosen(body.scope if body else None):
+        return {"course": await _call(lambda: _courses().publish(course_id))}
+
+
+@router.post("/courses/{course_id}/archive")
+async def archive_course(course_id: str):
+    return {"course": await _call(lambda: _courses().archive(course_id))}
+
+
+@router.delete("/courses/{course_id}")
+async def delete_course(course_id: str):
+    await _call(lambda: _courses().delete(course_id))
+    return {"ok": True}
+
+
+# ── calendar (spec 2026-11-03 batch 2 §7) ──────────────────
+
+
+@router.get("/calendar")
+async def calendar():
+    """Opening times and deadlines: what reached a student, or what an author assigned."""
+
+    def build() -> list[dict[str, Any]]:
+        student = StudentTasks()
+        if student._is_student():
+            entries = [e for e in student.assigned() if e["state"] != "closed"]
+            items = [(e["key"], e["title"], e["kind"], e["state"], e.get("open_at"), e["due_at"]) for e in entries]
+        else:
+            items = [
+                (t["id"], t["title"], t["kind"], t["status"], t["open_at"], t["due_at"])
+                for t in TaskService().list_mine() if t["status"] == "published"
+            ]
+        events = []
+        for key, title, kind, state, opens, due in items:
+            if opens:
+                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "open", "at": opens})
+            if due:
+                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "due", "at": due})
+        return sorted(events, key=lambda e: e["at"])
+
+    return {"events": await _call(build)}
 
 
 # ── authoring ──────────────────────────────────────────────

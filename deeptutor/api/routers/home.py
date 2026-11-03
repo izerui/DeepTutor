@@ -85,7 +85,9 @@ async def home() -> dict[str, Any]:
             "assigned": [t for t in tasks if t["state"] in ("open", "overdue")],
             "history_count": sum(1 for t in tasks if t["state"] in ("completed", "closed")),
         }
-        for name, loader in (("school", _school), ("mine", _mine)):
+        from deeptutor.classes.announcements import AnnouncementService
+
+        for name, loader in (("school", _school), ("mine", _mine), ("announcements", AnnouncementService().for_home)):
             try:
                 sections[name] = loader()
             except Exception:

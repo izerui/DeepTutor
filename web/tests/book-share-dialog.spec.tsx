@@ -43,7 +43,7 @@ it("defaults private KB choices to the server plan and submits reference-only us
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenCalledWith("book:same", {
     visibility: "public", kb_choices: { kb1: "reference_only" }, force: false,
-    scope: { everyone: false, users: [], classes: ["c1"] },
+    scope: { everyone: false, users: [], classes: ["c1"], groups: [] },
   }, "w");
 });
 it("asks someone who teaches no class to choose receivers before publishing", async () => {

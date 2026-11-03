@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getClassReport, getStudentReport, type ClassReport, type StudentReport } from "@/lib/classes-api";
+import { CommentEditor } from "@/components/comments/Comments";
 import { actionClass } from "./ClassesHub";
 
 const cell = "px-2 py-1.5 text-left text-[12.5px]";
@@ -159,7 +160,8 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
             </p>
             <ul className="grid gap-1 sm:grid-cols-2">
               {(path.knowledge_points ?? []).map((kp, index) => (
-                <li key={index} className="flex items-center gap-2 text-[12px]">
+                <li key={index} className="space-y-0.5 text-[12px]">
+                <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[var(--foreground)]">{kp.name}</span>
                   <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--muted)]">
                     <span
@@ -170,6 +172,8 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
                   <span className="w-9 text-right tabular-nums text-[var(--muted-foreground)]">
                     {Math.round(kp.mastery * 100)}%
                   </span>
+                </div>
+                {kp.id && <CommentEditor kind="path_point" subject={path.template_id} target={kp.id} studentId={studentId} />}
                 </li>
               ))}
             </ul>

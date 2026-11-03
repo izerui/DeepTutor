@@ -28,6 +28,31 @@ export interface ClassSummary {
   created_at: number;
   updated_at: number;
   student_count?: number;
+  /** Spec 2026-11-03 batch 2 §0: "" when not set. */
+  department_id?: string;
+  grade_id?: string;
+}
+
+export interface OrgItem {
+  id: string;
+  name: string;
+}
+
+export interface OrgLists {
+  departments: OrgItem[];
+  grades: OrgItem[];
+}
+
+export interface Announcement {
+  id: string;
+  class_id: string;
+  class_name: string;
+  author: string;
+  text: string;
+  pinned: boolean;
+  created_at: number;
+  updated_at: number;
+  can_edit: boolean;
 }
 
 export interface ClassDetail extends ClassSummary {
@@ -56,7 +81,7 @@ export interface TeacherPathReport {
   average_mastery: number;
   attempts: AttemptTally;
   last_activity: number | null;
-  knowledge_points?: { name: string; mastery: number; mastered: boolean }[];
+  knowledge_points?: { id: string; name: string; mastery: number; mastered: boolean }[];
 }
 
 export interface OverallReport {
@@ -139,7 +164,10 @@ export const listClasses = (includeArchived = false) =>
   call<{ classes: ClassSummary[] }>(includeArchived ? "?include_archived=true" : "").then((r) => r.classes);
 export const createClass = (name: string) => call<{ class: ClassDetail }>("", json({ name })).then((r) => r.class);
 export const getClass = (id: string) => call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}`).then((r) => r.class);
-export const updateClass = (id: string, patch: { name?: string; archived?: boolean }) =>
+export const updateClass = (
+  id: string,
+  patch: { name?: string; archived?: boolean; department_id?: string; grade_id?: string },
+) =>
   call<{ class: ClassDetail }>(`/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }).then(
     (r) => r.class,
   );
@@ -197,6 +225,33 @@ export const resetStudentPassword = (studentId: string, newPassword: string) =>
   call<{ ok: boolean }>(`/students/${encodeURIComponent(studentId)}/password`, json({ new_password: newPassword }));
 
 /** The QR code image for an invite URL (an SVG served by the backend). */
+// Departments and grades (spec 2026-11-03 batch 2 §0).
+export const getOrg = () => call<OrgLists>("/org");
+export const createOrgItem = (kind: "department" | "grade", name: string) =>
+  call<{ item: OrgItem }>(`/org/${kind}`, json({ name })).then((r) => r.item);
+export const renameOrgItem = (kind: "department" | "grade", id: string, name: string) =>
+  call<OrgLists>(`/org/${kind}/${encodeURIComponent(id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+export const deleteOrgItem = (kind: "department" | "grade", id: string) =>
+  call<OrgLists>(`/org/${kind}/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const getTeacherDepartments = () =>
+  call<{ teachers: Record<string, string[]>; people: ClassPerson[] }>("/org/teachers");
+export const setTeacherDepartments = (userId: string, departmentIds: string[]) =>
+  call<{ teachers: Record<string, string[]> }>(`/org/teachers/${encodeURIComponent(userId)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ department_ids: departmentIds }),
+  }).then((r) => r.teachers);
+
+// Announcements (spec 2026-11-03 batch 2 §4).
+export const listAnnouncements = (id: string) =>
+  call<{ announcements: Announcement[] }>(`/${encodeURIComponent(id)}/announcements`).then((r) => r.announcements);
+export const postAnnouncement = (id: string, text: string, pinned: boolean) =>
+  call<{ announcement: Announcement }>(`/${encodeURIComponent(id)}/announcements`, json({ text, pinned })).then((r) => r.announcement);
+export const updateAnnouncement = (announcementId: string, patch: { text?: string; pinned?: boolean }) =>
+  call<{ announcement: Announcement }>(`/announcements/${encodeURIComponent(announcementId)}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+  }).then((r) => r.announcement);
+export const deleteAnnouncement = (announcementId: string) =>
+  call<{ ok: boolean }>(`/announcements/${encodeURIComponent(announcementId)}`, { method: "DELETE" });
+
 export const inviteQrUrl = (inviteUrl: string) => apiUrl(`${BASE}/qr.svg?data=${encodeURIComponent(inviteUrl)}`);
 
 /** The public preview of an invite link (no sign-in needed). */

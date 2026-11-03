@@ -29,6 +29,7 @@ import {
   type StudentPolicyKey,
 } from "@/lib/classes-api";
 import { actionClass, CopyButton, inputClass, primaryClass } from "./ClassesHub";
+import { AnnouncementsSection, ClassOrgFields } from "./ClassOrg";
 import { ClassReportSection } from "./ClassReport";
 
 const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
@@ -85,6 +86,7 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
   return (
     <fieldset disabled={busy} className="min-w-0 space-y-4">
       <ClassHeader detail={detail} run={run} />
+      <ClassOrgFields detail={detail} run={run} />
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
       {notice && <p role="status" className="text-[12px] text-[var(--muted-foreground)]">{notice}</p>}
 
@@ -144,6 +146,11 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
             ))}
           </ul>
         )}
+      </section>
+
+      <section className={sectionClass}>
+        <h3 className={titleClass}>{t("Announcements")}</h3>
+        <AnnouncementsSection classId={detail.id} canPost={detail.can_manage && !detail.archived} />
       </section>
 
       {/* Spec 2026-10-29 D17: teachers read learning reports; administrators do not. */}

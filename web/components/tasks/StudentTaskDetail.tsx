@@ -20,7 +20,8 @@ export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onC
   const [error, setError] = useState("");
   const href = targetHref(task);
   const submission = task.submission ?? null;
-  const closed = task.state === "closed";
+  // Before it opens a task shows only when it opens (batch 2 §6); nothing can be done yet.
+  const closed = task.state === "closed" || task.state === "not_open";
   const canHandIn = task.kind === "homework" && !closed && submission?.status !== "graded";
 
   const run = async (action: () => Promise<AssignedTask>) => {
@@ -64,7 +65,12 @@ export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onC
           {t("Done when {{percent}}% of the points are mastered", { percent: Math.round((task.settings.ratio ?? 1) * 100) })}
         </p>
       )}
-      {closed && <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("This task is closed. Your own results stay here.")}</p>}
+      {task.state === "not_open" && (
+        <p className="text-[12.5px] text-[var(--muted-foreground)]">
+          {t("Opens {{date}}", { date: formatWhen(task.open_at) })}
+        </p>
+      )}
+      {task.state === "closed" && <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("This task is closed. Your own results stay here.")}</p>}
       {href && !closed && (
         <Link href={href} className="inline-flex rounded-lg bg-[var(--primary)] px-3 py-1.5 text-[13px] text-[var(--primary-foreground)]">
           {task.target_title ? t("Open “{{title}}”", { title: task.target_title }) : t("Open")}

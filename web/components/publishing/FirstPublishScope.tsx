@@ -21,6 +21,7 @@ export const toScopeUpdate = (value: ScopeValue): ScopeUpdate => ({
   everyone: value.everyone,
   users: value.people.map((p) => p.id),
   classes: value.classes,
+  groups: (value.groups ?? []).map((g) => g.id),
 });
 
 /**
@@ -85,7 +86,13 @@ export function FirstPublishScope({
   return (
     <fieldset className="space-y-2 rounded-lg border border-[var(--border)] p-3" data-testid="first-publish-scope">
       <legend className="px-1 text-sm font-medium">{t("Who receives this")}</legend>
-      <ScopePicker value={value} onChange={change} classes={described.choices.classes} />
+      <ScopePicker
+        value={value}
+        onChange={change}
+        classes={described.choices.classes}
+        departments={described.choices.departments}
+        grades={described.choices.grades}
+      />
       {isEmptyScope(value) && (
         <p className="text-xs text-amber-700 dark:text-amber-300">
           {t("Choose classes, people or everyone before publishing.")}

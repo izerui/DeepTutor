@@ -3,12 +3,14 @@ import { apiFetch, apiUrl } from "./api";
 /** Publish scopes are system-level: never workspace-scoped (spec 2026-10-29 §7). */
 const BASE = "/api/publish";
 
-export type PublishKind = "book" | "knowledge_base" | "mastery_path" | "practice_set" | "task";
+export type PublishKind = "book" | "knowledge_base" | "mastery_path" | "practice_set" | "task" | "course";
 
 export interface PublishScope {
   everyone: boolean;
   users: { id: string; username: string }[];
   classes: { id: string; name: string }[];
+  /** Departments, grades or both (administrators; spec 2026-11-03 batch 2 §0). */
+  groups?: { id: string; name: string }[];
   /** False while the item still follows the old rule (public = everyone, paths = hand-picked students). */
   managed: boolean;
 }
@@ -19,7 +21,12 @@ export interface ScopeDescription {
   published: boolean;
   scope: PublishScope;
   audience_size: number;
-  choices: { classes: { id: string; name: string }[] };
+  choices: {
+    classes: { id: string; name: string }[];
+    /** Only for administrators. */
+    departments?: { id: string; name: string }[];
+    grades?: { id: string; name: string }[];
+  };
   suggested_classes: string[];
 }
 
@@ -27,6 +34,7 @@ export interface ScopeUpdate {
   everyone: boolean;
   users: string[];
   classes: string[];
+  groups?: string[];
   confirm?: boolean;
 }
 

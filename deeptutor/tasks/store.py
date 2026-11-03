@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     target_id TEXT NOT NULL DEFAULT '',
     settings_json TEXT NOT NULL DEFAULT '{}',
     due_at REAL,
+    -- Before it, students see only "opens on …" (spec 2026-11-03 batch 2 §6).
+    open_at REAL,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL,
@@ -71,8 +73,27 @@ CREATE TABLE IF NOT EXISTS task_submissions (
     PRIMARY KEY (task_id, student_id)
 );
 CREATE INDEX IF NOT EXISTS idx_task_submissions_student ON task_submissions(student_id);
+
+-- Teacher courses: tasks in an order, with a description (spec 2026-11-03 batch 2 §5).
+CREATE TABLE IF NOT EXISTS courses (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    published_at REAL
+);
+CREATE TABLE IF NOT EXISTS course_items (
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (course_id, task_id)
+);
 """,
     "Task",
+    columns={"tasks": {"open_at": "REAL"}},
 )
 
 

@@ -6,7 +6,8 @@ import type { ScopeUpdate } from "./publish-api";
 const BASE = "/api/tasks";
 
 export type TaskKind = "mastery_path" | "practice_set" | "book" | "homework" | "note";
-export type TaskState = "open" | "overdue" | "completed" | "closed";
+/** ``not_open``: published, but its opening time has not come (spec 2026-11-03 batch 2 §6). */
+export type TaskState = "not_open" | "open" | "overdue" | "completed" | "closed";
 
 export interface TaskSettings {
   ratio?: number;
@@ -26,6 +27,7 @@ export interface TaskSummary {
   target_title: string;
   settings: TaskSettings;
   due_at: number | null;
+  open_at: number | null;
   status: "draft" | "published" | "archived";
   created_at: number;
   updated_at: number;
@@ -80,6 +82,7 @@ export interface AssignedTask {
   target_title: string;
   settings: TaskSettings;
   due_at: number | null;
+  open_at?: number | null;
   state: TaskState;
   completed_at: number | null;
   late: boolean;
@@ -119,7 +122,7 @@ export const createTask = (kind: TaskKind, title: string) =>
 export const getTask = (taskId: string) => call<{ task: TaskDetail }>(id(taskId)).then((r) => r.task);
 export const updateTask = (
   taskId: string,
-  fields: Partial<Pick<TaskSummary, "title" | "description" | "target_id" | "settings" | "due_at">>,
+  fields: Partial<Pick<TaskSummary, "title" | "description" | "target_id" | "settings" | "due_at" | "open_at">>,
 ) => call<{ task: TaskSummary }>(id(taskId), send("PUT", fields)).then((r) => r.task);
 /** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
 export const publishTask = (taskId: string, scope?: ScopeUpdate) =>
@@ -153,6 +156,7 @@ export const submitHomework = (taskId: string, text: string, files: File[]) => {
 };
 
 export interface HomeData {
+  announcements?: import("./classes-api").Announcement[];
   assigned: AssignedTask[];
   history_count: number;
   school: { kind: "book" | "knowledge_base"; id: string; ref?: string; title: string; updated_at: string }[];
@@ -166,3 +170,55 @@ export async function getHome(): Promise<HomeData> {
   if (!res.ok) throw new TasksApiError(`Request failed (${res.status})`, res.status);
   return (await res.json()) as HomeData;
 }
+
+// Teacher courses (spec 2026-11-03 batch 2 §5): tasks in an order.
+export interface CourseSummary {
+  id: string;
+  title: string;
+  status: "draft" | "published" | "archived";
+  task_count: number;
+  updated_at: number;
+}
+
+export interface CourseDetail {
+  id: string;
+  title: string;
+  description: string;
+  status: "draft" | "published" | "archived";
+  published_at: number | null;
+  tasks: TaskSummary[];
+}
+
+export interface AssignedCourse {
+  id: string;
+  title: string;
+  description: string;
+  provenance: Provenance;
+  published_at: number | null;
+  tasks: AssignedTask[];
+}
+
+export const listMyCourses = () => call<{ courses: CourseSummary[] }>("/courses/mine").then((r) => r.courses);
+export const listAssignedCourses = () => call<{ courses: AssignedCourse[] }>("/courses/assigned").then((r) => r.courses);
+export const createCourse = (title: string) =>
+  call<{ course: CourseDetail }>("/courses", send("POST", { title })).then((r) => r.course);
+export const getCourse = (courseId: string) => call<{ course: CourseDetail }>(`/courses${id(courseId)}`).then((r) => r.course);
+export const updateCourse = (courseId: string, fields: { title?: string; description?: string; task_ids?: string[] }) =>
+  call<{ course: CourseDetail }>(`/courses${id(courseId)}`, send("PUT", fields)).then((r) => r.course);
+export const addCourseTask = (courseId: string, kind: TaskKind, title: string) =>
+  call<{ course: CourseDetail }>(`/courses${id(courseId)}/tasks`, send("POST", { kind, title })).then((r) => r.course);
+export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
+  call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.course);
+export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
+export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
+
+// The calendar (spec 2026-11-03 batch 2 §7).
+export interface CalendarEvent {
+  key: string;
+  title: string;
+  kind: TaskKind;
+  state: string;
+  type: "open" | "due";
+  at: number;
+}
+export const listCalendar = () => call<{ events: CalendarEvent[] }>("/calendar").then((r) => r.events);

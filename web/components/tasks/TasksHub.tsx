@@ -31,6 +31,7 @@ import {
 } from "@/lib/tasks-api";
 import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
 
+import { CourseAuthorView, StudentCourses } from "./Courses";
 import { StudentTaskDetail } from "./StudentTaskDetail";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
@@ -57,20 +58,48 @@ export default function TasksHub() {
             : t("Everything your teachers assigned to you.")}
         </p>
       </header>
-      {isAdmin || isTeacher ? <AuthorView isAdmin={isAdmin} /> : <StudentView />}
+      {isAdmin || isTeacher ? <AuthorTabs isAdmin={isAdmin} /> : <StudentView />}
     </div>
   );
 }
 
-function AuthorView({ isAdmin }: { isAdmin: boolean }) {
+/** Tasks one by one, or courses that lay them out in order (batch 2 §5). */
+function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"tasks" | "courses">("tasks");
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const tabClass = (on: boolean) =>
+    `rounded-lg px-3 py-1.5 text-[13px] ${on ? "bg-[var(--muted)] font-medium text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`;
+  return (
+    <div className="space-y-4">
+      <div role="tablist" className="flex gap-1">
+        <button type="button" role="tab" aria-selected={tab === "tasks"} className={tabClass(tab === "tasks")} onClick={() => setTab("tasks")}>
+          {t("Tasks")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "courses"} className={tabClass(tab === "courses")} onClick={() => setTab("courses")}>
+          {t("Courses")}
+        </button>
+      </div>
+      {tab === "tasks" ? (
+        <AuthorView key={openTask ?? ""} isAdmin={isAdmin} initialTask={openTask} />
+      ) : (
+        <CourseAuthorView isAdmin={isAdmin} onOpenTask={(id) => { setOpenTask(id); setTab("tasks"); }} />
+      )}
+    </div>
+  );
+}
+
+function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initialTask?: string | null }) {
   const { t } = useTranslation();
   const [tasks, setTasks] = useState<MyTask[] | null>(null);
   // ``?task=`` (a notification's link) opens one task, also when already on this page.
   const taskParam = useSearchParams().get("task");
-  const [selected, setSelected] = useState<string | null>(taskParam);
-  useEffect(() => {
+  const [selected, setSelected] = useState<string | null>(initialTask ?? taskParam);
+  const [seenParam, setSeenParam] = useState(taskParam);
+  if (taskParam !== seenParam) {
+    setSeenParam(taskParam);
     if (taskParam) setSelected(taskParam);
-  }, [taskParam]);
+  }
   const [kind, setKind] = useState<TaskKind>("homework");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -345,6 +374,20 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
           onChange={(e) => save({ due_at: fromLocalInput(e.target.value) })}
         />
       </label>
+      <label className="flex flex-wrap items-center gap-2 text-[12.5px]">
+        {t("Opens at (optional)")}
+        <input
+          type="datetime-local"
+          className={`${inputClass} w-auto`}
+          value={toLocalInput(task.open_at)}
+          onChange={(e) => save({ open_at: fromLocalInput(e.target.value) })}
+        />
+      </label>
+      {task.open_at && (task.kind === "practice_set" || task.kind === "mastery_path") && (
+        <p className="text-[11.5px] text-[var(--muted-foreground)]">
+          {t("Students who already received this practice set or path on its own can still open it before this time.")}
+        </p>
+      )}
       {draft ? (
         <TargetPicker task={task} onChange={(fields) => save(fields)} />
       ) : task.target_title ? (
@@ -491,6 +534,7 @@ function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentI
 
 function StudentView() {
   const { t } = useTranslation();
+  const courseParam = useSearchParams().get("course");
   const [tasks, setTasks] = useState<AssignedTask[] | null>(null);
   const [selected, setSelected] = useState<AssignedTask | null>(null);
   const [error, setError] = useState("");
@@ -503,6 +547,7 @@ function StudentView() {
   return (
     <div className="space-y-4">
       {selected && <StudentTaskDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); }} />}
+      <StudentCourses courseId={courseParam} onOpenTask={setSelected} />
       {tasks.length === 0 ? (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to do right now.")}</p>
       ) : (

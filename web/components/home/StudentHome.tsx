@@ -93,6 +93,24 @@ export default function StudentHome() {
         <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : (
         <>
+          {(home.announcements ?? []).length > 0 && (
+            <section aria-labelledby="home-announcements" className="space-y-2">
+              <h2 id="home-announcements" className="text-[13px] font-semibold">{t("Class announcements")}</h2>
+              <ul className="space-y-2">
+                {(home.announcements ?? []).map((item) => (
+                  <li key={item.id} className="rounded-xl border border-[var(--border)] p-3 text-[12.5px]">
+                    <p className="whitespace-pre-line text-[var(--foreground)]">{item.text}</p>
+                    <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                      {item.class_name} · {item.author || t("Former teacher")} · {formatWhen(item.created_at)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/classes" className="text-[12.5px] text-[var(--primary)] hover:underline">
+                {t("All announcements")}
+              </Link>
+            </section>
+          )}
           <section aria-labelledby="home-assigned" className="space-y-3">
             <h2 id="home-assigned" className="text-[13px] font-semibold">{t("From my teachers")}</h2>
             {home.assigned.length === 0 ? (

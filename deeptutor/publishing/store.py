@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS publish_items (
 CREATE TABLE IF NOT EXISTS publish_targets (
     kind TEXT NOT NULL,
     item_id TEXT NOT NULL,
-    target_type TEXT NOT NULL CHECK (target_type IN ('user', 'class')),
+    -- ``group``: a department, a grade or both (spec 2026-11-03 batch 2 §0).
+    target_type TEXT NOT NULL CHECK (target_type IN ('user', 'class', 'group')),
     target_id TEXT NOT NULL,
     PRIMARY KEY (kind, item_id, target_type, target_id),
     FOREIGN KEY (kind, item_id) REFERENCES publish_items(kind, item_id) ON DELETE CASCADE
@@ -75,10 +76,36 @@ def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
         if not readonly:
             conn.execute("PRAGMA synchronous = FULL")
             conn.executescript(_SCHEMA)
+            _allow_groups(conn)
         return conn
     except BaseException:
         conn.close()
         raise
+
+
+def _allow_groups(conn: sqlite3.Connection) -> None:
+    """Databases made before groups existed only allowed user and class targets."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'publish_targets'"
+    ).fetchone()
+    if row is None or "'group'" in (row[0] or ""):
+        return
+    conn.executescript("""
+BEGIN IMMEDIATE;
+ALTER TABLE publish_targets RENAME TO publish_targets_before_groups;
+CREATE TABLE publish_targets (
+    kind TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('user', 'class', 'group')),
+    target_id TEXT NOT NULL,
+    PRIMARY KEY (kind, item_id, target_type, target_id),
+    FOREIGN KEY (kind, item_id) REFERENCES publish_items(kind, item_id) ON DELETE CASCADE
+);
+INSERT INTO publish_targets SELECT * FROM publish_targets_before_groups;
+DROP TABLE publish_targets_before_groups;
+CREATE INDEX IF NOT EXISTS idx_publish_targets_target ON publish_targets(target_type, target_id);
+COMMIT;
+""")
 
 
 @contextmanager

@@ -15,6 +15,7 @@ import {
   type ClassSummary,
   type MyInvitation,
 } from "@/lib/classes-api";
+import { AnnouncementsSection, OrgAdmin, useOrgLists } from "./ClassOrg";
 import { ClassPanel } from "./ClassPanel";
 
 export const actionClass =
@@ -51,6 +52,10 @@ export default function ClassesHub() {
 
 function ManagerView() {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
+  const [lists] = useOrgLists();
+  const [showOrg, setShowOrg] = useState(false);
+  const [filter, setFilter] = useState({ department: "", grade: "" });
   const [classes, setClasses] = useState<ClassSummary[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -83,7 +88,22 @@ function ManagerView() {
     }
   }
 
+  const shown = (classes ?? []).filter(
+    (row) =>
+      (!filter.department || row.department_id === filter.department) &&
+      (!filter.grade || row.grade_id === filter.grade),
+  );
+
   return (
+    <div className="space-y-4">
+    {isAdmin && (
+      <div className="space-y-2">
+        <button type="button" className={actionClass} onClick={() => setShowOrg(!showOrg)}>
+          {t("Departments and grades")}
+        </button>
+        {showOrg && <OrgAdmin />}
+      </div>
+    )}
     <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -116,6 +136,20 @@ function ManagerView() {
             </div>
           </form>
         )}
+        {(lists.departments.length > 0 || lists.grades.length > 0) && (
+          <div className="flex gap-2">
+            <select aria-label={t("Department")} className={inputClass} value={filter.department}
+              onChange={(e) => setFilter({ ...filter, department: e.target.value })}>
+              <option value="">{t("All departments")}</option>
+              {lists.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <select aria-label={t("Grade")} className={inputClass} value={filter.grade}
+              onChange={(e) => setFilter({ ...filter, grade: e.target.value })}>
+              <option value="">{t("All grades")}</option>
+              {lists.grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </div>
+        )}
         {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
         {classes === null ? (
           <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
@@ -125,7 +159,7 @@ function ManagerView() {
           </p>
         ) : (
           <ul className="space-y-1.5">
-            {classes.map((row) => (
+            {shown.map((row) => (
               <li key={row.id}>
                 <button
                   type="button"
@@ -157,6 +191,7 @@ function ManagerView() {
           </p>
         )}
       </section>
+    </div>
     </div>
   );
 }
@@ -231,7 +266,8 @@ function StudentView() {
           </p>
         ) : (
           classes.map((row) => (
-            <div key={row.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] p-3">
+            <div key={row.id} className="space-y-2 rounded-xl border border-[var(--border)] p-3">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-[13.5px] font-medium text-[var(--foreground)]">{row.name}</span>
               <button
                 type="button"
@@ -242,6 +278,11 @@ function StudentView() {
               >
                 {t("Leave class")}
               </button>
+            </div>
+            <details>
+              <summary className="cursor-pointer text-[12px] text-[var(--muted-foreground)]">{t("Announcements")}</summary>
+              <div className="pt-2"><AnnouncementsSection classId={row.id} canPost={false} /></div>
+            </details>
             </div>
           ))
         )}

@@ -884,6 +884,8 @@ class PracticeSetService:
                 "completed": bool(mine),
                 "attempts": len(mine),
                 "first_score": first["score"] if first else None,
+                # What a comment attaches to (batch 2 §3): their latest attempt.
+                "latest_submission_id": mine[-1]["id"] if mine else None,
                 # Each score with its own version's maximum (versions may differ).
                 "best_score": best["score"] if best else None,
                 "best_max_score": best["max_score"] if best else None,

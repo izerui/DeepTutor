@@ -57,6 +57,11 @@ def _accounts() -> dict[str, dict[str, Any]]:
     return accounts
 
 
+def _org_fields(orgs: dict[str, dict[str, str]], class_id: str) -> dict[str, str]:
+    current = orgs.get(class_id, {})
+    return {"department_id": current.get("department_id", ""), "grade_id": current.get("grade_id", "")}
+
+
 def _role(user: CurrentUser) -> str:
     """The actor's live role (a role change takes effect before the token expires)."""
     if user.is_admin:
@@ -128,7 +133,31 @@ class ClassService:
                 )
         return self.get(class_id)
 
-    def update(self, class_id: str, *, name: str | None = None, archived: bool | None = None) -> dict[str, Any]:
+    def update(
+        self, class_id: str, *, name: str | None = None, archived: bool | None = None,
+        department_id: str | None = None, grade_id: str | None = None,
+    ) -> dict[str, Any]:
+        if department_id is not None or grade_id is not None:
+            from deeptutor.classes import org
+
+            with store.read() as conn:
+                self._require_manager(conn, class_id)
+            current = org.class_org_map().get(class_id, {})
+            # Spec 2026-11-03 §0: picked from the administrators' lists.
+            org.set_class_org(
+                class_id,
+                current.get("department_id", "") if department_id is None else department_id,
+                current.get("grade_id", "") if grade_id is None else grade_id,
+            )
+            with store.read() as conn:
+                members = [
+                    r["student_id"]
+                    for r in conn.execute("SELECT student_id FROM class_members WHERE class_id = ?", (class_id,))
+                ]
+            # Paths published to its department or grade follow it at once.
+            _paths_follow(*members)
+            if name is None and archived is None:
+                return self.get(class_id)
         with store.write() as conn:
             self._require_manager(conn, class_id)
             if name is not None:
@@ -182,8 +211,11 @@ class ClassService:
                     "SELECT class_id, COUNT(*) AS n FROM class_members GROUP BY class_id"
                 ).fetchall()
             }
+        from deeptutor.classes import org
+
+        orgs = org.class_org_map()
         return [
-            {**self._summary(row), "student_count": counts.get(row["id"], 0)}
+            {**self._summary(row), **_org_fields(orgs, row["id"]), "student_count": counts.get(row["id"], 0)}
             for row in rows
             if include_archived or not row["archived"]
         ]
@@ -204,8 +236,11 @@ class ClassService:
             teachers = conn.execute(
                 "SELECT user_id FROM class_teachers WHERE class_id = ? ORDER BY added_at", (class_id,)
             ).fetchall()
+            from deeptutor.classes import org
+
             result = {
                 **self._summary(row),
+                **_org_fields(org.class_org_map(), class_id),
                 "can_manage": manager,
                 "teachers": [self._person(accounts, t["user_id"]) for t in teachers],
             }

@@ -21,6 +21,7 @@ from deeptutor.publishing.scope import (
     PRACTICE_SET,
     STUDENT_KINDS,
     TASK,
+    COURSE,
     Scope,
     ScopeError,
     ScopeForbidden,
@@ -59,6 +60,15 @@ class PublishService:
             record = registry.get_kb(item_id)
             found = record is not None and owns(record.created_by, self.actor)
             info = {"owner": record.created_by, "public": record.visibility == "public"} if found else {}
+        elif kind == COURSE:
+            from deeptutor.tasks.store import db as task_db
+
+            with task_db.read() as conn:
+                row = conn.execute(
+                    "SELECT owner_user_id, status FROM courses WHERE id = ?", (item_id,)
+                ).fetchone() if conn else None
+            found = row is not None and row["owner_user_id"] == self.actor.id
+            info = {"owner": row["owner_user_id"], "public": row["status"] == "published"} if found else {}
         elif kind == TASK:
             from deeptutor.tasks.store import db as task_db
 
@@ -122,7 +132,7 @@ class PublishService:
             return stored
         if kind == MASTERY_PATH:
             return scopes._template_scope(item_id)
-        if kind in (PRACTICE_SET, TASK):
+        if kind in (PRACTICE_SET, TASK, COURSE):
             return Scope(managed=False)  # reaches nobody until its scope is set
         return Scope(everyone=bool(info["public"]), managed=False)
 
@@ -141,6 +151,9 @@ class PublishService:
 
         accounts = _accounts()
         classes = self._pickable_classes()
+        from deeptutor.classes.org import group_label, lists
+
+        names = lists()
         return {
             "kind": kind,
             "item_id": item_id,
@@ -152,14 +165,21 @@ class PublishService:
                     for u in scope.users
                 ],
                 "classes": [{"id": c, "name": classes.get(c, "")} for c in scope.classes],
+                "groups": [{"id": g, "name": group_label(g, names)} for g in scope.groups],
             },
             "audience_size": len(self._reached(kind, scope, info)),
-            "choices": {"classes": [{"id": k, "name": v} for k, v in sorted(classes.items(), key=lambda i: i[1])]},
+            "choices": {
+                "classes": [{"id": k, "name": v} for k, v in sorted(classes.items(), key=lambda i: i[1])],
+                # Spec 2026-11-03 §0: administrators may also pick departments and grades.
+                **({"departments": names["departments"], "grades": names["grades"]} if self._role() == "admin" else {}),
+            },
             # §7.1: by default a teacher publishes to every class they teach.
             "suggested_classes": [] if self._role() == "admin" else sorted(classes),
         }
 
-    def _validated(self, kind: str, everyone: bool, users: Any, classes: Any, current: Scope) -> Scope:
+    def _validated(
+        self, kind: str, everyone: bool, users: Any, classes: Any, current: Scope, groups: Any = (),
+    ) -> Scope:
         """Check what the publisher adds; targets already in the scope may stay.
 
         A class the teacher no longer teaches, or a student who left their
@@ -167,7 +187,16 @@ class PublishService:
         """
         from deeptutor.classes.service import _accounts, teacher_student_ids
 
-        users, classes = _clean_ids(users), _clean_ids(classes)
+        users, classes, groups = _clean_ids(users), _clean_ids(classes), _clean_ids(groups)
+        added_groups = [g for g in groups if g not in current.groups]
+        if added_groups:
+            # Spec 2026-11-03 §0: only administrators publish to departments and grades.
+            if self._role() != "admin":
+                raise ScopeForbidden("Only administrators publish to departments and grades.")
+            from deeptutor.classes.org import valid_group
+
+            if not all(valid_group(g) for g in added_groups):
+                raise ScopeError("Choose departments and grades from the list.")
         accounts = _accounts()
         # Deleted accounts drop out silently; they can no longer receive anything.
         users = [u for u in users if u in accounts and u != self.actor.id]
@@ -187,24 +216,24 @@ class PublishService:
             if kind in STUDENT_KINDS and account["role"] != "student":
                 raise ScopeError(
                     "Only students receive Mastery Paths." if kind == MASTERY_PATH
-                    else "Only students receive tasks." if kind == TASK
+                    else "Only students receive tasks." if kind in (TASK, COURSE)
                     else "Only students receive practice sets."
                 )
             # Spec §5: a teacher names only students of their own classes (any teacher may be named).
             if reachable is not None and account["role"] == "student" and user_id not in reachable:
                 raise ScopeForbidden("You can only choose students in your classes.")
-        return Scope(everyone=bool(everyone), users=users, classes=classes)
+        return Scope(everyone=bool(everyone), users=users, classes=classes, groups=groups)
 
     def set_scope(
         self, kind: str, item_id: str, *, everyone: bool, users: Any, classes: Any,
-        confirm: bool = False,
+        confirm: bool = False, groups: Any = (),
     ) -> dict[str, Any]:
         self._require_publisher()
         info = self._item(kind, item_id)
         if kind == MASTERY_PATH and not info["public"]:
             raise ScopeError("Publish this path before choosing who receives it.")
         current = self._current(kind, item_id, info)
-        new = self._validated(kind, everyone, users, classes, current)
+        new = self._validated(kind, everyone, users, classes, current, groups=groups)
         if info.get("homework") and new.everyone:
             # Spec 2026-11-02 R22: homework goes to classes or chosen students only.
             raise ScopeError("Homework goes to your classes or chosen students, not to everyone.")

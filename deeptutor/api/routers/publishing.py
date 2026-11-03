@@ -30,11 +30,14 @@ class ScopeChoice(BaseModel):
     everyone: bool = False
     users: list[str] = Field(default_factory=list, max_length=1000)
     classes: list[str] = Field(default_factory=list, max_length=200)
+    groups: list[str] = Field(default_factory=list, max_length=200)
 
     def to_scope(self):
         from deeptutor.publishing.scope import Scope
 
-        return Scope(everyone=self.everyone, users=list(self.users), classes=list(self.classes))
+        return Scope(
+            everyone=self.everyone, users=list(self.users), classes=list(self.classes), groups=list(self.groups),
+        )
 
 
 def chosen(choice: ScopeChoice | None):
@@ -48,6 +51,7 @@ class ScopeUpdate(BaseModel):
     everyone: bool = False
     users: list[str] = Field(default_factory=list, max_length=1000)
     classes: list[str] = Field(default_factory=list, max_length=200)
+    groups: list[str] = Field(default_factory=list, max_length=200)
     confirm: bool = False
 
 
@@ -67,6 +71,7 @@ async def set_scope(kind: str, item_id: str, body: ScopeUpdate):
         return await asyncio.to_thread(
             PublishService().set_scope, kind, item_id,
             everyone=body.everyone, users=body.users, classes=body.classes, confirm=body.confirm,
+            groups=body.groups,
         )
     except ScopeNeedsConfirmation as exc:
         # Spec §7.2: say how many people lose access; nothing was written.

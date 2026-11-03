@@ -16,10 +16,15 @@ import threading
 
 
 class SystemDb:
-    def __init__(self, filename: str, schema: str, label: str) -> None:
+    def __init__(
+        self, filename: str, schema: str, label: str,
+        columns: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         self.filename = filename
         self.schema = schema
         self.label = label
+        #: table -> column -> definition, added to databases made before the column existed.
+        self.columns = columns or {}
         #: Tests may point this at a temporary file; ``None`` means ``<SYSTEM_ROOT>/<filename>``.
         self.path_override: Path | None = None
         self._write_lock = threading.Lock()
@@ -43,6 +48,11 @@ class SystemDb:
             if not readonly:
                 conn.execute("PRAGMA synchronous = FULL")
                 conn.executescript(self.schema)
+                for table, columns in self.columns.items():
+                    present = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+                    for name, definition in columns.items():
+                        if name not in present:
+                            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
             return conn
         except BaseException:
             conn.close()

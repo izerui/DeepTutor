@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { primaryClass } from "@/components/classes/ClassesHub";
+import { MyComments } from "@/components/comments/Comments";
 import { submitSet, takeSet, type ResultValue, type SubmitResult, type TakeView } from "@/lib/practice-sets-api";
 import { formatDate } from "./PracticeSetsHub";
 import { QuestionAnswer } from "./QuestionAnswer";
@@ -112,6 +113,8 @@ export function TakeSet({ setId }: { setId: string }) {
         </p>
         {view.description && <p className="whitespace-pre-line text-[13px]">{view.description}</p>}
       </header>
+
+      <MyComments kind="practice_submission" subject={setId} />
 
       {result && (
         <div role="status" className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-4 text-[13px]">
