@@ -84,6 +84,13 @@ services:
       #   - DEEPTUTOR_REDIS_URL=redis://redis:6379/0
       # Optional extras:
       #   - DEEPTUTOR_EXTRAS=math-animator,partners
+      # Sign-up / sign-in limits per visitor address. Off by default: the
+      # frontend then ignores X-Real-IP (anyone reaching port 3782 directly
+      # could forge it) and only per-account limits apply. Turn it on only when
+      # BOTH hold: nginx sets "proxy_set_header X-Real-IP $remote_addr;" (see
+      # above), and port 3782 is reachable through nginx alone, e.g. publish it
+      # as "127.0.0.1:${DEEPTUTOR_FRONTEND_PORT:-3782}:3782".
+      #   - DEEPTUTOR_TRUSTED_INGRESS=1
       #   - DEEPTUTOR_APT_PACKAGES=ffmpeg
       # Unraid / NAS bind mounts:
       #   - PUID=99

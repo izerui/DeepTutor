@@ -237,3 +237,96 @@ def test_the_limit_error_survives_error_mapping():
     error = AiLimitReached()
     assert map_error(error, provider="openai") is error
     assert str(error) == "Today's AI usage is used up. Come back tomorrow."
+
+
+# ── handing homework in (review round 2) ───────────────────
+
+
+def _hand_in(as_account, name, task_id, text, files):
+    from deeptutor.tasks.service import StudentTasks
+
+    with as_account(name):
+        return asyncio.run(StudentTasks().submit(task_id, text, files))
+
+
+def _published_homework(as_account):
+    from deeptutor.tasks.service import TaskService
+
+    with as_account("tina"):
+        task = TaskService().create("homework", "Lab report")
+        TaskService().publish(task["id"])
+    return task["id"]
+
+
+def _file(as_account, ids, task_id, name):
+    from deeptutor.tasks.service import TaskService
+
+    with as_account("tina"):
+        return TaskService().file_path(task_id, ids["sara"], name).read_bytes()
+
+
+@pytest.mark.parametrize("fails_at", ["file", "database"])
+def test_a_failed_resubmission_keeps_the_previous_hand_in_whole(as_account, ids, monkeypatch, fails_at):
+    from deeptutor.tasks import service as tasks
+    from deeptutor.tasks.store import db, files_root
+
+    task_id = _published_homework(as_account)
+    _hand_in(as_account, "sara", task_id, "First draft", [("report.pdf", b"first")])
+    real = tasks.Path.write_bytes
+
+    def broken_file(self, data):
+        if data == b"second-b":
+            raise OSError("disk full")
+        return real(self, data)
+
+    def broken_write():
+        raise RuntimeError("database is locked")
+
+    # Scoped: undoing the whole monkeypatch would also undo the test's own store paths.
+    with monkeypatch.context() as patch:
+        if fails_at == "file":
+            patch.setattr(tasks.Path, "write_bytes", broken_file)
+        else:
+            patch.setattr(db, "write", broken_write)
+        with pytest.raises((OSError, RuntimeError)):
+            _hand_in(as_account, "sara", task_id, "Second", [("a.pdf", b"second-a"), ("b.pdf", b"second-b")])
+    with db.read() as conn:
+        row = conn.execute("SELECT text, attempt FROM task_submissions WHERE task_id = ?", (task_id,)).fetchone()
+    assert (row["text"], row["attempt"]) == ("First draft", 1)
+    assert _file(as_account, ids, task_id, "report.pdf") == b"first"
+    # Nothing of the failed attempt is left behind.
+    folder = files_root() / task_id / ids["sara"]
+    assert sorted(p.read_bytes() for p in folder.rglob("*") if p.is_file()) == [b"first"]
+
+
+def test_a_successful_resubmission_replaces_the_files_and_cleans_up(as_account, ids):
+    from deeptutor.tasks.store import files_root
+
+    task_id = _published_homework(as_account)
+    _hand_in(as_account, "sara", task_id, "First", [("report.pdf", b"first")])
+    _hand_in(as_account, "sara", task_id, "Second", [("report.pdf", b"second")])
+    assert _file(as_account, ids, task_id, "report.pdf") == b"second"
+    folder = files_root() / task_id / ids["sara"]
+    assert [p.read_bytes() for p in folder.rglob("*") if p.is_file()] == [b"second"]
+    assert len([p for p in folder.iterdir() if p.is_dir()]) == 1  # the replaced folder is gone
+
+
+def test_a_grade_given_while_the_student_hands_in_again_is_kept(as_account, ids, monkeypatch):
+    """The student read the page while it was waiting; the teacher grades before the save."""
+    from deeptutor.tasks.service import StudentTasks, TaskConflict, TaskService
+    from deeptutor.tasks.store import db
+
+    task_id = _published_homework(as_account)
+    _hand_in(as_account, "sara", task_id, "First", [("report.pdf", b"first")])
+    with as_account("sara"):
+        stale = StudentTasks().get(task_id)  # "Waiting for grading" on the student's screen
+    with as_account("tina"):
+        TaskService().grade(task_id, ids["sara"], 88, "Good.")
+    with monkeypatch.context() as patch:
+        patch.setattr(StudentTasks, "get", lambda self, key: stale)
+        with pytest.raises(TaskConflict):
+            _hand_in(as_account, "sara", task_id, "Late change", [("report.pdf", b"changed")])
+    with db.read() as conn:
+        row = conn.execute("SELECT status, score, text FROM task_submissions WHERE task_id = ?", (task_id,)).fetchone()
+    assert (row["status"], row["score"], row["text"]) == ("graded", 88.0, "First")
+    assert _file(as_account, ids, task_id, "report.pdf") == b"first"

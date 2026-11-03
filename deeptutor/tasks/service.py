@@ -165,6 +165,20 @@ def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> boo
     return False
 
 
+def _remove_files(base: Path, records: list[dict[str, Any]]) -> None:
+    """Delete a replaced hand-in's files, and its folder once empty; never fails the hand-in."""
+    for record in records:
+        path = (base / str(record.get("stored") or "")).resolve()
+        if base.resolve() not in path.parents:
+            continue  # never outside this student's folder
+        try:
+            path.unlink(missing_ok=True)
+            if path.parent != base.resolve() and not any(path.parent.iterdir()):
+                path.parent.rmdir()
+        except OSError:
+            logger.warning("Could not remove a replaced homework file %s", path, exc_info=True)
+
+
 def _first_submission(set_id: str, student_id: str) -> float | None:
     """When the student first submitted a practice set: the moment it was done, and whether late."""
     from deeptutor.practice_sets import store as practice_store
@@ -968,7 +982,12 @@ class StudentTasks:
             if len(data) > FILE_MAX_BYTES:
                 raise TaskError(f"{clean}: files are limited to 20 MB.")
             stored.append((clean, suffix, data))
-        folder = files_root() / task_id / self.actor.id
+        # Each hand-in writes its files into a folder of its own; the previous
+        # hand-in's files are removed only once this one is stored, so a failure
+        # at any step leaves the previous hand-in whole.
+        base = files_root() / task_id / self.actor.id
+        batch = uuid.uuid4().hex[:12]
+        folder = base / batch
         names: set[str] = set()
         records = []
         for clean, suffix, _data in stored:
@@ -977,33 +996,49 @@ class StudentTasks:
                 counter += 1
                 name = f"{Path(clean).stem}-{counter}{suffix}"
             names.add(name)
-            records.append({"name": name, "stored": f"{uuid.uuid4().hex}{suffix}", "size": len(_data),
+            records.append({"name": name, "stored": f"{batch}/{uuid.uuid4().hex}{suffix}", "size": len(_data),
                             "type": FILE_TYPES[suffix]})
 
         def save() -> None:
-            # A fresh folder per hand-in: the last one is the one kept.
-            if folder.exists():
-                shutil.rmtree(folder)
-            folder.mkdir(parents=True, exist_ok=True)
-            for record, (_clean, _suffix, data) in zip(records, stored, strict=True):
-                (folder / record["stored"]).write_bytes(data)
-            now = _now()
-            due = entry["due_at"]
-            with db.write() as conn:
-                conn.execute(
-                    "INSERT INTO task_submissions (task_id, student_id, text, files_json, attempt, submitted_at, late) "
-                    "VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(task_id, student_id) DO UPDATE SET "
-                    "text = excluded.text, files_json = excluded.files_json, attempt = attempt + 1, "
-                    "submitted_at = excluded.submitted_at, late = excluded.late, status = 'submitted', "
-                    "ai_score = NULL, ai_reason = '', return_reason = ''",
-                    (task_id, self.actor.id, text, json.dumps(records, ensure_ascii=False), now,
-                     int(bool(due and now > due))),
-                )
-                conn.execute(
-                    "INSERT OR IGNORE INTO task_completions VALUES (?, ?, ?, ?, 0)",
-                    (task_id, self.actor.id, now, int(bool(due and now > due))),
-                )
-                owner = conn.execute("SELECT owner_user_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            previous: list[dict[str, Any]] = []
+            try:
+                if records:
+                    folder.mkdir(parents=True, exist_ok=True)
+                for record, (_clean, _suffix, data) in zip(records, stored, strict=True):
+                    (base / record["stored"]).write_bytes(data)
+                now = _now()
+                due = entry["due_at"]
+                with db.write() as conn:
+                    # Checked again where it is written: a grade given since the page
+                    # was read is not overwritten by this hand-in.
+                    existing = conn.execute(
+                        "SELECT status, files_json FROM task_submissions WHERE task_id = ? AND student_id = ?",
+                        (task_id, self.actor.id),
+                    ).fetchone()
+                    if existing is not None and existing["status"] == "graded":
+                        raise TaskConflict(
+                            "Your homework was graded; it can only be handed in again if it is sent back."
+                        )
+                    previous = json.loads(existing["files_json"] or "[]") if existing is not None else []
+                    conn.execute(
+                        "INSERT INTO task_submissions (task_id, student_id, text, files_json, attempt, submitted_at, late) "
+                        "VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(task_id, student_id) DO UPDATE SET "
+                        "text = excluded.text, files_json = excluded.files_json, attempt = attempt + 1, "
+                        "submitted_at = excluded.submitted_at, late = excluded.late, status = 'submitted', "
+                        "ai_score = NULL, ai_reason = '', return_reason = ''",
+                        (task_id, self.actor.id, text, json.dumps(records, ensure_ascii=False), now,
+                         int(bool(due and now > due))),
+                    )
+                    conn.execute(
+                        "INSERT OR IGNORE INTO task_completions VALUES (?, ?, ?, ?, 0)",
+                        (task_id, self.actor.id, now, int(bool(due and now > due))),
+                    )
+                    owner = conn.execute("SELECT owner_user_id, title FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            except BaseException:
+                # Nothing of this hand-in is kept; the previous one is untouched.
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
+            _remove_files(base, previous)
             from deeptutor.notifications.service import notify
 
             day = time.strftime("%Y-%m-%d", time.localtime(now))

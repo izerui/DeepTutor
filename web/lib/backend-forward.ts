@@ -19,18 +19,32 @@ const UNTRUSTED_FORWARD_HEADERS = [
   CLIENT_IP_HEADER,
 ];
 
+/**
+ * Whether a trusted ingress (nginx) sits in front of this server, overwrites
+ * X-Real-IP with the browser's address, and is the only way in — set
+ * ``DEEPTUTOR_TRUSTED_INGRESS=1`` only then. Otherwise anyone reaching Next
+ * directly could write the header, so it is never forwarded and the backend's
+ * per-address sign-in limits stay off (per-account limits still apply).
+ */
+export function trustedIngress(): boolean {
+  const value = (process.env.DEEPTUTOR_TRUSTED_INGRESS || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 export function prepareBackendForwardHeaders(
   source: Headers,
-  { allowWebSocketUpgrade = false }: { allowWebSocketUpgrade?: boolean } = {},
+  {
+    allowWebSocketUpgrade = false,
+    trustClientIp = trustedIngress(),
+  }: { allowWebSocketUpgrade?: boolean; trustClientIp?: boolean } = {},
 ): Headers {
   // NextRequest.nextUrl.host is the Next server's bind address in standalone
   // and source deployments. The HTTP Host header carries the requested
   // frontend host through Next's proxy, including when TLS ends upstream.
   const frontendHost = source.get("host");
-  // The ingress (nginx) sets X-Real-IP, replacing whatever the browser sent; it is
-  // kept under our own name and the backend trusts it from this proxy only.
-  // X-Forwarded-For is not used: its first entry is whatever the client wrote.
-  const clientIp = source.get("x-real-ip")?.trim() || "";
+  // Only behind a declared trusted ingress, which replaces whatever the browser
+  // sent: kept under our own name, and the backend trusts it from this proxy only.
+  const clientIp = trustClientIp ? source.get("x-real-ip")?.trim() || "" : "";
   const headers = new Headers(source);
   const connectionTokens = (headers.get("connection") || "")
     .split(",")
