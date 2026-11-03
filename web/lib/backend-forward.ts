@@ -27,10 +27,10 @@ export function prepareBackendForwardHeaders(
   // and source deployments. The HTTP Host header carries the requested
   // frontend host through Next's proxy, including when TLS ends upstream.
   const frontendHost = source.get("host");
-  // The ingress (nginx) sets X-Real-IP / X-Forwarded-For; only the first hop
-  // is kept, under our own name, and the backend trusts it from this proxy only.
-  const clientIp =
-    source.get("x-real-ip")?.trim() || source.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  // The ingress (nginx) sets X-Real-IP, replacing whatever the browser sent; it is
+  // kept under our own name and the backend trusts it from this proxy only.
+  // X-Forwarded-For is not used: its first entry is whatever the client wrote.
+  const clientIp = source.get("x-real-ip")?.trim() || "";
   const headers = new Headers(source);
   const connectionTokens = (headers.get("connection") || "")
     .split(",")

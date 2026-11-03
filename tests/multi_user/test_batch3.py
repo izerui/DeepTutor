@@ -91,7 +91,8 @@ def test_the_frontend_address_is_trusted_only_from_the_proxy():
 
     assert auth_router._client_address(request("127.0.0.1", "8.8.8.8")) == "8.8.8.8"
     assert auth_router._client_address(request("203.0.113.5", "8.8.8.8")) == "203.0.113.5"
-    assert auth_router._client_address(request("127.0.0.1", "not-an-ip")) == "127.0.0.1"
+    # Through the proxy without the ingress's address: unknown, not everyone's shared "127.0.0.1".
+    assert auth_router._client_address(request("127.0.0.1", "not-an-ip")) == ""
 
 
 # ── student permissions by class (§7) ──────────────────────

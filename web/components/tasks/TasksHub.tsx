@@ -100,7 +100,8 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
     setSeenParam(taskParam);
     if (taskParam) setSelected(taskParam);
   }
-  const [kind, setKind] = useState<TaskKind>("homework");
+  // R21: administrators assign no homework, so their first choice is a practice set.
+  const [kind, setKind] = useState<TaskKind>(isAdmin ? "practice_set" : "homework");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -123,7 +124,7 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
           onSubmit={(event) => {
             event.preventDefault();
             if (!title.trim()) return;
-            createTask(isAdmin && kind === "homework" ? "note" : kind, title.trim())
+            createTask(kind, title.trim())
               .then((created) => {
                 setTitle("");
                 setSelected(created.id);
@@ -135,7 +136,7 @@ function AuthorView({ isAdmin, initialTask = null }: { isAdmin: boolean; initial
           <select
             aria-label={t("Kind of task")}
             className={inputClass}
-            value={isAdmin && kind === "homework" ? "practice_set" : kind}
+            value={kind}
             onChange={(e) => setKind(e.target.value as TaskKind)}
           >
             {kinds.map((k) => (

@@ -10,6 +10,8 @@ from __future__ import annotations
 #: Whole features: every route under the prefix.
 FEATURE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("/api/partners", "allow_partners"),
+    # Group chats run the same Partners.
+    ("/api/partner-groups", "allow_partners"),
     ("/api/subagents", "allow_agents"),
     ("/api/documents", "allow_co_writer"),
 )

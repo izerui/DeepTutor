@@ -44,14 +44,20 @@ def option_counts(question: dict[str, Any], submissions) -> dict[str, int] | Non
 
 
 class PracticeReview:
-    """The set's author only (administrators see no answers, R21-like)."""
+    """The set's author, a teacher (administrators see no answers, R21)."""
 
     def __init__(self, actor=None) -> None:
         self.service = PracticeSetService(actor)
         self.actor = self.service.actor
 
     def _submission(self, conn, set_id: str, submission_id: str):
+        from deeptutor.practice_sets.service import PracticeForbidden, _role
+
         self.service._require_author()
+        if _role(self.actor) == "admin":
+            # Batch 3 §2.1, R21: answers go to teachers only — also on a set handed to an
+            # administrator when its teacher left; they see scores and may withdraw.
+            raise PracticeForbidden("Students' answers are shown to teachers only.")
         row = self.service._owned(conn, set_id)
         submission = conn.execute(
             "SELECT * FROM practice_submissions WHERE id = ? AND set_id = ?", (submission_id, set_id)
@@ -136,10 +142,15 @@ class PracticeReview:
         """Every reported student's results, one row each, with each question's result."""
         report = self.service.report(set_id)
         with store.read() as conn:
+            current = conn.execute(
+                "SELECT current_revision FROM practice_sets WHERE id = ?", (set_id,)
+            ).fetchone()[0]
             submissions = conn.execute(
-                "SELECT student_id, results_json FROM practice_submissions WHERE set_id = ? ORDER BY submitted_at",
-                (set_id,),
+                "SELECT student_id, results_json FROM practice_submissions WHERE set_id = ? AND revision = ? "
+                "ORDER BY submitted_at",
+                (set_id, current),
             ).fetchall()
+        # Per question: each student's first attempt at the current version, whose questions the columns are.
         first: dict[str, dict[str, str]] = {}
         for submission in submissions:
             if submission["student_id"] not in first:
@@ -149,16 +160,20 @@ class PracticeReview:
         out = io.StringIO()
         writer = csv.writer(out)
         questions = report["questions"]
+        # Each score with the maximum of the version it was on (R15).
         writer.writerow([
-            "student", "in_scope", "attempts", "first_score", "best_score", "counted_score", "max_score",
-            "minutes", "late", "submitted_at", *[f"Q{i + 1}" for i in range(len(questions))],
+            "student", "in_scope", "attempts", "first_score", "first_max", "best_score", "best_max",
+            "counted_score", "counted_max", "minutes", "late", "submitted_at",
+            *[f"Q{i + 1}" for i in range(len(questions))],
         ])
         for student in report["students"]:
             results = first.get(student["id"], {})
             writer.writerow([
                 student["username"], "yes" if student["in_scope"] else "no", student["attempts"],
-                _number(student["first_score"]), _number(student["best_score"]), _number(student["score"]),
-                _number(student["max_score"]), _number(student["minutes"]), "yes" if student["late"] else "no",
+                _number(student["first_score"]), _number(student["max_score"]),
+                _number(student["best_score"]), _number(student["best_max_score"]),
+                _number(student["score"]), _number(student["score_max"]),
+                _number(student["minutes"]), "yes" if student["late"] else "no",
                 time.strftime("%Y-%m-%d %H:%M", time.localtime(student["submitted_at"])) if student["submitted_at"] else "",
                 *[results.get(q["question_id"], "") for q in questions],
             ])

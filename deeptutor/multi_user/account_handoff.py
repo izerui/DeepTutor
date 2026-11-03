@@ -321,8 +321,16 @@ def retry_handoff(user_id: str, *, fallback_successor: str = "") -> AccountHando
             "Successor %s of deleted user '%s' is gone; handing over to %s instead",
             record.successor_id, user_id, successor,
         )
-    failed, error = run_stages(user_id, successor, record.stages, quiet=True)
+    counts: dict[str, int] = {}
+    failed, error = run_stages(user_id, successor, record.stages, quiet=True, counts=counts)
     remaining = _finish(user_id, record.username, successor, record.attempts, failed, error)
+    try:
+        from deeptutor.notifications.service import notify_handover
+
+        # What only this retry moved is told too (one summary per user and successor).
+        notify_handover(successor, user_id, record.username, counts)
+    except Exception:
+        logger.debug("Could not tell %s about the retried hand-over of '%s'", successor, user_id, exc_info=True)
     if failed:
         logger.warning(
             "Pending account hand-over retry for '%s' (%s), attempt %d: still failing: %s (%s)",

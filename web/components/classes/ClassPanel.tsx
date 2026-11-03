@@ -38,7 +38,16 @@ const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
 const titleClass = "text-[13.5px] font-medium text-[var(--foreground)]";
 const hintClass = "text-[12px] leading-relaxed text-[var(--muted-foreground)]";
 
-export function ClassPanel({ classId, onChanged }: { classId: string; onChanged: () => void }) {
+export function ClassPanel({
+  classId,
+  onChanged,
+  focusStudent = null,
+}: {
+  classId: string;
+  onChanged: () => void;
+  /** A student to open in the learning report straight away. */
+  focusStudent?: string | null;
+}) {
   const { t } = useTranslation();
   const { isAdmin, userId } = useAuthStatus();
   const [detail, setDetail] = useState<ClassDetail | null>(null);
@@ -159,7 +168,7 @@ export function ClassPanel({ classId, onChanged }: { classId: string; onChanged:
       {!isAdmin && (
         <section className={sectionClass}>
           <h3 className={titleClass}>{t("Learning report")}</h3>
-          <ClassReportSection classId={detail.id} />
+          <ClassReportSection classId={detail.id} focusStudent={focusStudent} />
         </section>
       )}
 

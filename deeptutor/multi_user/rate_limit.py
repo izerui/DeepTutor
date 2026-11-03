@@ -92,14 +92,21 @@ def clear(bucket: str) -> None:
 
 
 def check_registration(address: str) -> None:
-    """Count a sign-up attempt; raise once the address or the site is over its limit."""
+    """Refuse a sign-up once the address (when known) or the site made too many accounts this hour."""
+    if (address and count(f"register:{address_key(address)}", REGISTER_PER_ADDRESS) >= REGISTER_PER_ADDRESS[0]) or (
+        count("register:site", REGISTER_SITE_WIDE) >= REGISTER_SITE_WIDE[0]
+    ):
+        raise RateLimited("Too many sign-ups from this network. Try again later.")
+
+
+def registered(address: str) -> None:
+    """Count an account that was made; failed attempts are not counted."""
     try:
-        per_address = hit(f"register:{address_key(address)}", REGISTER_PER_ADDRESS)
-        site = hit("register:site", REGISTER_SITE_WIDE)
+        if address:
+            hit(f"register:{address_key(address)}", REGISTER_PER_ADDRESS)
+        hit("register:site", REGISTER_SITE_WIDE)
     except Exception:
         return
-    if per_address > REGISTER_PER_ADDRESS[0] or site > REGISTER_SITE_WIDE[0]:
-        raise RateLimited("Too many sign-ups from this network. Try again later.")
 
 
 # ── sign-in ────────────────────────────────────────────────
@@ -112,9 +119,8 @@ def _login_buckets(username: str, address: str) -> tuple[str, str]:
 def check_login(username: str, address: str) -> None:
     """Refuse while the username or the address has failed too often (no hint which)."""
     user_bucket, address_bucket = _login_buckets(username, address)
-    if (
-        count(user_bucket, LOGIN_FAILURES_PER_USERNAME) >= LOGIN_FAILURES_PER_USERNAME[0]
-        or count(address_bucket, LOGIN_FAILURES_PER_ADDRESS) >= LOGIN_FAILURES_PER_ADDRESS[0]
+    if count(user_bucket, LOGIN_FAILURES_PER_USERNAME) >= LOGIN_FAILURES_PER_USERNAME[0] or (
+        address and count(address_bucket, LOGIN_FAILURES_PER_ADDRESS) >= LOGIN_FAILURES_PER_ADDRESS[0]
     ):
         raise RateLimited("Too many attempts. Try again in 15 minutes.")
 
@@ -123,7 +129,8 @@ def login_failed(username: str, address: str) -> None:
     user_bucket, address_bucket = _login_buckets(username, address)
     try:
         hit(user_bucket, LOGIN_FAILURES_PER_USERNAME)
-        hit(address_bucket, LOGIN_FAILURES_PER_ADDRESS)
+        if address:  # an unknown address is not one shared bucket for everyone
+            hit(address_bucket, LOGIN_FAILURES_PER_ADDRESS)
     except Exception:
         return
 
@@ -136,5 +143,5 @@ def login_succeeded(username: str) -> None:
 
 
 __all__ = [
-    "RateLimited", "check_login", "check_registration", "login_failed", "login_succeeded",
+    "RateLimited", "check_login", "check_registration", "login_failed", "login_succeeded", "registered",
 ]

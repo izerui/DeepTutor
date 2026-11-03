@@ -13,6 +13,7 @@ suggestion, never a lock.
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from typing import Any
 import uuid
@@ -55,7 +56,14 @@ class CourseService:
             try:
                 tasks.append(self.tasks.get(task_id))
             except TaskError:
-                continue
+                # A task handed to someone else (homework to a co-teacher) stays in
+                # the course, shown but not editable here.
+                with db.read() as conn:
+                    other = conn.execute(
+                        "SELECT id, kind, title, status, due_at, open_at FROM tasks WHERE id = ?", (task_id,)
+                    ).fetchone() if conn else None
+                if other is not None:
+                    tasks.append({**dict(other), "owned": False})
         return {
             "id": row["id"], "title": row["title"], "description": row["description"], "status": row["status"],
             "created_at": row["created_at"], "updated_at": row["updated_at"], "published_at": row["published_at"],
@@ -90,11 +98,14 @@ class CourseService:
         with db.read() as conn:
             if conn is None:
                 return []
-            rows = conn.execute(
-                "SELECT c.*, (SELECT COUNT(*) FROM course_items i WHERE i.course_id = c.id) AS n "
-                "FROM courses c WHERE owner_user_id = ? ORDER BY updated_at DESC",
-                (self.actor.id,),
-            ).fetchall()
+            try:
+                rows = conn.execute(
+                    "SELECT c.*, (SELECT COUNT(*) FROM course_items i WHERE i.course_id = c.id) AS n "
+                    "FROM courses c WHERE owner_user_id = ? ORDER BY updated_at DESC",
+                    (self.actor.id,),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                return []  # a task store from before courses; the next write adds the tables
         return [{"id": r["id"], "title": r["title"], "status": r["status"], "task_count": r["n"],
                  "updated_at": r["updated_at"]} for r in rows]
 
@@ -122,8 +133,11 @@ class CourseService:
                         "SELECT id FROM tasks WHERE owner_user_id = ? AND status != 'archived'", (self.actor.id,)
                     )
                 }
-                if any(t not in mine for t in wanted):
+                kept = set(self._items(conn, course_id))
+                # New items are one's own tasks; items already there may have been handed to others.
+                if any(t not in mine and t not in kept for t in wanted):
                     raise TaskError("A course holds your own tasks that are not withdrawn.")
+                added = [t for t in wanted if t not in kept]
                 conn.execute("DELETE FROM course_items WHERE course_id = ?", (course_id,))
                 conn.executemany(
                     "INSERT INTO course_items VALUES (?, ?, ?)",
@@ -131,9 +145,35 @@ class CourseService:
                 )
             conn.execute("UPDATE courses SET updated_at = ? WHERE id = ?", (time.time(), course_id))
         if row["status"] == "published" and task_ids is not None:
-            # Tasks added to a published course follow its receivers (§5.1).
+            # Tasks added to a published course follow its receivers (§5.1); a task
+            # already published must already reach them all, as at publication.
+            self._check_coverage(course_id, added)
             self._publish_drafts(course_id)
         return self.get(course_id)
+
+    def _check_coverage(self, course_id: str, task_ids: list[str]) -> None:
+        from deeptutor.publishing import scope as scopes
+
+        if not task_ids:
+            return
+        scope = scopes.get_scope(scopes.COURSE, course_id)
+        receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
+        with db.read() as conn:
+            published = [
+                r[0] for r in conn.execute(
+                    f"SELECT id FROM tasks WHERE status = 'published' AND id IN ({','.join('?' for _ in task_ids)})",  # nosec B608
+                    task_ids,
+                )
+            ] if conn else []
+        for task_id in published:
+            task_scope = scopes.get_scope(scopes.TASK, task_id)
+            reach = scopes.audience(task_scope, students_only=True) if task_scope else set()
+            if receivers - reach:
+                with db.write() as conn:  # undo the addition: the course keeps reaching everyone it did
+                    conn.execute("DELETE FROM course_items WHERE course_id = ? AND task_id = ?", (course_id, task_id))
+                raise TaskError(
+                    "A published task in this course does not reach all of these students. Widen who receives it first."
+                )
 
     def add_new_task(self, course_id: str, kind: str, title: str) -> dict[str, Any]:
         """Create a task and put it at the end of the course in one step (§2)."""
@@ -154,12 +194,26 @@ class CourseService:
                 f"SELECT id FROM tasks WHERE status = 'draft' AND id IN ({','.join('?' for _ in items)})",  # nosec B608
                 items,
             )] if items else []
-        for task_id in drafts:
-            with scopes.chosen_scope(scopes.Scope(
-                everyone=scope.everyone, users=list(scope.users), classes=list(scope.classes),
-                groups=list(scope.groups),
-            ) if scope else None):
-                self.tasks.publish(task_id, quiet=True)
+        done: list[str] = []
+        try:
+            for task_id in drafts:
+                with scopes.chosen_scope(scopes.Scope(
+                    everyone=scope.everyone, users=list(scope.users), classes=list(scope.classes),
+                    groups=list(scope.groups),
+                ) if scope else None):
+                    self.tasks.publish(task_id, quiet=True)
+                done.append(task_id)
+        except Exception:
+            # All or nothing: tasks published before the failure go back to drafts,
+            # so nobody receives part of a course without being told.
+            if done:
+                with db.write() as conn:
+                    conn.executemany(
+                        "UPDATE tasks SET status = 'draft', published_at = NULL WHERE id = ?", [(t,) for t in done]
+                    )
+                for task_id in done:
+                    scopes.forget(scopes.TASK, task_id)
+            raise
 
     def publish(self, course_id: str) -> dict[str, Any]:
         """Settle receivers, check published tasks reach them, publish drafts, then the course."""
@@ -247,7 +301,12 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     with db.read() as conn:
         if conn is None:
             return []
-        rows = conn.execute("SELECT * FROM courses WHERE status = 'published' ORDER BY published_at DESC").fetchall()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM courses WHERE status = 'published' ORDER BY published_at DESC"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []  # a task store from before courses
         items = {
             r["id"]: [t[0] for t in conn.execute(
                 "SELECT task_id FROM course_items WHERE course_id = ? ORDER BY position", (r["id"],)
@@ -269,13 +328,15 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     ]
 
 
-def transfer_courses(user_id: str, successor_id: str) -> int:
-    """A departing teacher's courses go with their tasks (batch 2 §8)."""
+def transfer_courses(user_id: str, successor_id: str, *, published_only: bool = False) -> int:
+    """A departing teacher's courses go with their tasks (batch 2 §8); a teacher who
+    becomes a student keeps their drafts, like their draft tasks."""
     if not db.path().exists():
         return 0
     with db.write() as conn:
         return int(conn.execute(
-            "UPDATE courses SET owner_user_id = ?, updated_at = ? WHERE owner_user_id = ?",
+            "UPDATE courses SET owner_user_id = ?, updated_at = ? WHERE owner_user_id = ?"
+            + (" AND status != 'draft'" if published_only else ""),
             (successor_id, time.time(), user_id),
         ).rowcount)
 

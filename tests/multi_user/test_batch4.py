@@ -159,20 +159,29 @@ def test_the_materials_owner_is_not_told_about_their_own_paths(teaching_users, m
 # ── hand-over summaries (§3) ───────────────────────────────
 
 
-def test_whoever_takes_over_gets_one_summary_and_courses_go_too(as_account, teaching_users):
+def test_whoever_takes_over_gets_one_summary(as_account, teaching_users):
     from deeptutor.classes.lifecycle import hand_over_published
-    from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.store import db
 
     ids = {name: row["id"] for name, row in teaching_users.items()}
     _set(as_account)
-    with as_account("tina"):
-        CourseService().create("Term plan")  # a course holding no task yet
     moved = hand_over_published(ids["tina"], ids["adam"])
-    assert moved["practice_sets"] == 1 and moved["courses"] == 1
+    assert moved["practice_sets"] == 1
     [notice] = [n for n in notifications.list_for(ids["adam"]) if n["kind"] == "content_transferred"]
     assert notice["params"]["from"] == "tina" and notice["params"]["practice_sets"] == 1
     assert "tasks_transferred" not in _kinds(ids["adam"])  # not a second notice for the same hand-over
+
+
+def test_a_deleted_teachers_courses_go_even_without_tasks(as_account, teaching_users):
+    from deeptutor.tasks.courses import CourseService
+    from deeptutor.tasks.service import transfer_tasks
+    from deeptutor.tasks.store import db
+
+    ids = {name: row["id"] for name, row in teaching_users.items()}
+    with as_account("tina"):
+        CourseService().create("Term plan")  # a course holding no task yet
+    counts: dict[str, int] = {}
+    transfer_tasks(ids["tina"], ids["adam"], counts=counts)  # the deletion hand-over
+    assert counts == {"tasks": 0, "courses": 1}
     with db.read() as conn:
         assert conn.execute("SELECT owner_user_id FROM courses").fetchone()[0] == ids["adam"]
 

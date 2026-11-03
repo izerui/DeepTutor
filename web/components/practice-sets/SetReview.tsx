@@ -93,6 +93,8 @@ export function AttemptReview({
   const [attempt, setAttempt] = useState<ReviewAttempt | null>(null);
   const [points, setPoints] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  // A failed change is shown beside the attempt, which stays on screen.
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -140,8 +142,8 @@ export function AttemptReview({
               {points[q.question_id] !== undefined && Number(points[q.question_id]) !== q.points && (
                 <button type="button" className="rounded bg-[var(--primary)] px-2 py-0.5 text-[var(--primary-foreground)]"
                   onClick={() => void regradeQuestion(setId, submissionId, q.question_id, Number(points[q.question_id]))
-                    .then((next) => { setAttempt(next); setPoints({}); onChanged(); })
-                    .catch((err) => setError(errorText(err, t)))}>
+                    .then((next) => { setAttempt(next); setPoints({}); setSaveError(""); onChanged(); })
+                    .catch((err) => setSaveError(errorText(err, t)))}>
                   {t("Save points")}
                 </button>
               )}
@@ -149,6 +151,7 @@ export function AttemptReview({
           </li>
         ))}
       </ol>
+      {saveError && <p role="alert" className="text-[12px] text-red-600">{saveError}</p>}
       <p className="text-[11px] text-[var(--muted-foreground)]">{t("The student is told when you change a score.")}</p>
     </div>
   );

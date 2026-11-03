@@ -115,11 +115,18 @@ def _overdue(student_id: str, username: str, teacher_id: str) -> int:
     from deeptutor.multi_user.paths import scope_for_user
     from deeptutor.tasks.service import StudentTasks
 
+    from deeptutor.multi_user.context import reset_current_user, set_current_user
+
     actor = CurrentUser(student_id, username, "student", scope_for_user(student_id, is_admin=False))
+    # Completion is read from the student's own progress (their paths, their book
+    # reading), which is resolved through the current user: act as them here.
+    token = set_current_user(actor)
     try:
         entries = StudentTasks(actor).assigned()
     except Exception:
         return 0
+    finally:
+        reset_current_user(token)
     return sum(1 for e in entries if e.get("state") == "overdue" and e.get("teacher_id") == teacher_id)
 
 

@@ -347,6 +347,7 @@ class LLMProvider(ABC):
         **kwargs: Any,
     ) -> LLMResponse:
         from deeptutor.services.llm.metrics import measure_provider_call
+        from deeptutor.services.llm.usage_limit import AiLimitReached
         from deeptutor.services.llm.multimodal import (
             has_image_parts,
             strip_image_parts,
@@ -382,6 +383,9 @@ class LLMProvider(ABC):
                     **kwargs,
                 )
             except asyncio.CancelledError:
+                raise
+            except AiLimitReached:
+                # A student over today's AI limit is told so, not retried or reworded.
                 raise
             except Exception as exc:
                 status_code = self._status_code_from_exception(exc)

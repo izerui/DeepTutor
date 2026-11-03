@@ -6311,5 +6311,6 @@
   "{{count}} knowledge bases": "Баз знань: {{count}}",
   "An explanation passes when its core idea is right.": "Пояснення зараховується, коли головна ідея правильна.",
   "An explanation passes when its main points are there without clear mistakes.": "Пояснення зараховується, коли є основні пункти без явних помилок.",
-  "An explanation must be complete and accurate to pass.": "Пояснення має бути повним і точним, щоб зарахувати."
+  "An explanation must be complete and accurate to pass.": "Пояснення має бути повним і точним, щоб зарахувати.",
+  "Withdrawn": "Відкликано"
 }

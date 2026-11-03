@@ -24,11 +24,15 @@ export function CommentEditor({
   subject,
   target,
   studentId,
+  preloaded,
 }: {
   kind: CommentKind;
   subject: string;
   target: string;
   studentId: string;
+  /** What this teacher already wrote to the student on ``subject``, fetched once by the caller
+   *  for many targets; ``null`` while that is loading. Absent: fetched here. */
+  preloaded?: TeacherComment[] | null;
 }) {
   const { t } = useTranslation();
   const ref = `${subject}:${target}`;
@@ -39,6 +43,7 @@ export function CommentEditor({
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    if (preloaded !== undefined) return;
     let alive = true;
     writtenComments(kind, subject, studentId)
       .then((rows) => {
@@ -51,8 +56,14 @@ export function CommentEditor({
     return () => {
       alive = false;
     };
-  }, [kind, subject, studentId, ref]);
+  }, [kind, subject, studentId, ref, preloaded]);
 
+  // With comments handed in, the one for this target is read from them until edited here.
+  const given = preloaded ? preloaded.find((row) => row.ref === ref) ?? null : undefined;
+  if (current === undefined && given !== undefined) {
+    setCurrent(given);
+    setText(given?.text ?? "");
+  }
   if (current === undefined) return null;
   if (!open) {
     return (

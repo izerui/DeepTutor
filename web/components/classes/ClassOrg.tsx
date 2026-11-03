@@ -25,14 +25,31 @@ import { actionClass, inputClass, primaryClass } from "./ClassesHub";
 
 const EMPTY: OrgLists = { departments: [], grades: [] };
 
+// One copy for the whole page: the filters, the class panel and the admin
+// editor all show the same lists, and a change in one shows in the others.
+let shared: OrgLists = EMPTY;
+const listeners = new Set<(lists: OrgLists) => void>();
+
+function reloadOrgLists() {
+  getOrg()
+    .then((next) => {
+      shared = next;
+      listeners.forEach((listener) => listener(next));
+    })
+    .catch(() => undefined);
+}
+
 /** The administrators' department and grade lists (spec 2026-11-03 batch 2 §0). */
 export function useOrgLists(): [OrgLists, () => void] {
-  const [lists, setLists] = useState<OrgLists>(EMPTY);
-  const refresh = useCallback(() => {
-    getOrg().then(setLists).catch(() => setLists(EMPTY));
+  const [lists, setLists] = useState<OrgLists>(shared);
+  useEffect(() => {
+    listeners.add(setLists);
+    reloadOrgLists();
+    return () => {
+      listeners.delete(setLists);
+    };
   }, []);
-  useEffect(refresh, [refresh]);
-  return [lists, refresh];
+  return [lists, reloadOrgLists];
 }
 
 /** A class's department and grade; its managers pick from the lists. */

@@ -163,19 +163,25 @@ def _request_frontend_host(request: Request) -> str:
 
 
 def _client_address(request: Request) -> str:
-    """The browser's address: the frontend proxy's ``x-deeptutor-client-ip`` from a trusted peer, else the peer."""
+    """The browser's address, or ``""`` when unknown.
+
+    Through the trusted frontend proxy it is the ingress's ``X-Real-IP``,
+    forwarded as ``x-deeptutor-client-ip``; without one every visitor would
+    look like the proxy, so the address is unknown and per-address limits do
+    not apply (batch 3 §9). A direct caller is its peer.
+    """
     client = getattr(request, "client", None)
     peer = client.host if client else ""
     try:
         peer_ip = str(ipaddress.ip_address(peer))
     except ValueError:
-        return peer
+        return ""
     if peer_ip in TRUSTED_FRONTEND_PROXY_IPS:
         raw = request.headers.get("x-deeptutor-client-ip", "").strip()
         try:
             return str(ipaddress.ip_address(raw))
         except ValueError:
-            pass
+            return ""
     return peer_ip
 
 
@@ -1337,11 +1343,12 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     first_user = is_first_user()
     invite = body.invite.strip()
     invite_error = ""
-    if not first_user:
-        from deeptutor.multi_user import rate_limit
+    from deeptutor.multi_user import rate_limit
 
+    address = _client_address(request)
+    if not first_user:
         try:
-            await asyncio.to_thread(rate_limit.check_registration, _client_address(request))
+            await asyncio.to_thread(rate_limit.check_registration, address)
         except rate_limit.RateLimited as exc:
             raise _rate_limited(exc) from None
         from deeptutor.classes.service import ClassError, link_info
@@ -1382,6 +1389,9 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
             user_id = str(item.get("id") or "")
             role = str(item.get("role") or "student")
             break
+    if not first_user:
+        # Only accounts actually made count against the limits (batch 3 §9).
+        await asyncio.to_thread(rate_limit.registered, address)
     joined: dict | None = None
     if invite and role == "student" and user_id:
         joined = await asyncio.to_thread(_join_new_student, user_id, body.username, invite)

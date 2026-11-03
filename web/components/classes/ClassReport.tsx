@@ -14,6 +14,7 @@ import {
   type ClassReport,
   type StudentReport,
 } from "@/lib/classes-api";
+import { writtenComments, type TeacherComment } from "@/lib/comments-api";
 import { remedialFromPath } from "@/lib/practice-sets-api";
 import { CommentEditor } from "@/components/comments/Comments";
 import { rememberSuggested } from "@/components/practice-sets/SetReview";
@@ -54,12 +55,13 @@ function useOpenRemedial() {
  * Learning report for a class (spec 2026-10-29 D17, option B): progress on this
  * teacher's paths plus an overall summary. Numbers only; no conversation text.
  */
-export function ClassReportSection({ classId }: { classId: string }) {
+export function ClassReportSection({ classId, focusStudent = null }: { classId: string; focusStudent?: string | null }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<ClassReport | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // From the workbench: the report opens on the student who needs attention.
+  const [selected, setSelected] = useState<string | null>(focusStudent);
   const [error, setError] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(focusStudent));
   const [days, setDays] = useState<number | null>(7);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
 
@@ -67,7 +69,11 @@ export function ClassReportSection({ classId }: { classId: string }) {
     if (!open) return;
     let alive = true;
     getClassReport(classId, days)
-      .then((next) => alive && setReport(next))
+      .then((next) => {
+        if (!alive) return;
+        setReport(next);
+        setError("");
+      })
       .catch((err) => alive && setError(errorText(err, t)));
     return () => {
       alive = false;
@@ -81,7 +87,7 @@ export function ClassReportSection({ classId }: { classId: string }) {
       </button>
     );
   }
-  if (error) return <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>;
+  if (error && !report) return <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>;
   if (!report) return <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />;
   if (report.students.length === 0) {
     return <p className="text-[12px] text-[var(--muted-foreground)]">{t("No students yet.")}</p>;
@@ -160,7 +166,7 @@ export function ClassReportSection({ classId }: { classId: string }) {
       <p className="text-[11.5px] text-[var(--muted-foreground)]">
         {t("Reports show progress numbers only. Students' conversations and notes stay private.")}
       </p>
-      {selected && <StudentDetail classId={classId} studentId={selected} />}
+      {selected && <StudentDetail key={selected} classId={classId} studentId={selected} />}
       {paths.size > 0 && <ClassPathView classId={classId} paths={paths} />}
     </div>
   );
@@ -241,14 +247,25 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
   const openRemedial = useOpenRemedial();
   const [report, setReport] = useState<StudentReport | null>(null);
   const [error, setError] = useState("");
+  // A failed action is shown beside the report, which stays usable.
+  const [actionError, setActionError] = useState("");
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
+  // What this teacher wrote to the student, fetched once per path for all its points.
+  const [comments, setComments] = useState<Record<string, TeacherComment[]>>({});
 
   useEffect(() => {
     let alive = true;
-    setReport(null);
     getStudentReport(classId, studentId)
-      .then((next) => alive && setReport(next))
+      .then((next) => {
+        if (!alive) return;
+        setReport(next);
+        for (const path of next.teacher_paths) {
+          writtenComments("path_point", path.template_id, studentId)
+            .then((rows) => alive && setComments((current) => ({ ...current, [path.template_id]: rows })))
+            .catch(() => alive && setComments((current) => ({ ...current, [path.template_id]: [] })));
+        }
+      })
       .catch((err) => alive && setError(errorText(err, t)));
     return () => {
       alive = false;
@@ -260,6 +277,7 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
   return (
     <div className="space-y-3 rounded-xl border border-[var(--border)] p-3">
       <h4 className="text-[13px] font-medium text-[var(--foreground)]">{report.username}</h4>
+      {actionError && <p role="alert" className="text-[12px] text-red-600">{actionError}</p>}
       {(report.practice_sets ?? []).length > 0 && (
         <ul className="space-y-1 text-[12.5px]">
           {(report.practice_sets ?? []).map((set) => (
@@ -317,7 +335,10 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
                         {kp.stuck_days != null && ` · ${t("stuck for {{days}} days", { days: kp.stuck_days })}`}
                       </p>
                     )}
-                    {kp.id && <CommentEditor kind="path_point" subject={path.template_id} target={kp.id} studentId={studentId} />}
+                    {kp.id && (
+                      <CommentEditor kind="path_point" subject={path.template_id} target={kp.id} studentId={studentId}
+                        preloaded={comments[path.template_id] ?? null} />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -325,10 +346,10 @@ function StudentDetail({ classId, studentId }: { classId: string; studentId: str
                 <button type="button" className={primaryClass} disabled={busy}
                   onClick={() => {
                     setBusy(true);
-                    setError("");
+                    setActionError("");
                     remedialFromPath(path.template_id, chosen, [studentId], t("Remedial: "))
                       .then(openRemedial)
-                      .catch((err) => setError(errorText(err, t)))
+                      .catch((err) => setActionError(errorText(err, t)))
                       .finally(() => setBusy(false));
                   }}>
                   <Sparkles size={13} />

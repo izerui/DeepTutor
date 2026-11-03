@@ -444,7 +444,10 @@ class PracticeSetService:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
         self._require_author()
         with store.read() as conn:
-            self._owned(conn, set_id)
+            draft = self._owned(conn, set_id)
+        # Checked before receivers are stored: a failed first publication must not
+        # keep receivers the teacher then changes (the stored ones would win).
+        self._check_publishable(draft)
         from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
 
         # Spec 2026-11-02 §4.1: the receivers are settled before anything is
@@ -452,13 +455,8 @@ class PracticeSetService:
         default_scope_on_publish(PRACTICE_SET, set_id)
         with store.write() as conn:
             row = self._owned(conn, set_id)
-            if row["status"] == "archived":
-                raise PracticeConflict("This practice set is archived.")
+            self._check_publishable(row)
             questions = normalize_questions(json.loads(row["draft_questions_json"]))
-            if not questions:
-                raise PracticeError("Add at least one question before publishing.")
-            if row["reveal"] == "after_due" and row["due_at"] is None:
-                raise PracticeError("Set a deadline, or show answers right after submitting.")
             revision = row["current_revision"] + 1
             now = _now()
             conn.execute(
@@ -477,6 +475,15 @@ class PracticeSetService:
                 {"content": "practice_set", "teacher": self.actor.username},
             )
         return self.get(set_id)
+
+    @staticmethod
+    def _check_publishable(row) -> None:
+        if row["status"] == "archived":
+            raise PracticeConflict("This practice set is archived.")
+        if not normalize_questions(json.loads(row["draft_questions_json"])):
+            raise PracticeError("Add at least one question before publishing.")
+        if row["reveal"] == "after_due" and row["due_at"] is None:
+            raise PracticeError("Set a deadline, or show answers right after submitting.")
 
     def archive(self, set_id: str) -> dict[str, Any]:
         """Withdraw a set: its author, or an administrator for anyone's published set (D10)."""

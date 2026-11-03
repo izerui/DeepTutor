@@ -24,9 +24,18 @@ LIMIT_MESSAGE = "Today's AI usage is used up. Come back tomorrow."
 _exempt: ContextVar[bool] = ContextVar("ai_usage_exempt", default=False)
 
 
-class AiLimitReached(RuntimeError):
+from deeptutor.services.llm.exceptions import LLMError
+
+
+class AiLimitReached(LLMError):
+    """An ``LLMError`` so error mapping passes it on as itself, never as a vague API error."""
+
     def __init__(self) -> None:
         super().__init__(LIMIT_MESSAGE)
+
+    def __str__(self) -> str:
+        # The plain sentence, translated by the client; no provider prefix.
+        return LIMIT_MESSAGE
 
 
 @contextmanager

@@ -6265,5 +6265,6 @@
   "{{count}} knowledge bases": "{{count}} 个知识库",
   "An explanation passes when its core idea is right.": "讲解类：核心意思对就算过。",
   "An explanation passes when its main points are there without clear mistakes.": "讲解类：要点基本齐全、没有明显错误就算过。",
-  "An explanation must be complete and accurate to pass.": "讲解类：要点完整、表述准确才算过。"
+  "An explanation must be complete and accurate to pass.": "讲解类：要点完整、表述准确才算过。",
+  "Withdrawn": "已撤回"
 }

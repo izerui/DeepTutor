@@ -6654,5 +6654,6 @@
   "{{count}} knowledge bases": "{{count}} bases de connaissances",
   "An explanation passes when its core idea is right.": "Une explication est validée quand l'idée principale est juste.",
   "An explanation passes when its main points are there without clear mistakes.": "Une explication est validée quand les points principaux y sont, sans erreur nette.",
-  "An explanation must be complete and accurate to pass.": "Une explication doit être complète et exacte pour être validée."
+  "An explanation must be complete and accurate to pass.": "Une explication doit être complète et exacte pour être validée.",
+  "Withdrawn": "Retiré"
 }

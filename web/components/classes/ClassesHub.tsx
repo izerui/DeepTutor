@@ -62,6 +62,10 @@ function ManagerView() {
   const [selected, setSelected] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("class"),
   );
+  // ``&student=``: open that student in the class's learning report (workbench, batch 3 §5.1).
+  const [focusStudent] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("student"),
+  );
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -187,7 +191,7 @@ function ManagerView() {
       </section>
       <section className="min-w-0">
         {selected ? (
-          <ClassPanel key={selected} classId={selected} onChanged={refresh} />
+          <ClassPanel key={selected} classId={selected} onChanged={refresh} focusStudent={focusStudent} />
         ) : (
           <p className="rounded-xl border border-dashed border-[var(--border)] p-10 text-center text-[12.5px] text-[var(--muted-foreground)]">
             {t("Select a class to manage its students, teachers and invite link.")}

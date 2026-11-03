@@ -165,6 +165,18 @@ def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> boo
     return False
 
 
+def _first_submission(set_id: str, student_id: str) -> float | None:
+    """When the student first submitted a practice set: the moment it was done, and whether late."""
+    from deeptutor.practice_sets import store as practice_store
+
+    with practice_store.read() as conn:
+        row = conn.execute(
+            "SELECT MIN(submitted_at) FROM practice_submissions WHERE set_id = ? AND student_id = ?",
+            (set_id, student_id),
+        ).fetchone() if conn else None
+    return float(row[0]) if row and row[0] else None
+
+
 def _completed_now(kind: str, target_id: str, settings: dict[str, Any], student: CurrentUser) -> bool:
     """Whether what the student did meets the task (homework and notes are stored, not detected)."""
     try:
@@ -375,8 +387,10 @@ class TaskService:
         if "open_at" in fields:
             opens = float(fields["open_at"]) if fields["open_at"] else None
             before = _open_at(row)
-            if published and before is not None and before <= _now() and (opens is None or opens > before):
-                # §6: once open, it may only open earlier — nobody who saw it loses it.
+            # Open now: published with no opening time, or one already passed.
+            is_open = published and (before is None or before <= _now())
+            if is_open and opens is not None and opens > _now():
+                # §6: once open, it stays open — nobody who saw it loses it.
                 raise TaskConflict("This task is already open; its opening time can only move earlier.")
             sets["open_at"] = opens
         due_after = sets.get("due_at", row["due_at"])
@@ -537,6 +551,10 @@ class TaskService:
                 continue
             done = completions.get(student_id)
             submission = submissions.get(student_id)
+            if submission is not None and _role(self.actor) == "admin":
+                # R21: homework is between the teacher and the student; an administrator
+                # who took over the task sees only that something was handed in.
+                submission = None
             students.append({
                 "id": student_id,
                 "username": account["username"],
@@ -568,8 +586,14 @@ class TaskService:
                          "score": row["score"], "comment": row["comment"]})
         return view
 
+    def _require_teacher_for_homework(self) -> None:
+        """R21: administrators neither read nor grade homework, even on a task handed to them."""
+        if _role(self.actor) == "admin":
+            raise TaskForbidden("Homework is graded by teachers; administrators can only withdraw the task.")
+
     def grade(self, task_id: str, student_id: str, score: float, comment: str) -> dict[str, Any]:
         self._require_author()
+        self._require_teacher_for_homework()
         with db.read() as conn:
             row = self._owned(conn, task_id)
         max_score = float(json.loads(row["settings_json"] or "{}").get("max_score") or 100)
@@ -577,11 +601,18 @@ class TaskService:
             raise TaskError(f"The score must be between 0 and {max_score:g}.")
         with db.write() as conn:
             submission = conn.execute(
-                "SELECT status FROM task_submissions WHERE task_id = ? AND student_id = ?", (task_id, student_id)
+                "SELECT status, submitted_at, late FROM task_submissions WHERE task_id = ? AND student_id = ?",
+                (task_id, student_id),
             ).fetchone()
             if submission is None:
                 raise TaskNotFound("No homework from this student.")
             regraded = submission["status"] == "graded"
+            if submission["status"] == "returned":
+                # Graded after all: the hand-in counts again (sending back had removed it).
+                conn.execute(
+                    "INSERT OR IGNORE INTO task_completions VALUES (?, ?, ?, ?, 0)",
+                    (task_id, student_id, submission["submitted_at"], submission["late"]),
+                )
             conn.execute(
                 "UPDATE task_submissions SET status = 'graded', score = ?, comment = ?, graded_by = ?, "
                 "graded_at = ? WHERE task_id = ? AND student_id = ?",
@@ -598,6 +629,7 @@ class TaskService:
 
     def send_back(self, task_id: str, student_id: str, reason: str) -> dict[str, Any]:
         self._require_author()
+        self._require_teacher_for_homework()
         reason = str(reason or "").strip()
         if not reason:
             raise TaskError("Say why the homework goes back.")
@@ -645,7 +677,9 @@ class TaskService:
             submission = conn.execute(
                 "SELECT files_json FROM task_submissions WHERE task_id = ? AND student_id = ?", (task_id, student_id)
             ).fetchone() if conn else None
-        if task is None or submission is None or self.actor.id not in (task["owner_user_id"], student_id):
+        if task is None or submission is None or self.actor.id not in (task["owner_user_id"], student_id) or (
+            self.actor.id != student_id and _role(self.actor) == "admin"  # R21
+        ):
             raise TaskNotFound("File not found.")
         for item in json.loads(submission["files_json"] or "[]"):
             if item["name"] == name:
@@ -697,8 +731,12 @@ class StudentTasks:
                 "SELECT * FROM task_completions WHERE task_key = ? AND student_id = ?", (key, self.actor.id)
             ).fetchone() if conn else None
 
-    def _record_completion(self, key: str, due_at: float | None, *, self_reported: bool = False) -> None:
-        now = _now()
+    def _record_completion(
+        self, key: str, due_at: float | None, *, self_reported: bool = False, at: float | None = None,
+    ) -> None:
+        # ``at``: when it was actually done, if known (a practice set's first submission);
+        # otherwise when it is noticed.
+        now = at or _now()
         with db.write() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO task_completions VALUES (?, ?, ?, ?, ?)",
@@ -719,7 +757,7 @@ class StudentTasks:
                 "due_at": due_at, "open_at": open_at, "state": "not_open", "completed_at": None, "late": False,
                 "provenance": provenance(teacher_id, self.actor), "teacher_id": teacher_id,
             }
-        if open_ and open_at and task_row is not None:
+        if open_ and open_at and task_row is not None and open_at > float(task_row["published_at"] or 0):
             from deeptutor.notifications.service import notify
 
             notify(
@@ -729,7 +767,9 @@ class StudentTasks:
         completion = self._completion(key)
         if completion is None and open_ and kind not in ("homework", "note"):
             if _completed_now(kind, target_id, settings, self.actor):
-                self._record_completion(key, due_at)
+                self._record_completion(
+                    key, due_at, at=_first_submission(target_id, self.actor.id) if kind == "practice_set" else None,
+                )
                 completion = self._completion(key)
         if completion is not None:
             state = "completed"
@@ -785,7 +825,9 @@ class StudentTasks:
             opens, due = _open_at(row), row["due_at"]
             if opens and now < opens:
                 continue
-            if opens:
+            if opens and opens > float(row["published_at"] or 0):
+                # Only a task published before it opened is announced at opening;
+                # one published already open was announced by its publication.
                 notify([self.actor.id], "task_opened", {"title": row["title"], "due_at": due},
                        link=f"/start?task={row['id']}", dedupe_key=f"task_opened:{row['id']}")
             if due and 0 < due - now <= DUE_SOON_SECONDS and self._completion(row["id"]) is None:
@@ -1066,7 +1108,7 @@ def transfer_tasks(
         from deeptutor.tasks.courses import transfer_courses
 
         # Courses go even when no task does (a course may hold none yet).
-        courses = transfer_courses(user_id, successor_id)
+        courses = transfer_courses(user_id, successor_id, published_only=published_only)
         if counts is not None:
             counts.update(tasks=0, courses=courses)
         return 0
@@ -1098,7 +1140,7 @@ def transfer_tasks(
 
     from deeptutor.tasks.courses import transfer_courses
 
-    courses = transfer_courses(user_id, successor_id)
+    courses = transfer_courses(user_id, successor_id, published_only=published_only)
     # The successor hears it in one summary of everything handed over (batch 4 §3);
     # a co-teacher who took homework hears it here.
     for target in set(moves.values()) - {successor_id}:
