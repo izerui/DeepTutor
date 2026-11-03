@@ -40,6 +40,7 @@ import {
 import { currentTemplate } from "@/lib/mastery-templates";
 import { useFinishedUnreviewed } from "@/components/catalog/FinishedReview";
 import { setPendingPrompt } from "@/lib/pending-prompt";
+import { setPendingLLMSelection } from "@/lib/pending-llm-selection";
 
 function MasteryPathRoute() {
   const router = useRouter();
@@ -167,7 +168,7 @@ function MasteryPathRoute() {
         <CreateTopicWizard
           returnFocusRef={wizardTriggerRef}
           onClose={() => setWizardOpen(false)}
-          onCreated={async (topic) => {
+          onCreated={async (topic, selection) => {
             setWizardOpen(false);
             await scope?.attach(
               "mastery_path",
@@ -183,6 +184,10 @@ function MasteryPathRoute() {
             setPendingPrompt(
               masteryOpeningMessage("outline", t),
               MASTERY_OPENING_SCOPE,
+            );
+            setPendingLLMSelection(
+              `mastery.outline.${topic.path_id}`,
+              selection,
             );
             router.push(masterySessionRoute(topic.path_id, "outline"));
           }}
