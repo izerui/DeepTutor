@@ -53,6 +53,22 @@ def test_unset_strict_preserves_non_strict_chat_default(fields) -> None:
     assert tool == original
 
 
+
+def test_mastery_quiz_keeps_its_optional_arguments_optional() -> None:
+    from deeptutor.capabilities.mastery.tools import MasteryQuizTool
+
+    tool = MasteryQuizTool().get_definition().to_openai_schema()
+    original = copy.deepcopy(tool)
+
+    converted = convert_tools([tool])[0]
+
+    # Left unset, Responses treats the tool as strict and makes ``visual`` and
+    # every other optional argument required, so a text-only card cannot be posed.
+    assert converted["strict"] is False
+    assert "visual" not in converted["parameters"].get("required", [])
+    assert converted["parameters"] == original["function"]["parameters"]
+    assert tool == original
+
 def test_native_web_search_ignores_strict() -> None:
     tool = _tool(strict=True)
     tool["function"]["name"] = "web_search"
