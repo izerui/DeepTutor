@@ -26,24 +26,33 @@ CREATE TABLE IF NOT EXISTS rate_buckets (
 )
 
 def _setting(name: str, default: int) -> int:
+    """A limit from the environment; ``0`` turns a per-address limit off."""
     import os
 
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
     try:
-        value = int(os.environ.get(name, "") or default)
+        value = int(raw)
     except ValueError:
         return default
-    return value if value > 0 else default
+    return value if value >= 0 else default
 
 
-#: (count, window seconds). Generous by default: on a campus or education network hundreds
-#: of students reach the site from one address and may all sign up in the same hour.
-#: Each can be changed in the deployment's environment.
-REGISTER_PER_ADDRESS = (_setting("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", 300), 3600)
+#: (count, window seconds). A whole school reaches the site from one address: a limit on
+#: that address would lock everyone out because of a few. Per-address limits are therefore
+#: OFF by default (``0``) and can be set in the deployment's environment; what stays on
+#: never blocks a crowd: the per-account sign-in limit and a high site-wide sign-up cap.
+REGISTER_PER_ADDRESS = (_setting("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", 0), 3600)
 #: Across the whole site, for when the address is unknown or spoofed.
 REGISTER_SITE_WIDE = (_setting("DEEPTUTOR_REGISTER_SITE_HOURLY", 2000), 3600)
 #: Guessing one account's password: not tied to an address, so not loosened.
 LOGIN_FAILURES_PER_USERNAME = (_setting("DEEPTUTOR_LOGIN_FAILURES_PER_ACCOUNT", 10), 900)
-LOGIN_FAILURES_PER_ADDRESS = (_setting("DEEPTUTOR_LOGIN_FAILURES_PER_ADDRESS", 300), 900)
+LOGIN_FAILURES_PER_ADDRESS = (_setting("DEEPTUTOR_LOGIN_FAILURES_PER_ADDRESS", 0), 900)
+
+
+def _on(limit: tuple[int, int]) -> bool:
+    return limit[0] > 0
 
 
 class RateLimited(Exception):
@@ -106,18 +115,20 @@ def clear(bucket: str) -> None:
 
 def check_registration(address: str) -> None:
     """Refuse a sign-up once the address (when known) or the site made too many accounts this hour."""
-    if (address and count(f"register:{address_key(address)}", REGISTER_PER_ADDRESS) >= REGISTER_PER_ADDRESS[0]) or (
-        count("register:site", REGISTER_SITE_WIDE) >= REGISTER_SITE_WIDE[0]
-    ):
+    if (
+        address and _on(REGISTER_PER_ADDRESS)
+        and count(f"register:{address_key(address)}", REGISTER_PER_ADDRESS) >= REGISTER_PER_ADDRESS[0]
+    ) or (_on(REGISTER_SITE_WIDE) and count("register:site", REGISTER_SITE_WIDE) >= REGISTER_SITE_WIDE[0]):
         raise RateLimited("Too many sign-ups from this network. Try again later.")
 
 
 def registered(address: str) -> None:
     """Count an account that was made; failed attempts are not counted."""
     try:
-        if address:
+        if address and _on(REGISTER_PER_ADDRESS):
             hit(f"register:{address_key(address)}", REGISTER_PER_ADDRESS)
-        hit("register:site", REGISTER_SITE_WIDE)
+        if _on(REGISTER_SITE_WIDE):
+            hit("register:site", REGISTER_SITE_WIDE)
     except Exception:
         return
 
@@ -132,8 +143,10 @@ def _login_buckets(username: str, address: str) -> tuple[str, str]:
 def check_login(username: str, address: str) -> None:
     """Refuse while the username or the address has failed too often (no hint which)."""
     user_bucket, address_bucket = _login_buckets(username, address)
-    if count(user_bucket, LOGIN_FAILURES_PER_USERNAME) >= LOGIN_FAILURES_PER_USERNAME[0] or (
-        address and count(address_bucket, LOGIN_FAILURES_PER_ADDRESS) >= LOGIN_FAILURES_PER_ADDRESS[0]
+    if (_on(LOGIN_FAILURES_PER_USERNAME) and count(user_bucket, LOGIN_FAILURES_PER_USERNAME)
+            >= LOGIN_FAILURES_PER_USERNAME[0]) or (
+        address and _on(LOGIN_FAILURES_PER_ADDRESS)
+        and count(address_bucket, LOGIN_FAILURES_PER_ADDRESS) >= LOGIN_FAILURES_PER_ADDRESS[0]
     ):
         raise RateLimited("Too many attempts. Try again in 15 minutes.")
 
@@ -141,8 +154,9 @@ def check_login(username: str, address: str) -> None:
 def login_failed(username: str, address: str) -> None:
     user_bucket, address_bucket = _login_buckets(username, address)
     try:
-        hit(user_bucket, LOGIN_FAILURES_PER_USERNAME)
-        if address:  # an unknown address is not one shared bucket for everyone
+        if _on(LOGIN_FAILURES_PER_USERNAME):
+            hit(user_bucket, LOGIN_FAILURES_PER_USERNAME)
+        if address and _on(LOGIN_FAILURES_PER_ADDRESS):  # an unknown address is not one shared bucket
             hit(address_bucket, LOGIN_FAILURES_PER_ADDRESS)
     except Exception:
         return

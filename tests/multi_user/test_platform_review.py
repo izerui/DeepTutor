@@ -489,9 +489,27 @@ def test_sign_ups_per_address_can_be_raised(monkeypatch):
     monkeypatch.delenv("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY")
     monkeypatch.delenv("DEEPTUTOR_REGISTER_SITE_HOURLY")
     defaults = importlib.reload(rate_limit)
-    # Generous for a campus network: many students behind one address sign up together.
-    assert defaults.REGISTER_PER_ADDRESS == (300, 3600) and defaults.REGISTER_SITE_WIDE == (2000, 3600)
-    assert defaults.LOGIN_FAILURES_PER_ADDRESS == (300, 900) and defaults.LOGIN_FAILURES_PER_USERNAME == (10, 900)
+    # A whole school shares one address: per-address limits are off by default.
+    assert defaults.REGISTER_PER_ADDRESS == (0, 3600) and defaults.REGISTER_SITE_WIDE == (2000, 3600)
+    assert defaults.LOGIN_FAILURES_PER_ADDRESS == (0, 900) and defaults.LOGIN_FAILURES_PER_USERNAME == (10, 900)
+
+
+def test_one_school_behind_one_address_is_not_locked_out(monkeypatch):
+    from deeptutor.multi_user import rate_limit
+
+    monkeypatch.setattr(rate_limit, "REGISTER_PER_ADDRESS", (0, 3600))
+    monkeypatch.setattr(rate_limit, "LOGIN_FAILURES_PER_ADDRESS", (0, 900))
+    school = "203.0.113.7"
+    for index in range(400):  # many students sign up from the school's one address
+        rate_limit.check_registration(school)
+        rate_limit.registered(school)
+    for index in range(500):  # many of them mistype their passwords now and then
+        rate_limit.login_failed(f"student{index % 200}", school)
+    rate_limit.check_login("student999", school)  # someone else at the school still signs in
+    for _ in range(10):  # but guessing one account's password still locks that account
+        rate_limit.login_failed("target", school)
+    with pytest.raises(rate_limit.RateLimited):
+        rate_limit.check_login("target", school)
 
 
 def test_a_teachers_calendar_has_their_tasks_and_the_courses_they_joined(as_account, teaching_users):

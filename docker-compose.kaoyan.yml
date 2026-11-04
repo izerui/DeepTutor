@@ -93,12 +93,14 @@ services:
       # port 3782 is published on 127.0.0.1 only. If either stops holding, remove
       # this line: anyone reaching 3782 directly could forge X-Real-IP.
       - DEEPTUTOR_TRUSTED_INGRESS=1
-      # Limits (defaults suit a campus or education network where many students
-      # share one address and may sign up together):
+      # Limits. A whole school may reach the site from one address, so the
+      # per-address limits are OFF (0) by default: one address's limit would lock
+      # every student there out because of a few. What stays on never blocks a crowd:
+      #   - DEEPTUTOR_LOGIN_FAILURES_PER_ACCOUNT=10      # wrong passwords per 15 minutes, one account only
       #   - DEEPTUTOR_REGISTER_SITE_HOURLY=2000          # new accounts per hour, whole site
-      #   - DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY=300    # new accounts per hour, one address
-      #   - DEEPTUTOR_LOGIN_FAILURES_PER_ADDRESS=300     # wrong passwords per 15 minutes, one address
-      #   - DEEPTUTOR_LOGIN_FAILURES_PER_ACCOUNT=10      # wrong passwords per 15 minutes, one account
+      # Turn a per-address limit on only if no school shares an address, e.g.:
+      #   - DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY=300
+      #   - DEEPTUTOR_LOGIN_FAILURES_PER_ADDRESS=300
       #   - DEEPTUTOR_APT_PACKAGES=ffmpeg
       # Unraid / NAS bind mounts:
       #   - PUID=99
