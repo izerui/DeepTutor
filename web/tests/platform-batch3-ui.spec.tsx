@@ -94,13 +94,13 @@ const points = {
   ],
 };
 
-it("reports a course: tasks, homework, practice score, flags, the period and an export link", async () => {
+it("reports a course: tasks, homework, practice score, flags and an export link", async () => {
   search.value = "kind=course&id=crs_1";
   catalog.getLearnerReport.mockResolvedValue(courseReport);
   catalog.getReportPoints.mockResolvedValue(points);
   render(<LearnerReportPage />);
   expect(await screen.findByRole("heading", { name: "Physics" })).toBeTruthy();
-  expect(catalog.getLearnerReport).toHaveBeenCalledWith("course", "crs_1", 7);
+  expect(catalog.getLearnerReport).toHaveBeenCalledWith("course", "crs_1", null);
   const sara = screen.getByRole("button", { name: "sara" }).closest("tr")!;
   expect(within(sara).getByText("2 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 · 0 · 1")).toBeTruthy();
@@ -110,17 +110,16 @@ it("reports a course: tasks, homework, practice score, flags, the period and an 
   // Follow-ups §7: the CSV is fetched with the sign-in credentials, not a bare link.
   catalog.downloadReport.mockResolvedValue(undefined);
   fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
-  await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", 7));
+  await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", null));
   // Follow-ups §3: a practice set opened from a course's report carries the course.
   expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href")).toBe("/practice-sets?set=ps_1&course=crs_1");
 
   fireEvent.click(screen.getByLabelText("Only learners who need attention"));
   expect(screen.queryByRole("button", { name: "tom" })).toBeNull();
 
-  fireEvent.change(screen.getByLabelText("Period"), { target: { value: "" } });
-  await waitFor(() => expect(catalog.getLearnerReport).toHaveBeenLastCalledWith("course", "crs_1", null));
-  fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
-  await waitFor(() => expect(catalog.downloadReport).toHaveBeenLastCalledWith("course", "crs_1", null));
+  // The report keeps to this item: no study time or answers from elsewhere, no period.
+  expect(screen.queryByLabelText("Period")).toBeNull();
+  expect(screen.queryByText("Study time in period")).toBeNull();
 });
 
 it("reports a path without the course columns, and shows a learner's detail", async () => {

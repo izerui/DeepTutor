@@ -1069,6 +1069,9 @@ class TeachingService:
             )
         self.store.delete_template(template.id)
         self._release_references(template)
+        from deeptutor.catalog.listings import forget as forget_listing
+
+        forget_listing("mastery_path", template.id)  # review L6
 
     def list_students(self, query: str = "") -> list[dict]:
         needle = query.strip().casefold()

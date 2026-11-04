@@ -33,6 +33,42 @@ class ItemInfo:
     not_ready: str = ""
 
 
+def owner(kind: str, item_id: str) -> str | None:
+    """Who owns it, from the registries only (no manifest or document reads); ``None`` if it is gone.
+
+    Raises when a store cannot be read: callers that must not act on a guess
+    (the migrations) let it stop them.
+    """
+    if kind == scopes.BOOK:
+        from deeptutor.book import registry as book_registry
+
+        record = book_registry.get_book(item_id)
+        return record.created_by if record else None
+    if kind == scopes.KNOWLEDGE_BASE:
+        from deeptutor.knowledge import registry as kb_registry
+
+        record = kb_registry.get_kb(item_id)
+        return record.created_by if record else None
+    if kind == scopes.MASTERY_PATH:
+        from deeptutor.teaching.store import TeachingStore
+
+        template = TeachingStore().get_template(item_id)
+        return template.owner_user_id if template else None
+    table = {scopes.PRACTICE_SET: ("practice_sets", "practice"), scopes.COURSE: ("courses", "tasks"),
+             scopes.TASK: ("tasks", "tasks")}.get(kind)
+    if table is None:
+        return None
+    if table[1] == "practice":
+        from deeptutor.practice_sets import store as source
+    else:
+        from deeptutor.tasks.store import db as source
+    with source.read() as conn:
+        row = conn.execute(
+            f"SELECT owner_user_id FROM {table[0]} WHERE id = ?", (item_id,)  # nosec B608
+        ).fetchone() if conn else None
+    return row["owner_user_id"] if row else None
+
+
 def info(kind: str, item_id: str) -> ItemInfo | None:
     reader = _READERS.get(kind)
     if reader is None:

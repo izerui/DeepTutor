@@ -24,7 +24,7 @@ META = dict(title="Arithmetic", summary="Add.", stages=["primary"], subjects=["p
 
 @pytest.fixture(autouse=True)
 def _retired_and_offline(monkeypatch, teaching_users):
-    from deeptutor.catalog import retire_classes
+    from deeptutor.catalog import migration, retire_classes
 
     async def ungraded(pending):
         return {}
@@ -34,6 +34,7 @@ def _retired_and_offline(monkeypatch, teaching_users):
 
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
     monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
+    migration.run()
     retire_classes.run()
 
 

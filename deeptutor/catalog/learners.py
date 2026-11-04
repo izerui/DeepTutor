@@ -14,14 +14,11 @@ from deeptutor.publishing import scope as scopes
 
 
 def _owner(kind: str, item_id: str) -> str | None:
-    if kind == scopes.TASK:
-        from deeptutor.tasks.store import db as task_db
-
-        with task_db.read() as conn:
-            row = conn.execute("SELECT owner_user_id FROM tasks WHERE id = ?", (item_id,)).fetchone() if conn else None
-        return row["owner_user_id"] if row else None
-    info = items.info(kind, item_id)
-    return info.owner if info else None
+    # Registries only, never a book's files (review M5).
+    try:
+        return items.owner(kind, item_id)
+    except Exception:
+        return None
 
 
 def learners_of(teacher_id: str) -> set[str]:
@@ -34,7 +31,7 @@ def where_learners_are(teacher_id: str) -> dict[str, tuple[str, str]]:
 
     with db.read() as conn:
         if conn is None:
-            return set()
+            return {}
         rows = conn.execute(
             "SELECT kind, item_id, user_id FROM enrollments WHERE left_at IS NULL"
         ).fetchall()

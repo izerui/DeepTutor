@@ -117,6 +117,7 @@ class ClassService:
     # ── classes ───────────────────────────────────────────────
 
     def create(self, name: str) -> dict[str, Any]:
+        _require_classes_in_use()
         self._require_teacher_or_admin()
         name = _clean_name(name)
         class_id = f"cls_{uuid.uuid4().hex}"
@@ -305,6 +306,7 @@ class ClassService:
     # ── teachers ──────────────────────────────────────────────
 
     def add_teacher(self, class_id: str, user_id: str) -> dict[str, Any]:
+        _require_classes_in_use()
         account = _accounts().get(user_id)
         if account is None or account["role"] != "teacher" or account["disabled"]:
             raise ClassError("Only an active teacher account can teach a class.")
@@ -345,6 +347,7 @@ class ClassService:
 
     def add_students(self, class_id: str, student_ids: list[str]) -> dict[str, Any]:
         """Administrators place students directly (spec §5, way 3)."""
+        _require_classes_in_use()
         if not self._is_admin():
             raise ClassForbidden("Only administrators add students directly; teachers send invitations.")
         accounts = _accounts()
@@ -420,6 +423,7 @@ class ClassService:
         ][:50]
 
     def invite(self, class_id: str, student_id: str) -> dict[str, Any]:
+        _require_classes_in_use()
         accounts = _accounts()
         self._require_student(accounts, student_id)
         with store.write() as conn:
@@ -489,6 +493,8 @@ class ClassService:
         ]
 
     def respond(self, invitation_id: str, *, accept: bool) -> None:
+        if accept:
+            _require_classes_in_use()
         with store.write() as conn:
             row = conn.execute(
                 "SELECT class_id, student_id FROM class_invitations WHERE id = ? AND status = 'pending'",
@@ -525,6 +531,7 @@ class ClassService:
 
     def regenerate_link(self, class_id: str, *, expires_in_days: int | None = None) -> dict[str, Any]:
         """Issue a new link; the previous one stops working at once (spec §5)."""
+        _require_classes_in_use()
         if expires_in_days is not None and not 1 <= int(expires_in_days) <= INVITE_TTL_MAX_DAYS:
             raise ClassError(f"Expiry must be between 1 and {INVITE_TTL_MAX_DAYS} days.")
         now = _now()
@@ -547,6 +554,7 @@ class ClassService:
             conn.execute("DELETE FROM class_invite_links WHERE class_id = ?", (class_id,))
 
     def join_by_link(self, token: str) -> dict[str, Any]:
+        _require_classes_in_use()
         if _role(self.actor) != "student" or self.actor.is_admin:
             raise ClassForbidden("Only student accounts join a class with an invite link.")
         with store.write() as conn:
@@ -616,6 +624,14 @@ def _live_link(conn, token: str):
     if row["expires_at"] is not None and row["expires_at"] < _now():
         raise ClassNotFound("This invite link has expired.")
     return row
+
+
+def _require_classes_in_use() -> None:
+    """Platform batch 2 §2.3 (review M1): once retired, nobody makes or joins a class."""
+    from deeptutor.publishing.scope import classes_retired
+
+    if classes_retired():
+        raise ClassForbidden("Classes are no longer used. People join from the learning market.")
 
 
 def teacher_student_ids(teacher_id: str) -> set[str]:

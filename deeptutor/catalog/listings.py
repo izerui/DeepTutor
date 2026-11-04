@@ -274,9 +274,10 @@ class ListingService:
         info = self._own_item(kind, item_id)
         if info.not_ready:
             raise ListingError(info.not_ready)
-        admin = self._role() == "admin"
         with db.read() as conn:
             row = _row(conn, kind, item_id) if conn else None
+        # Taken down by an administrator: reviewed again, even when its author is one (review M4).
+        admin = self._role() == "admin" and not (row is not None and _col(row, "blocked", 0))
         if row is None:
             raise ListingError("Fill in the listing first.")
         if row["status"] not in ("draft", "rejected", "taken_down"):
@@ -336,7 +337,7 @@ class ListingService:
         return self.get(kind, item_id)
 
     def _move(self, kind: str, item_id: str, sources: tuple[str, ...], target: str, action: str,
-              *, reason: str = "") -> Any:
+              *, reason: str = "", block: bool = False) -> Any:
         now = time.time()
         with db.write() as conn:
             row = _row(conn, kind, item_id)
@@ -350,6 +351,9 @@ class ListingService:
                 f"UPDATE listings SET status = ?, reason = ?, updated_at = ?{extra} WHERE kind = ? AND item_id = ?",  # nosec B608
                 (*params, kind, item_id),
             )
+            if block:
+                # In the same write as the state (review M4): never "taken down" yet still open.
+                conn.execute("UPDATE listings SET blocked = 1 WHERE kind = ? AND item_id = ?", (kind, item_id))
             _event(conn, kind, item_id, self.actor.id, action, reason)
             return _row(conn, kind, item_id)
 
@@ -421,9 +425,7 @@ class ListingService:
         """Out of the market and out of reach of everyone who joined; their records stay."""
         self._require_admin()
         reason = _reason(reason)
-        row = self._move(kind, item_id, ("listed", "unlisted"), "taken_down", "taken_down", reason=reason)
-        with db.write() as conn:
-            conn.execute("UPDATE listings SET blocked = 1 WHERE kind = ? AND item_id = ?", (kind, item_id))
+        row = self._move(kind, item_id, ("listed", "unlisted"), "taken_down", "taken_down", reason=reason, block=True)
         _after_access_change(kind, item_id)
         if kind == scopes.MASTERY_PATH:
             from deeptutor.teaching.instances import notify_instance_closed

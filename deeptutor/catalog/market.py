@@ -218,7 +218,9 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
         "mine": mine,
         "closed": info.closed,
         "can_join": row["status"] == "listed" and not mine and not info.closed,
-        "preview": items.preview(kind, item_id),
+        # A taken-down item shows its contents to its author and administrators only (review L1).
+        "preview": items.preview(kind, item_id) if not (row["blocked"] if "blocked" in row.keys() else 0)
+        or mine or _role(viewer) == "admin" else {},
         "study": _study_target(kind, item_id),
     }
 
@@ -229,7 +231,8 @@ def author_page(viewer: CurrentUser, author_id: str) -> dict[str, Any]:
     accounts = _accounts()
     entries = [e for e in _entries(accounts) if e["owner_id"] == author_id]
     name = author_name(author_id, accounts)
-    if not entries and not name:
+    if not entries:
+        # Review L1: an author page exists for people with something in the market only.
         raise ListingNotFound("Not found.")
     joined = enrollment.joined_by(viewer.id)
     entries.sort(key=lambda e: -(e["listed_at"] or 0))

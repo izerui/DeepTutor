@@ -82,8 +82,10 @@ def merge(from_tag: str, to_tag: str) -> dict[str, Any]:
             "ON CONFLICT(from_key) DO UPDATE SET to_tag = excluded.to_tag, created_at = excluded.created_at",
             (key, source, target, now),
         )
-        # Earlier merges into the source now lead to the target.
-        conn.execute("UPDATE tag_aliases SET to_tag = ? WHERE lower(to_tag) = ? AND from_key != ?", (target, key, key))
+        # Earlier merges into the source now lead to the target (compared case-folded, not SQL lower()).
+        for alias in conn.execute("SELECT from_key, to_tag FROM tag_aliases WHERE from_key != ?", (key,)).fetchall():
+            if alias["to_tag"].casefold() == key:
+                conn.execute("UPDATE tag_aliases SET to_tag = ? WHERE from_key = ?", (target, alias["from_key"]))
         for row in conn.execute("SELECT kind, item_id, tags_json FROM listings").fetchall():
             tags = json.loads(row["tags_json"] or "[]")
             if not any(t.casefold() == key for t in tags):

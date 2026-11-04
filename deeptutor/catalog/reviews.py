@@ -77,12 +77,14 @@ class ReviewService:
         return info
 
     def _view(self, row, owner: str) -> dict[str, Any]:
+        from deeptutor.multi_user.ownership import owns
+
         mine = row["user_id"] == self.actor.id
         return {
             "user_id": row["user_id"], "author": author_name(row["user_id"]), "stars": row["stars"],
             "text": row["text"], "reply": row["reply"], "reply_at": row["reply_at"],
             "created_at": row["created_at"], "updated_at": row["updated_at"],
-            "mine": mine, "can_reply": owner == self.actor.id,
+            "mine": mine, "can_reply": owns(owner, self.actor),
             "can_delete": mine or self._role() == "admin",
         }
 
@@ -91,6 +93,9 @@ class ReviewService:
         from deeptutor.multi_user.ownership import owns
 
         info = self._item(kind, item_id)
+        joined = (kind, item_id) in joined_by(self.actor.id)
+        if status(kind, item_id) != "listed" and not (joined or owns(info.owner, self.actor) or self._role() == "admin"):
+            raise ListingNotFound("Not found.")  # review L1: nothing about items one cannot see
         with db.read() as conn:
             rows = conn.execute(
                 "SELECT * FROM reviews WHERE kind = ? AND item_id = ? ORDER BY updated_at DESC",
@@ -98,7 +103,6 @@ class ReviewService:
             ).fetchall() if conn else []
         average = round(sum(r["stars"] for r in rows) / len(rows), 2) if rows else None
         start = (max(1, page) - 1) * PAGE
-        joined = (kind, item_id) in joined_by(self.actor.id)
         return {
             "average": average,
             "count": len(rows),

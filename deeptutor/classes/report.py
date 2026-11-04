@@ -194,6 +194,11 @@ class ReportService:
         # students' learning data (D2).
         if self.actor.is_admin or _role(self.actor) != "teacher":
             raise ClassForbidden("Only a class's teachers see its learning reports.")
+        from deeptutor.publishing.scope import classes_retired
+
+        if classes_retired():
+            # Review M1: class reports go with the classes; courses and paths have their own.
+            raise ClassForbidden("Classes are no longer used. See the reports of your courses and paths.")
 
     def _class_students(self, class_id: str) -> tuple[str, list[str]]:
         with store.read() as conn:

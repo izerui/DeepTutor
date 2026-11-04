@@ -39,6 +39,17 @@ def done() -> bool:
 
 
 def _backup() -> None:
+    """Once: a later retry after a failure does not copy everything again (review M6)."""
+    marker = "backup:before-market"
+    with db.read() as conn:
+        if conn is not None and conn.execute("SELECT 1 FROM catalog_meta WHERE key = ?", (marker,)).fetchone():
+            return
+    _copy_stores()
+    with db.write() as conn:
+        conn.execute("INSERT OR IGNORE INTO catalog_meta (key, value) VALUES (?, ?)", (marker, str(time.time())))
+
+
+def _copy_stores() -> None:
     from deeptutor.publishing import store as scope_store
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -209,10 +220,12 @@ def _migrate_one(kind: str, item_id: str, accounts: dict[str, dict[str, Any]]) -
             "INSERT INTO listing_events (kind, item_id, actor_id, action, reason, at) VALUES (?, ?, '', 'migrated', '', ?)",
             (kind, item_id, now),
         )
-    _drop_everyone(kind, item_id, info.owner)
     if kind == scopes.COURSE:
+        # Its tasks first: if this stops halfway, the course still counts next time (review L2).
         for task in items.course_tasks(item_id):
             _drop_everyone(scopes.TASK, task["id"], info.owner)
+    _drop_everyone(kind, item_id, info.owner)
+    if kind == scopes.COURSE:
         enrollment.refresh_course(item_id)
     elif kind == scopes.MASTERY_PATH:
         enrollment.reconcile_path(item_id)

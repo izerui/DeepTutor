@@ -57,7 +57,8 @@ class LearnerReportService(ReportService):
     def _task_progress(task_ids: list[str], learners: list[str]) -> dict[str, dict[str, int]]:
         from deeptutor.tasks.store import db as task_db
 
-        out = {u: {"done": 0, "total": len(task_ids), "to_grade": 0, "returned": 0, "graded": 0} for u in learners}
+        out = {u: {"done": 0, "total": len(task_ids), "to_grade": 0, "returned": 0, "graded": 0, "last": None}
+               for u in learners}
         if not task_ids or not learners:
             return out
         task_marks = ",".join("?" for _ in task_ids)
@@ -66,11 +67,12 @@ class LearnerReportService(ReportService):
             if conn is None:
                 return out
             for row in conn.execute(
-                f"SELECT student_id, COUNT(*) FROM task_completions WHERE task_key IN ({task_marks}) "  # nosec B608
+                f"SELECT student_id, COUNT(*), MAX(completed_at) FROM task_completions WHERE task_key IN ({task_marks}) "  # nosec B608
                 f"AND student_id IN ({user_marks}) GROUP BY student_id",
                 (*task_ids, *learners),
             ):
                 out[row[0]]["done"] = int(row[1])
+                out[row[0]]["last"] = row[2]
             for row in conn.execute(
                 f"SELECT student_id, status, COUNT(*) FROM task_submissions WHERE task_id IN ({task_marks}) "  # nosec B608
                 f"AND student_id IN ({user_marks}) GROUP BY student_id, status",
@@ -97,13 +99,19 @@ class LearnerReportService(ReportService):
         rows = []
         for user_id in learners:
             report = self._student_report(user_id, paths, detail=False, days=days)
+            mine_sets = [p for p in practice.get(user_id, []) if p["set_id"] in sets]
+            tasks = progress.get(user_id) if kind == scopes.COURSE else None
+            # Only what happened on this item: a learner's own study elsewhere stays theirs
+            # (review: joining must not show the author one's whole learning record).
+            stamps = [p["last_activity"] for p in report["teacher_paths"]] + \
+                [s["last_submitted_at"] for s in mine_sets] + [(tasks or {}).get("last")]
             rows.append({
                 "id": user_id,
                 "username": (accounts.get(user_id) or {}).get("username") or user_id,
-                "overall": report["overall"],
+                "overall": {"last_activity": max((s for s in stamps if s), default=None)},
                 "paths": report["teacher_paths"],
-                "practice_sets": [p for p in practice.get(user_id, []) if p["set_id"] in sets],
-                "tasks": progress.get(user_id) if kind == scopes.COURSE else None,
+                "practice_sets": mine_sets,
+                "tasks": tasks,
                 "flags": flags.get(user_id, []),
             })
         return {
@@ -143,7 +151,7 @@ class LearnerReportService(ReportService):
         out = io.StringIO()
         writer = csv.writer(out)
         writer.writerow([
-            "learner", "study_minutes", "answers", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
+            "learner", "last_activity", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
             "homework_to_grade", "practice_sets_done", "practice_score_ratio", "attention",
         ])
         for row in report["learners"]:
@@ -154,8 +162,9 @@ class LearnerReportService(ReportService):
             maximum = sum(s["best_max_score"] or 0 for s in sets)
             ratio = sum(s["best_score"] or 0 for s in sets) / maximum if sets and maximum else None
             tasks = row["tasks"] or {}
+            last = overall.get("last_activity")
             writer.writerow([
-                row["username"], overall["period_minutes"], overall["period_answers"], kp_mastered, kp_total,
+                row["username"], _when(last), kp_mastered, kp_total,
                 tasks.get("done", ""), tasks.get("total", ""), tasks.get("to_grade", ""), len(sets),
                 f"{ratio:.2f}" if ratio is not None else "", "; ".join(flag["kind"] for flag in row["flags"]),
             ])
@@ -176,6 +185,17 @@ class LearnerReportService(ReportService):
             "practice_sets": [p for p in self._my_practice_results([user_id]).get(user_id, []) if p["set_id"] in sets],
             "tasks": self._task_progress(task_ids, [user_id])[user_id] if kind == scopes.COURSE else None,
         }
+
+
+def _when(stamp: Any) -> str:
+    import time
+
+    if not stamp:
+        return ""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(stamp)))
+    except (TypeError, ValueError):
+        return str(stamp)
 
 
 __all__ = ["KINDS", "LearnerReportService"]

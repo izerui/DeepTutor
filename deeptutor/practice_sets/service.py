@@ -532,9 +532,11 @@ class PracticeSetService:
             if row["current_revision"] > 0:
                 raise PracticeConflict("Published practice sets cannot be deleted; archive them instead.")
             conn.execute("DELETE FROM practice_sets WHERE id = ?", (set_id,))
+        from deeptutor.catalog.listings import forget as forget_listing
         from deeptutor.publishing.scope import PRACTICE_SET, forget
 
         forget(PRACTICE_SET, set_id)
+        forget_listing(PRACTICE_SET, set_id)  # review L6: no draft listing left behind
 
     async def from_bank(self, entry_ids: list[int]) -> list[dict[str, Any]]:
         """Questions from the author's own bank: question, answer and explanation only (§8.2)."""
@@ -597,7 +599,16 @@ class PracticeSetService:
         """Published sets whose scope reaches the student, with their own progress."""
         from deeptutor.publishing.scope import PRACTICE_SET, managed_items
 
-        ids = [i for i in managed_items(PRACTICE_SET) if self._reaches_me(i)]
+        from deeptutor.publishing.scope import classes_retired
+
+        if classes_retired():
+            # Only what one joined can reach one now (review M5): no walk over every set.
+            from deeptutor.catalog.enrollment import joined_by
+
+            candidates = [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
+        else:
+            candidates = managed_items(PRACTICE_SET)
+        ids = [i for i in candidates if self._reaches_me(i)]
         if not ids:
             return []
         marks = ",".join("?" for _ in ids)

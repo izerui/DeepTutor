@@ -29,8 +29,9 @@ def _offline(monkeypatch):
 
 
 def _retire():
-    from deeptutor.catalog import retire_classes
+    from deeptutor.catalog import migration, retire_classes
 
+    migration.run()  # "everyone" goes to the market first (review H2)
     assert retire_classes.run() is True
     assert retire_classes.retired()
 
@@ -91,11 +92,10 @@ def test_class_receivers_become_members_and_classes_stop_counting(
     with as_account("adam"):
         ClassService().remove_student(_class_id(as_account), teaching_users["sara"]["id"])
     assert set(_assigned_sets(as_account, "sara")) == {set_id}
-    nina = _new_student(seed_user, as_user, as_account)
-    with as_user(nina["id"], role="student", username="nina"):
-        from deeptutor.practice_sets.service import PracticeSetService
+    from deeptutor.classes.service import ClassForbidden
 
-        assert PracticeSetService().assigned() == []
+    with pytest.raises(ClassForbidden):
+        _new_student(seed_user, as_user, as_account)  # nobody joins a class any more (review M1)
 
 
 def test_books_reach_class_teachers_too_and_student_shares_stay(as_account, teaching_users, tmp_path):
@@ -193,6 +193,9 @@ def test_a_failed_run_leaves_classes_working(as_account, monkeypatch):
     def broken(accounts):
         raise RuntimeError("disk full")
 
+    from deeptutor.catalog import migration
+
+    migration.run()
     monkeypatch.setattr(retire_classes, "_keep_policies", broken)
     with pytest.raises(RuntimeError):
         retire_classes.run()

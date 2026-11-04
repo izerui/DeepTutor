@@ -61,6 +61,27 @@ def access_state(kind: str, item_id: str) -> tuple[bool, list[str]]:
         return False, sorted(r[0] for r in conn.execute(_MEMBERS_SQL, (kind, item_id)))
 
 
+def access_states(kind: str) -> dict[str, tuple[bool, set[str]]]:
+    """``access_state`` for every item of a kind at once: item -> (taken down, members) (review M5)."""
+    with db.read() as conn:
+        if conn is None:
+            return {}
+        blocked = {
+            r[0] for r in conn.execute("SELECT item_id FROM listings WHERE kind = ? AND blocked = 1", (kind,))
+        }
+        rows = conn.execute(
+            "SELECT DISTINCT e.item_id, e.user_id FROM enrollments e WHERE e.kind = ? AND e.left_at IS NULL "
+            "AND NOT (e.via LIKE 'course:%' AND EXISTS (SELECT 1 FROM listings l WHERE l.kind = 'course' "
+            "AND l.item_id = substr(e.via, 8) AND l.blocked = 1))",
+            (kind,),
+        ).fetchall()
+    out: dict[str, tuple[bool, set[str]]] = {item: (True, set()) for item in blocked}
+    for item_id, user_id in rows:
+        if item_id not in blocked:
+            out.setdefault(item_id, (False, set()))[1].add(user_id)
+    return out
+
+
 def members(kind: str, item_id: str) -> set[str]:
     return set(access_state(kind, item_id)[1])
 
@@ -78,6 +99,10 @@ def joined_counts(keys: list[tuple[str, str]] | None = None) -> dict[tuple[str, 
             "SELECT kind, item_id, COUNT(DISTINCT user_id) FROM enrollments "
             "WHERE left_at IS NULL AND via IN (?, ?) GROUP BY kind, item_id",
             DIRECT,
+        ).fetchall() if keys is None or len(keys) > 1 else conn.execute(
+            "SELECT kind, item_id, COUNT(DISTINCT user_id) FROM enrollments "
+            "WHERE kind = ? AND item_id = ? AND left_at IS NULL AND via IN (?, ?) GROUP BY kind, item_id",
+            (*keys[0], *DIRECT),
         ).fetchall()
     counts = {(r[0], r[1]): int(r[2]) for r in rows}
     if keys is None:
@@ -162,14 +187,22 @@ def reconcile_path(template_id: str) -> None:
 
 def _course_targets(course_id: str) -> set[tuple[str, str]]:
     """The course's tasks and the content they cite."""
-    from deeptutor.catalog.items import course_tasks
+    from deeptutor.catalog import items
+    from deeptutor.catalog.listings import status
 
     kinds = {"mastery_path": scopes.MASTERY_PATH, "practice_set": scopes.PRACTICE_SET, "book": scopes.BOOK}
+    author = items.owner(scopes.COURSE, course_id)
     targets: set[tuple[str, str]] = set()
-    for task in course_tasks(course_id):
+    for task in items.course_tasks(course_id):
         targets.add((scopes.TASK, task["id"]))
-        if task["kind"] in kinds and task["target_id"]:
-            targets.add((kinds[task["kind"]], task["target_id"]))
+        if task["kind"] not in kinds or not task["target_id"]:
+            continue
+        kind = kinds[task["kind"]]
+        # A course hands out its author's own content, or what is in the market;
+        # never someone else's item they took out or only showed to a few (review H1).
+        if items.owner(kind, task["target_id"]) != author and status(kind, task["target_id"]) != "listed":
+            continue
+        targets.add((kind, task["target_id"]))
     return targets
 
 

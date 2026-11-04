@@ -89,7 +89,8 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   const { t } = useTranslation();
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
-  const [days, setDays] = useState<number | null>(7);
+  // The report covers this item only, all of its time (a learner's study elsewhere stays theirs).
+  const days: number | null = null;
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -137,15 +138,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
 
       <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
         <label className="flex items-center gap-1.5">
-          {t("Period")}
-          <select aria-label={t("Period")} className={selectClass} value={days ?? ""}
-            onChange={(e) => setDays(e.target.value ? Number(e.target.value) : null)}>
-            <option value="7">{t("Last 7 days")}</option>
-            <option value="30">{t("Last 30 days")}</option>
-            <option value="">{t("All time")}</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
           <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
           {t("Only learners who need attention")}
         </label>
@@ -163,8 +155,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                 <th className={cell}>{t("Learner")}</th>
                 <th className={cell}>{t("Needs attention")}</th>
                 <th className={cell}>{t("Last studied")}</th>
-                <th className={cell}>{t("Study time in period")}</th>
-                <th className={cell}>{t("Answers in period")}</th>
                 {isCourse && <th className={cell}>{t("Tasks done")}</th>}
                 {isCourse && <th className={cell}>{t("Homework: to grade · returned · graded")}</th>}
                 <th className={cell}>{t("Mastered points")}</th>
@@ -192,8 +182,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                       </ul>
                     </td>
                     <td className={cell}>{when(row.overall.last_activity, t("Never"))}</td>
-                    <td className={cell}>{t("{{minutes}} min", { minutes: row.overall.period_minutes ?? 0 })}</td>
-                    <td className={cell}>{row.overall.period_answers ?? 0}</td>
                     {isCourse && (
                       <td className={cell}>{row.tasks ? `${row.tasks.done} / ${row.tasks.total}` : "—"}</td>
                     )}

@@ -474,9 +474,21 @@ def reconcile_student(student_id: str) -> None:
     assigned = {
         a.template_id for a in teaching.assignments_for_student(student_id) if a.status == "active"
     }
+    try:
+        from deeptutor.catalog.enrollment import access_states
+
+        states = access_states(MASTERY_PATH)  # one read for every path (review M5)
+    except Exception:
+        logger.exception("Could not read the market members of the paths")
+        return
     for template_id in templates:
         template = teaching.get_template(template_id)
-        scope = get_scope(MASTERY_PATH, template_id)
+        blocked, joined = states.get(template_id, (False, set()))
+        scope = None if blocked else _stored_scope(MASTERY_PATH, template_id)
+        if scope is not None:
+            scope.members = sorted(joined)
+        elif blocked:
+            scope = Scope()
         if template is None or scope is None or template.status != "published":
             continue
         wanted = student_id != template.owner_user_id and (

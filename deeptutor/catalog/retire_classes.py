@@ -70,16 +70,10 @@ def _scoped_items() -> list[tuple[str, str]]:
 
 
 def _owner(kind: str, item_id: str) -> str | None:
-    if kind == scopes.TASK:
-        from deeptutor.tasks.store import db as task_db
-
-        with task_db.read() as conn:
-            row = conn.execute("SELECT owner_user_id FROM tasks WHERE id = ?", (item_id,)).fetchone() if conn else None
-        return row["owner_user_id"] if row else None
+    """``None`` only when the item is gone; an unreadable store raises and stops the run (review H3)."""
     from deeptutor.catalog import items
 
-    info = items.info(kind, item_id)
-    return info.owner if info else None
+    return items.owner(kind, item_id)
 
 
 def _student_owned_share(kind: str, owner: str, accounts: dict[str, dict[str, Any]]) -> bool:
@@ -175,6 +169,17 @@ def _keep_policies(accounts: dict[str, dict[str, Any]]) -> int:
 
 
 def _backup() -> None:
+    """Once: a later retry after a failure does not copy everything again (review M6)."""
+    marker = "backup:before-classes-retired"
+    with db.read() as conn:
+        if conn is not None and conn.execute("SELECT 1 FROM catalog_meta WHERE key = ?", (marker,)).fetchone():
+            return
+    _copy_stores()
+    with db.write() as conn:
+        conn.execute("INSERT OR IGNORE INTO catalog_meta (key, value) VALUES (?, ?)", (marker, str(time.time())))
+
+
+def _copy_stores() -> None:
     from deeptutor.multi_user import grants as grant_store
     from deeptutor.publishing import store as scope_store
 
@@ -190,6 +195,12 @@ def _backup() -> None:
 def run() -> bool:
     """Retire classes; ``True`` when this call did it."""
     if retired():
+        return False
+    from deeptutor.catalog import migration
+
+    if not migration.done():
+        # Review H2: "everyone" goes to the market first; never turn it into everyone joined.
+        logger.warning("Classes stay until content published to everyone is in the market")
         return False
     accounts = _accounts()
     _backup()

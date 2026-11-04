@@ -152,6 +152,16 @@ class CourseService:
 
             if not scopes.join_only_scope(scopes._stored_scope(scopes.COURSE, course_id)):
                 self._check_coverage(course_id, added)
+            from deeptutor.catalog.items import _course_foreign_books
+
+            refused = _course_foreign_books(course_id, row["owner_user_id"])
+            if refused:
+                # Review H1: someone else's book out of the market is not handed to a course's learners.
+                with db.write() as conn:
+                    conn.executemany(
+                        "DELETE FROM course_items WHERE course_id = ? AND task_id = ?", [(course_id, t) for t in added]
+                    )
+                raise TaskError(refused)
             self._publish_drafts(course_id)
             # Its members get the new tasks and what they cite (platform batch 1 §4.3).
             refresh_course(course_id)
@@ -311,9 +321,11 @@ class CourseService:
             if row["status"] != "draft":
                 raise TaskConflict("Published courses cannot be deleted; withdraw them instead.")
             conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+        from deeptutor.catalog.listings import forget as forget_listing
         from deeptutor.publishing.scope import COURSE, forget
 
         forget(COURSE, course_id)
+        forget_listing(COURSE, course_id)  # review L6
 
 
 # ── the student's side ─────────────────────────────────────
@@ -341,6 +353,12 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             )]
             for r in rows
         }
+    if scopes.classes_retired():
+        # Only courses one joined can reach one now (review M5).
+        from deeptutor.catalog.enrollment import joined_by
+
+        joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE}
+        rows = [r for r in rows if r["id"] in joined]
     classes = scopes.member_class_ids(actor.id) if student else set()
     # Students, and anyone who joined (platform batch 2 §6).
     reached = [

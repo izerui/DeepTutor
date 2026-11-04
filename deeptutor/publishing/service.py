@@ -127,8 +127,13 @@ class PublishService:
         return {row["id"]: row["name"] for row in rows}
 
     def _current(self, kind: str, item_id: str, info: dict[str, Any]) -> Scope:
-        stored = scopes.get_scope(kind, item_id)
+        # What is stored, with its members — never the empty scope a taken-down item
+        # reads as, which saving would write back over the stored one (review M3).
+        stored = scopes._stored_scope(kind, item_id)
         if stored is not None:
+            from deeptutor.catalog.enrollment import members
+
+            stored.members = sorted(members(kind, item_id))
             return stored
         if kind == MASTERY_PATH:
             return scopes._template_scope(item_id)
@@ -192,6 +197,9 @@ class PublishService:
             [c for c in classes if c not in current.classes] or [g for g in groups if g not in current.groups]
         ):
             raise ScopeError("Classes are no longer used. People join from the learning market.")
+        if scopes.classes_retired() and everyone and not current.everyone:
+            # Review M2: reaching everyone goes through the market and its review.
+            raise ScopeError("To reach everyone, put it in the learning market.")
         added_groups = [g for g in groups if g not in current.groups]
         if added_groups:
             # Spec 2026-11-03 §0: only administrators publish to departments and grades.
@@ -236,6 +244,10 @@ class PublishService:
         info = self._item(kind, item_id)
         if kind == MASTERY_PATH and not info["public"]:
             raise ScopeError("Publish this path before choosing who receives it.")
+        from deeptutor.catalog.enrollment import access_state
+
+        if access_state(kind, item_id)[0]:
+            raise ScopeError("An administrator took this down; it reaches nobody until approved again.")
         current = self._current(kind, item_id, info)
         new = self._validated(kind, everyone, users, classes, current, groups=groups)
         new.members = list(current.members)  # people who joined stay whatever the publisher picks

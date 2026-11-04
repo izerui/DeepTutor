@@ -58,7 +58,10 @@ class AnnouncementService:
         return owns(info.owner, self.actor) and self._role() in ("teacher", "admin")
 
     def _view(self, row, info: items.ItemInfo | None = None) -> dict[str, Any]:
-        mine = row["author_id"] == self.actor.id
+        from deeptutor.multi_user.ownership import owns
+
+        # Its writer, or whoever owns the item now (a handed-over course keeps its announcements editable).
+        mine = row["author_id"] == self.actor.id or (info is not None and owns(info.owner, self.actor))
         return {
             "id": row["id"], "kind": row["kind"], "item_id": row["item_id"],
             "item_title": info.title if info else "",
@@ -103,6 +106,14 @@ class AnnouncementService:
             ).fetchall() if conn else []
         return [self._view(row, info) for row in rows]
 
+    def _may_edit(self, row) -> bool:
+        if row["author_id"] == self.actor.id:
+            return True
+        from deeptutor.multi_user.ownership import owns
+
+        info = items.info(row["kind"], row["item_id"])
+        return info is not None and owns(info.owner, self.actor)
+
     def _own(self, conn, announcement_id: str):
         row = conn.execute("SELECT * FROM content_announcements WHERE id = ?", (announcement_id,)).fetchone()
         if row is None:
@@ -112,7 +123,7 @@ class AnnouncementService:
     def update(self, announcement_id: str, *, text: str | None = None, pinned: bool | None = None) -> dict[str, Any]:
         with db.write() as conn:
             row = self._own(conn, announcement_id)
-            if row["author_id"] != self.actor.id:
+            if not self._may_edit(row):
                 raise ListingForbidden("Only its author edits an announcement.")
             conn.execute(
                 "UPDATE content_announcements SET text = ?, pinned = ?, updated_at = ? WHERE id = ?",
@@ -125,7 +136,7 @@ class AnnouncementService:
     def delete(self, announcement_id: str) -> None:
         with db.write() as conn:
             row = self._own(conn, announcement_id)
-            if row["author_id"] != self.actor.id and self._role() != "admin":
+            if not self._may_edit(row) and self._role() != "admin":
                 raise ListingForbidden("Only its author or an administrator deletes an announcement.")
             conn.execute("DELETE FROM content_announcements WHERE id = ?", (announcement_id,))
 
@@ -134,9 +145,12 @@ class AnnouncementService:
         joined = [key for key in enrollment.joined_by(self.actor.id) if key[0] in KINDS]
         if not joined:
             return []
+        # Only the announcements of what one joined, newest first (review M5).
+        clause = " OR ".join("(kind = ? AND item_id = ?)" for _ in joined[:200])
         with db.read() as conn:
             rows = conn.execute(
-                "SELECT * FROM content_announcements ORDER BY created_at DESC"
+                f"SELECT * FROM content_announcements WHERE {clause} ORDER BY created_at DESC LIMIT 50",  # nosec B608
+                [value for key in joined[:200] for value in key],
             ).fetchall() if conn else []
         wanted = set(joined)
         out = []
