@@ -172,6 +172,9 @@ def _practice_set(item_id: str) -> ItemInfo | None:
         not_ready = "The practice set is archived."
     elif row["status"] != "published" or row["current_revision"] < 1:
         not_ready = "Publish the practice set first."
+    elif row["due_at"] is not None:
+        # Direction §11.4: the market is self-paced; deadlines belong to course tasks.
+        not_ready = "Remove the deadline first: practice in the market has none. Set deadlines on course tasks."
     return ItemInfo(
         scopes.PRACTICE_SET, item_id, row["owner_user_id"], row["title"], row["description"],
         closed=row["status"] == "archived", not_ready=not_ready,

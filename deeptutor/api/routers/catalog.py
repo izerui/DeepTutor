@@ -204,12 +204,15 @@ class NodeUpdate(BaseModel):
     name_zh: str | None = Field(default=None, max_length=100)
     name_en: str | None = Field(default=None, max_length=100)
     hidden: bool | None = None
+    #: The other interface languages: de, fr, pl, uk.
+    names: dict[str, str] | None = None
 
 
 class NodeCreate(BaseModel):
     parent: str = Field(default="", max_length=200)
     name_zh: str = Field(default="", max_length=100)
     name_en: str = Field(default="", max_length=100)
+    names: dict[str, str] | None = None
 
 
 class NodeMove(BaseModel):
@@ -250,14 +253,15 @@ async def admin_taxonomy() -> dict[str, Any]:
 async def update_node(node_id: str, body: NodeUpdate) -> dict[str, Any]:
     from deeptutor.catalog.taxonomy import update_node as update
 
-    return await _admin(update, node_id, name_zh=body.name_zh, name_en=body.name_en, hidden=body.hidden)
+    return await _admin(update, node_id, name_zh=body.name_zh, name_en=body.name_en, hidden=body.hidden,
+                        names=body.names)
 
 
 @router.post("/admin/taxonomy/nodes")
 async def add_node(body: NodeCreate) -> dict[str, Any]:
     from deeptutor.catalog.taxonomy import add_node as add
 
-    return await _admin(add, body.parent, body.name_zh, body.name_en)
+    return await _admin(add, body.parent, body.name_zh, body.name_en, body.names)
 
 
 @router.post("/admin/taxonomy/nodes/{node_id}/move")

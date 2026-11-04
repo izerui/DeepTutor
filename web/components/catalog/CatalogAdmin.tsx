@@ -18,6 +18,7 @@ import {
   type AdminTags,
   type AdminTaxonomy,
   type AdminTaxonomyNode,
+  type OtherNames,
 } from "@/lib/catalog-api";
 
 import { AdminNav } from "./AdminNav";
@@ -29,6 +30,47 @@ const NAME_MAX = 40;
 const small = "rounded-lg border border-[var(--border)] px-2 py-1 text-[12px] hover:bg-[var(--muted)] disabled:opacity-40";
 
 type Run = (work: () => Promise<AdminTaxonomy>) => Promise<boolean>;
+
+/** The names besides Chinese and English, each in its own language. */
+const OTHER_LANGUAGES = [
+  { code: "de", label: "Deutsch" },
+  { code: "fr", label: "Français" },
+  { code: "pl", label: "Polski" },
+  { code: "uk", label: "Українська" },
+] as const;
+type OtherCode = (typeof OTHER_LANGUAGES)[number]["code"];
+
+const othersOf = (names: Partial<Record<OtherCode, string>>): Record<OtherCode, string> => ({
+  de: names.de ?? "", fr: names.fr ?? "", pl: names.pl ?? "", uk: names.uk ?? "",
+});
+const trimmed = (others: Record<OtherCode, string>): OtherNames => ({
+  de: others.de.trim(), fr: others.fr.trim(), pl: others.pl.trim(), uk: others.uk.trim(),
+});
+const sameOthers = (a: Record<OtherCode, string>, b: Record<OtherCode, string>) =>
+  OTHER_LANGUAGES.every(({ code }) => a[code].trim() === b[code].trim());
+
+/** "Other languages": Deutsch, Français, Polski, Українська inputs. */
+function OtherNameInputs({
+  value,
+  onChange,
+  labelOf,
+}: {
+  value: Record<OtherCode, string>;
+  onChange: (next: Record<OtherCode, string>) => void;
+  labelOf: (language: string) => string;
+}) {
+  return (
+    <div className="flex basis-full flex-wrap items-center gap-2">
+      {OTHER_LANGUAGES.map(({ code, label }) => (
+        <label key={code} className="inline-flex items-center gap-1 text-[11.5px] text-[var(--muted-foreground)]">
+          {label}
+          <input className={`${inputClass} w-36`} value={value[code]} maxLength={NAME_MAX} lang={code}
+            aria-label={labelOf(label)} onChange={(e) => onChange({ ...value, [code]: e.target.value })} />
+        </label>
+      ))}
+    </div>
+  );
+}
 
 /** One entry: both names, hidden, its place among its siblings, and how many listings use it. */
 function NodeRow({
@@ -47,14 +89,18 @@ function NodeRow({
   const { t, i18n } = useTranslation();
   const [zh, setZh] = useState(node.names.zh);
   const [en, setEn] = useState(node.names.en);
+  const [others, setOthers] = useState(() => othersOf(node.names));
+  const [showOthers, setShowOthers] = useState(false);
   const [seen, setSeen] = useState(node.names);
   if (seen !== node.names) {
     setSeen(node.names);
     setZh(node.names.zh);
     setEn(node.names.en);
+    setOthers(othersOf(node.names));
   }
   const label = pickName(node.names, i18n?.language) || node.id;
-  const changed = zh.trim() !== node.names.zh || en.trim() !== node.names.en;
+  const othersChanged = !sameOthers(others, othersOf(node.names));
+  const changed = zh.trim() !== node.names.zh || en.trim() !== node.names.en || othersChanged;
   return (
     <div
       className={`flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] px-2 py-1.5 text-[12.5px] ${node.hidden ? "opacity-60" : ""}`}
@@ -66,8 +112,15 @@ function NodeRow({
       <input className={`${inputClass} w-40`} value={en} maxLength={NAME_MAX}
         aria-label={t("English name of {{name}}", { name: label })} onChange={(e) => setEn(e.target.value)} />
       <button type="button" className={small} disabled={!changed}
-        onClick={() => void run(() => updateTaxonomyNode(node.id, { name_zh: zh.trim(), name_en: en.trim() }))}>
+        onClick={() => void run(() => updateTaxonomyNode(node.id, {
+          name_zh: zh.trim(), name_en: en.trim(), ...(othersChanged ? { names: trimmed(others) } : {}),
+        }))}>
         {t("Save")}
+      </button>
+      <button type="button" className={small} aria-expanded={showOthers}
+        aria-label={t("Other languages of {{name}}", { name: label })}
+        onClick={() => setShowOthers(!showOthers)}>
+        {t("Other languages")}
       </button>
       <label className="inline-flex items-center gap-1">
         <input type="checkbox" checked={node.hidden}
@@ -97,6 +150,10 @@ function NodeRow({
       ) : (
         <span className="text-[11px] text-[var(--muted-foreground)]">{t("Built in")}</span>
       )}
+      {showOthers && (
+        <OtherNameInputs value={others} onChange={setOthers}
+          labelOf={(language) => t("{{language}} name of {{name}}", { language, name: label })} />
+      )}
     </div>
   );
 }
@@ -107,6 +164,8 @@ function AddNode({ parent, label, run, depth }: { parent: string; label: string;
   const [open, setOpen] = useState(false);
   const [zh, setZh] = useState("");
   const [en, setEn] = useState("");
+  const [others, setOthers] = useState(() => othersOf({}));
+  const [showOthers, setShowOthers] = useState(false);
   if (!open) {
     return (
       <button type="button" className="text-[12px] text-[var(--primary)] hover:underline" style={{ marginLeft: depth * 20 }}
@@ -122,10 +181,14 @@ function AddNode({ parent, label, run, depth }: { parent: string; label: string;
       aria-label={label}
       onSubmit={(e) => {
         e.preventDefault();
-        void run(() => addTaxonomyNode(parent, zh.trim(), en.trim())).then((ok) => {
+        const names = trimmed(others);
+        const anyOther = OTHER_LANGUAGES.some(({ code }) => names[code]);
+        void run(() => (anyOther ? addTaxonomyNode(parent, zh.trim(), en.trim(), names) : addTaxonomyNode(parent, zh.trim(), en.trim()))).then((ok) => {
           if (!ok) return;
           setZh("");
           setEn("");
+          setOthers(othersOf({}));
+          setShowOthers(false);
           setOpen(false);
         });
       }}
@@ -134,8 +197,15 @@ function AddNode({ parent, label, run, depth }: { parent: string; label: string;
         aria-label={t("Chinese name")} onChange={(e) => setZh(e.target.value)} />
       <input className={`${inputClass} w-40`} value={en} maxLength={NAME_MAX} placeholder={t("English name")}
         aria-label={t("English name")} onChange={(e) => setEn(e.target.value)} />
+      <button type="button" className={small} aria-expanded={showOthers} onClick={() => setShowOthers(!showOthers)}>
+        {t("Other languages")}
+      </button>
       <button type="submit" className={primaryClass} disabled={!zh.trim() && !en.trim()}>{t("Add")}</button>
       <button type="button" className={actionClass} onClick={() => setOpen(false)}>{t("Cancel")}</button>
+      {showOthers && (
+        <OtherNameInputs value={others} onChange={setOthers}
+          labelOf={(language) => t("{{language}} name", { language })} />
+      )}
     </form>
   );
 }

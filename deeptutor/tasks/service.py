@@ -777,7 +777,8 @@ class StudentTasks:
         if scopes.classes_retired():
             from deeptutor.catalog.enrollment import joined_by
 
-            wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK]
+            wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK] + \
+                scopes.named_items(scopes.TASK, self.actor.id)
         with db.read() as conn:
             if conn is None:
                 return []

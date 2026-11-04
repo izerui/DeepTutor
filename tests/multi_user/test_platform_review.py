@@ -224,4 +224,117 @@ def test_a_report_shows_only_what_happened_on_the_item(as_account, teaching_user
         join(get_current_user(), "course", course["id"])
     with as_account("tina"):
         [row] = LearnerReportService().report("course", course["id"])["learners"]
-    assert set(row["overall"]) == {"last_activity"}  # no study time, question bank or own paths
+    # No study time, question bank or own paths: only what happened on this item.
+    assert set(row["overall"]) == {"last_activity", "period_answers", "period_tasks_done"}
+
+
+# ── direction §11.4: no deadline in the market ─────────────
+
+
+def test_practice_in_the_market_has_no_deadline(as_account):
+    import time
+
+    from deeptutor.catalog.listings import ListingError
+    from deeptutor.practice_sets.service import PracticeError, PracticeSetService
+
+    set_id = _market_set(as_account)
+    with as_account("tina"):
+        PracticeSetService().update(set_id, due_at=time.time() + 86400)
+        _listings().save("practice_set", set_id, **META)
+        with pytest.raises(ListingError, match="deadline"):
+            _listings().submit("practice_set", set_id)
+        PracticeSetService().update(set_id, due_at=None)
+        _listings().submit("practice_set", set_id)
+        with pytest.raises(PracticeError, match="deadline"):
+            PracticeSetService().update(set_id, due_at=time.time() + 86400)
+
+
+def test_administrators_name_entries_in_every_language():
+    from deeptutor.catalog import taxonomy
+
+    taxonomy.add_node("primary", "书法", "Calligraphy", {"de": "Kalligrafie", "fr": "Calligraphie"})
+    entry = next(s for s in taxonomy.tree()["stages"][0]["subjects"] if s["names"]["en"] == "Calligraphy")
+    assert entry["names"]["de"] == "Kalligrafie" and "pl" not in entry["names"]
+    taxonomy.update_node("primary.math", name_en="Maths", names={"de": "Rechnen"})
+    math = next(s for s in taxonomy.tree()["stages"][0]["subjects"] if s["id"] == "primary.math")
+    assert math["names"]["en"] == "Maths" and math["names"]["de"] == "Rechnen" and "fr" not in math["names"]
+
+
+# ── the migration check (run on a copy before going live) ──
+
+
+def test_the_migration_check_finds_nothing_lost(as_account, teaching_users):
+    from deeptutor.catalog import migration_check
+    from deeptutor.classes.service import ClassService
+    from deeptutor.practice_sets.service import PracticeSetService
+    from deeptutor.publishing import scope as scopes
+
+    _market_set(as_account)  # to Tina's class
+    with as_account("tina"):
+        everyone = PracticeSetService().create("Everyone")
+        PracticeSetService().update(everyone["id"], questions=QUESTIONS)
+        with scopes.chosen_scope(scopes.Scope(everyone=True)):
+            PracticeSetService().publish(everyone["id"])
+    with as_account("adam"):
+        [row] = ClassService().list_classes()
+        ClassService().set_student_policy(row["id"], {"allow_partners": True})
+    result = migration_check.run()
+    assert result["classes_retired"] and result["problems"] == 0
+    sara = next(p for p in result["people"] if p["username"] == "sara")
+    assert sara["ok"] and sara["not_started_everyone_items"] == {"practice_set": [everyone["id"]]}
+    assert migration_check.main([]) == 2  # refuses without --on-a-copy
+
+
+# ── found in the browser check with a stand-in model ───────
+
+
+def test_a_set_sent_by_name_shows_after_retirement(as_account, teaching_users):
+    from deeptutor.practice_sets.service import PracticeSetService
+    from deeptutor.publishing import scope as scopes
+
+    _retire()
+    from deeptutor.catalog.enrollment import join
+    from deeptutor.multi_user.context import get_current_user
+
+    week = _market_set(as_account)
+    _list(as_account, "practice_set", week)
+    with as_account("sara"):
+        join(get_current_user(), "practice_set", week)  # she learns from Tina: Tina may send her a set
+    with as_account("tina"):
+        remedial = PracticeSetService().create("Remedial: Week 1")
+        PracticeSetService().update(remedial["id"], questions=QUESTIONS)
+        with scopes.chosen_scope(scopes.Scope(users=[_uid(teaching_users, "sara")])):
+            PracticeSetService().publish(remedial["id"])
+    with as_account("sara"):
+        assert sorted(s["id"] for s in PracticeSetService().assigned()) == sorted([week, remedial["id"]])
+    with as_account("sam"):
+        assert PracticeSetService().assigned() == []
+
+
+def test_a_path_learner_who_never_opened_it_counts_in_the_report(
+    as_account, teaching_users, teacher_draft, quiet_change_model,
+):
+    import asyncio
+
+    from deeptutor.catalog.enrollment import join
+    from deeptutor.catalog.reports import LearnerReportService
+    from deeptutor.multi_user.context import get_current_user
+    from deeptutor.teaching.models import PublishRequest
+    from deeptutor.teaching.service import TeachingService
+
+    _retire()
+    teacher_draft()
+    with as_account("tina"):
+        service = TeachingService()
+        template = service.register("topic_calculus", "")
+        preview = asyncio.run(service.preview_publish(template.id))
+        asyncio.run(service.publish(template.id, PublishRequest(draft_revision=preview["draft_revision"])))
+    _list(as_account, "mastery_path", template.id)
+    with as_account("sara"):
+        join(get_current_user(), "mastery_path", template.id)  # never opens it
+    with as_account("tina"):
+        points = LearnerReportService().points("mastery_path", template.id, template.id)
+        [row] = LearnerReportService().report("mastery_path", template.id)["learners"]
+    assert len(points["points"]) == 3
+    assert all(p["not_mastered"] == [_uid(teaching_users, "sara")] for p in points["points"])
+    assert row["paths"][0]["kp_total"] == 3 and row["paths"][0]["kp_mastered"] == 0

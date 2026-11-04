@@ -265,10 +265,19 @@ def _nodes() -> dict[str, dict[str, Any]]:
             rows = conn.execute("SELECT * FROM taxonomy_nodes").fetchall() if conn else []
     except Exception:
         rows = []  # an unreadable store shows the built-in classification
+    import json
+
+    def others(row) -> dict[str, str]:
+        try:
+            value = json.loads(row["names_json"] if "names_json" in row.keys() else "{}") or {}
+        except ValueError:
+            value = {}
+        return {k: str(v) for k, v in value.items() if k in OTHER_LANGUAGES and str(v).strip()}
+
     for row in rows:
         if row["custom"]:
             nodes[row["node_id"]] = {
-                "parent": row["parent"], "names": {"zh": row["name_zh"], "en": row["name_en"]},
+                "parent": row["parent"], "names": {"zh": row["name_zh"], "en": row["name_en"], **others(row)},
                 "position": row["position"] if row["position"] is not None else 1e6,
                 "hidden": bool(row["hidden"]), "custom": True,
             }
@@ -277,10 +286,12 @@ def _nodes() -> dict[str, dict[str, Any]]:
         if found is None:
             continue
         if row["name_zh"] or row["name_en"]:
-            # Renamed by an administrator: the built-in translations no longer match.
+            # Renamed by an administrator: the built-in translations no longer match,
+            # unless the administrator gave them too.
             found["names"] = {
                 "zh": row["name_zh"] or found["names"]["zh"], "en": row["name_en"] or found["names"]["en"],
             }
+        found["names"].update(others(row))
         found["hidden"] = bool(row["hidden"])
         if row["position"] is not None:
             found["position"] = row["position"]
@@ -430,6 +441,21 @@ def validate(
 # ── administrators (batch 2 §8.1) ──────────────────────────
 
 NAME_MAX = 40
+OTHER_LANGUAGES = ("de", "fr", "pl", "uk")
+
+
+def _clean_others(names: dict[str, str] | None) -> str | None:
+    """The other languages' names as stored; ``None`` when not given."""
+    import json
+
+    if names is None:
+        return None
+    cleaned = {}
+    for language in OTHER_LANGUAGES:
+        value = _clean_name(names.get(language))
+        if value:
+            cleaned[language] = value
+    return json.dumps(cleaned, ensure_ascii=False)
 
 
 def _in_use() -> dict[str, int]:
@@ -478,7 +504,7 @@ def _upsert(conn, node_id: str, **values: Any) -> None:
 
 
 def update_node(node_id: str, *, name_zh: str | None = None, name_en: str | None = None,
-                hidden: bool | None = None) -> dict[str, Any]:
+                hidden: bool | None = None, names: dict[str, str] | None = None) -> dict[str, Any]:
     from deeptutor.catalog.store import db
 
     nodes = _nodes()
@@ -494,6 +520,9 @@ def update_node(node_id: str, *, name_zh: str | None = None, name_en: str | None
             raise TaxonomyError("Give it a name.")
     if hidden is not None:
         values["hidden"] = int(bool(hidden))
+    others = _clean_others(names)
+    if others is not None:
+        values["names_json"] = others
     with db.write() as conn:
         _upsert(conn, node_id, **values)
     return admin_tree()
@@ -517,7 +546,7 @@ def move_node(node_id: str, direction: str) -> dict[str, Any]:
     return admin_tree()
 
 
-def add_node(parent: str, name_zh: str, name_en: str) -> dict[str, Any]:
+def add_node(parent: str, name_zh: str, name_en: str, names: dict[str, str] | None = None) -> dict[str, Any]:
     import uuid
 
     from deeptutor.catalog.store import db
@@ -535,9 +564,9 @@ def add_node(parent: str, name_zh: str, name_en: str) -> dict[str, Any]:
     last = max((nodes[s]["position"] for s in _children(nodes, parent, True)), default=0.0)
     with db.write() as conn:
         conn.execute(
-            "INSERT INTO taxonomy_nodes (node_id, parent, name_zh, name_en, hidden, position, custom) "
-            "VALUES (?, ?, ?, ?, 0, ?, 1)",
-            (node_id, parent, zh, en, last + 10.0),
+            "INSERT INTO taxonomy_nodes (node_id, parent, name_zh, name_en, hidden, position, custom, names_json) "
+            "VALUES (?, ?, ?, ?, 0, ?, 1, ?)",
+            (node_id, parent, zh, en, last + 10.0, _clean_others(names) or "{}"),
         )
     return admin_tree()
 

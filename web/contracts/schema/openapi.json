@@ -7528,6 +7528,20 @@
             "title": "Name Zh",
             "type": "string"
           },
+          "names": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Names"
+          },
           "parent": {
             "default": "",
             "maxLength": 200,
@@ -7588,6 +7602,20 @@
               }
             ],
             "title": "Name Zh"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Names"
           }
         },
         "title": "NodeUpdate",

@@ -128,8 +128,11 @@ it('creates managed workspaces without a server folder field', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
   await waitFor(() => expect(fixtures.save).toHaveBeenCalledWith({ name: 'Geometry', resources: { skills: null, mcp: null, knowledge_bases: null } }))
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Create workspace' })).toBeNull())
-  // Spec 2026-10-29 P1c: no server folder can be entered.
-  fireEvent.click(screen.getByRole('button', { name: 'New workspace' }))
+  // Spec 2026-10-29 P1c: no server folder can be entered. Opening the form loads the
+  // resources to assign; let that finish inside act().
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'New workspace' }))
+  })
   expect(screen.queryByPlaceholderText('Leave empty to create under root')).toBeNull()
 })
 

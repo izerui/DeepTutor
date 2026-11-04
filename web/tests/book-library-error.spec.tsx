@@ -2,6 +2,9 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import BookLibrary from '@/app/(workspace)/learning/books/components/BookLibrary'
+// The library reads the account role from /api/auth/status; there is no backend here, and an
+// answer arriving after the test would update the component outside act().
+vi.mock('@/hooks/useAuthStatus', () => ({ useAuthStatus: () => ({ isAdmin: false, isTeacher: false }) }))
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))

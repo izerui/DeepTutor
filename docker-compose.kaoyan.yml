@@ -68,7 +68,10 @@ services:
       init-auth:
         condition: service_completed_successfully
     ports:
-      - "${DEEPTUTOR_FRONTEND_PORT:-3782}:3782"
+      # Reached through nginx on this host only (see the Nginx config above), so the
+      # visitor address nginx sets can be trusted. To reach 3782 from elsewhere,
+      # drop the "127.0.0.1:" prefix AND remove DEEPTUTOR_TRUSTED_INGRESS below.
+      - "127.0.0.1:${DEEPTUTOR_FRONTEND_PORT:-3782}:3782"
       - "${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
 
     volumes:
@@ -84,13 +87,11 @@ services:
       #   - DEEPTUTOR_REDIS_URL=redis://redis:6379/0
       # Optional extras:
       #   - DEEPTUTOR_EXTRAS=math-animator,partners
-      # Sign-up / sign-in limits per visitor address. Off by default: the
-      # frontend then ignores X-Real-IP (anyone reaching port 3782 directly
-      # could forge it) and only per-account limits apply. Turn it on only when
-      # BOTH hold: nginx sets "proxy_set_header X-Real-IP $remote_addr;" (see
-      # above), and port 3782 is reachable through nginx alone, e.g. publish it
-      # as "127.0.0.1:${DEEPTUTOR_FRONTEND_PORT:-3782}:3782".
-      #   - DEEPTUTOR_TRUSTED_INGRESS=1
+      # Sign-up / sign-in limits per visitor address. On here because BOTH hold:
+      # nginx sets "proxy_set_header X-Real-IP $remote_addr;" (see above), and
+      # port 3782 is published on 127.0.0.1 only. If either stops holding, remove
+      # this line: anyone reaching 3782 directly could forge X-Real-IP.
+      - DEEPTUTOR_TRUSTED_INGRESS=1
       #   - DEEPTUTOR_APT_PACKAGES=ffmpeg
       # Unraid / NAS bind mounts:
       #   - PUID=99

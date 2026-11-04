@@ -62,11 +62,7 @@ beforeEach(() => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
-const overall = {
-  path_count: 1, self_study_path_count: 0, kp_total: 4, kp_mastered: 1, attempts: { correct: 3, partial: 0, incorrect: 2 },
-  last_activity: 1_700_000_000, question_bank: { total: 0, correct: 0, partial: 0, incorrect: 0 },
-  study_minutes_total: 90, study_minutes_7d: 30, period_minutes: 30, period_answers: 12,
-};
+const overall = { last_activity: 1_700_000_000, period_answers: 12, period_tasks_done: 3 };
 const row = (over: Partial<LearnerRow> = {}): LearnerRow => ({
   id: "u_sara", username: "sara", overall,
   paths: [{ template_id: "tpl_1", title: "Algebra", revision: 1, kp_total: 4, kp_mastered: 1,
@@ -100,26 +96,40 @@ it("reports a course: tasks, homework, practice score, flags and an export link"
   catalog.getReportPoints.mockResolvedValue(points);
   render(<LearnerReportPage />);
   expect(await screen.findByRole("heading", { name: "Physics" })).toBeTruthy();
-  expect(catalog.getLearnerReport).toHaveBeenCalledWith("course", "crs_1", null);
+  // The period defaults to the last 7 days.
+  expect(catalog.getLearnerReport).toHaveBeenCalledWith("course", "crs_1", 7);
   const sara = screen.getByRole("button", { name: "sara" }).closest("tr")!;
   expect(within(sara).getByText("2 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 · 0 · 1")).toBeTruthy();
   expect(within(sara).getByText("4 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 / 4")).toBeTruthy();
   expect(within(sara).getByText("2 tasks overdue")).toBeTruthy();
+  // Answers and tasks done in the period, on this course only.
+  expect(screen.getByText("Answers in period")).toBeTruthy();
+  expect(screen.getByText("Tasks done in period")).toBeTruthy();
+  expect(within(sara).getByText("12")).toBeTruthy();
+  expect(within(sara).getByText("3")).toBeTruthy();
+  expect(screen.getByText("Only what happened in this course is shown.")).toBeTruthy();
   // Follow-ups §7: the CSV is fetched with the sign-in credentials, not a bare link.
   catalog.downloadReport.mockResolvedValue(undefined);
   fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
-  await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", null));
+  await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", 7));
   // Follow-ups §3: a practice set opened from a course's report carries the course.
   expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href")).toBe("/practice-sets?set=ps_1&course=crs_1");
 
   fireEvent.click(screen.getByLabelText("Only learners who need attention"));
   expect(screen.queryByRole("button", { name: "tom" })).toBeNull();
 
-  // The report keeps to this item: no study time or answers from elsewhere, no period.
-  expect(screen.queryByLabelText("Period")).toBeNull();
+  // The report keeps to this item: no study time from elsewhere.
   expect(screen.queryByText("Study time in period")).toBeNull();
+
+  // Another period reloads the report, and the export follows it.
+  fireEvent.change(screen.getByLabelText("Period"), { target: { value: "30" } });
+  await waitFor(() => expect(catalog.getLearnerReport).toHaveBeenLastCalledWith("course", "crs_1", 30));
+  fireEvent.change(screen.getByLabelText("Period"), { target: { value: "" } });
+  await waitFor(() => expect(catalog.getLearnerReport).toHaveBeenLastCalledWith("course", "crs_1", null));
+  fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+  await waitFor(() => expect(catalog.downloadReport).toHaveBeenLastCalledWith("course", "crs_1", null));
 });
 
 it("reports a path without the course columns, and shows a learner's detail", async () => {
@@ -140,6 +150,9 @@ it("reports a path without the course columns, and shows a learner's detail", as
   render(<LearnerReportPage />);
   expect(await screen.findByRole("heading", { name: "Algebra" })).toBeTruthy();
   expect(screen.queryByText("Tasks done")).toBeNull();
+  expect(screen.queryByText("Tasks done in period")).toBeNull();
+  expect(screen.getByText("Answers in period")).toBeTruthy();
+  expect(screen.getByText("Only what happened in this path is shown.")).toBeTruthy();
   expect(screen.queryByText("Practice: best score")).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: "sara" }));

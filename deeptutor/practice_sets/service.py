@@ -399,6 +399,14 @@ class PracticeSetService:
         if questions is not None:
             sets.append("draft_questions_json = ?")
             values.append(json.dumps(normalize_questions(questions), ensure_ascii=False))
+        if due_at not in ("", None):
+            from deeptutor.catalog.listings import status as listing_status
+
+            if listing_status("practice_set", set_id) in ("pending", "listed"):
+                # Direction §11.4: practice in the market is self-paced.
+                raise PracticeError(
+                    "A practice set in the market has no deadline. Set deadlines on course tasks instead."
+                )
         if due_at != "":
             sets.append("due_at = ?")
             values.append(float(due_at) if due_at is not None else None)
@@ -605,7 +613,13 @@ class PracticeSetService:
             # Only what one joined can reach one now (review M5): no walk over every set.
             from deeptutor.catalog.enrollment import joined_by
 
-            candidates = [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
+            from deeptutor.publishing.scope import named_items
+
+            # What one joined, and what was sent to one by name (a remedial set).
+            candidates = list(dict.fromkeys(
+                [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
+                + named_items(PRACTICE_SET, self.actor.id)
+            ))
         else:
             candidates = managed_items(PRACTICE_SET)
         ids = [i for i in candidates if self._reaches_me(i)]

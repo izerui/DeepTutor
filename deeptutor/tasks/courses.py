@@ -357,7 +357,9 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
         # Only courses one joined can reach one now (review M5).
         from deeptutor.catalog.enrollment import joined_by
 
-        joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE}
+        joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE} | set(
+            scopes.named_items(scopes.COURSE, actor.id)
+        )
         rows = [r for r in rows if r["id"] in joined]
     classes = scopes.member_class_ids(actor.id) if student else set()
     # Students, and anyone who joined (platform batch 2 §6).

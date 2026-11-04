@@ -166,6 +166,19 @@ def classes_retired() -> bool:
     return retired()
 
 
+def named_items(kind: str, user_id: str) -> list[str]:
+    """Items whose stored scope names this account (e.g. a remedial set sent to chosen learners)."""
+    with store.read() as conn:
+        if conn is None:
+            return []
+        return [
+            row["item_id"] for row in conn.execute(
+                "SELECT item_id FROM publish_targets WHERE kind = ? AND target_type = 'user' AND target_id = ?",
+                (kind, user_id),
+            )
+        ]
+
+
 def managed_items(kind: str) -> list[str]:
     with store.read() as conn:
         if conn is None:

@@ -83,6 +83,47 @@ class LearnerReportService(ReportService):
                     out[row[0]][key] = int(row[2])
         return out
 
+    @staticmethod
+    def _period_counts(
+        learners: list[str], paths: dict[str, str], sets: set[str], task_ids: list[str], since: float,
+    ) -> dict[str, dict[str, int]]:
+        """Per learner, since *since*: answers on the item's paths and sets, tasks completed — on this item only."""
+        from deeptutor.practice_sets import store as practice_store
+        from deeptutor.tasks.store import db as task_db
+
+        out = {u: {"answers": 0, "tasks_done": 0} for u in learners}
+        if not learners:
+            return out
+        for user_id in learners:
+            for progress, _topic in _snapshots(user_id):
+                origin = getattr(progress, "origin", None)
+                if origin is None or origin.template_id not in paths:
+                    continue
+                out[user_id]["answers"] += sum(
+                    1 for a in progress.quiz_attempts
+                    if not getattr(a, "voided", False) and float(getattr(a, "timestamp", 0) or 0) >= since
+                )
+        marks = ",".join("?" for _ in learners)
+        if sets:
+            set_marks = ",".join("?" for _ in sets)
+            with practice_store.read() as conn:
+                for row in (conn.execute(
+                    f"SELECT student_id, COUNT(*) FROM practice_submissions WHERE set_id IN ({set_marks}) "  # nosec B608
+                    f"AND student_id IN ({marks}) AND submitted_at >= ? GROUP BY student_id",
+                    (*sorted(sets), *learners, since),
+                ) if conn else []):
+                    out[row[0]]["answers"] += int(row[1])
+        if task_ids:
+            task_marks = ",".join("?" for _ in task_ids)
+            with task_db.read() as conn:
+                for row in (conn.execute(
+                    f"SELECT student_id, COUNT(*) FROM task_completions WHERE task_key IN ({task_marks}) "  # nosec B608
+                    f"AND student_id IN ({marks}) AND completed_at >= ? GROUP BY student_id",
+                    (*task_ids, *learners, since),
+                ) if conn else []):
+                    out[row[0]]["tasks_done"] = int(row[1])
+        return out
+
     def report(self, kind: str, item_id: str, days: int | None = None) -> dict[str, Any]:
         from deeptutor.classes import attention
         from deeptutor.classes.service import _accounts
@@ -95,10 +136,24 @@ class LearnerReportService(ReportService):
         practice = self._my_practice_results(learners)
         progress = self._task_progress(task_ids, learners)
         flags = attention.for_teacher(self.actor.id, learners)
+        import time
+
+        since = time.time() - days * 86400 if days else 0.0
+        period = self._period_counts(learners, paths, sets, task_ids, since)
         accounts = _accounts()
         rows = []
+        outlines = {template_id: _revision_points(template_id) for template_id in paths}
         for user_id in learners:
             report = self._student_report(user_id, paths, detail=False, days=days)
+            seen = {p["template_id"] for p in report["teacher_paths"]}
+            for template_id, title in paths.items():
+                if template_id not in seen:
+                    # Not opened yet: the path's points, none mastered.
+                    report["teacher_paths"].append({
+                        "template_id": template_id, "title": title, "revision": None,
+                        "kp_total": len(outlines[template_id]), "kp_mastered": 0,
+                        "attempts": {"correct": 0, "partial": 0, "incorrect": 0}, "last_activity": None,
+                    })
             mine_sets = [p for p in practice.get(user_id, []) if p["set_id"] in sets]
             tasks = progress.get(user_id) if kind == scopes.COURSE else None
             # Only what happened on this item: a learner's own study elsewhere stays theirs
@@ -108,7 +163,12 @@ class LearnerReportService(ReportService):
             rows.append({
                 "id": user_id,
                 "username": (accounts.get(user_id) or {}).get("username") or user_id,
-                "overall": {"last_activity": max((s for s in stamps if s), default=None)},
+                "overall": {
+                    "last_activity": max((s for s in stamps if s), default=None),
+                    # In the chosen period, on this item only.
+                    "period_answers": period[user_id]["answers"],
+                    "period_tasks_done": period[user_id]["tasks_done"],
+                },
                 "paths": report["teacher_paths"],
                 "practice_sets": mine_sets,
                 "tasks": tasks,
@@ -130,11 +190,14 @@ class LearnerReportService(ReportService):
         if template_id not in paths:
             raise ListingNotFound("Mastery Path not found.")
         points: dict[str, dict[str, Any]] = {}
+        outline = _revision_points(template_id)
         for user_id in self._learners(kind, item_id, info.owner):
+            opened = False
             for progress, _topic in _snapshots(user_id):
                 origin = getattr(progress, "origin", None)
                 if origin is None or origin.template_id != template_id:
                     continue
+                opened = True
                 for module in progress.modules:
                     for kp in module.knowledge_points:
                         entry = points.setdefault(kp.id, {"id": kp.id, "name": kp.name, "students": 0,
@@ -144,6 +207,13 @@ class LearnerReportService(ReportService):
                             entry["mastered"] += 1
                         else:
                             entry["not_mastered"].append(user_id)
+            if not opened:
+                # Joined but never opened: their copy is made on first opening; nothing mastered yet.
+                for kp_id, name in outline:
+                    entry = points.setdefault(kp_id, {"id": kp_id, "name": name, "students": 0,
+                                                      "mastered": 0, "not_mastered": []})
+                    entry["students"] += 1
+                    entry["not_mastered"].append(user_id)
         return {"template_id": template_id, "title": paths[template_id], "points": list(points.values())}
 
     def export(self, kind: str, item_id: str, days: int | None = None) -> str:
@@ -151,7 +221,7 @@ class LearnerReportService(ReportService):
         out = io.StringIO()
         writer = csv.writer(out)
         writer.writerow([
-            "learner", "last_activity", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
+            "learner", "last_activity", "answers_in_period", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
             "homework_to_grade", "practice_sets_done", "practice_score_ratio", "attention",
         ])
         for row in report["learners"]:
@@ -164,7 +234,7 @@ class LearnerReportService(ReportService):
             tasks = row["tasks"] or {}
             last = overall.get("last_activity")
             writer.writerow([
-                row["username"], _when(last), kp_mastered, kp_total,
+                row["username"], _when(last), overall.get("period_answers", 0), kp_mastered, kp_total,
                 tasks.get("done", ""), tasks.get("total", ""), tasks.get("to_grade", ""), len(sets),
                 f"{ratio:.2f}" if ratio is not None else "", "; ".join(flag["kind"] for flag in row["flags"]),
             ])
@@ -185,6 +255,18 @@ class LearnerReportService(ReportService):
             "practice_sets": [p for p in self._my_practice_results([user_id]).get(user_id, []) if p["set_id"] in sets],
             "tasks": self._task_progress(task_ids, [user_id])[user_id] if kind == scopes.COURSE else None,
         }
+
+
+def _revision_points(template_id: str) -> list[tuple[str, str]]:
+    """(id, name) of the knowledge points of the path's current revision."""
+    from deeptutor.teaching.store import TeachingStore
+
+    teaching = TeachingStore()
+    template = teaching.get_template(template_id)
+    revision = teaching.get_revision(template_id, template.current_revision) if template else None
+    if revision is None:
+        return []
+    return [(kp.id, kp.name) for module in revision.outline.modules for kp in module.knowledge_points]
 
 
 def _when(stamp: Any) -> str:

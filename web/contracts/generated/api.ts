@@ -17039,6 +17039,10 @@ export interface components {
        * @default
        */
       readonly name_zh: string;
+      /** Names */
+      readonly names?: {
+        readonly [key: string]: string;
+      } | null;
       /**
        * Parent
        * @default
@@ -17058,6 +17062,10 @@ export interface components {
       readonly name_en?: string | null;
       /** Name Zh */
       readonly name_zh?: string | null;
+      /** Names */
+      readonly names?: {
+        readonly [key: string]: string;
+      } | null;
     };
     /** NotebookCaptureRequest */
     readonly NotebookCaptureRequest: {

@@ -15,6 +15,11 @@ const fixture = vi.hoisted(() => ({
   refresh: vi.fn(async () => {}),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
+// The knowledge pages read the account from /api/auth/status; there is no backend here, and an
+// answer arriving after a test would update the components outside act().
+vi.mock("@/hooks/useAuthStatus", () => ({
+  useAuthStatus: () => ({ isAdmin: false, isTeacher: false, allowPrivateKb: true, loading: false }),
+}));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("@/features/knowledge/api/engines", async (original) => ({
   ...(await original<typeof import("@/features/knowledge/api/engines")>()),

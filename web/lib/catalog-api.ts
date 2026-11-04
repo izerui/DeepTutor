@@ -4,7 +4,6 @@ import type { ScopeUpdate } from "./publish-api";
 import type {
   AttemptTally,
   AttentionFlag,
-  OverallReport,
   PracticeSetResult,
   TeacherPathReport,
 } from "./report-types";
@@ -299,10 +298,13 @@ export interface AdminTaxonomy {
   stages: AdminTaxonomyStage[];
   difficulties: TaxonomyNode[];
 }
+/** German, French, Polish and Ukrainian names; given, they replace the stored ones (empty drops one). */
+export type OtherNames = Partial<Record<"de" | "fr" | "pl" | "uk", string>>;
 export interface TaxonomyNodeUpdate {
   name_zh?: string;
   name_en?: string;
   hidden?: boolean;
+  names?: OtherNames;
 }
 
 const node = (nodeId: string) => `/admin/taxonomy/nodes/${encodeURIComponent(nodeId)}`;
@@ -311,8 +313,8 @@ export const getAdminTaxonomy = () => call<AdminTaxonomy>("/admin/taxonomy");
 export const updateTaxonomyNode = (nodeId: string, fields: TaxonomyNodeUpdate) =>
   call<AdminTaxonomy>(node(nodeId), send("PUT", fields));
 /** ``parent`` ``""`` adds a stage; a stage id adds a subject; a first-level subject id a sub-subject. */
-export const addTaxonomyNode = (parent: string, nameZh: string, nameEn: string) =>
-  call<AdminTaxonomy>("/admin/taxonomy/nodes", send("POST", { parent, name_zh: nameZh, name_en: nameEn }));
+export const addTaxonomyNode = (parent: string, nameZh: string, nameEn: string, names?: OtherNames) =>
+  call<AdminTaxonomy>("/admin/taxonomy/nodes", send("POST", { parent, name_zh: nameZh, name_en: nameEn, ...(names ? { names } : {}) }));
 export const moveTaxonomyNode = (nodeId: string, direction: "up" | "down") =>
   call<AdminTaxonomy>(`${node(nodeId)}/move`, send("POST", { direction }));
 export const deleteTaxonomyNode = (nodeId: string) => call<AdminTaxonomy>(node(nodeId), send("DELETE"));
@@ -361,10 +363,18 @@ export interface LearnerPath {
   last_activity: number | null;
 }
 
+/** A learner's numbers on this item only, in the chosen period (``period_days``). */
+export interface LearnerOverall {
+  last_activity: number | null;
+  period_answers: number;
+  /** Tasks of this course finished in the period (0 for a Mastery Path). */
+  period_tasks_done: number;
+}
+
 export interface LearnerRow {
   id: string;
   username: string;
-  overall: OverallReport;
+  overall: LearnerOverall;
   paths: LearnerPath[];
   practice_sets: PracticeSetResult[];
   /** ``null`` for a Mastery Path (no tasks). */

@@ -235,6 +235,34 @@ it("renames, hides, adds, moves and deletes classification entries and refreshes
   expect(catalog.getTaxonomy).toHaveBeenCalledTimes(1);
 });
 
+it("edits the names in the other languages of an entry and of a new one", async () => {
+  const tree = adminTree({ custom: true, in_use: 0 });
+  tree.stages[0].subjects[0].names = { ...tree.stages[0].subjects[0].names, de: "Mathematik", fr: "Maths" };
+  catalog.getAdminTaxonomy.mockResolvedValue(tree);
+  catalog.updateTaxonomyNode.mockResolvedValue(tree);
+  render(<TaxonomyAdmin />);
+  const row = await screen.findByTestId("node-senior.math");
+  expect(within(row).queryByLabelText("Deutsch name of Math")).toBeNull();
+  fireEvent.click(within(row).getByRole("button", { name: "Other languages of Math" }));
+  expect((within(row).getByLabelText("Deutsch name of Math") as HTMLInputElement).value).toBe("Mathematik");
+  expect((within(row).getByLabelText("Français name of Math") as HTMLInputElement).value).toBe("Maths");
+  fireEvent.change(within(row).getByLabelText("Polski name of Math"), { target: { value: "Matematyka" } });
+  fireEvent.change(within(row).getByLabelText("Français name of Math"), { target: { value: "" } });
+  fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(catalog.updateTaxonomyNode).toHaveBeenCalledWith("senior.math", {
+    name_zh: "Math", name_en: "Math", names: { de: "Mathematik", fr: "", pl: "Matematyka", uk: "" },
+  }));
+
+  catalog.addTaxonomyNode.mockResolvedValue(tree);
+  fireEvent.click(screen.getByRole("button", { name: "+ Add subject" }));
+  const form = screen.getByRole("form", { name: "Add subject" });
+  fireEvent.change(within(form).getByLabelText("English name"), { target: { value: "Physics" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Other languages" }));
+  fireEvent.change(within(form).getByLabelText("Українська name"), { target: { value: "Фізика" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(catalog.addTaxonomyNode).toHaveBeenCalledWith("senior", "", "Physics", { de: "", fr: "", pl: "", uk: "Фізика" }));
+});
+
 it("merges one tag into another and undoes a merge", async () => {
   catalog.getAdminTags.mockResolvedValue({ tags: [{ tag: "algebra", count: 3 }, { tag: "Algebra I", count: 1 }], merges: [] });
   catalog.mergeTags.mockResolvedValue({ tags: [{ tag: "algebra", count: 4 }], merges: [{ from: "Algebra I", to: "algebra", at: 1 }] });

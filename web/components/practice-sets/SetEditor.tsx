@@ -9,7 +9,7 @@ import { CommentEditor } from "@/components/comments/Comments";
 import { DownloadButton } from "@/components/common/DownloadButton";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
+import { JOIN_ONLY_SCOPE, type ListingStatus } from "@/lib/catalog-api";
 import { listKnowledgeBases } from "@/features/knowledge/api/catalog";
 import {
   archiveSet,
@@ -89,6 +89,9 @@ export function SetEditor({
   // Platform batch 1 §4.4: a first publication goes to nobody until people join from the market;
   // a remedial set (batch 3 §3.1) still goes to the students who got the questions wrong.
   const [remedial] = useState(() => takeSuggested(setId));
+  // Practice in the market has no deadline (deadlines belong to course tasks).
+  const [listingStatus, setListingStatus] = useState<ListingStatus | null>(null);
+  const inMarket = listingStatus === "pending" || listingStatus === "listed";
 
   useEffect(() => {
     let alive = true;
@@ -214,7 +217,9 @@ export function SetEditor({
             {t("Deadline (optional)")}
             <input
               type="datetime-local"
-              className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2"
+              className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 disabled:opacity-50"
+              // A deadline set before listing can still be cleared.
+              disabled={inMarket && !draft.due_at}
               value={toLocalInput(draft.due_at)}
               onChange={(e) => patch({ due_at: e.target.value ? new Date(e.target.value).getTime() / 1000 : null })}
             />
@@ -228,10 +233,15 @@ export function SetEditor({
             >
               <option value="after_submit">{t("Right after submitting")}</option>
               {/* Without a deadline, "after the deadline" would never come. */}
-              <option value="after_due" disabled={!draft.due_at}>{t("After the deadline")}</option>
+              <option value="after_due" disabled={!draft.due_at || inMarket}>{t("After the deadline")}</option>
             </select>
           </label>
         </div>
+        {inMarket && (
+          <p className={hintClass} data-testid="market-no-deadline">
+            {t("Practice in the market has no deadline. Set deadlines on course tasks.")}
+          </p>
+        )}
         <div className="flex flex-wrap gap-4 text-[12.5px]">
           <label className="flex items-center gap-2">
             {t("Attempts allowed")}
@@ -290,7 +300,8 @@ export function SetEditor({
 
       {saved.current_revision > 0 && (
         <section className={sectionClass}>
-          <ListingPanel kind="practice_set" itemId={setId} onChanged={onChanged} />
+          <ListingPanel kind="practice_set" itemId={setId} onChanged={onChanged} onStatus={setListingStatus}
+            reloadKey={String(saved.due_at ?? "")} />
         </section>
       )}
 

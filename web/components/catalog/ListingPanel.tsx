@@ -83,7 +83,21 @@ const fieldsOf = (listing: AuthorListing): ListingFields => ({
  * it was turned down, the market information, the buttons for this state
  * and how many have joined. Only teachers and administrators list content.
  */
-export function ListingPanel({ kind, itemId, onChanged }: { kind: CatalogKind; itemId: string; onChanged?: () => void }) {
+export function ListingPanel({
+  kind,
+  itemId,
+  onChanged,
+  onStatus,
+  reloadKey,
+}: {
+  kind: CatalogKind;
+  itemId: string;
+  onChanged?: () => void;
+  /** Told the listing's state whenever it is read or changed (e.g. a practice set locks its deadline). */
+  onStatus?: (status: ListingStatus) => void;
+  /** Read the listing again when this changes (the item was saved, so ``not_ready`` may have changed). */
+  reloadKey?: string;
+}) {
   const { t } = useTranslation();
   const { isAdmin, isTeacher, enabled, loading } = useAuthStatus();
   const [listing, setListing] = useState<AuthorListing | null>(null);
@@ -94,6 +108,11 @@ export function ListingPanel({ kind, itemId, onChanged }: { kind: CatalogKind; i
   const [notice, setNotice] = useState("");
   const allowed = !enabled || isTeacher || isAdmin;
   const { taxonomy, error: taxonomyError } = useTaxonomy(!loading && allowed && !hidden);
+  const status = listing?.status;
+
+  useEffect(() => {
+    if (status) onStatus?.(status);
+  }, [status, onStatus]);
 
   useEffect(() => {
     if (loading || !allowed) return;
@@ -113,7 +132,7 @@ export function ListingPanel({ kind, itemId, onChanged }: { kind: CatalogKind; i
     return () => {
       alive = false;
     };
-  }, [kind, itemId, loading, allowed, t]);
+  }, [kind, itemId, loading, allowed, reloadKey, t]);
 
   if (loading || !allowed || hidden) return null;
   if (!listing || !fields) {

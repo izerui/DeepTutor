@@ -89,8 +89,8 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   const { t } = useTranslation();
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
-  // The report covers this item only, all of its time (a learner's study elsewhere stays theirs).
-  const days: number | null = null;
+  // Counted on this item only (a learner's study elsewhere stays theirs); 7 / 30 days or all time.
+  const [days, setDays] = useState<number | null>(7);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -138,6 +138,15 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
 
       <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
         <label className="flex items-center gap-1.5">
+          {t("Period")}
+          <select aria-label={t("Period")} className={selectClass} value={days ?? ""}
+            onChange={(e) => setDays(e.target.value ? Number(e.target.value) : null)}>
+            <option value="7">{t("Last 7 days")}</option>
+            <option value="30">{t("Last 30 days")}</option>
+            <option value="">{t("All time")}</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
           <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
           {t("Only learners who need attention")}
         </label>
@@ -155,6 +164,8 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                 <th className={cell}>{t("Learner")}</th>
                 <th className={cell}>{t("Needs attention")}</th>
                 <th className={cell}>{t("Last studied")}</th>
+                <th className={cell}>{t("Answers in period")}</th>
+                {isCourse && <th className={cell}>{t("Tasks done in period")}</th>}
                 {isCourse && <th className={cell}>{t("Tasks done")}</th>}
                 {isCourse && <th className={cell}>{t("Homework: to grade · returned · graded")}</th>}
                 <th className={cell}>{t("Mastered points")}</th>
@@ -182,6 +193,8 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                       </ul>
                     </td>
                     <td className={cell}>{when(row.overall.last_activity, t("Never"))}</td>
+                    <td className={cell}>{row.overall.period_answers ?? 0}</td>
+                    {isCourse && <td className={cell}>{row.overall.period_tasks_done ?? 0}</td>}
                     {isCourse && (
                       <td className={cell}>{row.tasks ? `${row.tasks.done} / ${row.tasks.total}` : "—"}</td>
                     )}
@@ -198,6 +211,11 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
             </tbody>
           </table>
         </div>
+      )}
+      {report.learners.length > 0 && (
+        <p className="text-[11.5px] text-[var(--muted-foreground)]">
+          {isCourse ? t("Only what happened in this course is shown.") : t("Only what happened in this path is shown.")}
+        </p>
       )}
       <p className="text-[11.5px] text-[var(--muted-foreground)]">
         {t("Reports show progress numbers only. Learners' conversations and notes stay private.")}

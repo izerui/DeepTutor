@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 // Platform follow-ups: reviews and favorites, grades, remedial into the course,
 // grading the hand-in one read, provenance wording, subjects by stage, CSV downloads.
-const { api, tasks, practice, router, search, t } = vi.hoisted(() => ({
+const { api, tasks, practice, router, search, listingStatus, t } = vi.hoisted(() => ({
   api: {
     getTaxonomy: vi.fn(),
     searchMarket: vi.fn(),
@@ -18,6 +18,7 @@ const { api, tasks, practice, router, search, t } = vi.hoisted(() => ({
   practice: { getSet: vi.fn(), getReport: vi.fn() },
   router: { replace: vi.fn(), push: vi.fn() },
   search: { value: "" },
+  listingStatus: { value: "" },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
 }));
@@ -42,7 +43,17 @@ vi.mock("@/lib/practice-sets-api", async () => ({
   ...(await vi.importActual<typeof import("@/lib/practice-sets-api")>("@/lib/practice-sets-api")),
   ...practice,
 }));
-vi.mock("@/components/catalog/ListingPanel", () => ({ ListingPanel: () => null }));
+vi.mock("@/components/catalog/ListingPanel", async () => {
+  const { useEffect } = await vi.importActual<typeof import("react")>("react");
+  return {
+    ListingPanel: ({ onStatus }: { onStatus?: (status: string) => void }) => {
+      useEffect(() => {
+        if (listingStatus.value) onStatus?.(listingStatus.value);
+      }, [onStatus]);
+      return null;
+    },
+  };
+});
 vi.mock("@/components/chat/QuestionBankPicker", () => ({ default: () => null }));
 vi.mock("@/components/comments/Comments", () => ({ CommentEditor: () => null }));
 vi.mock("@/features/knowledge/api/catalog", () => ({ listKnowledgeBases: vi.fn(() => Promise.resolve([])) }));
@@ -102,6 +113,7 @@ beforeEach(() => {
   resetTaxonomyCache();
   api.getTaxonomy.mockResolvedValue(taxonomy);
   search.value = "";
+  listingStatus.value = "";
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -288,6 +300,28 @@ it("offers no course button for a draft", async () => {
   render(<SetEditor setId="ps_r" courseId="crs_1" onChanged={vi.fn()} onDeleted={vi.fn()} />);
   expect(await screen.findByRole("button", { name: "Save draft" })).toBeTruthy();
   expect(screen.queryByTestId("add-to-course")).toBeNull();
+});
+
+// ── practice in the market has no deadline ──
+
+it("locks the deadline of a practice set that is in the market", async () => {
+  listingStatus.value = "listed";
+  practice.getSet.mockResolvedValue({ id: "ps_1", title: "Week 1 quiz", description: "", status: "published", current_revision: 1,
+    due_at: null, reveal: "after_submit", created_at: 1, updated_at: 1, questions: [] });
+  const { container } = render(<SetEditor setId="ps_1" onChanged={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByText("Practice in the market has no deadline. Set deadlines on course tasks.")).toBeTruthy();
+  expect((container.querySelector('input[type="datetime-local"]') as HTMLInputElement).disabled).toBe(true);
+  expect((screen.getByRole("option", { name: "After the deadline" }) as HTMLOptionElement).disabled).toBe(true);
+});
+
+it("leaves the deadline open while the practice set is not in the market", async () => {
+  listingStatus.value = "unlisted";
+  practice.getSet.mockResolvedValue({ id: "ps_1", title: "Week 1 quiz", description: "", status: "published", current_revision: 1,
+    due_at: null, reveal: "after_submit", created_at: 1, updated_at: 1, questions: [] });
+  const { container } = render(<SetEditor setId="ps_1" onChanged={vi.fn()} onDeleted={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "Save draft" })).toBeTruthy();
+  expect(screen.queryByTestId("market-no-deadline")).toBeNull();
+  expect((container.querySelector('input[type="datetime-local"]') as HTMLInputElement).disabled).toBe(false);
 });
 
 // ── grading the hand-in one read ──

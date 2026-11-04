@@ -80,7 +80,9 @@ CREATE TABLE IF NOT EXISTS taxonomy_nodes (
     name_en TEXT NOT NULL DEFAULT '',
     hidden INTEGER NOT NULL DEFAULT 0,
     position REAL,
-    custom INTEGER NOT NULL DEFAULT 0
+    custom INTEGER NOT NULL DEFAULT 0,
+    -- Names in the other interface languages: {"de": …, "fr": …, "pl": …, "uk": …}.
+    names_json TEXT NOT NULL DEFAULT '{}'
 );
 
 -- A merged tag and the one it became (batch 2 §8.2), keyed by its case-folded spelling.
@@ -137,6 +139,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     # Columns added after the first release, for stores made before them.
     columns={
         "listings": {"grades_json": "TEXT NOT NULL DEFAULT '[]'", "blocked": "INTEGER NOT NULL DEFAULT 0"},
+        "taxonomy_nodes": {"names_json": "TEXT NOT NULL DEFAULT '{}'"},
     },
 )
 
