@@ -190,13 +190,6 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(run_at_startup)
     except Exception:
         logger.exception("Market migration failed")
-    # Platform batch 2 §2: receivers become members, then classes stop counting.
-    try:
-        from deeptutor.catalog import retire_classes
-
-        await asyncio.to_thread(retire_classes.run_at_startup)
-    except Exception:
-        logger.exception("Retiring classes failed")
 
 
     # Initialize LLM client early so OPENAI_* env vars are available before
@@ -591,7 +584,6 @@ from deeptutor.api.routers import (
     book,
     capabilities,
     capabilities_settings,
-    classes,
     publishing,
     practice_sets,
     tasks,
@@ -694,10 +686,6 @@ app.include_router(
     tags=["mastery-teaching"],
     dependencies=_auth,
 )
-# Classes (spec 2026-10-29 §5). The invite-link preview is public so a link
-# opened while signed out can name the class; joining requires an account.
-app.include_router(classes.router, prefix="/api/classes", tags=["classes"], dependencies=_auth)
-app.include_router(classes.public_router, prefix="/api/class-invites", tags=["classes"])
 app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
 app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
 # Spec 2026-11-03 batch 1: tasks and homework, notifications, the student home.

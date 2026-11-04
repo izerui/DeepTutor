@@ -1,9 +1,9 @@
-"""Platform batch 2: classes retire.
+"""Platform batch 2: what replaced classes — learners, tasks in courses, joining, taxonomy and tags.
 
 Spec: docs/superpowers/specs/2026-11-03-platform-batch2-design.md
 
-The fixture class holds Sara and Sam, taught by Tina and Tom. Each test sets
-up what was sent through classes, then retires classes.
+Classes are gone altogether (the retirement migration with them); these are
+the rules that outlived them.
 """
 
 from __future__ import annotations
@@ -28,24 +28,8 @@ def _offline(monkeypatch):
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
 
 
-def _retire():
-    from deeptutor.catalog import migration, retire_classes
-
-    migration.run()  # "everyone" goes to the market first (review H2)
-    assert retire_classes.run() is True
-    assert retire_classes.retired()
-
-
-def _class_id(as_account):
-    from deeptutor.classes.service import ClassService
-
-    with as_account("adam"):
-        [row] = ClassService().list_classes()
-    return row["id"]
-
-
-def _class_set(as_account, owner="tina", title="Week 1"):
-    """Published the old way: to the teacher's classes."""
+def _published_set(as_account, owner="tina", title="Week 1"):
+    """Published with nobody chosen: it reaches only who joins it."""
     from deeptutor.practice_sets.service import PracticeSetService
 
     with as_account(owner):
@@ -62,180 +46,30 @@ def _assigned_sets(as_account, name):
         return [s["id"] for s in PracticeSetService().assigned()]
 
 
-def _new_student(seed_user, as_user, as_account, name="nina"):
-    from deeptutor.classes.service import ClassService
-
-    user = seed_user(name, role="student")
-    with as_account("adam"):
-        [row] = ClassService().list_classes()
-        ClassService().add_students(row["id"], [user["id"]])
-    return user
+# ── learners (§2.3) ────────────────────────────────────────
 
 
-# ── the migration (§2.1) ───────────────────────────────────
+def test_teachers_learners_are_who_joined_their_content(as_account, teaching_users, deliver):
+    from deeptutor.catalog.learners import learners_of
 
-
-def test_class_receivers_become_members_and_classes_stop_counting(
-    as_account, teaching_users, seed_user, as_user,
-):
-    from deeptutor.catalog.enrollment import joined_by
-    from deeptutor.classes.service import ClassService
-    from deeptutor.publishing import scope as scopes
-
-    set_id = _class_set(as_account)
-    assert set(_assigned_sets(as_account, "sara")) == {set_id}
-    _retire()
-    assert scopes._stored_scope(scopes.PRACTICE_SET, set_id).empty
-    assert joined_by(teaching_users["sara"]["id"]) == {("practice_set", set_id): "migrated"}
-    assert set(_assigned_sets(as_account, "sara")) == {set_id}
-    # Leaving the class takes nothing away; a newcomer to it gets nothing.
-    with as_account("adam"):
-        ClassService().remove_student(_class_id(as_account), teaching_users["sara"]["id"])
-    assert set(_assigned_sets(as_account, "sara")) == {set_id}
-    from deeptutor.classes.service import ClassForbidden
-
-    with pytest.raises(ClassForbidden):
-        _new_student(seed_user, as_user, as_account)  # nobody joins a class any more (review M1)
-
-
-def test_books_reach_class_teachers_too_and_student_shares_stay(as_account, teaching_users, tmp_path):
-    from deeptutor.book import registry as book_registry
-    from deeptutor.catalog.enrollment import members
-    from deeptutor.publishing import scope as scopes
-
-    tina = teaching_users["tina"]["id"]
-    book = book_registry.register_book(
-        base_dir=tmp_path / "books", dir_name="book_bk_cls", title="Waves", created_by=tina, visibility="public",
-    )
-    scopes._store_scope(scopes.BOOK, book.book_id, scopes.Scope(classes=[_class_id(as_account)]), actor_id=tina)
-    shared = book_registry.register_book(
-        base_dir=tmp_path / "books", dir_name="book_bk_stu", title="Notes",
-        created_by=teaching_users["sara"]["id"], visibility="public",
-    )
-    scopes._store_scope(scopes.BOOK, shared.book_id, scopes.Scope(classes=[_class_id(as_account)]),
-                        actor_id=teaching_users["sara"]["id"])
-    _retire()
-    assert members("book", book.book_id) == {
-        teaching_users[n]["id"] for n in ("sara", "sam", "tom")
-    }
-    # A student's old share stays as it was: the same classmates keep reading it (review 2 #2).
-    assert members("book", shared.book_id) == {teaching_users[n]["id"] for n in ("sam", "tina", "tom")}
-
-
-def test_a_class_course_keeps_handing_out_its_tasks(as_account, teaching_users):
-    from deeptutor.tasks.courses import CourseService, assigned_courses
-    from deeptutor.tasks.service import StudentTasks, TaskService
-
-    set_id = _class_set(as_account)
-    with as_account("tina"):
-        task = TaskService().create("practice_set", "Do week 1")
-        TaskService().update(task["id"], target_id=set_id)
-        course = CourseService().create("Course")
-        CourseService().update(course["id"], task_ids=[task["id"]])
-        CourseService().publish(course["id"])
-    _retire()
-    with as_account("sam"):
-        assert [c["id"] for c in assigned_courses()] == [course["id"]]
-        assert [t["key"] for t in StudentTasks().assigned()] == [task["id"]]
-
-
-def test_a_standalone_task_stays_with_those_who_had_it(as_account, teaching_users):
-    from deeptutor.tasks.service import StudentTasks, TaskService
-
-    with as_account("tina"):
-        task = TaskService().create("note", "Read chapter 3")
-        TaskService().publish(task["id"])  # before retirement: to her classes
-    _retire()
-    with as_account("sara"):
-        assert [t["key"] for t in StudentTasks().assigned()] == [task["id"]]
-
-
-def test_hand_assigned_paths_keep_their_students(
-    as_account, teaching_users, teacher_draft, publish_template,
-):
-    from deeptutor.catalog.enrollment import joined_by
-
-    teacher_draft()
-    result = publish_template(students=("sara",))
-    _retire()
-    assert joined_by(teaching_users["sara"]["id"]) == {("mastery_path", result["template"]["id"]): "migrated"}
-    assert ("mastery_path", result["template"]["id"]) not in joined_by(teaching_users["sam"]["id"])
-
-
-# ── policies (§2.2) ────────────────────────────────────────
-
-
-def test_what_classes_allowed_is_kept_per_student(as_account, teaching_users):
-    from deeptutor.classes.service import ClassService
-    from deeptutor.multi_user.grants import load_grant, save_grant
-    from deeptutor.multi_user.roles import effective_ai_daily_tokens, effective_student_policy
-
-    sara, sam = teaching_users["sara"]["id"], teaching_users["sam"]["id"]
-    with as_account("adam"):
-        ClassService().set_student_policy(
-            _class_id(as_account), {"allow_partners": True, "allow_personal_book": False, "ai_daily_tokens": 5000},
-        )
-    grant = load_grant(sam)
-    save_grant(sam, {**grant, "student_policy": {"allow_partners": False}})  # his own setting wins
-    before = {u: (effective_student_policy(u), effective_ai_daily_tokens(u)) for u in (sara, sam)}
-    assert before[sara][0]["allow_partners"] and not before[sam][0]["allow_partners"]
-    _retire()
-    after = {u: (effective_student_policy(u), effective_ai_daily_tokens(u)) for u in (sara, sam)}
-    assert after == before
-    assert load_grant(sara)["student_policy"] == {
-        "allow_partners": True, "allow_personal_book": False, "ai_daily_tokens": 5000,
-    }
-
-
-def test_a_failed_run_leaves_classes_working(as_account, monkeypatch):
-    from deeptutor.catalog import retire_classes
-
-    def broken(accounts):
-        raise RuntimeError("disk full")
-
-    from deeptutor.catalog import migration
-
-    migration.run()
-    monkeypatch.setattr(retire_classes, "_keep_policies", broken)
-    with pytest.raises(RuntimeError):
-        retire_classes.run()
-    assert not retire_classes.retired()
-
-
-# ── after retirement (§2.3) ────────────────────────────────
-
-
-def test_teachers_learners_are_who_joined_their_content(as_account, teaching_users):
-    from deeptutor.classes.service import teacher_student_ids
-
-    _class_set(as_account)
-    _retire()
-    assert teacher_student_ids(teaching_users["tina"]["id"]) == {
+    set_id = _published_set(as_account)
+    assert learners_of(teaching_users["tina"]["id"]) == set()
+    deliver("practice_set", set_id, "sara", "sam")
+    assert learners_of(teaching_users["tina"]["id"]) == {
         teaching_users["sara"]["id"], teaching_users["sam"]["id"],
     }
-    assert teacher_student_ids(teaching_users["tom"]["id"]) == set()
+    assert learners_of(teaching_users["tom"]["id"]) == set()
 
 
-def test_only_administrators_reset_passwords(as_account, teaching_users):
-    from deeptutor.classes.service import ClassForbidden, ClassService
-
-    _retire()
-    with as_account("tina"), pytest.raises(ClassForbidden):
-        ClassService().reset_student_password(teaching_users["sara"]["id"], "new-password-1")
-    with as_account("adam"):
-        ClassService().reset_student_password(teaching_users["sara"]["id"], "new-password-1")
-
-
-def test_publishing_no_longer_goes_to_classes(as_account):
+def test_publishing_with_nobody_chosen_reaches_nobody(as_account):
     from deeptutor.publishing import scope as scopes
     from deeptutor.publishing.service import PublishService, ScopeError
 
-    _retire()
-    set_id = _class_set(as_account)  # nothing chosen: nobody, no error
+    set_id = _published_set(as_account)  # nothing chosen: nobody, no error
     assert scopes._stored_scope(scopes.PRACTICE_SET, set_id).empty
     assert _assigned_sets(as_account, "sara") == []
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=False, users=[], classes=[_class_id(as_account)])
+        PublishService().set_scope("practice_set", set_id, everyone=True, users=[])
 
 
 # ── registration (§4) ──────────────────────────────────────
@@ -260,15 +94,13 @@ def auth_client(teaching_users, monkeypatch):
 
 
 def test_invites_no_longer_join_or_admit(as_account, auth_client):
-    from deeptutor.classes.service import ClassService, student_class_ids
+    from deeptutor.catalog.enrollment import joined_by
 
-    with as_account("tina"):
-        token = ClassService().regenerate_link(_class_id(as_account))["token"]
-    _retire()
+    token = "an-old-class-link"
     joined = auth_client.post("/api/auth/register", json={"username": "newbie", "password": "password-123",
                                                           "invite": token})
-    assert joined.status_code == 201 and joined.json()["joined_class"] is None
-    assert student_class_ids(joined.json()["user_id"]) == set()
+    assert joined.status_code == 201 and "joined_class" not in joined.json()
+    assert joined_by(joined.json()["user_id"]) == {}
     auth_client.put("/api/auth/registration", json={"open": False}, headers={"Authorization": "Bearer admin-token"})
     refused = auth_client.post("/api/auth/register", json={"username": "other", "password": "password-123",
                                                            "invite": token})
@@ -283,7 +115,6 @@ def test_tasks_go_out_with_courses_only(as_account):
     from deeptutor.tasks.service import TaskError, TaskService
     from deeptutor.tasks.store import db as task_db
 
-    _retire()
     with as_account("tina"):
         task = TaskService().create("note", "Read")
         with pytest.raises(TaskError, match="course"):
@@ -297,13 +128,11 @@ def test_tasks_go_out_with_courses_only(as_account):
     assert statuses == {"Read": "published", "Read more": "published"}
 
 
-def test_joined_sets_and_paths_are_not_tasks(as_account):
+def test_joined_sets_and_paths_are_not_tasks(as_account, deliver):
     from deeptutor.tasks.service import StudentTasks
 
-    set_id = _class_set(as_account)
-    with as_account("sara"):
-        assert [t["key"] for t in StudentTasks().assigned()] == [f"practice_set:{set_id}"]
-    _retire()
+    set_id = _published_set(as_account)
+    deliver("practice_set", set_id, "sara")
     with as_account("sara"):
         assert StudentTasks().assigned() == []
     assert _assigned_sets(as_account, "sara") == [set_id]  # still in her practice sets
@@ -334,7 +163,6 @@ def test_a_teacher_joins_answers_and_shows_in_the_results(as_account, teaching_u
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.practice_sets.service import PracticeSetService
 
-    _retire()
     set_id = _listed_set(as_account)
     with as_account("tom"):
         join(get_current_user(), "practice_set", set_id)
@@ -356,7 +184,6 @@ def test_a_teacher_joins_a_path_and_gets_a_copy(as_account, teaching_users, teac
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    _retire()
     teacher_draft()
     with as_account("tina"):
         service = TeachingService()
@@ -380,7 +207,6 @@ def test_an_administrator_joins_a_course(as_account):
     from deeptutor.tasks.courses import CourseService, assigned_courses
     from deeptutor.tasks.service import TaskService
 
-    _retire()
     with as_account("tina"):
         task = TaskService().create("note", "Read")
         course = CourseService().create("Course")

@@ -35,7 +35,7 @@ def test_student_policy_defaults():
 def test_normalize_student_policy_keeps_set_items_and_drops_unknown_keys():
     assert roles.normalize_student_policy(None) is None
     assert roles.normalize_student_policy("bogus") is None
-    # Spec 2026-10-29 §6: items not set for the student inherit from classes.
+    # Spec 2026-10-29 §6: items not set for the student fall back to the defaults.
     assert roles.normalize_student_policy({"allow_private_kb": True, "x": 1}) == {
         "allow_private_kb": True,
     }

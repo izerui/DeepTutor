@@ -27,12 +27,25 @@ def ids(teaching_users):
     return {name: row["id"] for name, row in teaching_users.items()}
 
 
+#: The running test's ``in_course`` fixture: tasks go out as part of a course Sara and Sam joined.
+_fixtures: dict[str, object] = {}
+
+
+@pytest.fixture(autouse=True)
+def _remember(in_course):
+    _fixtures["in_course"] = in_course
+
+
+def _in_course(*task_ids, **options):
+    return _fixtures["in_course"](*task_ids, **options)
+
+
 def _homework(as_account, ids, owner="tina"):
     from deeptutor.tasks.service import StudentTasks, TaskService
 
     with as_account(owner):
         task = TaskService().create("homework", "Essay")
-        TaskService().publish(task["id"])
+    _in_course(task["id"], owner=owner)
     with as_account("sara"):
         asyncio.run(StudentTasks().submit(task["id"], "Waves carry energy.", []))
     return task["id"]
@@ -47,7 +60,7 @@ def test_an_administrator_who_took_over_homework_cannot_read_or_grade_it(as_acco
     task_id = _homework(as_account, ids)
     from deeptutor.tasks.store import db
 
-    # As if no co-teacher was left: the homework task went to the administrator.
+    # As if its teacher left: the homework task went to the administrator.
 
     with db.write() as conn:
         conn.execute("UPDATE tasks SET owner_user_id = ? WHERE id = ?", (ids["adam"], task_id))
@@ -77,7 +90,8 @@ def test_a_task_that_is_open_cannot_be_closed_again_by_an_opening_time(as_accoun
 
     with as_account("tina"):
         task = TaskService().create("note", "Read")
-        TaskService().publish(task["id"])  # open at once
+    _in_course(task["id"])  # open at once
+    with as_account("tina"):
         with pytest.raises(TaskConflict):
             TaskService().update(task["id"], open_at=time.time() + 3600)
         TaskService().update(task["id"], open_at=None)  # clearing keeps it open: allowed
@@ -89,12 +103,13 @@ def test_a_task_published_after_its_opening_is_announced_once(as_account, ids):
     with as_account("tina"):
         task = TaskService().create("note", "Read")
         TaskService().update(task["id"], open_at=time.time() - 60)
-        TaskService().publish(task["id"])
+    _in_course(task["id"])
     with as_account("sara"):
         StudentTasks().sweep()
         StudentTasks().assigned()
     kinds = [n["kind"] for n in notifications.list_for(ids["sara"])]
-    assert kinds.count("task_published") == 1 and "task_opened" not in kinds
+    # Announced once, as its course.
+    assert kinds.count("course_published") == 1 and "task_opened" not in kinds
 
 
 def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_account, ids, monkeypatch):
@@ -110,7 +125,7 @@ def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_a
         PracticeSetService().publish(created["id"])
         task = TaskService().create("practice_set", "Do week 5")
         TaskService().update(task["id"], target_id=created["id"], due_at=due)
-        TaskService().publish(task["id"])
+    _in_course(task["id"])  # the course hands out the set too
     with as_account("sara"):
         qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(created["id"], {qid: "A"}))
@@ -123,13 +138,16 @@ def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_a
                             (task["id"],)).fetchone()[0] < due
 
 
-def test_needing_attention_reads_each_students_progress_as_that_student(as_account, ids, monkeypatch):
-    from deeptutor.classes import attention
+def test_needing_attention_reads_each_students_progress_as_that_student(
+    as_account, ids, monkeypatch, make_learners
+):
+    from deeptutor.catalog import attention
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.tasks.service import StudentTasks
 
     seen = []
     monkeypatch.setattr(StudentTasks, "assigned", lambda self: seen.append(get_current_user().id) or [])
+    make_learners("tina", "sara", "sam")
     attention.clear_cache()
     with as_account("tina"):
         attention.for_teacher(ids["tina"])
@@ -142,7 +160,7 @@ def test_needing_attention_reads_each_students_progress_as_that_student(as_accou
 
 
 def test_a_teacher_turned_student_keeps_draft_courses(as_account, ids):
-    from deeptutor.classes.lifecycle import hand_over_published
+    from deeptutor.multi_user.content_lifecycle import hand_over_published
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.store import db
 
@@ -170,27 +188,10 @@ def test_a_failed_course_publication_publishes_none_of_its_tasks(as_account):
         assert {TaskService().get(t["id"])["status"] for t in course["tasks"]} == {"draft"}
 
 
-def test_a_published_task_added_to_a_published_course_must_reach_its_students(as_account, ids):
-    from deeptutor.publishing import scope as scopes
-    from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.service import TaskError, TaskService
-
-    with as_account("tina"):
-        course = CourseService().create("Waves")
-        course = CourseService().add_new_task(course["id"], "note", "Intro")
-        CourseService().publish(course["id"])
-        narrow = TaskService().create("note", "Only Sara")
-        with scopes.chosen_scope(scopes.Scope(users=[ids["sara"]])):
-            TaskService().publish(narrow["id"])
-        with pytest.raises(TaskError):
-            CourseService().update(course["id"], task_ids=[course["tasks"][0]["id"], narrow["id"]])
-        assert [t["id"] for t in CourseService().get(course["id"])["tasks"]] == [course["tasks"][0]["id"]]
-
-
 # ── permissions ────────────────────────────────────────────
 
 
-def test_administrators_see_no_practice_answers(as_account, ids):
+def test_administrators_see_no_practice_answers(as_account, ids, deliver):
     from deeptutor.practice_sets.review import PracticeReview
     from deeptutor.practice_sets.service import PracticeForbidden, PracticeSetService
     from deeptutor.practice_sets import store
@@ -200,6 +201,7 @@ def test_administrators_see_no_practice_answers(as_account, ids):
         PracticeSetService().update(created["id"], questions=[
             {"question": "Why?", "question_type": "short_answer", "correct_answer": "Because."}])
         PracticeSetService().publish(created["id"])
+    deliver("practice_set", created["id"], "sara")
     with as_account("sara"):
         qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
         result = asyncio.run(PracticeSetService().submit(created["id"], {qid: "Private thoughts."}))
@@ -209,10 +211,11 @@ def test_administrators_see_no_practice_answers(as_account, ids):
         PracticeReview().attempt(created["id"], result["submission_id"])
 
 
-def test_a_failed_first_publication_keeps_no_receivers(as_account, ids):
+def test_a_failed_first_publication_keeps_no_receivers(as_account, ids, make_learners):
     from deeptutor.practice_sets.service import PracticeError, PracticeSetService
     from deeptutor.publishing import scope as scopes
 
+    make_learners("tina", "sam")
     with as_account("tina"):
         created = PracticeSetService().create("Week 7")
         PracticeSetService().update(created["id"], questions=[
@@ -254,7 +257,7 @@ def _published_homework(as_account):
 
     with as_account("tina"):
         task = TaskService().create("homework", "Lab report")
-        TaskService().publish(task["id"])
+    _in_course(task["id"])
     return task["id"]
 
 

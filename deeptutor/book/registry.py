@@ -1025,16 +1025,12 @@ def set_book_visibility(
     kb_choices: Mapping[str, str] | None = None, confirm: bool = False,
     confirmed_referrers: Collection[str] | None = None,
 ) -> BookRecord:
-    from deeptutor.teaching.material_watch import watching
-
     from .sharing import set_visibility
 
-    # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
-    with watching("book", book_id):
-        record = set_visibility(
-            book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
-            confirmed_referrers=confirmed_referrers,
-        )
+    record = set_visibility(
+        book_id, visibility, force=force, kb_choices=kb_choices, confirm=confirm,
+        confirmed_referrers=confirmed_referrers,
+    )
     if visibility == "private":
         from deeptutor.catalog.listings import content_closed
         from deeptutor.catalog.material_notice import notify_lost

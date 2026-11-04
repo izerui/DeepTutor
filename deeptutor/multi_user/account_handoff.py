@@ -10,7 +10,7 @@ stages, each in its own transaction:
 ``teacher_paths`` / ``student_assignments`` / ``path_materials``
     :func:`deeptutor.teaching.service.handle_account_deleted`
 ``classes`` / ``publish_targets`` / ``practice_sets``
-    :mod:`deeptutor.classes.lifecycle` (spec 2026-10-29 §5, §7, §8)
+    :mod:`deeptutor.multi_user.content_lifecycle` (spec 2026-10-29 §7, §8)
 ``tasks`` / ``task_records`` / ``notifications``
     :mod:`deeptutor.tasks.service`, :mod:`deeptutor.notifications.service`
     (spec 2026-11-03 batch 1 §7)
@@ -45,7 +45,6 @@ STAGES: tuple[str, ...] = (
     "teacher_paths",
     "student_assignments",
     "path_materials",
-    "classes",
     "publish_targets",
     "practice_sets",
     # Spec 2026-11-03 batch 1 §7: tasks, homework and notifications follow too.
@@ -182,10 +181,9 @@ def run_stages(
             errors.extend(teaching_errors)
         failed.extend(stage for stage in teaching if stage in set(teaching_failed))
 
-    from deeptutor.classes import lifecycle
+    from deeptutor.multi_user import content_lifecycle as lifecycle
 
     for stage, run in (
-        ("classes", lambda: lifecycle.forget_deleted_account(user_id)),
         ("publish_targets", lambda: lifecycle.forget_publish_targets(user_id)),
         ("practice_sets", lambda: counts.__setitem__(
             "practice_sets", lifecycle.transfer_practice_sets(user_id, successor_id))),

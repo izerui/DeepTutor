@@ -514,13 +514,17 @@ def test_everyone_scoped_content_moves_into_the_market(as_account, teaching_user
     with as_account("tina"):
         created = PracticeSetService().create("Everyone")
         PracticeSetService().update(created["id"], questions=QUESTIONS)
-        with scopes.chosen_scope(scopes.Scope(everyone=True)):
-            PracticeSetService().publish(created["id"])
+    # Content from before the market that reached everyone (it can no longer be chosen).
+    scopes._store_scope(scopes.PRACTICE_SET, created["id"], scopes.Scope(everyone=True),
+                        actor_id=teaching_users["tina"]["id"])
+    with as_account("tina"):
+        PracticeSetService().publish(created["id"])
     set_id = created["id"]
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}))
-    assert set(_assigned_sets(as_account, "sam")) == {set_id}
+    # (A student's list holds only what they joined or were named in, so the
+    # set is not listed for Sam even before the migration.)
 
     assert migration.run() == 2  # the set, and Tom's public book that never had a scope
     assert migration.run() == 0

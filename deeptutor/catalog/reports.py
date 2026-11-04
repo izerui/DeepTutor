@@ -13,7 +13,7 @@ from typing import Any
 
 from deeptutor.catalog import enrollment, items
 from deeptutor.catalog.listings import ListingForbidden, ListingNotFound
-from deeptutor.classes.report import PERIODS, ReportService, _snapshots
+from deeptutor.catalog.learner_data import PERIODS, LearnerData, _snapshots
 from deeptutor.publishing import scope as scopes
 
 KINDS = (scopes.COURSE, scopes.MASTERY_PATH)
@@ -21,9 +21,9 @@ KINDS = (scopes.COURSE, scopes.MASTERY_PATH)
 CHUNK = 400
 
 
-class LearnerReportService(ReportService):
+class LearnerReportService(LearnerData):
     def _require_author(self, kind: str, item_id: str) -> items.ItemInfo:
-        from deeptutor.classes.service import _role
+        from deeptutor.multi_user.accounts import live_role as _role
         from deeptutor.multi_user.ownership import owns
 
         if kind not in KINDS:
@@ -36,7 +36,7 @@ class LearnerReportService(ReportService):
         return info
 
     def _learners(self, kind: str, item_id: str, owner: str) -> list[str]:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
         found = enrollment.members(kind, item_id) - {owner, self.actor.id}
@@ -144,8 +144,8 @@ class LearnerReportService(ReportService):
         return out
 
     def report(self, kind: str, item_id: str, days: int | None = None) -> dict[str, Any]:
-        from deeptutor.classes import attention
-        from deeptutor.classes.service import _accounts
+        from deeptutor.catalog import attention
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         info = self._require_author(kind, item_id)
         if days is not None and days not in PERIODS:
@@ -260,7 +260,7 @@ class LearnerReportService(ReportService):
         return out.getvalue()
 
     def learner(self, kind: str, item_id: str, user_id: str) -> dict[str, Any]:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         info = self._require_author(kind, item_id)
         if user_id not in self._learners(kind, item_id, info.owner):

@@ -1286,10 +1286,7 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 
     try:
         # Registry writers and the teaching-store counting stay off the event loop.
-        from deeptutor.teaching.material_watch import watching
-
-        # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
-        with chosen(req.scope), watching("book", record.book_id):
+        with chosen(req.scope):
             updated, plan = await asyncio.to_thread(run)
     except ScopeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

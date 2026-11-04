@@ -64,7 +64,7 @@ class ReviewService:
         self.actor = actor or get_current_user()
 
     def _role(self) -> str:
-        from deeptutor.classes.service import _role
+        from deeptutor.multi_user.accounts import live_role as _role
 
         return _role(self.actor)
 

@@ -289,21 +289,21 @@ def test_a_stale_preview_cannot_be_published(as_account, teacher_draft, quiet_ch
 
 
 def test_only_active_student_accounts_can_be_assigned(
-    as_account, teacher_draft, publish_template, teaching_users
+    as_account, teacher_draft, publish_template, teaching_users, make_learners
 ):
     teacher_draft()
     template_id = publish_template()["template"]["id"]
+    make_learners("tina", "sam")
     with as_account("tina"):
         with pytest.raises(InvalidStudents):
             TeachingService().assign(template_id, [teaching_users["uma"]["id"]])
         rows = TeachingService().assign(template_id, [teaching_users["sam"]["id"]])
-    # Published with nobody picked, it already reached Tina's class (spec §7.1).
     assert "sam" in [row["username"] for row in rows]
 
 
 def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
     teacher_draft()
-    template_id = publish_template()["template"]["id"]
+    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
 
     with as_account("tom"):
         service = TeachingService()
@@ -314,7 +314,6 @@ def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
     with as_account("adam"):
         service = TeachingService()
         assert [t["id"] for t in service.list_for_actor()] == [template_id]
-        # Published with nobody picked: it reached Tina's class (spec §7.1).
         assert {row["username"] for row in service.assignments(template_id)} == {"sara", "sam"}
         with pytest.raises(TemplateForbidden):
             asyncio.run(service.preview_publish(template_id))
@@ -378,7 +377,8 @@ def test_republishing_records_the_confirmed_changes(
     assert result["affected_students"] == 1
 
 
-def test_student_picker_returns_only_public_fields(as_account, teaching_users):
+def test_student_picker_returns_only_public_fields(as_account, teaching_users, make_learners):
+    make_learners("tina", "sara", "sam")  # the picker offers Tina's learners
     with as_account("tina"):
         students = TeachingService().list_students()
         filtered = TeachingService().list_students("sa")

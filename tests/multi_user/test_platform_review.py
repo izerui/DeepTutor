@@ -23,13 +23,6 @@ def _offline(monkeypatch):
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
 
 
-def _retire():
-    from deeptutor.catalog import migration, retire_classes
-
-    migration.run()
-    assert retire_classes.run() is True
-
-
 def _uid(teaching_users, name):
     return teaching_users[name]["id"]
 
@@ -71,7 +64,6 @@ def test_a_course_does_not_hand_out_someone_elses_unlisted_book(as_account, teac
     from deeptutor.tasks.service import TaskError, TaskService
     from deeptutor.tasks.store import db as task_db
 
-    _retire()
     tom = _uid(teaching_users, "tom")
     book = book_registry.register_book(
         base_dir=tmp_path / "books", dir_name="book_bk_t", title="Optics", created_by=tom, visibility="public",
@@ -100,68 +92,36 @@ def test_a_course_does_not_hand_out_someone_elses_unlisted_book(as_account, teac
     assert _uid(teaching_users, "sara") not in members("book", book.book_id)
 
 
-# ── H2, H3 ─────────────────────────────────────────────────
-
-
-def test_retiring_waits_for_the_market_migration(as_account):
-    from deeptutor.catalog import retire_classes
-
-    assert retire_classes.run() is False
-    assert not retire_classes.retired()
-
-
-def test_an_unreadable_item_stops_the_retirement(as_account, monkeypatch):
-    from deeptutor.catalog import items, migration, retire_classes
-
-    _market_set(as_account)  # sent to Tina's class
-    migration.run()
-
-    def unreadable(kind, item_id):
-        raise OSError("disk")
-
-    monkeypatch.setattr(items, "owner", unreadable)
-    with pytest.raises(OSError):
-        retire_classes.run()
-    assert not retire_classes.retired()
-
-
 # ── M1, M2, M3, M4 ─────────────────────────────────────────
 
 
-def test_after_retirement_classes_give_no_reports_and_take_nobody(as_account):
-    from deeptutor.classes.report import ReportService
-    from deeptutor.classes.service import ClassForbidden, ClassService
-
-    with as_account("adam"):
-        [row] = ClassService().list_classes()
-    _retire()
-    with as_account("tina"):
-        with pytest.raises(ClassForbidden):
-            ReportService().class_report(row["id"])
-        with pytest.raises(ClassForbidden):
-            ClassService().create("New class")
-
-
-def test_after_retirement_everyone_goes_through_the_market(as_account):
+def test_everyone_goes_through_the_market(as_account):
     from deeptutor.publishing.service import PublishService, ScopeError
 
-    _retire()
     set_id = _market_set(as_account)
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=True, users=[], classes=[])
+        PublishService().set_scope("practice_set", set_id, everyone=True, users=[])
 
 
-def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users):
+def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users, make_learners):
+    from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
     from deeptutor.publishing.service import PublishService, ScopeError
 
-    set_id = _market_set(as_account)  # stored: Tina's class
+    sara = _uid(teaching_users, "sara")
+    make_learners("tina", "sara")
+    with as_account("tina"):
+        created = PracticeSetService().create("Week 1")
+        PracticeSetService().update(created["id"], questions=QUESTIONS)
+        with scopes.chosen_scope(scopes.Scope(users=[sara])):
+            PracticeSetService().publish(created["id"])  # stored: Sara by name
+    set_id = created["id"]
     _list(as_account, "practice_set", set_id)
     with as_account("adam"):
         _listings().take_down("practice_set", set_id, "Wrong.")
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=False, users=[], classes=[])
-    assert scopes._stored_scope("practice_set", set_id).classes  # untouched
+        PublishService().set_scope("practice_set", set_id, everyone=False, users=[])
+    assert scopes._stored_scope("practice_set", set_id).users == [sara]  # untouched
 
 
 def test_an_administrators_taken_down_item_is_reviewed_again(as_account):
@@ -213,7 +173,6 @@ def test_a_report_shows_only_what_happened_on_the_item(as_account, teaching_user
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskService
 
-    _retire()
     with as_account("tina"):
         note = TaskService().create("note", "Read")
         course = CourseService().create("Course")
@@ -263,36 +222,34 @@ def test_administrators_name_entries_in_every_language():
 # ── the migration check (run on a copy before going live) ──
 
 
-def test_the_migration_check_finds_nothing_lost(as_account, teaching_users):
+def test_the_migration_check_finds_nothing_lost(as_account, teaching_users, deliver):
     from deeptutor.catalog import migration_check
-    from deeptutor.classes.service import ClassService
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
 
-    _market_set(as_account)  # to Tina's class
+    deliver("practice_set", _market_set(as_account), "sara")
     with as_account("tina"):
         everyone = PracticeSetService().create("Everyone")
         PracticeSetService().update(everyone["id"], questions=QUESTIONS)
-        with scopes.chosen_scope(scopes.Scope(everyone=True)):
-            PracticeSetService().publish(everyone["id"])
-    with as_account("adam"):
-        [row] = ClassService().list_classes()
-        ClassService().set_student_policy(row["id"], {"allow_partners": True})
+    # Content from before the market that reached everyone (it can no longer be chosen).
+    scopes._store_scope(scopes.PRACTICE_SET, everyone["id"], scopes.Scope(everyone=True),
+                        actor_id=_uid(teaching_users, "tina"))
+    with as_account("tina"):
+        PracticeSetService().publish(everyone["id"])
     result = migration_check.run()
-    assert result["classes_retired"] and result["problems"] == 0
+    assert result["migrated"] and result["problems"] == 0
     sara = next(p for p in result["people"] if p["username"] == "sara")
-    assert sara["ok"] and sara["not_started_everyone_items"] == {"practice_set": [everyone["id"]]}
+    assert sara["ok"]
     assert migration_check.main([]) == 2  # refuses without --on-a-copy
 
 
 # ── found in the browser check with a stand-in model ───────
 
 
-def test_a_set_sent_by_name_shows_after_retirement(as_account, teaching_users):
+def test_a_set_sent_by_name_shows(as_account, teaching_users):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
 
-    _retire()
     from deeptutor.catalog.enrollment import join
     from deeptutor.multi_user.context import get_current_user
 
@@ -322,7 +279,6 @@ def test_a_path_learner_who_never_opened_it_counts_in_the_report(
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    _retire()
     teacher_draft()
     with as_account("tina"):
         service = TeachingService()
@@ -396,8 +352,11 @@ def test_a_migrated_set_with_a_deadline_waits_outside_the_market(as_account, tea
     with as_account("tina"):
         created = PracticeSetService().create("Dated")
         PracticeSetService().update(created["id"], questions=QUESTIONS, due_at=time.time() + 86400)
-        with scopes.chosen_scope(scopes.Scope(everyone=True)):
-            PracticeSetService().publish(created["id"])
+    # Content from before the market that reached everyone (it can no longer be chosen).
+    scopes._store_scope(scopes.PRACTICE_SET, created["id"], scopes.Scope(everyone=True),
+                        actor_id=_uid(teaching_users, "tina"))
+    with as_account("tina"):
+        PracticeSetService().publish(created["id"])
     import asyncio
 
     with as_account("sara"):
@@ -425,10 +384,16 @@ def test_learners_of_leave_out_what_was_taken_down(as_account, teaching_users):
     assert _uid(teaching_users, "sam") not in learners_of(_uid(teaching_users, "tina"))
 
 
-def test_publishing_tells_learners_where_to_go(as_account, teaching_users):
+def test_publishing_tells_learners_where_to_go(as_account, teaching_users, deliver):
     from deeptutor.notifications import service as notifications
+    from deeptutor.practice_sets.service import PracticeSetService
 
-    _market_set(as_account)  # before retirement: to Tina's class, who hear of it
+    with as_account("tina"):
+        created = PracticeSetService().create("Week 1")
+        PracticeSetService().update(created["id"], questions=QUESTIONS)
+    deliver("practice_set", created["id"], "sara")  # she joined it, and hears of its publication
+    with as_account("tina"):
+        PracticeSetService().publish(created["id"])
     [notice] = [n for n in notifications.list_for(_uid(teaching_users, "sara")) if n["kind"] == "content_published"]
     assert notice["link"].startswith("/practice-sets?set=")
 
@@ -454,7 +419,6 @@ def test_an_administrator_hands_a_course_with_homework_to_a_teacher(as_account, 
     from deeptutor.tasks.service import TaskError, TaskService
     from deeptutor.tasks.store import db as task_db
 
-    _retire()
     with as_account("tina"):
         homework = TaskService().create("homework", "Essay")
         course = CourseService().create("Course")
@@ -522,7 +486,6 @@ def test_a_teachers_calendar_has_their_tasks_and_the_courses_they_joined(as_acco
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskService
 
-    _retire()
     soon = time.time() + 86400
     for owner, title in (("tina", "Tina's"), ("tom", "Tom's")):
         with as_account(owner):

@@ -19,7 +19,7 @@ SENT_LIMIT = 8
 
 def to_grade(teacher_id: str) -> list[dict[str, Any]]:
     """Every hand-in waiting for this teacher, oldest first."""
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
     from deeptutor.tasks.store import db
 
     with db.read() as conn:
@@ -41,23 +41,6 @@ def to_grade(teacher_id: str) -> list[dict[str, Any]]:
         for r in rows
     ]
 
-
-def _first_class(teacher_id: str) -> dict[str, str]:
-    """Each student's first class (by name) that this teacher teaches, for the report link."""
-    from deeptutor.classes import store
-
-    with store.read() as conn:
-        if conn is None:
-            return {}
-        rows = conn.execute(
-            "SELECT m.student_id, c.id FROM class_members m JOIN class_teachers t ON t.class_id = m.class_id "
-            "JOIN classes c ON c.id = m.class_id WHERE t.user_id = ? AND c.archived = 0 ORDER BY c.name",
-            (teacher_id,),
-        ).fetchall()
-    first: dict[str, str] = {}
-    for row in rows:
-        first.setdefault(row[0], row[1])
-    return first
 
 
 def _sent(actor) -> list[dict[str, Any]]:
@@ -98,65 +81,33 @@ def _sent(actor) -> list[dict[str, Any]]:
 
 
 def workbench(actor=None) -> dict[str, Any]:
-    from deeptutor.classes import attention
-    from deeptutor.classes.service import ClassService, _accounts, _role
+    """A teacher's home: what to grade, learners who need attention (with the course or path to open), what they sent."""
+    from deeptutor.catalog import attention, items
+    from deeptutor.catalog.learners import where_learners_are
+    from deeptutor.multi_user.accounts import accounts as _accounts, live_role as _role
 
     actor = actor or get_current_user()
     role = _role(actor)
     if role != "teacher":
         return {"role": role}
-    from deeptutor.publishing.scope import classes_retired
-
-    if classes_retired():
-        # Platform batch 3 §2: the teacher's learners, each with the course or path to open.
-        from deeptutor.catalog import items
-        from deeptutor.catalog.learners import where_learners_are
-
-        where = where_learners_are(actor.id)
-        flags = attention.for_teacher(actor.id)
-        accounts = _accounts()
-        needing = []
-        for s, f in flags.items():
-            if not f:
-                continue
-            kind, item_id = where.get(s, ("", ""))
-            info = items.info(kind, item_id) if kind else None
-            needing.append({
-                "student_id": s, "username": (accounts.get(s) or {}).get("username", ""), "class_id": "",
-                "item": {"kind": kind, "id": item_id, "title": info.title if info else ""} if kind else None,
-                "flags": f,
-            })
-        needing.sort(key=lambda row: (-len(row["flags"]), row["username"]))
-        return {
-            "role": role, "to_grade": to_grade(actor.id), "attention": needing[:ATTENTION_LIMIT],
-            "attention_total": len(needing), "classes": [], "sent": _sent(actor),
-        }
+    where = where_learners_are(actor.id)
     flags = attention.for_teacher(actor.id)
     accounts = _accounts()
-    first_class = _first_class(actor.id)
-    needing = [
-        {"student_id": s, "username": (accounts.get(s) or {}).get("username", ""), "class_id": first_class.get(s, ""),
-         "flags": f}
-        for s, f in flags.items() if f
-    ]
-    needing.sort(key=lambda row: (-len(row["flags"]), row["username"]))
-    inactive = {s for s, f in flags.items() if any(flag["kind"] == "inactive" for flag in f)}
-    classes = []
-    service = ClassService(actor)
-    for row in service.list_classes():
-        members = service.get(row["id"]).get("students") or []
-        ids = [m["id"] for m in members]
-        classes.append({
-            "id": row["id"], "name": row["name"], "student_count": len(ids),
-            "active_this_week": sum(1 for s in ids if s in flags and s not in inactive),
+    needing = []
+    for s, f in flags.items():
+        if not f:
+            continue
+        kind, item_id = where.get(s, ("", ""))
+        info = items.info(kind, item_id) if kind else None
+        needing.append({
+            "student_id": s, "username": (accounts.get(s) or {}).get("username", ""),
+            "item": {"kind": kind, "id": item_id, "title": info.title if info else ""} if kind else None,
+            "flags": f,
         })
+    needing.sort(key=lambda row: (-len(row["flags"]), row["username"]))
     return {
-        "role": role,
-        "to_grade": to_grade(actor.id),
-        "attention": needing[:ATTENTION_LIMIT],
-        "attention_total": len(needing),
-        "classes": classes,
-        "sent": _sent(actor),
+        "role": role, "to_grade": to_grade(actor.id), "attention": needing[:ATTENTION_LIMIT],
+        "attention_total": len(needing), "sent": _sent(actor),
     }
 
 

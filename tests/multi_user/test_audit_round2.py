@@ -13,7 +13,6 @@ import time
 
 import pytest
 
-from deeptutor.classes.service import ClassService
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing.scope import BOOK, MASTERY_PATH, PRACTICE_SET, ScopeError, get_scope
 from deeptutor.publishing.service import PublishService
@@ -22,12 +21,6 @@ QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
      "correct_answer": "B", "explanation": "Add."},
 ]
-
-
-def _class_id(as_account) -> str:
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
 
 
 def _admin(teaching_users, name: str):
@@ -111,8 +104,8 @@ def test_citing_a_scoped_kb_passes_nothing_on(teaching_users, as_account, tmp_pa
     with as_account("tina"):
         registry.set_visibility(kb.kb_id, "public")
         PublishService().set_scope(KNOWLEDGE_BASE, kb.kb_id, everyone=False,
-                                   users=[teaching_users["tom"]["id"]], classes=[], confirm=True)
-    # Tom cites it in something every reader may open (a book read by his class).
+                                   users=[teaching_users["tom"]["id"]], confirm=True)
+    # Tom cites it in something every reader may open (a book everyone may read).
     registry.register_reference_reader("zz_everyone", lambda referrer_id, user_id: True)
     registry.add_reference(kb.kb_id, referrer_kind="zz_everyone", referrer_id="b1",
                            created_by=teaching_users["tom"]["id"])
@@ -132,18 +125,19 @@ def test_teachers_name_only_students_and_teachers(teaching_books, teaching_users
         for name in ("uma", "adam"):
             with pytest.raises(ScopeError):
                 PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False,
-                                           users=[teaching_users[name]["id"]], classes=[], confirm=True)
+                                           users=[teaching_users[name]["id"]], confirm=True)
 
 
-def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_account):
+def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_account, make_learners):
     from deeptutor.book import registry as book_registry
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.publishing import store as scope_store
 
     book_id = teaching_books.public.book_id
+    make_learners("tom", "sam")
     with as_account("tom"):
         PublishService().set_scope(BOOK, book_id, everyone=False,
-                                   users=[teaching_users["sam"]["id"]], classes=[], confirm=True)
+                                   users=[teaching_users["sam"]["id"]], confirm=True)
     scope_store.scopes_db_path().unlink()
     record = book_registry.get_book(book_id)
     with as_account("sara"):
@@ -154,19 +148,6 @@ def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_acco
 
 
 # ── mastery paths ──────────────────────────────────────────
-
-
-def test_a_first_published_path_reaches_the_teachers_classes(
-    teacher_draft, publish_template, teaching_users, as_account
-):
-    from deeptutor.teaching.store import TeachingStore
-
-    teacher_draft()
-    template_id = publish_template()["template"]["id"]
-    scope = get_scope(MASTERY_PATH, template_id)
-    assert scope is not None and scope.classes == [_class_id(as_account)]
-    active = {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
-    assert active == {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
 
 
 def test_admins_withdraw_teacher_paths_but_never_retarget_them(
@@ -190,13 +171,13 @@ def test_admins_withdraw_teacher_paths_but_never_retarget_them(
 
 
 @pytest.fixture
-def after_due_set(as_account):
-    _class_id(as_account)
+def after_due_set(as_account, deliver):
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Week 1")
         service.update(created["id"], questions=QUESTIONS, reveal="after_due", due_at=time.time() + 3600)
         service.publish(created["id"])
+    deliver(PRACTICE_SET, created["id"], "sara")
     return created["id"]
 
 
@@ -256,13 +237,14 @@ def test_answers_of_an_older_version_are_completed_after_republishing(after_due_
     assert entry["result"] == "incorrect" and entry["correct_answer"] == "B"
 
 
-def test_best_scores_keep_their_own_versions_maximum(as_account):
+def test_best_scores_keep_their_own_versions_maximum(as_account, deliver):
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Grows")
         service.update(created["id"], questions=QUESTIONS)
         service.publish(created["id"])
     set_id = created["id"]
+    deliver(PRACTICE_SET, set_id, "sara")
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}))  # 1 / 1
@@ -276,19 +258,3 @@ def test_best_scores_keep_their_own_versions_maximum(as_account):
     with as_account("tina"):
         [sara] = [s for s in PracticeSetService().report(set_id)["students"] if s["username"] == "sara"]
     assert (sara["best_score"], sara["best_max_score"]) == (1, 1)
-
-
-def test_a_set_for_everyone_reports_only_the_teachers_students(as_account, as_user, seed_user):
-    sue = seed_user("sue", role="student")["id"]
-    with as_account("tina"):
-        service = PracticeSetService()
-        created = service.create("Open")
-        service.update(created["id"], questions=QUESTIONS)
-        service.publish(created["id"])
-        PublishService().set_scope(PRACTICE_SET, created["id"], everyone=True, users=[], classes=[])
-    with as_user(sue, role="student", username="sue"):
-        qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
-        asyncio.run(PracticeSetService().submit(created["id"], {qid: "B"}))
-    with as_account("tina"):
-        names = {s["username"] for s in PracticeSetService().report(created["id"])["students"]}
-    assert names == {"sara", "sam"} and sue

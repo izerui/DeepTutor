@@ -305,7 +305,7 @@ class SetRoleRequest(BaseModel):
 
 
 class PublicRegisterRequest(RegisterRequest):
-    """Self-service sign-up; ``invite`` is a class invite token (spec 2026-10-29 §5)."""
+    """Self-service sign-up. ``invite`` is still accepted from old links and ignored."""
 
     invite: str = Field(default="", max_length=128)
 
@@ -760,8 +760,8 @@ def _learning_surface_for_path(
         # the router already scopes every record to the current account, so
         # all methods (including progress PATCH/POST) belong to "chat".
         ("/api/mastery-paths", "chat"),
-        # Joining, leaving and answering class invitations (spec 2026-10-29 §5).
-        ("/api/classes", "chat"),
+        # The learning market: browsing, joining, reviews, announcements, reports.
+        ("/api/catalog", "chat"),
         # Answering a teacher's practice set (spec 2026-10-29 §8.3).
         ("/api/practice-sets", "chat"),
         # Tasks, homework, notifications and the home page (spec 2026-11-03 batch 1).
@@ -1301,9 +1301,8 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     Self-service registration.
 
     The first account becomes the administrator. After that, anyone may sign
-    up as a student while public registration is open; while it is closed, a
-    valid class invite token still admits a new student, who joins that class
-    on creation (spec 2026-10-29 §5, D19).
+    up as a student while public registration is open; while it is closed,
+    only an administrator makes accounts.
 
     Only available when AUTH_ENABLED=true.
     """
@@ -1341,14 +1340,6 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
         }
 
     first_user = is_first_user()
-    invite = body.invite.strip()
-    invite_error = ""
-    from deeptutor.publishing.scope import classes_retired
-
-    retired = await asyncio.to_thread(classes_retired)
-    if retired:
-        # Platform batch 2 §4: an invite link no longer joins a class nor opens closed sign-up.
-        invite = ""
     from deeptutor.multi_user import rate_limit
 
     address = _client_address(request)
@@ -1357,25 +1348,13 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
             await asyncio.to_thread(rate_limit.check_registration, address)
         except rate_limit.RateLimited as exc:
             raise _rate_limited(exc) from None
-        from deeptutor.classes.service import ClassError, link_info
         from deeptutor.multi_user.registration import public_registration_open
 
-        is_open = await asyncio.to_thread(public_registration_open)
-        if invite:
-            try:
-                await asyncio.to_thread(link_info, invite)
-            except ClassError as exc:
-                if not is_open:
-                    raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-                # Open registration does not depend on the link: sign up, join nothing.
-                invite, invite_error = "", str(exc)
-        elif not is_open:
+        # Open sign-up, or an administrator makes the account; an old invite link opens nothing.
+        if not await asyncio.to_thread(public_registration_open):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Registration is closed. Ask an administrator for an account." if retired
-                    else "Registration is closed. Ask your teacher for an invite link."
-                ),
+                detail="Registration is closed. Ask an administrator for an account.",
             )
 
     existing = {u["username"] for u in list_users()}
@@ -1401,13 +1380,10 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     if not first_user:
         # Only accounts actually made count against the limits (batch 3 §9).
         await asyncio.to_thread(rate_limit.registered, address)
-    joined: dict | None = None
-    if invite and role == "student" and user_id:
-        joined = await asyncio.to_thread(_join_new_student, user_id, body.username, invite)
     if first_user:
         logger.info(f"First user (admin) registered: '{body.username}'")
     else:
-        logger.info("Student registered: '%s' (invite=%s)", body.username, bool(invite))
+        logger.info("Student registered: '%s'", body.username)
     return {
         "ok": True,
         "user_id": user_id,
@@ -1415,24 +1391,8 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
         "role": role,
         "is_first_user": first_user,
         "is_admin": role == "admin",
-        "joined_class": joined,
-        "invite_error": invite_error,
     }
 
-
-def _join_new_student(user_id: str, username: str, invite: str) -> dict | None:
-    """Put a student who signed up through an invite link straight into the class."""
-    from deeptutor.classes.service import ClassError, ClassService
-    from deeptutor.multi_user.models import CurrentUser
-    from deeptutor.multi_user.paths import scope_for_user
-
-    actor = CurrentUser(user_id, username, "student", scope_for_user(user_id, is_admin=False))
-    try:
-        return ClassService(actor).join_by_link(invite)
-    except ClassError:
-        # The account exists either way; the invite page can still be retried.
-        logger.warning("New student %s could not join with the invite link", username)
-        return None
 
 
 @router.get("/registration")
@@ -1535,7 +1495,7 @@ async def change_own_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not available in this deployment.")
     if authenticate(current.username, body.current_password) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
-    from deeptutor.classes.service import end_other_sessions
+    from deeptutor.multi_user.accounts import end_other_sessions
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
@@ -2247,7 +2207,7 @@ async def admin_reset_password(
 
     Sessions and paired devices signed in with the old password stop working.
     """
-    from deeptutor.classes.service import end_other_sessions
+    from deeptutor.multi_user.accounts import end_other_sessions
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
@@ -2293,7 +2253,7 @@ async def update_user_role(
         )
     old_role = str(target.get("role") or "")
     if old_role == "teacher" and body.role == "student":
-        from deeptutor.classes.lifecycle import hand_over_published
+        from deeptutor.multi_user.content_lifecycle import hand_over_published
 
         # Spec 2026-11-02 §6.1: what they published goes to this administrator
         # first; a failure leaves the role unchanged, so the change can be retried.
@@ -2311,7 +2271,7 @@ async def update_user_role(
     updated = set_role(username, body.role)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    from deeptutor.classes.lifecycle import after_role_change
+    from deeptutor.multi_user.content_lifecycle import after_role_change
 
     # Spec 2026-10-29 §5: class rows and assignments follow the new role.
     await asyncio.to_thread(after_role_change, str(target.get("id") or ""), old_role, body.role)

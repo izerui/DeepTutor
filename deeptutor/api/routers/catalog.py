@@ -225,7 +225,7 @@ class TagMerge(BaseModel):
 
 
 def _require_admin() -> None:
-    from deeptutor.classes.service import _role
+    from deeptutor.multi_user.accounts import live_role as _role
 
     if _role(get_current_user()) != "admin":
         raise HTTPException(status_code=403, detail="Only administrators manage the classification.")

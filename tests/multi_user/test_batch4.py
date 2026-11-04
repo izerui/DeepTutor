@@ -1,5 +1,7 @@
-"""Batch 4 of the 2026-11-02 plan: class averages, withdrawn-material notices,
-hand-over summaries, own courses on the home page, teacher courses in one's own.
+"""Batch 4 of the 2026-11-02 plan: learners' averages, hand-over summaries,
+own courses on the home page, teacher courses in one's own.
+
+(The withdrawn-material notices went with classes.)
 
 Spec: docs/superpowers/specs/2026-11-03-batch4-design.md
 """
@@ -8,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from types import SimpleNamespace
 
 import pytest
 
@@ -27,16 +28,21 @@ def _offline(monkeypatch):
     monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
 
 
-@pytest.fixture
-def third_student(teaching_users, seed_user, as_account):
-    """A third student in the fixture class, so an average can be shown."""
-    from deeptutor.classes.service import ClassService
+#: The running test's ``deliver`` fixture, and who joins what Tina publishes here.
+_fixtures: dict[str, object] = {}
 
+
+@pytest.fixture(autouse=True)
+def _remember(deliver):
+    _fixtures.update(deliver=deliver, learners=("sara", "sam"))
+
+
+@pytest.fixture
+def third_student(teaching_users, seed_user):
+    """A third learner, so an average can be shown."""
     stu = seed_user("sue", role="student")
-    with as_account("adam"):
-        [row] = ClassService().list_classes()
-        ClassService().add_students(row["id"], [stu["id"]])
     teaching_users["sue"] = stu
+    _fixtures["learners"] = ("sara", "sam", "sue")
     return stu
 
 
@@ -57,6 +63,7 @@ def _set(as_account, **settings):
         created = PracticeSetService().create("Week 4")
         PracticeSetService().update(created["id"], questions=QUESTIONS, **settings)
         PracticeSetService().publish(created["id"])
+    _fixtures["deliver"]("practice_set", created["id"], *_fixtures["learners"])  # they joined it
     return created["id"]
 
 
@@ -75,7 +82,7 @@ def _take(as_account, name, set_id):
         return PracticeSetService().take(set_id)
 
 
-# ── class averages (§1) ────────────────────────────────────
+# ── learners' averages (§1) ────────────────────────────────
 
 
 def test_a_practice_average_needs_three_scores(as_account, third_student):
@@ -94,12 +101,12 @@ def test_no_average_before_the_answers_show(as_account, third_student):
     assert _take(as_account, "sara", set_id)["class_average"] is None
 
 
-def test_a_homework_average_shows_beside_a_graded_one(as_account, third_student, teaching_users):
+def test_a_homework_average_shows_beside_a_graded_one(as_account, third_student, teaching_users, in_course):
     from deeptutor.tasks.service import StudentTasks, TaskService
 
     with as_account("tina"):
         task = TaskService().create("homework", "Essay")
-        TaskService().publish(task["id"])
+    in_course(task["id"], to=("sara", "sam", "sue"))
     for name in ("sara", "sam", "sue"):
         with as_account(name):
             asyncio.run(StudentTasks().submit(task["id"], "text", []))
@@ -117,50 +124,11 @@ def test_a_homework_average_shows_beside_a_graded_one(as_account, third_student,
     assert sam_view["class_average"] == 75.0 and "ranking" not in sam_view
 
 
-# ── withdrawn material (§2) ────────────────────────────────
-
-
-def test_a_teacher_hears_when_cited_material_stops_reaching_their_students(
-    as_account, teaching_users, teaching_books, monkeypatch,
-):
-    from deeptutor.publishing import scope as scopes
-    from deeptutor.publishing.service import PublishService
-    from deeptutor.teaching import material_watch
-
-    ids = {name: row["id"] for name, row in teaching_users.items()}
-    book_id = teaching_books.public.book_id  # Tom's public book, everyone reads it
-    path = SimpleNamespace(id="tpl_waves", owner_user_id=ids["tina"], title="Waves path")
-    monkeypatch.setattr(
-        material_watch, "_citing_paths",
-        lambda kind, item_id, owner: [(path, {ids["sara"], ids["sam"]})] if item_id == book_id else [],
-    )
-    with as_account("tom"):
-        PublishService().set_scope(scopes.BOOK, book_id, everyone=False, users=[ids["sam"]], classes=[],
-                                   confirm=True)
-    [notice] = [n for n in notifications.list_for(ids["tina"]) if n["kind"] == "material_withdrawn"]
-    assert notice["params"] == {"title": "Waves path", "material": "Optics", "count": 1}
-    with as_account("tom"):  # the same day, the same path: once
-        PublishService().set_scope(scopes.BOOK, book_id, everyone=False, users=[], classes=[], confirm=True)
-    assert _kinds(ids["tina"]).count("material_withdrawn") == 1
-    with as_account("tom"):  # widening tells nobody
-        PublishService().set_scope(scopes.BOOK, book_id, everyone=True, users=[], classes=[], confirm=True)
-    assert _kinds(ids["tina"]).count("material_withdrawn") == 1
-
-
-def test_the_materials_owner_is_not_told_about_their_own_paths(teaching_users, monkeypatch):
-    from deeptutor.teaching import material_watch
-
-    template = SimpleNamespace(id="t", owner_user_id="u_tom", status="published", current_revision=1)
-    monkeypatch.setattr("deeptutor.teaching.store.TeachingStore.list_templates",
-                        lambda self, owner_user_id=None: [template])
-    assert material_watch._citing_paths("book", "bk", "u_tom") == []
-
-
 # ── hand-over summaries (§3) ───────────────────────────────
 
 
 def test_whoever_takes_over_gets_one_summary(as_account, teaching_users):
-    from deeptutor.classes.lifecycle import hand_over_published
+    from deeptutor.multi_user.content_lifecycle import hand_over_published
 
     ids = {name: row["id"] for name, row in teaching_users.items()}
     _set(as_account)
@@ -195,6 +163,8 @@ def _publish_course(as_account, title="Waves, term 1"):
     with as_account("tina"):
         course = CourseService().create(title)
         CourseService().add_new_task(course["id"], "note", "Read the intro")
+    _fixtures["deliver"]("course", course["id"], "sara")  # she joined it
+    with as_account("tina"):
         CourseService().publish(course["id"])
     return course["id"]
 

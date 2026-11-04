@@ -61,12 +61,8 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("Your homework “{{title}}” was sent back: {{reason}}", { title, reason: p.reason });
     case "homework_submitted":
       return t("{{count}} new hand-ins for “{{title}}”", { title, count: item.count });
-    case "class_invitation":
-      return t("{{teacher}} invited you to the class {{name}}", { teacher: p.teacher, name: p.class_name });
     case "teacher_comment":
       return t("{{teacher}} commented on “{{title}}”", { teacher: p.teacher, title });
-    case "class_announcement":
-      return t("{{teacher}} posted an announcement in {{name}}", { teacher: p.teacher, name: p.class_name });
     // Platform batch 3 §3: an announcement in a course or a Mastery Path one joined.
     case "content_announcement":
       return t("{{teacher}} posted an announcement in “{{title}}”", { teacher: p.teacher, title });

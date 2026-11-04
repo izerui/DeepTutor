@@ -145,13 +145,8 @@ class CourseService:
                 )
             conn.execute("UPDATE courses SET updated_at = ? WHERE id = ?", (time.time(), course_id))
         if row["status"] == "published" and task_ids is not None:
-            # Tasks added to a published course follow its receivers (§5.1); a task
-            # already published must already reach them all, as at publication.
+            # Tasks added to a published course reach its learners (§5.1).
             from deeptutor.catalog.enrollment import refresh_course
-            from deeptutor.publishing import scope as scopes
-
-            if not scopes.join_only_scope(scopes._stored_scope(scopes.COURSE, course_id)):
-                self._check_coverage(course_id, added)
             from deeptutor.catalog.items import _course_foreign_books
 
             refused = _course_foreign_books(course_id, row["owner_user_id"])
@@ -166,30 +161,6 @@ class CourseService:
             # Its members get the new tasks and what they cite (platform batch 1 §4.3).
             refresh_course(course_id)
         return self.get(course_id)
-
-    def _check_coverage(self, course_id: str, task_ids: list[str]) -> None:
-        from deeptutor.publishing import scope as scopes
-
-        if not task_ids:
-            return
-        scope = scopes.get_scope(scopes.COURSE, course_id)
-        receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
-        with db.read() as conn:
-            published = [
-                r[0] for r in conn.execute(
-                    f"SELECT id FROM tasks WHERE status = 'published' AND id IN ({','.join('?' for _ in task_ids)})",  # nosec B608
-                    task_ids,
-                )
-            ] if conn else []
-        for task_id in published:
-            task_scope = scopes.get_scope(scopes.TASK, task_id)
-            reach = scopes.audience(task_scope, students_only=True) if task_scope else set()
-            if receivers - reach:
-                with db.write() as conn:  # undo the addition: the course keeps reaching everyone it did
-                    conn.execute("DELETE FROM course_items WHERE course_id = ? AND task_id = ?", (course_id, task_id))
-                raise TaskError(
-                    "A published task in this course does not reach all of these students. Widen who receives it first."
-                )
 
     def add_new_task(self, course_id: str, kind: str, title: str) -> dict[str, Any]:
         """Create a task and put it at the end of the course in one step (§2)."""
@@ -255,14 +226,10 @@ class CourseService:
                 items,
             )] if items else []
         done: list[str] = []
-        # A course for the market hands its tasks to its members (platform batch 1 §4.3).
-        market = scopes.join_only_scope(scope)
+        # Its tasks reach whom the course reaches: its learners, and anyone it names.
         try:
             for task_id in drafts:
-                with scopes.join_only(market), scopes.chosen_scope(scopes.Scope(
-                    everyone=scope.everyone, users=list(scope.users), classes=list(scope.classes),
-                    groups=list(scope.groups),
-                ) if scope else None):
+                with scopes.chosen_scope(scopes.Scope(users=list(scope.users)) if scope else None):
                     self.tasks.publish(task_id, quiet=True)
                 done.append(task_id)
         except Exception:
@@ -285,12 +252,6 @@ class CourseService:
         with db.read() as conn:
             row = self._owned(conn, course_id)
             items = self._items(conn, course_id)
-            published = {
-                r["id"]: r["title"] for r in conn.execute(
-                    f"SELECT id, title FROM tasks WHERE status = 'published' AND id IN ({','.join('?' for _ in items)})",  # nosec B608
-                    items,
-                )
-            } if items else {}
         if row["status"] != "draft":
             raise TaskConflict("This course was already published.")
         if not items:
@@ -299,14 +260,7 @@ class CourseService:
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)
         try:
-            if scope is None or (scope.empty and not (scopes.is_join_only() or scopes.classes_retired())):
-                raise scopes.ScopeRequired()
-            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id)
-            for task_id in published:
-                task_scope = scopes.get_scope(scopes.TASK, task_id)
-                reach = scopes.audience(task_scope, students_only=True) if task_scope else set()
-                if receivers - reach:
-                    raise TaskError("A published task in this course does not reach all of these students. Widen who receives it first.")
+            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
             self._publish_drafts(course_id)
         except Exception:
             if not had_scope:
@@ -379,19 +333,17 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             )]
             for r in rows
         }
-    if scopes.classes_retired():
-        # Only courses one joined can reach one now (review M5).
-        from deeptutor.catalog.enrollment import joined_by
+    from deeptutor.catalog.enrollment import joined_by
 
-        joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE} | set(
-            scopes.named_items(scopes.COURSE, actor.id)
-        )
-        rows = [r for r in rows if r["id"] in joined]
-    classes = scopes.member_class_ids(actor.id) if student else set()
-    # Students, and anyone who joined (platform batch 2 §6).
+    # Only courses one joined, or was named in, can reach one: no walk over every course.
+    joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE} | set(
+        scopes.named_items(scopes.COURSE, actor.id)
+    )
+    rows = [r for r in rows if r["id"] in joined]
+    # Students by name, and anyone who joined.
     reached = [
         r for r in rows if (s := scopes.get_scope(scopes.COURSE, r["id"])) and r["owner_user_id"] != actor.id
-        and ((student and scopes._reaches(s, actor.id, classes)) or actor.id in s.members)
+        and ((student and scopes._reaches(s, actor.id)) or actor.id in s.members)
     ]
     if not reached:
         return []

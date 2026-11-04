@@ -172,7 +172,7 @@ async def calendar():
     """Opening times and deadlines: what reached a student, or what an author assigned."""
 
     def build() -> list[dict[str, Any]]:
-        from deeptutor.classes.service import _role
+        from deeptutor.multi_user.accounts import live_role as _role
 
         student = StudentTasks()
         items = []

@@ -1,6 +1,6 @@
 """Tell teachers when material their content cites goes away (platform batch 3 §6).
 
-Once classes are retired, a book or knowledge base cited by another teacher's
+A book or knowledge base cited by another teacher's
 published Mastery Path — or a book read by a task of their course — that an
 administrator takes down, or its owner makes private or deletes, is no longer
 there for their learners. Those authors hear of it, once a day per material
@@ -57,7 +57,7 @@ def _citing(kind: str, item_id: str, material_owner: str) -> list[tuple[str, str
 def notify_lost(kind: str, item_id: str, *, owner: str, name: str) -> None:
     """Best effort: a notice never makes the change that caused it fail."""
     try:
-        if kind not in (scopes.BOOK, scopes.KNOWLEDGE_BASE) or not scopes.classes_retired():
+        if kind not in (scopes.BOOK, scopes.KNOWLEDGE_BASE):
             return
         from deeptutor.catalog.enrollment import members
         from deeptutor.notifications.service import notify

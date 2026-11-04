@@ -121,7 +121,7 @@ def clean_tags(tags: list[str]) -> list[str]:
 
 
 def _admin_ids() -> list[str]:
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     return [uid for uid, row in _accounts().items() if row["role"] == "admin" and not row["disabled"]]
 
@@ -185,7 +185,7 @@ class ListingService:
         self.actor = actor or get_current_user()
 
     def _role(self) -> str:
-        from deeptutor.classes.service import _role
+        from deeptutor.multi_user.accounts import live_role as _role
 
         return _role(self.actor)
 
@@ -514,7 +514,7 @@ def author_name(owner_id: str, accounts: dict[str, dict[str, Any]] | None = None
     if owner_id == LOCAL_ADMIN_ID:
         return ""
     if accounts is None:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
     return str((accounts.get(owner_id) or {}).get("username") or "")
@@ -526,7 +526,7 @@ def author_role(owner_id: str, accounts: dict[str, dict[str, Any]] | None = None
     if owner_id == LOCAL_ADMIN_ID:
         return "admin"
     if accounts is None:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
     return str((accounts.get(owner_id) or {}).get("role") or "")

@@ -27,7 +27,7 @@ TITLE_PREFIX = "Remedial: "
 
 
 def _people(ids: set[str]) -> list[dict[str, str]]:
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     accounts = _accounts()
     return sorted(
@@ -101,12 +101,12 @@ class RemedialPractice:
         return {"set": draft, "suggested_students": _people(self._mine(wrong))}
 
     def _mine(self, students: set[str]) -> set[str]:
-        """Only students this teacher may send to: their classes' students."""
-        from deeptutor.classes.service import teacher_student_ids
+        """Only learners this teacher may send to: who joined their content."""
+        from deeptutor.catalog.learners import learners_of
 
         if self.actor.is_admin:
             return students
-        return students & teacher_student_ids(self.actor.id)
+        return students & learners_of(self.actor.id)
 
     async def from_path(
         self, template_id: str, kp_ids: list[str], student_ids: list[str] | None = None,

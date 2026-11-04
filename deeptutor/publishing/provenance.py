@@ -26,7 +26,7 @@ def provenance(owner_id: str, viewer: CurrentUser, *, accounts: dict[str, dict[s
     if owner_id == LOCAL_ADMIN_ID:
         return {"kind": "school", "name": ""}
     if accounts is None:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
     account = accounts.get(owner_id) or {}

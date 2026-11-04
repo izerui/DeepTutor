@@ -77,7 +77,6 @@ def effective_student_policy(user_id: str) -> dict[str, bool]:
     """The student's policy; every ability is denied when the grant is unreadable.
 
     Spec 2026-10-29 §6: a setting made for this student wins; otherwise the
-    classes they are in decide (any class that allows, allows); otherwise the
     defaults apply.
     """
     from .grants import GrantStorageError, load_grant
@@ -86,28 +85,18 @@ def effective_student_policy(user_id: str) -> dict[str, bool]:
         stored = load_grant(user_id).get("student_policy")
     except GrantStorageError:
         return {key: False for key in STUDENT_POLICY_DEFAULTS}
-    from deeptutor.classes.service import class_student_policy
-
     policy = dict(STUDENT_POLICY_DEFAULTS)
-    policy.update(class_student_policy(user_id))
-    # Per item: a setting made for this student wins over their classes.
+    # Per item: a setting made for this student wins over the default.
     if isinstance(stored, dict):
         policy.update({k: v for k, v in stored.items() if k in policy and isinstance(v, bool)})
     return policy
 
 
-def widest_ai_limit(limits: list[int]) -> int | None:
-    """The most generous of several limits: no limit (``0``) beats any number."""
-    if not limits:
-        return None
-    return 0 if 0 in limits else max(limits)
-
 
 def effective_ai_daily_tokens(user_id: str) -> int:
     """A student's daily AI tokens (batch 3 §8); ``0`` is no limit.
 
-    Their own setting wins; otherwise the most generous of their classes;
-    otherwise the school default.
+    Their own setting wins; otherwise the school default.
     """
     from .grants import GrantStorageError, load_grant
 
@@ -118,11 +107,6 @@ def effective_ai_daily_tokens(user_id: str) -> int:
     own = _ai_tokens(stored.get(AI_DAILY_TOKENS)) if isinstance(stored, dict) else None
     if own is not None:
         return own
-    from deeptutor.classes.service import class_ai_daily_tokens
-
-    from_classes = class_ai_daily_tokens(user_id)
-    if from_classes is not None:
-        return from_classes
     from deeptutor.services.llm.usage_limit import school_default_daily_tokens
 
     return school_default_daily_tokens()

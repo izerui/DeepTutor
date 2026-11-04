@@ -224,24 +224,46 @@ def fake_llm_config() -> MagicMock:
 
 @pytest.fixture(autouse=True)
 def _legacy_first_publish(request, monkeypatch):
-    """Tests written before 2026-11-02 publish as accounts that teach no class.
+    """Book and knowledge-base tests written before the market keep "public means everyone".
 
-    Then, such a first publication reached everyone (books, knowledge bases)
-    or nobody yet (practice sets). Those tests are about other rules, so they
-    keep that outcome; tests marked ``first_publish_rule`` get the real rule
-    (choose the receivers, or nothing is published).
+    On the learning platform a first publication by a request user names
+    nobody: people reach it by joining it from the market. Before the market,
+    a book or knowledge base made public with no receivers chosen reached
+    every account. The tests about other rules of books and knowledge bases
+    (reading, references, withdrawal, health, listings) were written then
+    and keep that outcome: such a publication stores no scope. Everything
+    else — named receivers (``chosen_scope``), market publications
+    (``join_only``) and every other kind — follows the real rule, and tests
+    marked ``first_publish_rule`` get the real rule for books and knowledge
+    bases too.
     """
     if request.node.get_closest_marker("first_publish_rule"):
         return
+    from contextlib import contextmanager
+    from contextvars import ContextVar
+
     from deeptutor.publishing import scope
 
+    real = scope.default_scope_on_publish
+    market: ContextVar[bool] = ContextVar("test_join_only", default=False)
+
+    @contextmanager
+    def join_only(enabled: bool = True):
+        token = market.set(bool(enabled))
+        try:
+            yield
+        finally:
+            market.reset(token)
+
     def legacy(kind: str, item_id: str) -> None:
-        if kind == scope.PRACTICE_SET:
-            from deeptutor.multi_user.context import get_current_user
+        chosen = scope._chosen.get()
+        nothing_chosen = chosen is None or chosen.empty
+        if kind in (scope.BOOK, scope.KNOWLEDGE_BASE) and not market.get() and nothing_chosen:
+            return
+        real(kind, item_id)
 
-            scope._store_scope(kind, item_id, scope.Scope(), actor_id=get_current_user().id)
-
-    monkeypatch.setattr(scope, "_no_receivers", legacy)
+    monkeypatch.setattr(scope, "join_only", join_only)
+    monkeypatch.setattr(scope, "default_scope_on_publish", legacy)
 
 
 @pytest.fixture(autouse=True)
@@ -388,10 +410,9 @@ def _isolate_teaching_db(monkeypatch, tmp_path, _isolate_kb_registry, _isolate_b
 @pytest.fixture(autouse=True)
 def _disable_startup_market_migration(monkeypatch):
     """The app lifespan must not move the developer's real content into the market."""
-    from deeptutor.catalog import migration, retire_classes
+    from deeptutor.catalog import migration
 
     monkeypatch.setattr(migration, "STARTUP_ENABLED", False)
-    monkeypatch.setattr(retire_classes, "STARTUP_ENABLED", False)
 
 
 @pytest.fixture(autouse=True)

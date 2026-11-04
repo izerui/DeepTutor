@@ -1,6 +1,6 @@
-"""Teacher-facing learning reports (spec 2026-10-29 D17, option B).
+"""What a teacher may read of a learner's study (spec 2026-10-29 D17, option B).
 
-A teacher sees, for students in the classes they teach:
+For the learners of a teacher's course or Mastery Path:
 
 * progress, scores and mistakes on the Mastery Paths *this teacher* published
   and assigned (titles and knowledge points are the teacher's own text), and
@@ -22,8 +22,7 @@ import sqlite3
 import time
 from typing import Any
 
-from deeptutor.classes import store
-from deeptutor.classes.service import ClassForbidden, ClassNotFound, _accounts, _role
+from deeptutor.multi_user.accounts import accounts as _accounts
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.models import CurrentUser
 
@@ -185,48 +184,11 @@ def _point_stats(progress, kp) -> dict[str, Any]:
     }
 
 
-class ReportService:
+class LearnerData:
+    """Reads, for a teacher, numbers about learners: never their text."""
+
     def __init__(self, actor: CurrentUser | None = None) -> None:
         self.actor = actor or get_current_user()
-
-    def _require_teacher(self) -> None:
-        # Spec D17: reports are for teachers; administrators do not read
-        # students' learning data (D2).
-        if self.actor.is_admin or _role(self.actor) != "teacher":
-            raise ClassForbidden("Only a class's teachers see its learning reports.")
-        from deeptutor.publishing.scope import classes_retired
-
-        if classes_retired():
-            # Review M1: class reports go with the classes; courses and paths have their own.
-            raise ClassForbidden("Classes are no longer used. See the reports of your courses and paths.")
-
-    def _class_students(self, class_id: str) -> tuple[str, list[str]]:
-        with store.read() as conn:
-            if conn is None:
-                raise ClassNotFound("Class not found.")
-            row = conn.execute("SELECT name FROM classes WHERE id = ?", (class_id,)).fetchone()
-            if row is None:
-                raise ClassNotFound("Class not found.")
-            teaches = conn.execute(
-                "SELECT 1 FROM class_teachers WHERE class_id = ? AND user_id = ?",
-                (class_id, self.actor.id),
-            ).fetchone()
-            if not teaches:
-                raise ClassForbidden("Only a class's teachers see its learning reports.")
-            students = [
-                r["student_id"] for r in conn.execute(
-                    "SELECT student_id FROM class_members WHERE class_id = ? ORDER BY joined_at",
-                    (class_id,),
-                )
-            ]
-        # Only accounts that are students now: a promoted student's learning
-        # data is theirs alone (D2), whatever rows linger.
-        accounts = _accounts()
-        students = [
-            s for s in students
-            if (accounts.get(s) or {}).get("role") == "student" and not accounts[s]["disabled"]
-        ]
-        return row["name"], students
 
     def _my_practice_results(self, student_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """D17: each student's results on this teacher's practice sets (scores only)."""
@@ -319,96 +281,5 @@ class ReportService:
         overall.update(_activity(student_id, snapshots, days=days))
         return {"teacher_paths": teacher_paths, "overall": overall}
 
-    def class_report(self, class_id: str, days: int | None = None) -> dict[str, Any]:
-        """``days``: 7 or 30 limit the period numbers; ``None`` is all time (batch 3 §6.3)."""
-        from deeptutor.classes import attention
 
-        self._require_teacher()
-        if days is not None and days not in PERIODS:
-            days = None
-        name, students = self._class_students(class_id)
-        accounts = _accounts()
-        my_templates = self._my_template_ids()
-        practice = self._my_practice_results(students)
-        flags = attention.for_teacher(self.actor.id, students)
-        rows = []
-        for student_id in students:
-            report = self._student_report(student_id, my_templates, detail=False, days=days)
-            rows.append({
-                "id": student_id,
-                "username": (accounts.get(student_id) or {}).get("username") or student_id,
-                **report,
-                "practice_sets": practice.get(student_id, []),
-                "flags": flags.get(student_id, []),
-            })
-        return {"class_id": class_id, "class_name": name, "period_days": days, "students": rows}
-
-    def class_path_points(self, class_id: str, template_id: str) -> dict[str, Any]:
-        """One of this teacher's paths across the class: who has mastered each point (batch 3 §3.1)."""
-        from deeptutor.learning.policy import is_mastered
-
-        self._require_teacher()
-        my_templates = self._my_template_ids()
-        if template_id not in my_templates:
-            raise ClassNotFound("Mastery Path not found.")
-        _name, students = self._class_students(class_id)
-        points: dict[str, dict[str, Any]] = {}
-        for student_id in students:
-            for progress, _topic in _snapshots(student_id):
-                origin = getattr(progress, "origin", None)
-                if origin is None or origin.template_id != template_id:
-                    continue
-                for module in progress.modules:
-                    for kp in module.knowledge_points:
-                        entry = points.setdefault(kp.id, {"id": kp.id, "name": kp.name, "students": 0,
-                                                         "mastered": 0, "not_mastered": []})
-                        entry["students"] += 1
-                        if is_mastered(progress, kp):
-                            entry["mastered"] += 1
-                        else:
-                            entry["not_mastered"].append(student_id)
-        return {"template_id": template_id, "title": my_templates[template_id], "points": list(points.values())}
-
-    def export_csv(self, class_id: str, days: int | None = None) -> str:
-        """The class report as CSV (batch 3 §6.3): numbers only."""
-        import csv
-        import io
-
-        report = self.class_report(class_id, days)
-        out = io.StringIO()
-        writer = csv.writer(out)
-        writer.writerow([
-            "student", "study_minutes", "answers", "kp_mastered", "kp_total",
-            "practice_sets_done", "practice_score_ratio", "attention",
-        ])
-        for row in report["students"]:
-            overall = row["overall"]
-            sets = row["practice_sets"]
-            ratio = (
-                sum(s["best_score"] for s in sets) / sum(s["best_max_score"] for s in sets)
-                if sets and sum(s["best_max_score"] for s in sets) else None
-            )
-            writer.writerow([
-                row["username"], overall["period_minutes"], overall["period_answers"],
-                overall["kp_mastered"], overall["kp_total"], len(sets),
-                f"{ratio:.2f}" if ratio is not None else "",
-                "; ".join(flag["kind"] for flag in row["flags"]),
-            ])
-        return out.getvalue()
-
-    def student_report(self, class_id: str, student_id: str) -> dict[str, Any]:
-        self._require_teacher()
-        _name, students = self._class_students(class_id)
-        if student_id not in students:
-            raise ClassNotFound("This student is not in the class.")
-        accounts = _accounts()
-        report = self._student_report(student_id, self._my_template_ids(), detail=True)
-        return {
-            "id": student_id,
-            "username": (accounts.get(student_id) or {}).get("username") or student_id,
-            **report,
-            "practice_sets": self._my_practice_results([student_id]).get(student_id, []),
-        }
-
-
-__all__ = ["ReportService"]
+__all__ = ["LearnerData", "PERIODS"]

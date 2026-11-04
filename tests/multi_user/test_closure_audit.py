@@ -1,8 +1,8 @@
-"""Closing the loops found by the 2026-10-30 audit of roles, classes, scopes and practice sets.
+"""Closing the loops found by the 2026-10-30 audit of roles, scopes and practice sets.
 
-Spec 2026-10-29: every account event (role change, deletion, password reset),
-class event (archive, teacher change) and publication keeps one consistent
-answer to "who may see and do what".
+Spec 2026-10-29: every account event (role change, deletion, password reset)
+and publication keeps one consistent answer to "who may see and do what".
+(Classes are gone: learners reach content by joining it.)
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import time
 
 import pytest
 
-from deeptutor.classes.service import ClassConflict, ClassForbidden, ClassService
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing.scope import BOOK, KNOWLEDGE_BASE, PRACTICE_SET, get_scope
@@ -20,14 +19,17 @@ from deeptutor.publishing.service import PublishService
 from deeptutor.publishing.scope import ScopeForbidden
 
 
-def _class_id(as_account) -> str:
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
+def _leave(teaching_users, name: str, kind: str, item_id: str) -> None:
+    from deeptutor.catalog.enrollment import leave
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    user = teaching_users[name]
+    leave(CurrentUser(user["id"], name, user["role"], UserScope(kind="user", user_id=user["id"], root=None)),
+          kind, item_id)
 
 
 def _set_role(teaching_users, name: str, role: str) -> None:
-    from deeptutor.classes.lifecycle import after_role_change
+    from deeptutor.multi_user.content_lifecycle import after_role_change
     from deeptutor.multi_user.identity import set_role
 
     old = teaching_users[name]["role"]
@@ -79,20 +81,7 @@ def test_a_token_from_the_same_second_as_a_password_reset_also_ends(teaching_use
 # ── role changes ───────────────────────────────────────────
 
 
-def test_a_demoted_teacher_manages_no_class_and_resets_no_password(teaching_users, as_account):
-    class_id = _class_id(as_account)
-    _set_role(teaching_users, "tina", "student")
-    with as_account("tina"):
-        with pytest.raises(ClassForbidden):
-            ClassService().reset_student_password(teaching_users["sara"]["id"], "new-password-1")
-        with pytest.raises(Exception):
-            ClassService().update(class_id, name="Taken over")
-    with as_account("tom"):
-        detail = ClassService().get(class_id)
-    assert [t["username"] for t in detail["teachers"]] == ["tom"]
-
-
-def test_a_promoted_student_leaves_classes_and_assignments(
+def test_a_promoted_student_leaves_their_assignments(
     teacher_draft, publish_template, teaching_users, as_account
 ):
     from deeptutor.teaching.store import TeachingStore
@@ -100,10 +89,6 @@ def test_a_promoted_student_leaves_classes_and_assignments(
     teacher_draft()
     template_id = publish_template(students=("sara", "sam"))["template"]["id"]
     _set_role(teaching_users, "sam", "teacher")
-    class_id = _class_id(as_account)
-    with as_account("tina"):
-        students = [s["username"] for s in ClassService().get(class_id)["students"]]
-    assert students == ["sara"]
     active = {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
     assert active == {teaching_users["sara"]["id"]}
 
@@ -126,20 +111,15 @@ def test_the_first_administrators_role_is_fixed(teaching_users, as_account, monk
 # ── account deletion ───────────────────────────────────────
 
 
-def test_deleting_accounts_clears_class_rows_and_hands_over_practice_sets(teaching_users, as_account):
+def test_deleting_accounts_hands_over_practice_sets(teaching_users, as_account):
     from deeptutor.multi_user.account_handoff import run_stages
 
-    class_id = _class_id(as_account)
     with as_account("tom"):
         created = PracticeSetService().create("Tom's set")
     adam = teaching_users["adam"]["id"]
     for name in ("tom", "sam"):
-        failed, _ = run_stages(teaching_users[name]["id"], adam, ("classes", "publish_targets", "practice_sets"))
+        failed, _ = run_stages(teaching_users[name]["id"], adam, ("publish_targets", "practice_sets"))
         assert failed == []
-    with as_account("tina"):
-        detail = ClassService().get(class_id)
-    assert [t["username"] for t in detail["teachers"]] == ["tina"]
-    assert [s["username"] for s in detail["students"]] == ["sara"]
     with as_account("adam"):
         assert PracticeSetService().get(created["id"])["title"] == "Tom's set"
 
@@ -159,48 +139,11 @@ def test_an_admin_resets_any_password_and_old_sessions_end(teaching_users, monke
     assert auth.authenticate("tina", "fresh-password") is not None
 
 
-# ── classes ────────────────────────────────────────────────
-
-
-def test_teachers_only_step_down_and_never_leave_a_class_empty(teaching_users, as_account):
-    class_id = _class_id(as_account)
-    with as_account("tom"):
-        with pytest.raises(ClassForbidden):
-            ClassService().remove_teacher(class_id, teaching_users["tina"]["id"])
-        ClassService().remove_teacher(class_id, teaching_users["tom"]["id"])
-    with as_account("tina"):
-        with pytest.raises(ClassConflict):
-            ClassService().remove_teacher(class_id, teaching_users["tina"]["id"])
-
-
-def test_archiving_a_class_ends_its_link_and_what_reached_students_through_it(
-    teacher_draft, publish_template, teaching_users, as_account
-):
-    from deeptutor.publishing.scope import MASTERY_PATH
-    from deeptutor.teaching.store import TeachingStore
-
-    teacher_draft()
-    template_id = publish_template()["template"]["id"]
-    class_id = _class_id(as_account)
-    with as_account("tina"):
-        PublishService().set_scope(MASTERY_PATH, template_id, everyone=False, users=[], classes=[class_id])
-        ClassService().regenerate_link(class_id)
-        ClassService().update(class_id, archived=True)
-        assert ClassService().invite_link(class_id) is None
-
-    def active():
-        return {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
-
-    assert active() == set()
-    with as_account("tina"):
-        ClassService().update(class_id, archived=False)
-    assert active() == {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
-
-
 # ── publishing ─────────────────────────────────────────────
 
 
-def test_a_first_publication_reaches_the_teachers_classes_and_admins_still_see_it(
+@pytest.mark.first_publish_rule
+def test_a_first_publication_reaches_nobody_until_they_join_and_admins_still_see_it(
     teaching_users, as_account, tmp_path
 ):
     from deeptutor.knowledge import registry
@@ -208,38 +151,35 @@ def test_a_first_publication_reaches_the_teachers_classes_and_admins_still_see_i
     kb = registry.register_kb(
         base_dir=tmp_path / "kbs", name="notes", kind="uploaded", created_by=teaching_users["tina"]["id"],
     )
-    class_id = _class_id(as_account)
     with as_account("tina"):
         registry.set_visibility(kb.kb_id, "public")
     scope = get_scope(KNOWLEDGE_BASE, kb.kb_id)
-    assert scope is not None and scope.classes == [class_id] and not scope.everyone
+    assert scope is not None and scope.empty
     current = registry.get_kb(kb.kb_id)
-    for name, expected in (("sara", True), ("uma", False), ("adam", True)):
+    for name, expected in (("sara", False), ("uma", False), ("adam", True)):
         with as_account(name):
             assert registry.can_read(current, get_current_user()) is expected, name
 
 
-def test_teachers_pick_only_their_students_but_keep_existing_targets(
-    teaching_books, teaching_users, as_account, seed_user
+def test_teachers_pick_only_their_learners_but_keep_existing_targets(
+    teaching_books, teaching_users, as_account, seed_user, make_learners
 ):
-    stan = seed_user("stan", role="student")["id"]  # a student in no class of Tom's
+    stan = seed_user("stan", role="student")["id"]  # joined nothing of Tom's
     sara = teaching_users["sara"]["id"]
-    with as_account("adam"):
-        other = ClassService().create("Other class")
+    course_id = make_learners("tom", "sara")
     with as_account("tom"):
         assert [p["username"] for p in PublishService().search_people("stan")] == []
         with pytest.raises(ScopeForbidden):
             PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[stan],
-                                       classes=[], confirm=True)
+                                       confirm=True)
         PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[sara],
-                                   classes=[], confirm=True)
-    # Sara leaves every class; the stale target must not block another change.
-    with as_account("sara"):
-        ClassService().leave(_class_id(as_account))
+                                   confirm=True)
+    # Sara leaves everything of Tom's; the stale target must not block another change.
+    _leave(teaching_users, "sara", "course", course_id)
     with as_account("tom"):
-        PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=True, users=[sara],
-                                   classes=[], confirm=True)
-    assert other["id"]
+        PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[sara],
+                                   confirm=True)
+    assert get_scope(BOOK, teaching_books.public.book_id).users == [sara]
 
 
 # ── practice sets ──────────────────────────────────────────
@@ -251,14 +191,14 @@ QUESTIONS = [
 
 
 @pytest.fixture
-def practice_set(as_account):
-    class_id = _class_id(as_account)
+def practice_set(as_account, deliver):
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Week 1")
         service.update(created["id"], questions=QUESTIONS, reveal="after_due", due_at=time.time() + 3600)
         service.publish(created["id"])
-    return created["id"], class_id
+    deliver(PRACTICE_SET, created["id"], "sara", "sam")
+    return created["id"], None
 
 
 def _bank_entry(as_account, name, set_id):
@@ -271,10 +211,11 @@ def _bank_entry(as_account, name, set_id):
     return row
 
 
-def test_a_first_published_set_reaches_the_teachers_classes(practice_set):
-    set_id, class_id = practice_set
+def test_a_first_published_set_names_nobody_and_reaches_who_joined(practice_set, teaching_users):
+    set_id, _ = practice_set
     scope = get_scope(PRACTICE_SET, set_id)
-    assert scope is not None and scope.classes == [class_id]
+    assert scope is not None and scope.empty
+    assert set(scope.members) == {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
 
 
 def test_answers_stay_out_of_the_bank_until_the_deadline(practice_set, as_account):
@@ -303,19 +244,12 @@ def test_no_answers_before_submitting_even_after_the_deadline(practice_set, as_a
     assert not taken["answers_revealed"] and "correct_answer" not in taken["questions"][0]
 
 
-def test_reports_keep_students_who_left_and_show_practice_in_class_reports(practice_set, as_account):
-    from deeptutor.classes.report import ReportService
-
-    set_id, class_id = practice_set
+def test_reports_keep_students_who_left(practice_set, as_account, teaching_users):
+    set_id, _ = practice_set
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}))
-    with as_account("tina"):
-        report = ReportService().class_report(class_id)
-    sara = next(s for s in report["students"] if s["username"] == "sara")
-    assert sara["practice_sets"][0]["first_score"] == 1
-    with as_account("sara"):
-        ClassService().leave(class_id)
+    _leave(teaching_users, "sara", PRACTICE_SET, set_id)
     with as_account("tina"):
         practice = PracticeSetService().report(set_id)
     left = next(s for s in practice["students"] if s["username"] == "sara")
@@ -359,25 +293,6 @@ def test_after_due_needs_a_deadline(as_account):
             service.publish(created["id"])
 
 
-# ── student permissions ────────────────────────────────────
-
-
-def test_personal_settings_override_classes_item_by_item(teaching_users, as_account):
-    from deeptutor.multi_user.grants import load_grant, save_grant
-    from deeptutor.multi_user.roles import effective_student_policy
-
-    class_id = _class_id(as_account)
-    sara = teaching_users["sara"]["id"]
-    with as_account("adam"):
-        ClassService().set_student_policy(class_id, {"allow_private_kb": True, "allow_personal_book": False})
-    save_grant(sara, {**load_grant(sara), "student_policy": {"allow_personal_mastery": False}})
-    policy = effective_student_policy(sara)
-    from deeptutor.multi_user import roles
-
-    assert policy == {**roles.STUDENT_POLICY_DEFAULTS, "allow_personal_mastery": False, "allow_personal_book": False,
-                      "allow_private_kb": True}
-
-
 # ── registration ───────────────────────────────────────────
 
 
@@ -392,7 +307,8 @@ def test_open_registration_does_not_depend_on_a_dead_invite(teaching_users, monk
         auth_router.PublicRegisterRequest(username="newbie", password="password1234", invite="no-such-link"),
         request=None, response=Response(),
     ))
-    assert result["ok"] and result["joined_class"] is None and result["invite_error"]
+    # Invites are ignored: registration does not depend on one, nor reports on it.
+    assert result["ok"] and "joined_class" not in result and "invite_error" not in result
 
 
 def test_people_change_their_own_password_and_keep_this_session(teaching_users, monkeypatch):

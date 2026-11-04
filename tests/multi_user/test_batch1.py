@@ -11,7 +11,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from deeptutor.classes.service import ClassService
 from deeptutor.notifications import service as notifications
 from deeptutor.practice_sets.service import PracticeConflict, PracticeSetService
 from deeptutor.publishing import scope as scopes
@@ -35,18 +34,14 @@ def _no_model(monkeypatch):
     monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", _quiet)
 
 
-def _class_id(as_account) -> str:
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
-
-
 def _kinds(as_account, name: str) -> list[str]:
     with as_account(name):
         return [n["kind"] for n in notifications.list_for(_uid(name))]
 
 
 _users: dict[str, str] = {}
+#: The ``in_course`` / ``deliver`` fixtures of the running test.
+_fixtures: dict[str, object] = {}
 
 
 def _uid(name: str) -> str:
@@ -54,19 +49,39 @@ def _uid(name: str) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _remember(teaching_users):
+def _remember(teaching_users, in_course, deliver):
     _users.clear()
     _users.update({name: row["id"] for name, row in teaching_users.items()})
+    _fixtures.update(in_course=in_course, deliver=deliver)
 
 
-def _homework(as_account, *, due_at: float | None = None, scope: Scope | None = None) -> str:
+def _in_course(*task_ids: str, **options) -> str:
+    """Tasks go out as part of a course; Sara and Sam joined it."""
+    return _fixtures["in_course"](*task_ids, **options)
+
+
+def _homework(as_account, *, due_at: float | None = None) -> str:
     with as_account("tina"):
         service = TaskService()
         task = service.create("homework", "Essay")
         service.update(task["id"], description="Write about waves.", due_at=due_at)
-        with scopes.chosen_scope(scope):
-            service.publish(task["id"])
+    _in_course(task["id"])
     return task["id"]
+
+
+def _note(as_account, title: str = "Revise") -> str:
+    with as_account("tina"):
+        note = TaskService().create("note", title)
+    _in_course(note["id"], title=title)
+    return note["id"]
+
+
+def _leave_course(name: str, course_id: str) -> None:
+    from deeptutor.catalog.enrollment import leave
+    from deeptutor.multi_user.models import CurrentUser, UserScope
+
+    leave(CurrentUser(_uid(name), name, "student", UserScope(kind="user", user_id=_uid(name), root=None)),
+          "course", course_id)
 
 
 def _entry(as_account, name: str, key: str):
@@ -84,7 +99,8 @@ def _submit(as_account, name: str, task_id: str, text: str = "Waves carry energy
 
 def test_homework_goes_out_comes_back_and_is_graded(as_account):
     task_id = _homework(as_account)
-    assert "task_published" in _kinds(as_account, "sara")
+    # A course announces its tasks once, as the course.
+    assert "course_published" in _kinds(as_account, "sara")
     assert _entry(as_account, "sara", task_id)["state"] == "open"
 
     done = _submit(as_account, "sara", task_id, files=[("notes.txt", b"draft")])
@@ -149,16 +165,28 @@ def test_homework_files_open_for_their_student_and_teacher_only(as_account):
 
 
 def test_homework_never_goes_to_everyone_and_admins_assign_none(as_account):
+    from deeptutor.tasks.courses import CourseService
+
     with as_account("tina"):
         task = TaskService().create("homework", "Essay")
-        with scopes.chosen_scope(Scope(everyone=True)), pytest.raises(TaskError):
+        # A task goes out with a course, never on its own.
+        with pytest.raises(TaskError):
             TaskService().publish(task["id"])
+    course_id = _in_course(task["id"], to=(), publish=False)
+    with as_account("tina"):
+        with scopes.chosen_scope(Scope(everyone=True)), pytest.raises(scopes.ScopeError):
+            CourseService().publish(course_id)
         assert scopes.get_scope(scopes.TASK, task["id"]) is None
+        assert scopes.get_scope(scopes.COURSE, course_id) is None
+        assert TaskService().get(task["id"])["status"] == "draft"
     with as_account("adam"), pytest.raises(TaskForbidden):
         TaskService().create("homework", "Admin essay")
 
 
-def test_a_task_must_not_reach_students_its_content_does_not(as_account):
+def test_a_task_must_not_reach_students_its_content_does_not(as_account, make_learners):
+    from deeptutor.tasks.courses import CourseService
+
+    make_learners("tina", "sara", "sam")
     with as_account("tina"):
         practice = PracticeSetService()
         created = practice.create("Week 1")
@@ -167,32 +195,38 @@ def test_a_task_must_not_reach_students_its_content_does_not(as_account):
             practice.publish(created["id"])
         task = TaskService().create("practice_set", "Do week 1")
         TaskService().update(task["id"], target_id=created["id"])
-        with pytest.raises(TaskError, match="Some of these students"):
-            TaskService().publish(task["id"])  # the class has Sam too
+    course_id = _in_course(task["id"], to=(), publish=False)
+    with as_account("tina"):
+        with scopes.chosen_scope(Scope(users=[_uid("sara"), _uid("sam")])):
+            with pytest.raises(TaskError, match="Some of these students"):
+                CourseService().publish(course_id)  # the set does not reach Sam
         assert scopes.get_scope(scopes.TASK, task["id"]) is None
         with scopes.chosen_scope(Scope(users=[_uid("sara")])):
-            TaskService().publish(task["id"])
+            CourseService().publish(course_id)
+    assert _entry(as_account, "sara", task["id"])["state"] == "open"
 
 
 # ── what students see, and when a task counts as done ──────
 
 
-def test_a_practice_set_shows_once_and_completion_stays(as_account):
+def test_a_practice_set_task_completes_and_completion_stays(as_account):
     with as_account("tina"):
         practice = PracticeSetService()
         created = practice.create("Week 1")
         practice.update(created["id"], questions=QUESTIONS)
+    _fixtures["deliver"]("practice_set", created["id"], "sara")  # she joined it
+    with as_account("tina"):
         practice.publish(created["id"])
-    virtual = f"practice_set:{created['id']}"
-    assert _entry(as_account, "sara", virtual)["state"] == "open"
     assert "content_published" in _kinds(as_account, "sara")
+    with as_account("sara"):
+        assert StudentTasks().assigned() == []  # a practice set is not a task by itself
     with as_account("tina"):
         task = TaskService().create("practice_set", "Do week 1")
         TaskService().update(task["id"], target_id=created["id"], due_at=time.time() + 3600)
-        TaskService().publish(task["id"])
+    _in_course(task["id"])
     with as_account("sara"):
         keys = [e["key"] for e in StudentTasks().assigned()]
-        assert task["id"] in keys and virtual not in keys  # R23: named by a task, listed once
+        assert keys == [task["id"]]
         qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(created["id"], {qid: "B"}))
     assert _entry(as_account, "sara", task["id"])["state"] == "completed"
@@ -202,17 +236,16 @@ def test_a_practice_set_shows_once_and_completion_stays(as_account):
     assert _entry(as_account, "sara", task["id"])["state"] == "completed"
 
 
-def test_leaving_the_class_closes_a_task_and_coming_back_restores_it(as_account):
-    task_id = _homework(as_account)
-    class_id = _class_id(as_account)
-    with as_account("sara"):
-        ClassService().leave(class_id)
+def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account):
+    with as_account("tina"):
+        task = TaskService().create("homework", "Essay")
+    task_id = task["id"]
+    course_id = _in_course(task_id)
+    _leave_course("sara", course_id)
     assert _entry(as_account, "sara", task_id) is None  # nothing done yet: it simply goes
-    with as_account("adam"):
-        ClassService().add_students(class_id, [_uid("sara")])
+    _fixtures["deliver"]("course", course_id, "sara")
     _submit(as_account, "sara", task_id)
-    with as_account("sara"):
-        ClassService().leave(class_id)
+    _leave_course("sara", course_id)
     entry = _entry(as_account, "sara", task_id)
     assert entry["state"] == "completed"  # their own record stays, in their history
     with as_account("tina"):
@@ -222,19 +255,16 @@ def test_leaving_the_class_closes_a_task_and_coming_back_restores_it(as_account)
 
 
 def test_notes_are_marked_done_by_the_student(as_account):
-    with as_account("tina"):
-        task = TaskService().create("note", "Revise chapter 3")
-        TaskService().publish(task["id"])
+    note = _note(as_account, "Revise chapter 3")
     with as_account("sara"):
-        assert StudentTasks().mark_done(task["id"])["state"] == "completed"
+        assert StudentTasks().mark_done(note)["state"] == "completed"
     with as_account("tina"):
-        sara = next(s for s in TaskService().detail(task["id"])["students"] if s["username"] == "sara")
+        sara = next(s for s in TaskService().detail(note)["students"] if s["username"] == "sara")
     assert sara["completed"] and sara["self_reported"]
 
 
 def test_book_tasks_complete_when_every_chosen_page_was_opened(as_account, teaching_books, monkeypatch):
     from deeptutor.book.models import Chapter, Progress, Spine
-    from deeptutor.publishing.service import PublishService
 
     spine = Spine(book_id=teaching_books.public.book_id, chapters=[
         Chapter(id="c1", title="Light", page_ids=["p1", "p2"]), Chapter(id="c2", title="Lenses", page_ids=["p3"]),
@@ -244,12 +274,12 @@ def test_book_tasks_complete_when_every_chosen_page_was_opened(as_account, teach
     visited: list[str] = []
     monkeypatch.setattr("deeptutor.multi_user.book_access.resolve_book", lambda ref: SimpleNamespace(
         load_progress=lambda book_id: Progress(book_id=book_id, visited_page_ids=list(visited))))
+    # Tom's public book from before the market reaches everyone.
     with as_account("tom"):
-        PublishService().set_scope(scopes.BOOK, teaching_books.public.book_id, everyone=True,
-                                   users=[], classes=[], confirm=True)
         task = TaskService().create("book", "Read about light")
         TaskService().update(task["id"], target_id=teaching_books.public.book_id, settings={"chapter_ids": ["c1"]})
-        TaskService().publish(task["id"])
+    _in_course(task["id"], owner="tom")
+    with as_account("tom"):
         assert TaskService().get(task["id"])["settings"]["page_ids"] == ["p1", "p2"]
     visited.append("p1")
     assert _entry(as_account, "sara", task["id"])["state"] == "open"
@@ -288,21 +318,25 @@ def test_answers_shown_after_the_deadline_pin_it(as_account):
 # ── account events ─────────────────────────────────────────
 
 
-def test_a_departing_teachers_homework_goes_to_a_co_teacher(teaching_users, as_account):
+def test_a_departing_teachers_tasks_go_to_the_admin_who_hands_the_course_on(teaching_users, as_account):
     from deeptutor.api.routers import auth as auth_router
+    from deeptutor.tasks.courses import CourseService
 
-    homework = _homework(as_account)
     with as_account("tina"):
-        note = TaskService().create("note", "Revise")
-        TaskService().publish(note["id"])
+        homework = TaskService().create("homework", "Essay")["id"]
+    course_id = _in_course(homework)
+    note = _note(as_account)
     asyncio.run(auth_router.update_user_role(
         "tina", auth_router.SetRoleRequest(role="student"),
         current=auth_router.TokenPayload(username="adam", role="admin", user_id=_uid("adam")),
     ))
-    with as_account("tom"):
-        assert TaskService().get(homework)["kind"] == "homework"  # Tom teaches the class too
+    # Every task goes to the administrator, homework too.
     with as_account("adam"):
-        assert TaskService().get(note["id"])["kind"] == "note"
+        assert TaskService().get(homework)["kind"] == "homework"
+        assert TaskService().get(note)["kind"] == "note"
+        CourseService().hand_over(course_id, _uid("tom"))
+    with as_account("tom"):
+        assert TaskService().get(homework)["kind"] == "homework"
     assert "tasks_transferred" in _kinds(as_account, "tom")
 
 
@@ -321,16 +355,6 @@ def test_a_deleted_students_homework_and_notifications_go(teaching_users, as_acc
         assert all(s["username"] != "sara" or s["submission"] is None for s in TaskService().detail(task_id)["students"])
 
 
-def test_teachers_are_told_of_class_invitations_they_send(teaching_users, as_account, seed_user):
-    stu = seed_user("stu", role="student")["id"]
-    with as_account("tina"):
-        ClassService().invite(_class_id(as_account), stu)
-    [note] = notifications.list_for(stu)
-    assert note["kind"] == "class_invitation" and note["params"]["class_name"] == "Teaching fixtures"
-    notifications.mark_read(stu)
-    assert notifications.unread_count(stu) == 0
-
-
 # ── the student home ───────────────────────────────────────
 
 
@@ -338,11 +362,9 @@ def test_the_home_lists_open_tasks_and_counts_history(as_account):
     from deeptutor.api.routers import home
 
     open_task = _homework(as_account)
-    with as_account("tina"):
-        note = TaskService().create("note", "Revise")
-        TaskService().publish(note["id"])
+    note = _note(as_account)
     with as_account("sara"):
-        StudentTasks().mark_done(note["id"])
+        StudentTasks().mark_done(note)
         payload = asyncio.run(home.home())
     assert [t["key"] for t in payload["assigned"]] == [open_task]
     assert payload["history_count"] == 1

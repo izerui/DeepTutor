@@ -125,7 +125,7 @@ def get(comment_id: str, viewer: CurrentUser | None = None) -> dict[str, Any]:
 
 def _view(row, names: dict[str, str] | None = None) -> dict[str, Any]:
     if names is None:
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         names = {uid: a["username"] for uid, a in _accounts().items()}
     return {

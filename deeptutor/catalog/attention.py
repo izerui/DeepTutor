@@ -1,7 +1,7 @@
-"""Students who need a teacher's attention (spec 2026-11-03 batch 3 §5.3).
+"""Learners who need a teacher's attention (spec 2026-11-03 batch 3 §5.3).
 
-For the students of the classes a teacher teaches, from data that teacher
-may already see:
+For the students who joined a teacher's content, from data that teacher may
+already see:
 
 * ``inactive``: nothing learned in 7 days — no chat turn, Mastery Path
   answer, practice submission, task completion or hand-in (times only);
@@ -46,7 +46,7 @@ def _now() -> float:
 
 
 def _chat_last_turn(student_id: str) -> float | None:
-    from deeptutor.classes.report import _read_only, _student_paths
+    from deeptutor.catalog.learner_data import _read_only, _student_paths
 
     conn = _read_only(_student_paths(student_id).get_chat_history_db())
     if conn is None:
@@ -134,7 +134,7 @@ def student_flags(
     student_id: str, username: str, teacher_id: str, my_templates: set[str], *,
     system_last: float | None, practice_wrong: list[float],
 ) -> list[dict[str, Any]]:
-    from deeptutor.classes.report import _snapshots
+    from deeptutor.catalog.learner_data import _snapshots
     from deeptutor.learning.policy import is_mastered
 
     now = _now()
@@ -182,7 +182,8 @@ def student_flags(
 
 def for_teacher(teacher_id: str, student_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """``{student_id: [flag, …]}`` for the teacher's students (or the given ones among them)."""
-    from deeptutor.classes.service import _accounts, teacher_student_ids
+    from deeptutor.catalog.learners import learners_of
+    from deeptutor.multi_user.accounts import accounts as _accounts
     from deeptutor.teaching.store import TeachingStore
 
     now = _now()
@@ -193,7 +194,7 @@ def for_teacher(teacher_id: str, student_ids: list[str] | None = None) -> dict[s
     else:
         accounts = _accounts()
         students = sorted(
-            s for s in teacher_student_ids(teacher_id)
+            s for s in learners_of(teacher_id)
             if (accounts.get(s) or {}).get("role") == "student" and not accounts[s]["disabled"]
         )
         my_templates = {t.id for t in TeachingStore().list_templates(owner_user_id=teacher_id)}

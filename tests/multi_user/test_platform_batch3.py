@@ -2,7 +2,7 @@
 
 Spec: docs/superpowers/specs/2026-11-04-platform-batch3-design.md
 
-Classes are retired first; everything here is reached by joining.
+Everything here is reached by joining.
 """
 
 from __future__ import annotations
@@ -23,9 +23,7 @@ META = dict(title="Arithmetic", summary="Add.", stages=["primary"], subjects=["p
 
 
 @pytest.fixture(autouse=True)
-def _retired_and_offline(monkeypatch, teaching_users):
-    from deeptutor.catalog import migration, retire_classes
-
+def _offline(monkeypatch, teaching_users):
     async def ungraded(pending):
         return {}
 
@@ -34,8 +32,6 @@ def _retired_and_offline(monkeypatch, teaching_users):
 
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
     monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
-    migration.run()
-    retire_classes.run()
 
 
 def _uid(teaching_users, name):

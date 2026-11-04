@@ -132,7 +132,7 @@ def _public(
 
 
 def search(viewer: CurrentUser, f: Filters) -> dict[str, Any]:
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     from deeptutor.catalog.reviews import favorites_of
 
@@ -189,7 +189,7 @@ def _study_target(kind: str, item_id: str) -> dict[str, Any]:
 
 def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
     """The introduction page. Listed items for everyone; others for their author, administrators and members."""
-    from deeptutor.classes.service import _accounts, _role
+    from deeptutor.multi_user.accounts import accounts as _accounts, live_role as _role
     from deeptutor.multi_user.ownership import owns
 
     with db.read() as conn:
@@ -226,7 +226,7 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
 
 
 def author_page(viewer: CurrentUser, author_id: str) -> dict[str, Any]:
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     accounts = _accounts()
     entries = [e for e in _entries(accounts) if e["owner_id"] == author_id]

@@ -1,4 +1,4 @@
-"""P3b: open sign-up creates students; an invite link still admits when closed."""
+"""P3b: open sign-up creates students; closed sign-up admits nobody (invites are ignored)."""
 
 from __future__ import annotations
 
@@ -23,64 +23,39 @@ def auth_client(seed_user, monkeypatch):
     return TestClient(app), tina
 
 
-def _invite(as_user, tina):
-    from deeptutor.classes.service import ClassService
-
-    with as_user(tina["id"], role="teacher", username="tina"):
-        cls = ClassService().create("Physics 1")
-        return cls["id"], ClassService().regenerate_link(cls["id"])["token"]
-
-
 def test_anyone_signs_up_as_a_student_while_registration_is_open(auth_client):
     client, _ = auth_client
     assert client.get("/api/auth/registration").json() == {"open": True}
     response = client.post("/api/auth/register", json={"username": "newbie", "password": "password-123"})
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["role"] == "student" and body["is_admin"] is False and body["joined_class"] is None
+    assert body["role"] == "student" and body["is_admin"] is False
+    assert "joined_class" not in body and "invite_error" not in body
 
 
-def test_closed_registration_still_admits_an_invited_student(auth_client, as_user):
-    from deeptutor.classes.service import student_class_ids
-
-    client, tina = auth_client
-    assert client.put(
-        "/api/auth/registration", json={"open": False}, headers={"Authorization": "Bearer admin-token"},
-    ).json() == {"open": False}
-    refused = client.post("/api/auth/register", json={"username": "walkin", "password": "password-123"})
-    assert refused.status_code == 403
-    class_id, token = _invite(as_user, tina)
-    invited = client.post(
-        "/api/auth/register", json={"username": "invited", "password": "password-123", "invite": token},
-    )
-    assert invited.status_code == 201, invited.text
-    body = invited.json()
-    assert body["joined_class"]["class_name"] == "Physics 1"
-    assert student_class_ids(body["user_id"]) == {class_id}
-
-
-def test_a_bad_invite_is_refused_before_any_account_is_made(auth_client):
-    """While registration is closed, only a valid invite admits a new account."""
-    from deeptutor.multi_user.registration import set_public_registration
+def test_closed_registration_admits_nobody_even_with_an_invite(auth_client):
     from deeptutor.services.auth import list_users
 
     client, _ = auth_client
-    set_public_registration(False)
-    response = client.post(
-        "/api/auth/register", json={"username": "ghost", "password": "password-123", "invite": "nope"},
-    )
-    assert response.status_code == 404
-    assert "ghost" not in {u["username"] for u in list_users()}
+    assert client.put(
+        "/api/auth/registration", json={"open": False}, headers={"Authorization": "Bearer admin-token"},
+    ).json() == {"open": False}
+    for name, extra in (("walkin", {}), ("invited", {"invite": "some-old-link"})):
+        body = {"username": name, "password": "password-123", **extra}
+        refused = client.post("/api/auth/register", json=body)
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "Registration is closed. Ask an administrator for an account."
+    assert not {"walkin", "invited"} & {u["username"] for u in list_users()}
 
 
-def test_open_registration_ignores_a_dead_invite(auth_client):
-    """Spec 2026-10-30 closure: an open sign-up does not depend on the link; it joins nothing."""
+def test_open_registration_ignores_an_invite(auth_client):
+    """An open sign-up does not depend on the link; it joins nothing."""
     client, _ = auth_client
     response = client.post(
         "/api/auth/register", json={"username": "ghost", "password": "password-123", "invite": "nope"},
     )
     assert response.status_code == 201
-    assert response.json()["joined_class"] is None and response.json()["invite_error"]
+    assert "joined_class" not in response.json() and "invite_error" not in response.json()
 
 
 def test_only_admins_change_the_registration_setting(auth_client):

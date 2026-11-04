@@ -119,7 +119,7 @@ def _candidates(accounts: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
 
 
 def _path_starters(template_id: str, people: list[str]) -> set[str]:
-    from deeptutor.classes.report import _snapshots
+    from deeptutor.catalog.learner_data import _snapshots
 
     out = set()
     for user_id in people:
@@ -254,7 +254,7 @@ def _drop_everyone(kind: str, item_id: str, owner: str) -> None:
     kept = stored or scopes.Scope()
     scopes._store_scope(
         kind, item_id,
-        scopes.Scope(users=list(kept.users), classes=list(kept.classes), groups=list(kept.groups)),
+        scopes.Scope(users=list(kept.users)),
         actor_id=owner,
     )
 
@@ -264,7 +264,7 @@ def run() -> int:
     if done():
         return 0
     _reading_cache.clear()
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     accounts = _accounts()
     candidates = _candidates(accounts)

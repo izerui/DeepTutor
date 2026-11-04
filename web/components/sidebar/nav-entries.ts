@@ -91,7 +91,6 @@ export const PRIMARY_NAV: NavEntry[] = [
     surfaces: ['reading', 'chat', 'books'],
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
-  // Platform batch 2 §3: classes are retired; the /classes page only explains that.
   // Spec 2026-10-29 §8: teachers write practice sets; everyone answers the ones
   // they joined from the market or were sent by name (traceability #1).
   {

@@ -15,7 +15,8 @@ def test_students_and_plain_users_cannot_reach_teacher_routes(teaching_http):
         assert teaching_http.client.get(f"{BASE}/students", headers=_auth(name)).status_code == 403
 
 
-def test_student_picker_exposes_only_public_fields(teaching_http):
+def test_student_picker_exposes_only_public_fields(teaching_http, make_learners):
+    make_learners("tina", "sara", "sam")  # the picker offers Tina's learners
     body = teaching_http.client.get(f"{BASE}/students", headers=_auth("tina")).json()
 
     assert sorted(s["username"] for s in body["students"]) == ["sam", "sara"]
@@ -24,8 +25,11 @@ def test_student_picker_exposes_only_public_fields(teaching_http):
     assert [s["username"] for s in narrowed["students"]] == ["sam"]
 
 
-def test_teacher_publishes_and_manages_assignments(teaching_http, teacher_draft, quiet_change_model):
+def test_teacher_publishes_and_manages_assignments(
+    teaching_http, teacher_draft, quiet_change_model, make_learners
+):
     teacher_draft()
+    make_learners("tina", "sara", "sam")
     client, users = teaching_http.client, teaching_http.users
 
     created = client.post(

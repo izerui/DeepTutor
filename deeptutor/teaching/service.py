@@ -544,21 +544,18 @@ class TeachingService:
     def _needs_students(template: MasteryTemplate) -> bool:
         from deeptutor.publishing import scope as scopes
 
-        return (
-            template.current_revision == 0
-            and scopes.get_scope(scopes.MASTERY_PATH, template.id) is None
-            and not scopes.taught_class_ids(template.owner_user_id)
-        )
+        # People join from the market: a first publication never needs students picked.
+        return False
 
     def _material_reach(self, template: MasteryTemplate, plan: SourcePlan) -> list[dict[str, Any]]:
         """Cited books and knowledge bases of someone else that some recipients cannot read.
 
-        Recipients are the path's current scope, or (first publication) the
-        students of the teacher's classes. Only a warning: the teacher may
+        Recipients are the path's current receivers and learners, or (first
+        publication) the teacher's learners. Only a warning: the teacher may
         still publish, or replace the material with their own.
         """
         from deeptutor.book import registry as book_registry
-        from deeptutor.classes.service import teacher_student_ids
+        from deeptutor.catalog.learners import learners_of
         from deeptutor.knowledge import registry as kb_registry
         from deeptutor.publishing import scope as scopes
 
@@ -566,7 +563,7 @@ class TeachingService:
         current = scopes.get_scope(scopes.MASTERY_PATH, template.id)
         recipients = (
             scopes.audience(current, students_only=True, owner_id=owner)
-            if current is not None else set(teacher_student_ids(owner))
+            if current is not None else set(learners_of(owner))
         )
         if not recipients:
             return []
@@ -708,12 +705,10 @@ class TeachingService:
         from deeptutor.publishing import scope as scopes
 
         first = revision.revision == 1 and not archived
-        by_class = first and not students
         if first:
             try:
-                # Spec 2026-10-29 §7.1: the students picked in the publish dialog
-                # are the scope; with none picked, like books, knowledge bases and
-                # practice sets, a first publication reaches the teacher's classes.
+                # The students picked in the publish dialog are its receivers; with
+                # none picked it reaches only the people who join it.
                 if students:
                     if scopes.get_scope(scopes.MASTERY_PATH, template.id) is None:
                         scopes._store_scope(
@@ -728,12 +723,6 @@ class TeachingService:
             try:
                 scopes.path_added_students(template.id, students, actor_id=user.id)
                 self.store.assign(template.id, students, assigned_by=user.id)
-            except Exception as exc:
-                warn("assignments", exc)
-        if by_class:
-            try:
-                # The classes' students get the path now; later joiners on opening their list.
-                scopes.reconcile_template(template.id)
             except Exception as exc:
                 warn("assignments", exc)
         if first:
@@ -803,12 +792,6 @@ class TeachingService:
         return True
 
     async def publish(self, template_id: str, request: PublishRequest) -> dict:
-        from deeptutor.publishing import scope as scopes
-
-        if request.join_only and not scopes.is_join_only():
-            # Platform batch 1 §4.4: for the market, nobody receives it until they join.
-            with scopes.join_only():
-                return await self.publish(template_id, request)
         # 1. Validate everything; nothing below writes until this block passes.
         # Synchronous store/registry sections run in worker threads (never on
         # the event loop), and nothing awaits while holding a writer.
@@ -826,17 +809,6 @@ class TeachingService:
         students = await asyncio.to_thread(self._validate_students, request.student_ids)
         from deeptutor.publishing import scope as scopes
 
-        if template.current_revision == 0 and not students and not scopes.is_join_only() and not await asyncio.to_thread(
-            lambda: scopes.get_scope(scopes.MASTERY_PATH, template.id) is not None
-            or bool(scopes.taught_class_ids(user.id))
-        ):
-            # Spec 2026-11-02 §4.1: with no class to default to, the receivers are chosen.
-            try:
-                scopes._no_receivers(scopes.MASTERY_PATH, template.id)
-            except scopes.ScopeRequired as exc:
-                raise TemplateConflict(
-                    "Choose the students who receive this path before publishing it."
-                ) from exc
         # Materials made public with the path reach the same receivers.
         chosen = scopes.Scope(users=list(students)) if students else None
         try:
@@ -967,20 +939,20 @@ class TeachingService:
         }
         if any(student_id not in students for student_id in wanted):
             raise InvalidStudents("Only active student accounts can be assigned.")
-        # Spec 2026-10-29 §5: a teacher reaches only the students in their classes.
+        # A teacher hands a path only to their own learners (who joined their content).
         reachable = self._reachable_students()
         if reachable is not None and any(student_id not in reachable for student_id in wanted):
-            raise InvalidStudents("You can only assign students in your classes.")
+            raise InvalidStudents("You can only assign learners of your own content.")
         return wanted
 
     def _reachable_students(self) -> set[str] | None:
-        """``None`` for administrators; a teacher's own class students otherwise."""
+        """``None`` for administrators; a teacher's own learners otherwise."""
         user_id, is_admin = self._actor()
         if is_admin:
             return None
-        from deeptutor.classes.service import teacher_student_ids
+        from deeptutor.catalog.learners import learners_of
 
-        return teacher_student_ids(user_id)
+        return learners_of(user_id)
 
     def assignments(self, template_id: str) -> list[dict]:
         template = self.get(template_id)

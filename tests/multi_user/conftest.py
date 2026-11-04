@@ -371,20 +371,96 @@ def teaching_users(seed_user):
         ("sam", "student"),
         ("uma", "user"),
     )
-    users = {name: seed_user(name, role=role) for name, role in accounts}
-    # Spec 2026-10-29 §5: teachers reach only their class's students, so both
-    # teachers teach one class that holds both students.
-    from deeptutor.classes.service import ClassService
-    from deeptutor.multi_user.models import CurrentUser
-    from deeptutor.multi_user.paths import admin_scope
+    return {name: seed_user(name, role=role) for name, role in accounts}
 
-    admin = CurrentUser(users["adam"]["id"], "adam", "admin", admin_scope())
-    service = ClassService(admin)
-    created = service.create("Teaching fixtures")
-    for teacher in ("tina", "tom"):
-        service.add_teacher(created["id"], users[teacher]["id"])
-    service.add_students(created["id"], [users["sara"]["id"], users["sam"]["id"]])
-    return users
+
+@pytest.fixture
+def deliver(teaching_users):
+    """``deliver(kind, item_id, "sara", "sam")``: those accounts reach the item.
+
+    Classes are gone: learners reach content by joining it. This writes the
+    enrollment rows the market migration writes (``via='migrated'``), so the
+    item need not be listed, then hands out what follows from them (a
+    course's tasks and what they cite, a path's copies). Without names it
+    delivers to Sara and Sam, the two students the old fixture class held.
+    """
+    import time
+
+    from deeptutor.catalog import enrollment
+    from deeptutor.catalog.store import db
+
+    def _deliver(kind: str, item_id: str, *names: str) -> None:
+        names = names or ("sara", "sam")
+        now = time.time()
+        with db.write() as conn:
+            conn.executemany(
+                "INSERT INTO enrollments (kind, item_id, user_id, via, joined_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(kind, item_id, user_id, via) DO UPDATE SET left_at = NULL",
+                [(kind, item_id, teaching_users[n]["id"], enrollment.MIGRATED, now) for n in names],
+            )
+        if kind == "course":
+            enrollment.refresh_course(item_id)
+        elif kind == "mastery_path":
+            enrollment.reconcile_path(item_id)
+
+    return _deliver
+
+
+@pytest.fixture
+def make_learners(as_account, deliver, teaching_users):
+    """``make_learners("tina", "sara", "sam")``: they become Tina's learners.
+
+    A teacher names (assigns, sends a remedial set to, reports on) only their
+    learners: people who joined any of their content. The old fixture class
+    made Sara and Sam the students of both teachers; this gives the teacher a
+    draft course "Learners" (never published, so it reaches nobody) and
+    enrolls those accounts in it. One such course per teacher and test.
+    """
+    from deeptutor.tasks.courses import CourseService
+
+    courses: dict[str, str] = {}
+
+    def _make(teacher: str = "tina", *names: str) -> str:
+        names = names or ("sara", "sam")
+        if teacher not in courses:
+            with as_account(teacher):
+                courses[teacher] = CourseService().create("Learners")["id"]
+        deliver("course", courses[teacher], *names)
+        return courses[teacher]
+
+    return _make
+
+
+@pytest.fixture
+def in_course(as_account, deliver):
+    """Tasks are published only as part of a course: wrap tasks into one and publish it.
+
+    ``in_course(task_id, ...)`` creates a course of ``owner`` holding the
+    tasks, delivers it to ``to`` (Sara and Sam by default) before publishing,
+    so they are told about it, then publishes it. Returns the course id.
+    """
+    from deeptutor.catalog.enrollment import refresh_course
+    from deeptutor.tasks.courses import CourseService
+
+    def _wrap(
+        *task_ids: str,
+        owner: str = "tina",
+        title: str = "Course",
+        to: tuple[str, ...] = ("sara", "sam"),
+        publish: bool = True,
+    ) -> str:
+        with as_account(owner):
+            course = CourseService().create(title)
+            CourseService().update(course["id"], task_ids=list(task_ids))
+        if to:
+            deliver("course", course["id"], *to)
+        if publish:
+            with as_account(owner):
+                CourseService().publish(course["id"])
+            refresh_course(course["id"])
+        return course["id"]
+
+    return _wrap
 
 
 @pytest.fixture
@@ -541,7 +617,7 @@ def edit_calculus_draft(as_account):
 
 
 @pytest.fixture
-def publish_template(as_account, teaching_users, quiet_change_model):
+def publish_template(as_account, teaching_users, quiet_change_model, make_learners):
     """Register (or reuse) the template for a draft, preview it, publish it.
 
     Uses whatever KB registry the test set up: plan B's real one (isolated per
@@ -561,6 +637,9 @@ def publish_template(as_account, teaching_users, quiet_change_model):
         kb_choices: dict | None = None,
         book_choices: dict | None = None,
     ) -> dict:
+        if students and teaching_users[name]["role"] != "admin":
+            # A teacher names only their learners (people who joined their content).
+            make_learners(name, *students)
         with as_account(name):
             service = TeachingService()
             template = service.register(path_id, "")

@@ -1,9 +1,10 @@
-"""Who may set a publish scope, and with which targets (spec 2026-10-29 §7).
+"""Who may name the receivers of an item, and whom (spec 2026-10-29 §7, learning platform).
 
-Only the publisher sets the scope of their own item (D10: administrators
-withdraw or delete other people's content, they do not republish it).
-Teachers pick among the classes they teach; administrators among all
-classes. Narrowing that cuts anyone off needs ``confirm`` (§7.2).
+Only the publisher sets the receivers of their own item (D10: administrators
+withdraw or delete other people's content, they do not republish it). People
+reach content by joining it from the market; a publisher may also name
+learners of their own content (a remedial set). Narrowing that cuts anyone
+off needs ``confirm`` (§7.2).
 """
 
 from __future__ import annotations
@@ -101,30 +102,13 @@ class PublishService:
         return info
 
     def _role(self) -> str:
-        from deeptutor.classes.service import _role
+        from deeptutor.multi_user.accounts import live_role as _role
 
         return _role(self.actor)
 
     def _require_publisher(self) -> None:
         if self._role() not in ("teacher", "admin"):
             raise ScopeForbidden("Only teachers and administrators publish content.")
-
-    def _pickable_classes(self) -> dict[str, str]:
-        """Class id -> name the actor may publish to."""
-        from deeptutor.classes import store as class_store
-
-        with class_store.read() as conn:
-            if conn is None:
-                return {}
-            if self._role() == "admin":
-                rows = conn.execute("SELECT id, name FROM classes WHERE archived = 0").fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT c.id, c.name FROM classes c JOIN class_teachers t ON t.class_id = c.id "
-                    "WHERE t.user_id = ? AND c.archived = 0",
-                    (self.actor.id,),
-                ).fetchall()
-        return {row["id"]: row["name"] for row in rows}
 
     def _current(self, kind: str, item_id: str, info: dict[str, Any]) -> Scope:
         # What is stored, with its members — never the empty scope a taken-down item
@@ -152,13 +136,9 @@ class PublishService:
         self._require_publisher()
         info = self._item(kind, item_id)
         scope = self._current(kind, item_id, info)
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
-        classes = self._pickable_classes()
-        from deeptutor.classes.org import group_label, lists
-
-        names = lists()
         return {
             "kind": kind,
             "item_id": item_id,
@@ -169,61 +149,32 @@ class PublishService:
                     {"id": u, "username": (accounts.get(u) or {}).get("username") or u}
                     for u in scope.users
                 ],
-                "classes": [{"id": c, "name": classes.get(c, "")} for c in scope.classes],
-                "groups": [{"id": g, "name": group_label(g, names)} for g in scope.groups],
             },
             "audience_size": len(self._reached(kind, scope, info)),
-            "choices": {
-                "classes": [{"id": k, "name": v} for k, v in sorted(classes.items(), key=lambda i: i[1])],
-                # Spec 2026-11-03 §0: administrators may also pick departments and grades.
-                **({"departments": names["departments"], "grades": names["grades"]} if self._role() == "admin" else {}),
-            },
-            # §7.1: by default a teacher publishes to every class they teach.
-            "suggested_classes": [] if self._role() == "admin" else sorted(classes),
         }
 
-    def _validated(
-        self, kind: str, everyone: bool, users: Any, classes: Any, current: Scope, groups: Any = (),
-    ) -> Scope:
-        """Check what the publisher adds; targets already in the scope may stay.
+    def _validated(self, kind: str, everyone: bool, users: Any, current: Scope) -> Scope:
+        """Check whom the publisher names; people already named may stay.
 
-        A class the teacher no longer teaches, or a student who left their
-        classes, must not block other changes; removing them is always allowed.
+        A teacher names their own learners (who joined their content); an
+        administrator anyone. "Everyone" is reached through the market only.
         """
-        from deeptutor.classes.service import _accounts, teacher_student_ids
+        from deeptutor.catalog.learners import learners_of
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
-        users, classes, groups = _clean_ids(users), _clean_ids(classes), _clean_ids(groups)
-        if scopes.classes_retired() and (
-            [c for c in classes if c not in current.classes] or [g for g in groups if g not in current.groups]
-        ):
-            raise ScopeError("Classes are no longer used. People join from the learning market.")
-        if scopes.classes_retired() and everyone and not current.everyone:
-            # Review M2: reaching everyone goes through the market and its review.
+        users = _clean_ids(users)
+        if everyone and not current.everyone:
             raise ScopeError("To reach everyone, put it in the learning market.")
-        added_groups = [g for g in groups if g not in current.groups]
-        if added_groups:
-            # Spec 2026-11-03 §0: only administrators publish to departments and grades.
-            if self._role() != "admin":
-                raise ScopeForbidden("Only administrators publish to departments and grades.")
-            from deeptutor.classes.org import valid_group
-
-            if not all(valid_group(g) for g in added_groups):
-                raise ScopeError("Choose departments and grades from the list.")
         accounts = _accounts()
         # Deleted accounts drop out silently; they can no longer receive anything.
         users = [u for u in users if u in accounts and u != self.actor.id]
-        added_classes = [c for c in classes if c not in current.classes]
         added_users = [u for u in users if u not in current.users]
-        pickable = self._pickable_classes()
-        if any(c not in pickable for c in added_classes):
-            raise ScopeForbidden("You can only publish to classes you teach.")
-        reachable = None if self._role() == "admin" else teacher_student_ids(self.actor.id)
+        reachable = None if self._role() == "admin" else learners_of(self.actor.id)
         for user_id in added_users:
             account = accounts[user_id]
             if account["disabled"]:
                 raise ScopeError("Only active accounts can receive content.")
             if account["role"] not in ("student", "teacher"):
-                # Spec §7.1: named receivers are students or teachers.
                 raise ScopeError("Only students and teachers can be chosen.")
             if kind in STUDENT_KINDS and account["role"] != "student":
                 raise ScopeError(
@@ -231,14 +182,12 @@ class PublishService:
                     else "Only students receive tasks." if kind in (TASK, COURSE)
                     else "Only students receive practice sets."
                 )
-            # Spec §5: a teacher names only students of their own classes (any teacher may be named).
             if reachable is not None and account["role"] == "student" and user_id not in reachable:
-                raise ScopeForbidden("You can only choose students in your classes.")
-        return Scope(everyone=bool(everyone), users=users, classes=classes, groups=groups)
+                raise ScopeForbidden("You can only choose learners of your own content.")
+        return Scope(everyone=bool(everyone) and current.everyone, users=users)
 
     def set_scope(
-        self, kind: str, item_id: str, *, everyone: bool, users: Any, classes: Any,
-        confirm: bool = False, groups: Any = (),
+        self, kind: str, item_id: str, *, everyone: bool, users: Any, confirm: bool = False,
     ) -> dict[str, Any]:
         self._require_publisher()
         info = self._item(kind, item_id)
@@ -249,42 +198,33 @@ class PublishService:
         if access_state(kind, item_id)[0]:
             raise ScopeError("An administrator took this down; it reaches nobody until approved again.")
         current = self._current(kind, item_id, info)
-        new = self._validated(kind, everyone, users, classes, current, groups=groups)
+        new = self._validated(kind, everyone, users, current)
         new.members = list(current.members)  # people who joined stay whatever the publisher picks
-        if info.get("homework") and new.everyone:
-            # Spec 2026-11-02 R22: homework goes to classes or chosen students only.
-            raise ScopeError("Homework goes to your classes or chosen students, not to everyone.")
         before = self._reached(kind, current, info)
         cut = before - self._reached(kind, new, info)
         if cut and not confirm:
             raise ScopeNeedsConfirmation(len(cut))
-        from deeptutor.teaching.material_watch import watching
-
-        # Batch 4 §2: narrowing a book or knowledge base tells authors of paths citing it.
-        with watching(kind, item_id):
-            scopes._store_scope(kind, item_id, new, actor_id=self.actor.id)
+        scopes._store_scope(kind, item_id, new, actor_id=self.actor.id)
         if kind == MASTERY_PATH:
             scopes.reconcile_template(item_id)
         return self.describe(kind, item_id)
 
     def search_people(self, query: str) -> list[dict[str, Any]]:
-        """Students and teachers by username, for picking specific people."""
-        from deeptutor.classes.service import _accounts
+        """A teacher's learners (an administrator: anyone) by username, for naming receivers."""
+        from deeptutor.catalog.learners import learners_of
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         self._require_publisher()
         needle = str(query or "").strip().casefold()
         if not needle:
             return []
-        from deeptutor.classes.service import teacher_student_ids
-
-        # Spec §5: teachers see the students of their own classes; any teacher.
-        reachable = None if self._role() == "admin" else teacher_student_ids(self.actor.id)
+        reachable = None if self._role() == "admin" else learners_of(self.actor.id)
         return [
             {"id": user_id, "username": account["username"], "role": account["role"]}
             for user_id, account in sorted(_accounts().items(), key=lambda item: item[1]["username"])
             if account["role"] in ("student", "teacher") and not account["disabled"]
             and user_id != self.actor.id and needle in account["username"].casefold()
-            and (reachable is None or account["role"] == "teacher" or user_id in reachable)
+            and (reachable is None or user_id in reachable)
         ][:50]
 
 

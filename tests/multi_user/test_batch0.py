@@ -9,7 +9,6 @@ import asyncio
 
 import pytest
 
-from deeptutor.classes.service import ClassService
 from deeptutor.practice_sets.service import PracticeNotFound, PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, Scope, get_scope
@@ -18,12 +17,6 @@ QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
      "correct_answer": "B", "explanation": "Add."},
 ]
-
-
-def _class_id(as_account) -> str:
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
 
 
 def _kb(teaching_users, tmp_path, owner: str, name: str = "notes"):
@@ -43,46 +36,46 @@ def _draft_set(as_account, name: str, title: str = "Week 1") -> str:
     return created["id"]
 
 
-# ── 2. a first publication names its receivers ─────────────
+# ── 2. a first publication names its receivers, or nobody (people join) ──
 
 
 @pytest.mark.first_publish_rule
-def test_a_teacher_with_classes_publishes_to_them_by_default(teaching_users, as_account, tmp_path):
-    from deeptutor.knowledge import registry
-
-    kb = _kb(teaching_users, tmp_path, "tina")
-    with as_account("tina"):
-        registry.set_visibility(kb.kb_id, "public")
-    assert get_scope(KNOWLEDGE_BASE, kb.kb_id).classes == [_class_id(as_account)]
-
-
-@pytest.mark.first_publish_rule
-def test_without_classes_nothing_is_published_until_receivers_are_chosen(
+def test_without_receivers_a_publication_reaches_nobody_until_they_join(
     teaching_users, as_account, tmp_path
 ):
     from deeptutor.knowledge import registry
 
     kb = _kb(teaching_users, tmp_path, "adam")
     with as_account("adam"):
-        with pytest.raises(scopes.ScopeRequired):
-            registry.set_visibility(kb.kb_id, "public")
-        assert registry.get_kb(kb.kb_id).visibility == "private"
-        assert get_scope(KNOWLEDGE_BASE, kb.kb_id) is None
-        # "Everyone" is a deliberate choice, written in the same step.
+        registry.set_visibility(kb.kb_id, "public")
+        assert registry.get_kb(kb.kb_id).visibility == "public"
+    scope = get_scope(KNOWLEDGE_BASE, kb.kb_id)
+    assert scope is not None and scope.empty
+    other = _kb(teaching_users, tmp_path, "adam", name="other")
+    with as_account("adam"):
+        # "Everyone" is reached through the market only; nothing is published.
         with scopes.chosen_scope(Scope(everyone=True)):
-            registry.set_visibility(kb.kb_id, "public")
-    assert get_scope(KNOWLEDGE_BASE, kb.kb_id).everyone
+            with pytest.raises(scopes.ScopeError):
+                registry.set_visibility(other.kb_id, "public")
+        assert registry.get_kb(other.kb_id).visibility == "private"
+    assert get_scope(KNOWLEDGE_BASE, other.kb_id) is None
 
 
 @pytest.mark.first_publish_rule
-def test_a_chosen_scope_is_checked_and_a_later_publication_keeps_it(teaching_users, as_account, tmp_path):
+def test_a_chosen_scope_is_checked_and_a_later_publication_keeps_it(
+    teaching_users, as_account, tmp_path, make_learners
+):
     from deeptutor.knowledge import registry
 
     kb = _kb(teaching_users, tmp_path, "tina")
     sara = teaching_users["sara"]["id"]
+    make_learners("tina", "sara")
     with as_account("tina"):
         with scopes.chosen_scope(Scope(users=[teaching_users["uma"]["id"]])):
             with pytest.raises(scopes.ScopeError):  # uma is neither a student nor a teacher
+                registry.set_visibility(kb.kb_id, "public")
+        with scopes.chosen_scope(Scope(users=[teaching_users["sam"]["id"]])):
+            with pytest.raises(scopes.ScopeError):  # Sam is no learner of Tina's
                 registry.set_visibility(kb.kb_id, "public")
         with scopes.chosen_scope(Scope(users=[sara])):
             registry.set_visibility(kb.kb_id, "public")
@@ -92,35 +85,29 @@ def test_a_chosen_scope_is_checked_and_a_later_publication_keeps_it(teaching_use
 
 
 @pytest.mark.first_publish_rule
-def test_practice_sets_and_paths_need_receivers_too(
+def test_practice_sets_and_paths_publish_to_nobody_until_they_join(
     teaching_users, as_account, teacher_draft, publish_template
 ):
-    from deeptutor.teaching.service import TemplateConflict
+    from deeptutor.teaching.store import TeachingStore
 
     set_id = _draft_set(as_account, "adam")
     with as_account("adam"):
-        with pytest.raises(scopes.ScopeRequired):
-            PracticeSetService().publish(set_id)
-        assert PracticeSetService().get(set_id)["status"] == "draft"
-        with scopes.chosen_scope(Scope(classes=[_class_id(as_account)])):
-            assert PracticeSetService().publish(set_id)["status"] == "published"
+        assert PracticeSetService().publish(set_id)["status"] == "published"
+    assert get_scope(PRACTICE_SET, set_id).empty
+    with as_account("sara"):
+        assert PracticeSetService().assigned() == []
 
     teacher_draft("tom", path_id="topic_tom")
-    # Tom teaches the class: nothing picked still reaches it.
     template_id = publish_template("tom", path_id="topic_tom")["template"]["id"]
-    assert get_scope(MASTERY_PATH, template_id).classes == [_class_id(as_account)]
-    with as_account("tom"):
-        ClassService().remove_teacher(_class_id(as_account), teaching_users["tom"]["id"])
-    teacher_draft("tom", path_id="topic_tom_2")
-    with pytest.raises(TemplateConflict):
-        publish_template("tom", path_id="topic_tom_2")
+    assert get_scope(MASTERY_PATH, template_id).empty
+    assert [a for a in TeachingStore().list_assignments(template_id) if a.status == "active"] == []
 
 
 # ── 4. cited materials some students cannot read ───────────
 
 
 def test_cited_materials_out_of_the_students_reach_are_flagged(
-    teaching_users, as_account, tmp_path, teacher_draft, publish_template
+    teaching_users, as_account, tmp_path, teacher_draft, publish_template, make_learners
 ):
     from deeptutor.knowledge import registry
     from deeptutor.publishing.service import PublishService
@@ -128,12 +115,15 @@ def test_cited_materials_out_of_the_students_reach_are_flagged(
     from deeptutor.teaching.snapshot import SourcePlan
 
     teacher_draft()
-    template = TeachingService().store.get_template(publish_template()["template"]["id"])
+    template = TeachingService().store.get_template(
+        publish_template(students=("sara", "sam"))["template"]["id"]
+    )
+    make_learners("tom", "sara")
     kb = _kb(teaching_users, tmp_path, "tom")
     with as_account("tom"):
         registry.set_visibility(kb.kb_id, "public")
         PublishService().set_scope(KNOWLEDGE_BASE, kb.kb_id, everyone=False,
-                                   users=[teaching_users["sara"]["id"]], classes=[], confirm=True)
+                                   users=[teaching_users["sara"]["id"]], confirm=True)
     own = _kb(teaching_users, tmp_path, "tina", name="mine")
     plan = SourcePlan(kb_refs={kb.kb_id: None, own.kb_id: None})
     with as_account("tina"):
@@ -164,10 +154,11 @@ def test_provenance_follows_the_publishers_live_role(teaching_users, as_account,
         assert provenance(teaching_users["tina"]["id"], get_current_user())["kind"] == "school"
 
 
-def test_assigned_practice_sets_say_where_they_come_from(as_account):
+def test_assigned_practice_sets_say_where_they_come_from(as_account, deliver):
     set_id = _draft_set(as_account, "tina")
     with as_account("tina"):
         PracticeSetService().publish(set_id)
+    deliver(PRACTICE_SET, set_id, "sara")
     with as_account("sara"):
         [row] = PracticeSetService().assigned()
     assert row["provenance"] == {"kind": "teacher", "name": "tina"}
@@ -176,12 +167,15 @@ def test_assigned_practice_sets_say_where_they_come_from(as_account):
 # ── 6. administrators withdraw others' practice sets ───────
 
 
-def test_admins_withdraw_but_never_open_others_practice_sets(as_account):
+def test_admins_withdraw_but_never_open_others_practice_sets(as_account, deliver):
     set_id = _draft_set(as_account, "tina")
     with as_account("adam"):
         assert PracticeSetService().withdrawable() == []  # a draft is nobody else's business
     with as_account("tina"):
         PracticeSetService().publish(set_id)
+    deliver(PRACTICE_SET, set_id, "sara")
+    with as_account("sara"):
+        assert [row["id"] for row in PracticeSetService().assigned()] == [set_id]
     with as_account("adam"):
         service = PracticeSetService()
         assert [row["id"] for row in service.withdrawable()] == [set_id]
@@ -200,7 +194,7 @@ def test_admins_withdraw_but_never_open_others_practice_sets(as_account):
 
 
 def test_a_demoted_teacher_hands_over_only_what_they_published(
-    teaching_users, as_account, tmp_path, teacher_draft, publish_template, monkeypatch
+    teaching_users, as_account, tmp_path, teacher_draft, publish_template, monkeypatch, deliver
 ):
     from deeptutor.api.routers import auth as auth_router
     from deeptutor.knowledge import registry
@@ -216,6 +210,7 @@ def test_a_demoted_teacher_hands_over_only_what_they_published(
     with as_account("tina"):
         PracticeSetService().publish(published_set)
         registry.set_visibility(public_kb.kb_id, "public")
+    deliver(PRACTICE_SET, published_set, "sara")
 
     asyncio.run(auth_router.update_user_role(
         "tina", auth_router.SetRoleRequest(role="student"),
@@ -240,7 +235,7 @@ def test_a_failed_hand_over_leaves_the_role_unchanged(teaching_users, monkeypatc
     from fastapi import HTTPException
 
     from deeptutor.api.routers import auth as auth_router
-    from deeptutor.classes import lifecycle
+    from deeptutor.multi_user import content_lifecycle as lifecycle
     from deeptutor.multi_user.identity import get_user
 
     def broken(*_args, **_kwargs):

@@ -3846,14 +3846,10 @@ def _admin_withdrawal(kb_name: str, *, force: bool, confirmed: frozenset[str] | 
         return False
     if record.visibility != "public":
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
-    from deeptutor.teaching.material_watch import watching
-
-    # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
-    with watching("knowledge_base", record.kb_id):
-        registry.set_visibility(
-            record.kb_id, "private", force=force,
-            confirm=confirmed is not None, confirmed_referrers=confirmed,
-        )
+    registry.set_visibility(
+        record.kb_id, "private", force=force,
+        confirm=confirmed is not None, confirmed_referrers=confirmed,
+    )
     from deeptutor.multi_user.audit import log_admin_action
 
     log_admin_action("kb_withdraw", summary={"kb_id": record.kb_id, "via": "delete"})
@@ -4023,14 +4019,10 @@ def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, 
     from deeptutor.knowledge import registry
 
     def attempt(confirmed: frozenset[str] | None):
-        from deeptutor.teaching.material_watch import watching
-
-        # Batch 4 §2: authors of other teachers' paths citing it hear if their students lose it.
-        with watching("knowledge_base", kb_id):
-            return registry.set_visibility(
-                kb_id, payload.visibility, force=payload.force,
-                confirm=confirmed is not None, confirmed_referrers=confirmed,
-            )
+        return registry.set_visibility(
+            kb_id, payload.visibility, force=payload.force,
+            confirm=confirmed is not None, confirmed_referrers=confirmed,
+        )
 
     try:
         updated = attempt(None) if payload.force else _confirmed_withdrawal(

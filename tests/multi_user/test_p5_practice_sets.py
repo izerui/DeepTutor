@@ -6,7 +6,6 @@ import asyncio
 
 import pytest
 
-from deeptutor.classes.service import ClassService
 from deeptutor.practice_sets.service import (
     PracticeConflict,
     PracticeForbidden,
@@ -15,7 +14,6 @@ from deeptutor.practice_sets.service import (
     exact_result,
 )
 from deeptutor.publishing.scope import PRACTICE_SET
-from deeptutor.publishing.service import PublishService
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice",
@@ -26,21 +24,14 @@ QUESTIONS = [
 ]
 
 
-def _class_id(as_account) -> str:
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
-
-
 @pytest.fixture
-def published_set(as_account):
-    class_id = _class_id(as_account)
+def published_set(as_account, deliver):
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Week 1")
         service.update(created["id"], questions=QUESTIONS)
         service.publish(created["id"])
-        PublishService().set_scope(PRACTICE_SET, created["id"], everyone=False, users=[], classes=[class_id])
+    deliver(PRACTICE_SET, created["id"], "sara", "sam")  # they joined it
     return created["id"]
 
 

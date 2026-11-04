@@ -1,12 +1,11 @@
-"""Check the two market migrations on a COPY of real data before going live.
+"""Check the market migration on a COPY of real data before going live.
 
     DEEPTUTOR_HOME=/path/to/a/copy python -m deeptutor.catalog.migration_check --on-a-copy
 
 For every active account it records what they can open — practice sets,
 Mastery Paths, tasks, courses, books, knowledge bases — and, for students,
-their abilities and daily AI limit. Then it runs both migrations (content
-published to everyone goes to the market; classes retire) and records it all
-again. Whatever someone lost is listed; losses the design expects (content
+their abilities and daily AI limit. Then it runs the migration (content
+published to everyone goes to the market) and records it all again. Whatever someone lost is listed; losses the design expects (content
 published to everyone that the person never started) are counted apart.
 Exit code 0: nothing else was lost and no student's abilities changed.
 
@@ -85,7 +84,7 @@ def _everyone_items() -> dict[tuple[str, str], set[str]]:
     """
     from deeptutor.catalog import items
     from deeptutor.catalog.migration import _candidates, _starters
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     accounts = _accounts()
     out = {}
@@ -103,14 +102,13 @@ def _safe_reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
 
 
 def run() -> dict[str, Any]:
-    from deeptutor.catalog import migration, retire_classes
-    from deeptutor.classes.service import _accounts
+    from deeptutor.catalog import migration
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     accounts = {u: a for u, a in _accounts().items() if not a["disabled"] and a["role"] != "admin"}
     everyone = _everyone_items()
     before = {u: _safe_reach(u, a) for u, a in sorted(accounts.items())}
     migration.run()
-    retired = retire_classes.run()
     after = {u: _safe_reach(u, a) for u, a in sorted(accounts.items())}
     people = []
     unexpected_total = 0
@@ -138,7 +136,7 @@ def run() -> dict[str, Any]:
             "not_started_everyone_items": expected, "abilities_changed": changed, "errors": errors,
             "ok": unexpected == 0,
         })
-    return {"classes_retired": retired or retire_classes.retired(), "people": people, "problems": unexpected_total}
+    return {"migrated": migration.done(), "people": people, "problems": unexpected_total}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"classes retired: {result['classes_retired']}")
+        print(f"migrated: {result['migrated']}")
         for person in result["people"]:
             line = f"{'OK ' if person['ok'] else '!! '}{person['username']} ({person['role']})"
             if person["lost"]:
@@ -167,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
                 line += f"  (by design: {count} item(s) published to everyone, never started, now in the market)"
             print(line)
         print(f"problems: {result['problems']}")
-    return 0 if result["problems"] == 0 and result["classes_retired"] else 1
+    return 0 if result["problems"] == 0 and result["migrated"] else 1
 
 
 if __name__ == "__main__":

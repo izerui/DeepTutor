@@ -101,14 +101,10 @@ async def home() -> dict[str, Any]:
             "assigned": [t for t in tasks if t["state"] in ("open", "overdue")],
             "history_count": sum(1 for t in tasks if t["state"] in ("completed", "closed")),
         }
-        from deeptutor.classes.announcements import AnnouncementService
-        from deeptutor.publishing.scope import classes_retired
-
-        retired = classes_retired()
         for name, loader in (
             ("market", _market), ("mine", _mine), ("mine_courses", _mine_courses), ("joined", _joined),
-            # Platform batch 3 §3: announcements of the courses and paths one joined.
-            ("announcements", _content_announcements if retired else AnnouncementService().for_home),
+            # Announcements of the courses and paths one joined.
+            ("announcements", _content_announcements),
         ):
             try:
                 sections[name] = loader()
@@ -135,7 +131,7 @@ async def teacher_workbench() -> dict[str, Any]:
 @router.get("/to-grade")
 async def to_grade_list() -> dict[str, Any]:
     """Batch 3 §5.4: every hand-in waiting for the current teacher."""
-    from deeptutor.classes.service import _role
+    from deeptutor.multi_user.accounts import live_role as _role
     from deeptutor.teaching.workbench import to_grade
 
     user = get_current_user()

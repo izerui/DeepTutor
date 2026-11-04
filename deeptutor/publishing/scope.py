@@ -1,16 +1,17 @@
-"""Publish scopes: who receives a published item (spec 2026-10-29 §7).
+"""Publish scopes: who receives a published item (spec 2026-10-29 §7, learning platform).
 
-A scope combines three kinds of target: specific accounts, specific classes
-(their students and teachers, including later joiners) and everyone.
+On the learning platform people reach content by joining it from the market
+(``members``, read from the market store with the scope). A scope may also
+name accounts — a remedial practice set goes to the learners it is for — and
+content from before the market may still say "everyone".
 
 * Books and knowledge bases stay governed by their ``visibility`` column:
   ``private`` reaches nobody but the owner. A public item without a scope row
   reaches everyone, as before; with one, only its audience.
-* A Mastery Path's audience is turned into assignments. Its scope only
-  counts students. An unmanaged path keeps its hand-made assignments; once a
-  scope is set, assignments follow it: :func:`reconcile_template` when the
-  scope changes, :func:`reconcile_student` when a student's classes change
-  or the student opens their learning list.
+* A Mastery Path's audience is turned into assignments: :func:`reconcile_template`
+  when its receivers change, :func:`reconcile_student` when a learner opens
+  their learning list. An unmanaged path keeps its hand-made assignments.
+* An item an administrator took down reaches nobody but its owner.
 
 Reading never creates the store. The store is a leaf: writers here never
 hold another store's lock, and teaching writes happen after this store's
@@ -38,7 +39,7 @@ PRACTICE_SET = "practice_set"
 TASK = "task"
 COURSE = "course"
 KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
-#: Kinds whose receivers are students only (they study or answer them).
+#: Kinds whose named receivers are students only (they study or answer them).
 STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
 
 
@@ -54,13 +55,6 @@ class ScopeForbidden(ScopeError):
     status_code = 403
 
 
-class ScopeRequired(ScopeError):
-    """A first publication by someone who teaches no class names no receivers."""
-
-    def __init__(self) -> None:
-        super().__init__("Choose who receives this before publishing it.")
-
-
 class ScopeNeedsConfirmation(ScopeError):
     """Narrowing would cut people off; nothing was written (spec §7.2)."""
 
@@ -73,38 +67,20 @@ class ScopeNeedsConfirmation(ScopeError):
 
 @dataclass
 class Scope:
+    #: Content from before the market only; new content reaches everyone through the market.
     everyone: bool = False
     users: list[str] = field(default_factory=list)
-    classes: list[str] = field(default_factory=list)
-    #: Departments, grades or both (``department:<id>``, ``grade:<id>``,
-    #: ``department:<id>+grade:<id>``); administrators only (2026-11-03 §0).
-    groups: list[str] = field(default_factory=list)
     #: False when the item has never had a scope (the old rule applies).
     managed: bool = True
-    #: Who joined it from the market (platform batch 1 §4.2). Read with the
-    #: scope, never stored with it.
+    #: Who joined it from the market. Read with the scope, never stored with it.
     members: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "everyone": self.everyone,
-            "users": list(self.users),
-            "classes": list(self.classes),
-            "groups": list(self.groups),
-            "managed": self.managed,
-        }
+        return {"everyone": self.everyone, "users": list(self.users), "managed": self.managed}
 
     @property
     def empty(self) -> bool:
-        return not (self.everyone or self.users or self.classes or self.groups)
-
-    def all_classes(self) -> set[str]:
-        """Its classes, and the active classes its groups cover right now."""
-        if not self.groups:
-            return set(self.classes)
-        from deeptutor.classes.org import group_class_ids
-
-        return set(self.classes) | group_class_ids(self.groups)
+        return not (self.everyone or self.users)
 
 
 # ── reading ────────────────────────────────────────────────
@@ -113,8 +89,8 @@ class Scope:
 def get_scope(kind: str, item_id: str) -> Scope | None:
     """The stored scope with the item's market members, or ``None`` when it never had one.
 
-    An item an administrator took out of the market reaches nobody but its
-    owner (platform batch 1 §2), whatever its scope says.
+    An item an administrator took down reaches nobody but its owner, whatever
+    its scope says.
     """
     return _with_members(kind, item_id, _stored_scope(kind, item_id))
 
@@ -144,26 +120,14 @@ def _stored_scope(kind: str, item_id: str) -> Scope | None:
         ).fetchone()
         if row is None:
             return None
-        targets = conn.execute(
-            "SELECT target_type, target_id FROM publish_targets WHERE kind = ? AND item_id = ? "
-            "ORDER BY target_type, target_id",
-            (kind, item_id),
-        ).fetchall()
-    return Scope(
-        everyone=bool(row["everyone"]),
-        users=[t["target_id"] for t in targets if t["target_type"] == "user"],
-        classes=[t["target_id"] for t in targets if t["target_type"] == "class"],
-        groups=[t["target_id"] for t in targets if t["target_type"] == "group"],
-    )
-
-
-def classes_retired() -> bool:
-    """Platform batch 2 §2.3: once retired, a class gives nobody anything."""
-    try:
-        from deeptutor.catalog.retire_classes import retired
-    except Exception:
-        return False
-    return retired()
+        users = [
+            t["target_id"] for t in conn.execute(
+                "SELECT target_id FROM publish_targets WHERE kind = ? AND item_id = ? AND target_type = 'user' "
+                "ORDER BY target_id",
+                (kind, item_id),
+            )
+        ]
+    return Scope(everyone=bool(row["everyone"]), users=users)
 
 
 def named_items(kind: str, user_id: str) -> list[str]:
@@ -189,36 +153,8 @@ def managed_items(kind: str) -> list[str]:
         ]
 
 
-def member_class_ids(user_id: str) -> set[str]:
-    """Active classes the account is in: as a student if a student, as a teacher if a teacher."""
-    from deeptutor.classes import store as class_store
-
-    if classes_retired():
-        return set()
-    account = _accounts().get(user_id)
-    if account is None or account["disabled"] or account["role"] not in ("student", "teacher"):
-        return set()
-    sql = (
-        "SELECT m.class_id FROM class_members m JOIN classes c ON c.id = m.class_id "
-        "WHERE m.student_id = ? AND c.archived = 0"
-        if account["role"] == "student" else
-        "SELECT t.class_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
-        "WHERE t.user_id = ? AND c.archived = 0"
-    )
-    with class_store.read() as conn:
-        if conn is None:
-            return set()
-        return {row[0] for row in conn.execute(sql, (user_id,))}
-
-
-def _reaches(scope: Scope, user_id: str, classes: set[str] | None = None) -> bool:
-    if scope.everyone or user_id in scope.users or user_id in scope.members:
-        return True
-    if not scope.classes and not scope.groups:
-        return False
-    if classes is None:
-        classes = member_class_ids(user_id)
-    return bool(classes & scope.all_classes())
+def _reaches(scope: Scope, user_id: str) -> bool:
+    return scope.everyone or user_id in scope.users or user_id in scope.members
 
 
 def allows(kind: str, item_id: str, user_id: str) -> bool:
@@ -237,50 +173,21 @@ def allows(kind: str, item_id: str, user_id: str) -> bool:
 
 
 def _accounts() -> dict[str, dict[str, Any]]:
-    from deeptutor.classes.service import _accounts as accounts
+    from deeptutor.multi_user.accounts import accounts
 
     return accounts()
-
-
-def _class_audience(class_ids: list[str], *, students_only: bool) -> set[str]:
-    from deeptutor.classes import store as class_store
-
-    if not class_ids:
-        return set()
-    marks = ",".join("?" for _ in class_ids)
-    with class_store.read() as conn:
-        if conn is None:
-            return set()
-        sql = (
-            f"SELECT m.student_id FROM class_members m JOIN classes c ON c.id = m.class_id "
-            f"WHERE m.class_id IN ({marks}) AND c.archived = 0"
-        )
-        if not students_only:
-            sql += (
-                f" UNION SELECT t.user_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
-                f"WHERE t.class_id IN ({marks}) AND c.archived = 0"
-            )
-        params = list(class_ids) * (1 if students_only else 2)
-        return {row[0] for row in conn.execute(sql, params)}
 
 
 def audience(scope: Scope, *, students_only: bool = False, owner_id: str = "") -> set[str]:
     """Active accounts the scope reaches, the owner excluded.
 
     *students_only* narrows the receivers a publisher named; people who joined
-    count whatever their role (platform batch 2 §6).
+    count whatever their role.
     """
     active = {user_id: row for user_id, row in _accounts().items() if not row["disabled"]}
-    accounts = {
-        user_id for user_id, row in active.items() if not students_only or row["role"] == "student"
-    }
-    if scope.everyone:
-        reached = set(accounts)
-    elif classes_retired():
-        reached = set(scope.users)
-    else:
-        reached = set(scope.users) | _class_audience(sorted(scope.all_classes()), students_only=students_only)
-    reached = (reached & accounts) | (set(scope.members) & set(active))
+    named = {user_id for user_id, row in active.items() if not students_only or row["role"] == "student"}
+    reached = set(named) if scope.everyone else set(scope.users) & named
+    reached |= set(scope.members) & set(active)
     reached.discard(owner_id)
     return reached
 
@@ -300,57 +207,17 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
         conn.execute("DELETE FROM publish_targets WHERE kind = ? AND item_id = ?", (kind, item_id))
         conn.executemany(
             "INSERT INTO publish_targets VALUES (?, ?, ?, ?)",
-            [(kind, item_id, "user", u) for u in scope.users]
-            + [(kind, item_id, "class", c) for c in scope.classes]
-            + [(kind, item_id, "group", g) for g in scope.groups],
-        )
-
-
-def taught_class_ids(user_id: str) -> list[str]:
-    from deeptutor.classes import store as class_store
-
-    if classes_retired():
-        return []
-    with class_store.read() as conn:
-        if conn is None:
-            return []
-        return sorted(
-            row[0] for row in conn.execute(
-                "SELECT t.class_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "
-                "WHERE t.user_id = ? AND c.archived = 0",
-                (user_id,),
-            )
+            [(kind, item_id, "user", u) for u in scope.users],
         )
 
 
 #: The receivers the publisher chose for this publication (see :func:`chosen_scope`).
 _chosen: ContextVar[Scope | None] = ContextVar("publish_chosen_scope", default=None)
-#: Published for the market: nobody receives it until they join (platform batch 1 §4.4).
-_join_only: ContextVar[bool] = ContextVar("publish_join_only", default=False)
-
-
-@contextmanager
-def join_only(enabled: bool = True) -> Iterator[None]:
-    """Publish inside this block with no receivers: only people who join reach it."""
-    token = _join_only.set(enabled)
-    try:
-        yield
-    finally:
-        _join_only.reset(token)
-
-
-def is_join_only() -> bool:
-    return _join_only.get()
-
-
-def join_only_scope(scope: Scope | None) -> bool:
-    """Stored without receivers: reached through the market only."""
-    return scope is not None and scope.empty
 
 
 @contextmanager
 def chosen_scope(scope: Scope | None) -> Iterator[None]:
-    """Publish inside this block to the receivers the publisher chose.
+    """Publish inside this block to the receivers the publisher chose (e.g. a remedial set's learners).
 
     Set by the publish routes around the visibility change, so the scope is
     written in the same step as the publication; materials made public along
@@ -363,21 +230,19 @@ def chosen_scope(scope: Scope | None) -> Iterator[None]:
         _chosen.reset(token)
 
 
+@contextmanager
+def join_only(enabled: bool = True) -> Iterator[None]:
+    """Kept for callers that say so explicitly: publishing reaches only who joins anyway."""
+    yield
+
+
 def default_scope_on_publish(kind: str, item_id: str) -> None:
-    """Spec 2026-11-02 §4.1: a first publication names its receivers.
+    """A first publication stores its receivers: the ones chosen, or nobody (people join).
 
     Runs where an item becomes public or published, inside that write, so an
-    item is never readable by everyone in between; a failure aborts the
-    publication. The receivers are, in order:
-
-    * the ones the publisher chose (:func:`chosen_scope`), checked like any
-      scope change;
-    * otherwise the classes the publisher teaches;
-    * otherwise none can be assumed: :class:`ScopeRequired` is raised and
-      nothing is published ("everyone" is only ever an explicit choice).
-
-    An item that already has a scope keeps it. Code without a request user
-    (migrations, maintenance) adds none, i.e. the old "everyone".
+    item is never readable by everyone in between. An item that already has a
+    scope keeps it. Code without a request user (migrations, maintenance) adds
+    none, i.e. the old "everyone".
     """
     from deeptutor.multi_user.context import get_current_user_or_none
 
@@ -385,30 +250,13 @@ def default_scope_on_publish(kind: str, item_id: str) -> None:
     if user is None or get_scope(kind, item_id) is not None:
         return
     chosen = _chosen.get()
-    if _join_only.get() or (classes_retired() and (chosen is None or chosen.empty)):
-        # Platform batch 1 §4.4, batch 2 §2.3: nobody receives it until they join.
-        _store_scope(kind, item_id, Scope(), actor_id=user.id)
-        return
-    if chosen is not None:
+    if chosen is not None and not chosen.empty:
         from deeptutor.publishing.service import PublishService
 
-        validated = PublishService(user)._validated(
-            kind, chosen.everyone, chosen.users, chosen.classes, Scope(), groups=chosen.groups
-        )
-        if validated.empty:
-            raise ScopeRequired()
+        validated = PublishService(user)._validated(kind, chosen.everyone, chosen.users, Scope())
         _store_scope(kind, item_id, validated, actor_id=user.id)
         return
-    classes = taught_class_ids(user.id)
-    if not classes:
-        _no_receivers(kind, item_id)
-        return
-    _store_scope(kind, item_id, Scope(classes=classes), actor_id=user.id)
-
-
-def _no_receivers(kind: str, item_id: str) -> None:
-    """Nothing chosen and no class to default to: publish nothing."""
-    raise ScopeRequired()
+    _store_scope(kind, item_id, Scope(), actor_id=user.id)
 
 
 def forget(kind: str, item_id: str) -> None:
@@ -460,7 +308,7 @@ def _apply_assignments(template, add: set[str], remove: set[str]) -> None:
 
 
 def reconcile_template(template_id: str) -> None:
-    """Make a scoped path's active assignments equal its student audience."""
+    """Make a scoped path's active assignments equal its audience."""
     from deeptutor.teaching.store import TeachingStore
 
     scope = get_scope(MASTERY_PATH, template_id)
@@ -474,15 +322,15 @@ def reconcile_template(template_id: str) -> None:
 
 
 def reconcile_student(student_id: str) -> None:
-    """Bring one student's assignments in line with every scoped path."""
+    """Bring one learner's assignments in line with every scoped path."""
     from deeptutor.teaching.store import TeachingStore
 
     templates = managed_items(MASTERY_PATH)
     if not templates:
         return
     account = _accounts().get(student_id)
-    is_student = bool(account) and account["role"] == "student" and not account["disabled"]
-    classes = member_class_ids(student_id) if is_student else set()
+    active = bool(account) and not account["disabled"]
+    is_student = active and account["role"] == "student"
     teaching = TeachingStore()
     assigned = {
         a.template_id for a in teaching.assignments_for_student(student_id) if a.status == "active"
@@ -490,7 +338,7 @@ def reconcile_student(student_id: str) -> None:
     try:
         from deeptutor.catalog.enrollment import access_states
 
-        states = access_states(MASTERY_PATH)  # one read for every path (review M5)
+        states = access_states(MASTERY_PATH)  # one read for every path
     except Exception:
         logger.exception("Could not read the market members of the paths")
         return
@@ -505,8 +353,7 @@ def reconcile_student(student_id: str) -> None:
         if template is None or scope is None or template.status != "published":
             continue
         wanted = student_id != template.owner_user_id and (
-            (is_student and _reaches(scope, student_id, classes))
-            or (bool(account) and not account["disabled"] and student_id in scope.members)
+            (is_student and (scope.everyone or student_id in scope.users)) or (active and student_id in scope.members)
         )
         has = template_id in assigned
         if wanted != has:
@@ -523,7 +370,7 @@ def reconcile_student_quietly(student_id: str) -> None:
 
 
 def path_added_students(template_id: str, student_ids: list[str], *, actor_id: str) -> None:
-    """Hand-picked students join a scoped path's audience as named accounts."""
+    """Hand-picked learners join a scoped path's audience as named accounts."""
     scope = _stored_scope(MASTERY_PATH, template_id)
     if scope is None:
         return
@@ -532,15 +379,13 @@ def path_added_students(template_id: str, student_ids: list[str], *, actor_id: s
 
 
 def path_revoke_allowed(template_id: str, student_id: str, *, actor_id: str) -> None:
-    """Drop a named student from a scoped path; refuse when a class or everyone still reaches them."""
+    """Drop a named learner from a scoped path; refuse when "everyone" still reaches them."""
     scope = _stored_scope(MASTERY_PATH, template_id)
     if scope is None:
         return
     scope.users = [u for u in scope.users if u != student_id]
-    if _reaches(scope, student_id):
-        raise ScopeError(
-            "This student receives the path through a class or everyone; change the scope instead."
-        )
+    if scope.everyone:
+        raise ScopeError("This path reaches everyone; change who receives it instead.")
     _store_scope(MASTERY_PATH, template_id, scope, actor_id=actor_id)
 
 
@@ -558,16 +403,14 @@ __all__ = [
     "ScopeForbidden",
     "ScopeNeedsConfirmation",
     "ScopeNotFound",
-    "ScopeRequired",
     "allows",
-    "chosen_scope",
-    "is_join_only",
-    "join_only",
-    "join_only_scope",
     "audience",
+    "chosen_scope",
     "forget",
     "get_scope",
-    "member_class_ids",
+    "join_only",
+    "managed_items",
+    "named_items",
     "path_added_students",
     "path_revoke_allowed",
     "reconcile_student",

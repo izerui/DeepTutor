@@ -73,7 +73,7 @@ class PracticeReview:
 
     def attempt(self, set_id: str, submission_id: str) -> dict[str, Any]:
         """One attempt, question by question."""
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         with store.read() as conn:
             _row, submission, revision = self._submission(conn, set_id, submission_id)

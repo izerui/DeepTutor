@@ -64,7 +64,7 @@ def _now() -> float:
 
 
 def _role(user: CurrentUser) -> str:
-    from deeptutor.classes.service import _role as live_role
+    from deeptutor.multi_user.accounts import live_role
 
     return live_role(user)
 
@@ -610,23 +610,16 @@ class PracticeSetService:
 
     def assigned(self) -> list[dict[str, Any]]:
         """Published sets whose scope reaches the student, with their own progress."""
-        from deeptutor.publishing.scope import PRACTICE_SET, managed_items
+        from deeptutor.publishing.scope import PRACTICE_SET
 
-        from deeptutor.publishing.scope import classes_retired
+        from deeptutor.catalog.enrollment import joined_by
+        from deeptutor.publishing.scope import named_items
 
-        if classes_retired():
-            # Only what one joined can reach one now (review M5): no walk over every set.
-            from deeptutor.catalog.enrollment import joined_by
-
-            from deeptutor.publishing.scope import named_items
-
-            # What one joined, and what was sent to one by name (a remedial set).
-            candidates = list(dict.fromkeys(
-                [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
-                + named_items(PRACTICE_SET, self.actor.id)
-            ))
-        else:
-            candidates = managed_items(PRACTICE_SET)
+        # What one joined, and what was sent to one by name (a remedial set): no walk over every set.
+        candidates = list(dict.fromkeys(
+            [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
+            + named_items(PRACTICE_SET, self.actor.id)
+        ))
         ids = [i for i in candidates if self._reaches_me(i)]
         if not ids:
             return []
@@ -644,7 +637,7 @@ class PracticeSetService:
                 f"WHERE student_id = ? AND set_id IN ({marks}) ORDER BY submitted_at",
                 (self.actor.id, *ids),
             ).fetchall()
-        from deeptutor.classes.service import _accounts
+        from deeptutor.multi_user.accounts import accounts as _accounts
         from deeptutor.publishing.provenance import provenance
 
         accounts = _accounts()
@@ -955,7 +948,7 @@ class PracticeSetService:
 
     def report(self, set_id: str) -> dict[str, Any]:
         """Results of the students the set reaches, plus anyone who submitted and left it (§8.4)."""
-        from deeptutor.publishing.scope import PRACTICE_SET, Scope, audience, get_scope
+        from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
         self._require_author()
         with store.read() as conn:
@@ -969,17 +962,9 @@ class PracticeSetService:
             ).fetchone()
         scope = get_scope(PRACTICE_SET, set_id)
         reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
-        from deeptutor.classes.service import _accounts, teacher_student_ids
+        from deeptutor.multi_user.accounts import accounts as _accounts
 
         visible = None
-        if scope is not None and scope.everyone and _role(self.actor) != "admin":
-            # Spec §5: a teacher sees the students of their classes and the people
-            # they named, even when the set went to everyone (decided 2026-11-02).
-            named = Scope(users=scope.users, classes=scope.classes)
-            visible = audience(named, students_only=True, owner_id=row["owner_user_id"]) | (
-                reached & teacher_student_ids(self.actor.id)
-            )
-            reached = visible
         accounts = _accounts()
         names = {user_id: account["username"] for user_id, account in accounts.items()}
         by_student: dict[str, list] = {}
@@ -1156,7 +1141,7 @@ def book_material(book_ref: str, chapter_ids: list[str]) -> tuple[str, str]:
 
 
 def _usernames() -> dict[str, str]:
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     return {user_id: row["username"] for user_id, row in _accounts().items()}
 

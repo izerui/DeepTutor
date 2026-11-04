@@ -65,8 +65,6 @@ vi.mock("@/lib/workbench-api", () => ({
 vi.mock("@/lib/book-api", () => ({ bookApi: { list: vi.fn(() => Promise.resolve({ books: [] })), getSpine: vi.fn() } }));
 
 import RegisterPage from "@/app/(auth)/register/page";
-import JoinClassPage from "@/app/(auth)/join/[token]/page";
-import ClassesPage from "@/app/(utility)/classes/page";
 import { AdminNav } from "@/components/catalog/AdminNav";
 import { TagAdmin, TaxonomyAdmin } from "@/components/catalog/CatalogAdmin";
 import { ReviewDetail } from "@/components/catalog/ReviewDesk";
@@ -112,19 +110,7 @@ beforeEach(() => {
   catalog.listMyListings.mockResolvedValue([]);
 });
 
-it("replaces the classes page with a pointer to the learning market", () => {
-  render(<ClassesPage />);
-  expect(screen.getByRole("heading", { name: "Classes are no longer used" })).toBeTruthy();
-  expect(screen.getByText(/anyone can join books, knowledge bases/)).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Go to the learning market" }).getAttribute("href")).toBe("/market");
-});
 
-it("says an old invite link is no longer used, with sign-in and registration", () => {
-  render(<JoinClassPage />);
-  expect(screen.getByRole("heading", { name: "This invite link is no longer used." })).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
-  expect(screen.getByRole("link", { name: "Create an account" }).getAttribute("href")).toBe("/register");
-});
 
 it("registers without an invite and never lands on the classes", async () => {
   search.value = "invite=tok_1";

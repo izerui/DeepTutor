@@ -76,13 +76,13 @@ def _open_at(row) -> float | None:
 
 
 def _role(user: CurrentUser) -> str:
-    from deeptutor.classes.service import _role as live_role
+    from deeptutor.multi_user.accounts import live_role
 
     return live_role(user)
 
 
 def _accounts() -> dict[str, dict[str, Any]]:
-    from deeptutor.classes.service import _accounts as accounts
+    from deeptutor.multi_user.accounts import accounts
 
     return accounts()
 
@@ -122,6 +122,16 @@ def _course_of(task_id: str) -> dict[str, str]:
         except sqlite3.OperationalError:
             row = None  # a task store from before courses
     return {"course_id": row["id"], "course_title": row["title"]} if row else {"course_id": "", "course_title": ""}
+
+
+def _everyone_tasks() -> list[str]:
+    """Tasks from before the market that still reach everyone (legacy data)."""
+    from deeptutor.publishing import store as scope_store
+
+    with scope_store.read() as conn:
+        if conn is None:
+            return []
+        return [r[0] for r in conn.execute("SELECT item_id FROM publish_items WHERE kind = 'task' AND everyone = 1")]
 
 
 def _in_a_course(task_id: str) -> bool:
@@ -506,8 +516,8 @@ class TaskService:
             row = self._owned(conn, task_id)
         if row["status"] != "draft":
             raise TaskConflict("This task was already published.")
-        if not _in_a_course(task_id) and scopes.classes_retired():
-            # Platform batch 2 §5: tasks go out as part of a course.
+        if not _in_a_course(task_id):
+            # Learning platform: tasks go out as part of a course.
             raise TaskError("Add the task to a course; it is published with the course.")
         kind = row["kind"]
         settings = self._check_target(kind, row["target_id"], json.loads(row["settings_json"] or "{}")) \
@@ -518,11 +528,9 @@ class TaskService:
         scopes.default_scope_on_publish(scopes.TASK, task_id)
         scope = scopes.get_scope(scopes.TASK, task_id)
         try:
-            if scope is None or (scope.empty and not (scopes.is_join_only() or scopes.classes_retired())):
-                raise scopes.ScopeRequired()
-            if kind == "homework" and scope.everyone:
-                raise TaskError("Homework goes to your classes or chosen students, not to everyone.")
-            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id)
+            if scope is not None and kind == "homework" and scope.everyone:
+                raise TaskError("Homework goes to a course's learners, not to everyone.")
+            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
             reach = _target_audience(kind, row["target_id"])
             if reach is not None and receivers - reach:
                 raise TaskError(
@@ -798,14 +806,11 @@ class StudentTasks:
         """Published or withdrawn tasks that reach the student, or that they worked on."""
         from deeptutor.publishing import scope as scopes
 
-        # Once classes are retired a task reaches only those who joined it (through its
-        # course), so only those tasks are read, not every task (follow-ups §6).
-        wanted: list[str] | None = None
-        if scopes.classes_retired():
-            from deeptutor.catalog.enrollment import joined_by
+        # A task reaches who joined it (through its course) or was named; only those are read.
+        from deeptutor.catalog.enrollment import joined_by
 
-            wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK] + \
-                scopes.named_items(scopes.TASK, self.actor.id)
+        wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK] + \
+            scopes.named_items(scopes.TASK, self.actor.id) + _everyone_tasks()
         with db.read() as conn:
             if conn is None:
                 return []
@@ -816,24 +821,20 @@ class StudentTasks:
                     (self.actor.id, self.actor.id),
                 )
             }
-            if wanted is None:
-                rows = conn.execute("SELECT * FROM tasks WHERE status != 'draft'").fetchall()
-            else:
-                ids = sorted(set(wanted) | mine)
-                rows = [
-                    row for start in range(0, len(ids), 500)
-                    for row in conn.execute(
-                        f"SELECT * FROM tasks WHERE status != 'draft' AND id IN ({','.join('?' for _ in ids[start:start + 500])})",  # nosec B608
-                        ids[start:start + 500],
-                    )
-                ]
+            ids = sorted(set(wanted) | mine)
+            rows = [
+                row for start in range(0, len(ids), 500)
+                for row in conn.execute(
+                    f"SELECT * FROM tasks WHERE status != 'draft' AND id IN ({','.join('?' for _ in ids[start:start + 500])})",  # nosec B608
+                    ids[start:start + 500],
+                )
+            ]
         student = _role(self.actor) == "student"
-        classes = scopes.member_class_ids(self.actor.id) if student else set()
         out = []
         for row in rows:
             scope = scopes.get_scope(scopes.TASK, row["id"])
             reaches = bool(scope) and row["owner_user_id"] != self.actor.id and (
-                (student and scopes._reaches(scope, self.actor.id, classes)) or self.actor.id in scope.members
+                (student and scopes._reaches(scope, self.actor.id)) or self.actor.id in scope.members
             )
             if reaches or row["id"] in mine:
                 out.append((row, reaches))
@@ -949,15 +950,12 @@ class StudentTasks:
                        link=f"/start?task={row['id']}", dedupe_key=f"task_due_soon:{row['id']}:{due}")
 
     def assigned(self) -> list[dict[str, Any]]:
-        """Every task the student received, plus practice sets and paths no task names (R23)."""
+        """Every task that reached the learner through the courses they joined (or by name)."""
         if not self._is_student():
             return []
         entries: list[dict[str, Any]] = []
-        named: set[tuple[str, str]] = set()
         for row, reaches in self._task_rows():
             settings = json.loads(row["settings_json"] or "{}")
-            if row["status"] == "published" and row["target_id"]:
-                named.add((row["kind"], row["target_id"]))
             open_ = (
                 row["status"] == "published" and reaches
                 and _target_available_to(row["kind"], row["target_id"], self.actor)
@@ -972,47 +970,8 @@ class StudentTasks:
                 if entry["submission"] and entry["submission"]["status"] == "returned" and entry["state"] == "completed":
                     entry["state"] = "open"
             entries.append(entry)
-        from deeptutor.publishing.scope import classes_retired
-
-        if not classes_retired():
-            # Platform batch 2 §5: once classes are retired, joined practice sets and
-            # paths stay in their own lists and no longer show as tasks.
-            entries += self._unnamed_content(named)
         order = {"overdue": 0, "open": 1, "not_open": 2, "completed": 3, "closed": 4}
         entries.sort(key=lambda e: (order[e["state"]], e["due_at"] or float("inf"), e["title"]))
-        return entries
-
-    def _unnamed_content(self, named: set[tuple[str, str]]) -> list[dict[str, Any]]:
-        from deeptutor.practice_sets.service import PracticeSetService
-        from deeptutor.teaching.store import TeachingStore
-
-        entries = []
-        try:
-            for row in PracticeSetService(self.actor).assigned():
-                if ("practice_set", row["id"]) in named:
-                    continue
-                entries.append(self._entry(
-                    key=f"practice_set:{row['id']}", kind="practice_set", title=row["title"],
-                    description=row["description"], target_id=row["id"], settings={}, due_at=row["due_at"],
-                    teacher_id=self._practice_owner(row["id"]), open_=True,
-                ))
-        except Exception:
-            logger.exception("Could not list the practice sets of %s", self.actor.id)
-        try:
-            teaching = TeachingStore()
-            for assignment in teaching.assignments_for_student(self.actor.id):
-                if assignment.status != "active" or ("mastery_path", assignment.template_id) in named:
-                    continue
-                template = teaching.get_template(assignment.template_id)
-                if template is None or template.status != "published":
-                    continue
-                entries.append(self._entry(
-                    key=f"mastery_path:{template.id}", kind="mastery_path", title=template.title,
-                    description=template.description, target_id=template.id, settings={"ratio": 1.0},
-                    due_at=None, teacher_id=template.owner_user_id, open_=True,
-                ))
-        except Exception:
-            logger.exception("Could not list the Mastery Paths of %s", self.actor.id)
         return entries
 
     @staticmethod
@@ -1227,15 +1186,11 @@ async def suggest_grade(task_id: str, student_id: str) -> None:
 def transfer_tasks(
     user_id: str, successor_id: str, *, published_only: bool = False, counts: dict[str, int] | None = None,
 ) -> int:
-    """A departing teacher's tasks: homework to a co-teacher of the class, the rest to *successor_id*.
+    """A departing teacher's tasks go to *successor_id*, homework included.
 
-    Spec 2026-11-03 §7: homework goes, if possible, to another teacher of a
-    class the task was given to (first by class name), so it can be graded;
-    otherwise to *successor_id*.
+    An administrator who receives homework hands the course or task on to a
+    teacher who grades it (:meth:`CourseService.hand_over`).
     """
-    from deeptutor.classes import store as class_store
-    from deeptutor.publishing import scope as scopes
-
     with db.read() as conn:
         if conn is None:
             return 0
@@ -1252,43 +1207,18 @@ def transfer_tasks(
         if counts is not None:
             counts.update(tasks=0, courses=courses)
         return 0
-    accounts = _accounts()
-    moves: dict[str, str] = {}
-    for row in rows:
-        target = successor_id
-        if row["kind"] == "homework":
-            scope = scopes.get_scope(scopes.TASK, row["id"])
-            if scope and scope.classes:
-                marks = ",".join("?" for _ in scope.classes)
-                with class_store.read() as conn:
-                    teachers = conn.execute(
-                        f"SELECT t.user_id FROM class_teachers t JOIN classes c ON c.id = t.class_id "  # nosec B608
-                        f"WHERE t.class_id IN ({marks}) AND t.user_id != ? ORDER BY c.name, t.added_at",
-                        (*scope.classes, user_id),
-                    ).fetchall() if conn else []
-                for (teacher_id,) in teachers:
-                    if (accounts.get(teacher_id) or {}).get("role") == "teacher":
-                        target = teacher_id
-                        break
-        moves[row["id"]] = target
+    moves: dict[str, str] = {row["id"]: successor_id for row in rows}
     with db.write() as conn:
         conn.executemany(
             "UPDATE tasks SET owner_user_id = ?, updated_at = ? WHERE id = ?",
             [(target, _now(), task_id) for task_id, target in moves.items()],
         )
-    from deeptutor.notifications.service import notify
-
     from deeptutor.tasks.courses import transfer_courses
 
+    # The successor hears it in one summary of everything handed over (batch 4 §3).
     courses = transfer_courses(user_id, successor_id, published_only=published_only)
-    # The successor hears it in one summary of everything handed over (batch 4 §3);
-    # a co-teacher who took homework hears it here.
-    for target in set(moves.values()) - {successor_id}:
-        count = sum(1 for t in moves.values() if t == target)
-        notify([target], "tasks_transferred", {"count": count},
-               link="/tasks", dedupe_key=f"tasks_transferred:{user_id}:{target}")
     if counts is not None:
-        counts["tasks"] = sum(1 for t in moves.values() if t == successor_id)
+        counts["tasks"] = len(moves)
         counts["courses"] = courses
     return len(moves)
 

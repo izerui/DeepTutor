@@ -19,7 +19,6 @@ function RegisterPageContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Platform batch 2 §4: no class invites any more; an ``?invite=`` is ignored.
   const rawNext = searchParams.get("next");
   const next = rawNext ? normalizeInternalReturnPath(rawNext) : "";
   const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";

@@ -1,13 +1,11 @@
-"""What an account's role change or deletion means for classes, scopes and practice sets.
-
-Spec 2026-10-29 §3/§5: a class has teachers (accounts with the teacher role)
-and students (accounts with the student role). When an account stops being
-one of them, its rows go; nothing it used to be keeps granting access.
+"""What an account's role change or deletion means for the content it published.
 
 * :func:`after_role_change` — called by the admin role route after the new
   role is stored.
-* :func:`forget_deleted_account` / :func:`transfer_practice_sets` — account
-  hand-over stages (``classes``, ``publish_targets``, ``practice_sets``).
+* :func:`hand_over_published` — a teacher who stops teaching hands what they
+  published to an administrator.
+* :func:`forget_publish_targets` / :func:`transfer_practice_sets` — account
+  hand-over stages (``publish_targets``, ``practice_sets``).
 
 Every function is idempotent: a second run finds nothing left to change.
 """
@@ -17,28 +15,11 @@ from __future__ import annotations
 import logging
 import time
 
-from deeptutor.classes import store
-
 logger = logging.getLogger(__name__)
 
 
-def _leave_classes(user_id: str, *, as_teacher: bool, as_student: bool) -> None:
-    if not (as_teacher or as_student) or not store.classes_db_path().exists():
-        return
-    with store.write() as conn:
-        if as_teacher:
-            conn.execute("DELETE FROM class_teachers WHERE user_id = ?", (user_id,))
-        if as_student:
-            conn.execute("DELETE FROM class_members WHERE student_id = ?", (user_id,))
-            conn.execute(
-                "UPDATE class_invitations SET status = 'cancelled', responded_at = ? "
-                "WHERE student_id = ? AND status = 'pending'",
-                (time.time(), user_id),
-            )
-
-
 def _end_student_assignments(user_id: str) -> None:
-    """A former student keeps their records but no teacher path stays open to them."""
+    """A former student keeps their records but no teacher path stays open to them by name."""
     from deeptutor.teaching import service as teaching_service
 
     failed = teaching_service.handle_account_deleted(
@@ -49,17 +30,14 @@ def _end_student_assignments(user_id: str) -> None:
 
 
 def after_role_change(user_id: str, old_role: str, new_role: str) -> None:
-    """Drop the class rows and assignments the new role no longer allows."""
+    """Close what the new role no longer allows; paths follow what the account joined."""
     if old_role == new_role:
         return
-    _leave_classes(user_id, as_teacher=new_role != "teacher", as_student=new_role != "student")
     if old_role == "student" and new_role != "student":
         _end_student_assignments(user_id)
-    if new_role == "student":
-        from deeptutor.publishing.scope import reconcile_student_quietly
+    from deeptutor.publishing.scope import reconcile_student_quietly
 
-        # Paths published to everyone reach the new student at once.
-        reconcile_student_quietly(user_id)
+    reconcile_student_quietly(user_id)
 
 
 def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
@@ -107,14 +85,6 @@ def hand_over_published(user_id: str, successor_id: str) -> dict[str, int]:
     return moved
 
 
-def forget_deleted_account(user_id: str) -> None:
-    """Hand-over stage ``classes``: the deleted id teaches, attends and is listed under nothing."""
-    _leave_classes(user_id, as_teacher=True, as_student=True)
-    from deeptutor.classes.org import forget_teacher
-
-    forget_teacher(user_id)
-
-
 def forget_publish_targets(user_id: str) -> None:
     """Hand-over stage ``publish_targets``: no scope names the deleted id any more."""
     from deeptutor.publishing import store as scope_store
@@ -141,10 +111,4 @@ def transfer_practice_sets(user_id: str, successor_id: str) -> int:
     return int(moved)
 
 
-__all__ = [
-    "after_role_change",
-    "hand_over_published",
-    "forget_deleted_account",
-    "forget_publish_targets",
-    "transfer_practice_sets",
-]
+__all__ = ["after_role_change", "forget_publish_targets", "hand_over_published", "transfer_practice_sets"]

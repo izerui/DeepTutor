@@ -30,16 +30,14 @@ class ScopeChoice(BaseModel):
 
     everyone: bool = False
     users: list[str] = Field(default_factory=list, max_length=1000)
-    classes: list[str] = Field(default_factory=list, max_length=200)
-    groups: list[str] = Field(default_factory=list, max_length=200)
-    #: For the market: nobody receives it until they join (platform batch 1 §4.4).
+    #: Accepted from older clients: publishing reaches only who joins anyway.
     join_only: bool = False
 
     def to_scope(self):
         from deeptutor.publishing.scope import Scope
 
         return Scope(
-            everyone=self.everyone, users=list(self.users), classes=list(self.classes), groups=list(self.groups),
+            everyone=self.everyone, users=list(self.users),
         )
 
 
@@ -57,8 +55,6 @@ def chosen(choice: ScopeChoice | None):
 class ScopeUpdate(BaseModel):
     everyone: bool = False
     users: list[str] = Field(default_factory=list, max_length=1000)
-    classes: list[str] = Field(default_factory=list, max_length=200)
-    groups: list[str] = Field(default_factory=list, max_length=200)
     confirm: bool = False
 
 
@@ -77,8 +73,7 @@ async def set_scope(kind: str, item_id: str, body: ScopeUpdate):
     try:
         return await asyncio.to_thread(
             PublishService().set_scope, kind, item_id,
-            everyone=body.everyone, users=body.users, classes=body.classes, confirm=body.confirm,
-            groups=body.groups,
+            everyone=body.everyone, users=body.users, confirm=body.confirm,
         )
     except ScopeNeedsConfirmation as exc:
         # Spec §7.2: say how many people lose access; nothing was written.

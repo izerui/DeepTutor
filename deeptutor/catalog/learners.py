@@ -27,7 +27,7 @@ def learners_of(teacher_id: str) -> set[str]:
 
 def where_learners_are(teacher_id: str) -> dict[str, tuple[str, str]]:
     """Each active learner of the teacher's content -> one (kind, id) they joined; courses and paths first."""
-    from deeptutor.classes.service import _accounts
+    from deeptutor.multi_user.accounts import accounts as _accounts
 
     with db.read() as conn:
         if conn is None:

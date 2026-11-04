@@ -99,7 +99,7 @@ def test_the_frontend_address_is_trusted_only_from_the_proxy():
     assert auth_router._client_address(request("127.0.0.1", "not-an-ip")) == ""
 
 
-# ── student permissions by class (§7) ──────────────────────
+# ── student permissions (§7) ───────────────────────────────
 
 
 @pytest.fixture
@@ -131,12 +131,20 @@ def features_http(teaching_users, monkeypatch):
     return call
 
 
-def _class_id(as_account) -> str:
-    from deeptutor.classes.service import ClassService
+#: The ``deliver`` / ``in_course`` fixtures of the running test (module helpers use them).
+_fixtures: dict[str, object] = {}
 
-    with as_account("tina"):
-        [row] = ClassService().list_classes()
-    return row["id"]
+
+@pytest.fixture(autouse=True)
+def _remember(deliver, in_course):
+    _fixtures.update(deliver=deliver, in_course=in_course)
+
+
+def _own_policy(teaching_users, name: str, policy: dict) -> None:
+    from deeptutor.multi_user.grants import load_grant, save_grant
+
+    user_id = teaching_users[name]["id"]
+    save_grant(user_id, {**load_grant(user_id), "student_policy": policy})
 
 
 def test_partners_agents_and_co_writer_are_off_for_students_by_default(features_http):
@@ -148,34 +156,13 @@ def test_partners_agents_and_co_writer_are_off_for_students_by_default(features_
     assert features_http("sara", "POST", "/api/task-board/cards") == 200
 
 
-def test_a_class_turns_features_on_and_a_personal_setting_still_wins(features_http, as_account, teaching_users):
-    from deeptutor.classes.service import ClassService
-    from deeptutor.multi_user.grants import load_grant, save_grant
-
-    class_id = _class_id(as_account)
-    with as_account("adam"):
-        ClassService().set_student_policy(class_id, {"allow_partners": True, "allow_personal_course": False})
+def test_a_personal_setting_turns_features_on_or_off_item_by_item(features_http, teaching_users):
+    _own_policy(teaching_users, "sara", {"allow_partners": True, "allow_personal_course": False})
     assert features_http("sara", "GET", "/api/partners") == 200
     assert features_http("sara", "POST", "/api/courses") == 403
-    sam = teaching_users["sam"]["id"]
-    grant = load_grant(sam)
-    grant["student_policy"] = {"allow_partners": False}
-    save_grant(sam, grant)
+    _own_policy(teaching_users, "sam", {"allow_partners": False})
     assert features_http("sam", "GET", "/api/partners") == 403
-    assert features_http("sam", "POST", "/api/courses") == 403  # unset personally: the class decides
-
-
-def test_only_administrators_set_class_permissions_and_unknown_keys_are_dropped(as_account):
-    from deeptutor.classes.service import ClassForbidden, ClassService
-
-    class_id = _class_id(as_account)
-    with as_account("tina"), pytest.raises(ClassForbidden):
-        ClassService().set_student_policy(class_id, {"allow_partners": True})
-    with as_account("adam"):
-        detail = ClassService().set_student_policy(
-            class_id, {"allow_agents": True, "made_up": True, "ai_daily_tokens": 5000, "allow_co_writer": "yes"},
-        )
-    assert detail["student_policy"] == {"allow_agents": True, "ai_daily_tokens": 5000}
+    assert features_http("sam", "POST", "/api/courses") == 200  # unset personally: the default decides
 
 
 # ── the daily AI limit (§8) ────────────────────────────────
@@ -191,19 +178,18 @@ def _spend(tokens: int, *, source: str = "chat", when: float | None = None) -> N
                 started_at=when or time.time(), source=source)
 
 
-def _limit_class(as_account, tokens: int) -> str:
-    from deeptutor.classes.service import ClassService
+def _limit_sara(tokens: int) -> None:
+    from deeptutor.multi_user.grants import load_grant, save_grant
+    from deeptutor.multi_user.identity import get_user
 
-    class_id = _class_id(as_account)
-    with as_account("adam"):
-        ClassService().set_student_policy(class_id, {"ai_daily_tokens": tokens})
-    return class_id
+    sara = get_user("sara")["id"]
+    save_grant(sara, {**load_grant(sara), "student_policy": {"ai_daily_tokens": tokens}})
 
 
 def test_a_student_over_todays_tokens_is_refused_and_teachers_never_are(as_account):
     from deeptutor.services.llm.usage_limit import AiLimitReached, admit_call, status_for_current_user
 
-    _limit_class(as_account, 1000)
+    _limit_sara(1000)
     with as_account("sara"):
         admit_call(None)
         _spend(600)
@@ -222,7 +208,7 @@ def test_a_student_over_todays_tokens_is_refused_and_teachers_never_are(as_accou
 def test_a_teachers_grading_is_neither_refused_nor_counted(as_account):
     from deeptutor.services.llm.usage_limit import AiLimitReached, admit_call, exempt, status_for_current_user
 
-    _limit_class(as_account, 1000)
+    _limit_sara(1000)
     with as_account("sara"):
         _spend(5000, source="exempt:practice")  # recorded under ``exempt``
         assert status_for_current_user()["used"] == 0
@@ -237,7 +223,7 @@ def test_an_admitted_turn_runs_to_its_end(as_account):
     from deeptutor.services.llm.metrics import TurnUsage
     from deeptutor.services.llm.usage_limit import AiLimitReached, admit_call
 
-    _limit_class(as_account, 1000)
+    _limit_sara(1000)
     turn = TurnUsage()
     with as_account("sara"):
         admit_call(turn)
@@ -247,8 +233,7 @@ def test_an_admitted_turn_runs_to_its_end(as_account):
             admit_call(TurnUsage())
 
 
-def test_the_limit_is_personal_then_the_widest_class_then_the_school_default(as_account, teaching_users):
-    from deeptutor.classes.service import ClassService
+def test_the_limit_is_personal_then_the_school_default(as_account, teaching_users):
     from deeptutor.multi_user.grants import load_grant, save_grant
     from deeptutor.multi_user.roles import effective_ai_daily_tokens
     from deeptutor.services.llm.usage_limit import set_school_default_daily_tokens
@@ -257,15 +242,8 @@ def test_the_limit_is_personal_then_the_widest_class_then_the_school_default(as_
     assert effective_ai_daily_tokens(sara) == 0
     set_school_default_daily_tokens(3000)
     assert effective_ai_daily_tokens(sara) == 3000
-    class_id = _limit_class(as_account, 1000)
-    with as_account("adam"):
-        other = ClassService().create("Second class")
-        ClassService().add_students(other["id"], [sara])
-        ClassService().set_student_policy(other["id"], {"ai_daily_tokens": 8000})
-    assert effective_ai_daily_tokens(sara) == 8000
-    with as_account("adam"):
-        ClassService().set_student_policy(class_id, {"ai_daily_tokens": 0})
-    assert effective_ai_daily_tokens(sara) == 0  # one class without a limit
+    _limit_sara(0)
+    assert effective_ai_daily_tokens(sara) == 0  # her own "no limit" wins
     grant = load_grant(sara)
     grant["student_policy"] = {"ai_daily_tokens": 200}
     save_grant(sara, grant)
@@ -305,6 +283,7 @@ def _published_set(as_account, **settings) -> str:
         created = service.create("Week 3")
         service.update(created["id"], questions=SET_QUESTIONS, **settings)
         service.publish(created["id"])
+    _fixtures["deliver"]("practice_set", created["id"], "sara", "sam")  # they joined it
     return created["id"]
 
 
@@ -328,7 +307,7 @@ def test_the_author_sees_subjective_text_and_picked_options_but_not_blanks(as_ac
         attempt = PracticeReview().attempt(set_id, result["submission_id"])
     answers = {q["question_id"]: q["answer"] for q in attempt["questions"]}
     assert answers == {ids[0]: "B", ids[1]: "TRUE", ids[2]: "Things fall.", ids[3]: None}
-    with as_account("tom"), pytest.raises(Exception):  # a co-teacher of the class sees nothing
+    with as_account("tom"), pytest.raises(Exception):  # another teacher sees nothing
         PracticeReview().attempt(set_id, result["submission_id"])
     with as_account("adam"), pytest.raises(Exception):
         PracticeReview().attempt(set_id, result["submission_id"])
@@ -525,7 +504,8 @@ def test_remedial_from_a_path_asks_for_the_picked_points(as_account, teacher_dra
     with as_account("tina"):
         made = asyncio.run(RemedialPractice().from_path(template_id, [kp.id], [teaching_users["sara"]["id"], outsider]))
     assert kp.name in asked["topic"] and made["set"]["questions"][0]["question"] == "Why?"
-    assert [p["username"] for p in made["suggested_students"]] == ["sara"]  # not someone outside her classes
+    # Not someone who never joined Tina's content.
+    assert [p["username"] for p in made["suggested_students"]] == ["sara"]
     with as_account("tom"), pytest.raises(Exception):
         asyncio.run(RemedialPractice().from_path(template_id, [kp.id]))
 
@@ -572,7 +552,7 @@ def remedial_run(module, ids, count):
 
 @pytest.fixture
 def fresh_attention():
-    from deeptutor.classes import attention
+    from deeptutor.catalog import attention
 
     attention.clear_cache()
     yield attention
@@ -591,7 +571,7 @@ def test_a_student_with_no_learning_for_a_week_is_inactive(as_account, teaching_
     assert "inactive" not in _flags(fresh_attention, teaching_users, "sara")
     assert _flags(fresh_attention, teaching_users, "sam")["inactive"]["days"] is None  # never learned
     later = time.time() + 8 * 86400
-    monkeypatch.setattr("deeptutor.classes.attention._now", lambda: later)
+    monkeypatch.setattr("deeptutor.catalog.attention._now", lambda: later)
     fresh_attention.clear_cache()
     assert _flags(fresh_attention, teaching_users, "sara")["inactive"]["days"] == 8
 
@@ -605,7 +585,7 @@ def test_overdue_counts_only_this_teachers_tasks(as_account, teaching_users, fre
         with as_account(teacher):
             task = TaskService().create("note", f"Read by {teacher}")
             TaskService().update(task["id"], due_at=time.time() + 60)
-            TaskService().publish(task["id"])
+        _fixtures["in_course"](task["id"], owner=teacher)
     monkeypatch.setattr("deeptutor.tasks.service._now", lambda: time.time() + 3600)
     assert _flags(fresh_attention, teaching_users, "sara")["overdue"]["count"] == 1
 
@@ -637,14 +617,14 @@ async def _no_suggestion(_task_id, _student_id):
     return None
 
 
-def test_the_workbench_lists_hand_ins_classes_and_what_was_sent(as_account, teaching_users, fresh_attention,
-                                                               monkeypatch):
+def test_the_workbench_lists_hand_ins_learners_and_what_was_sent(as_account, teaching_users, fresh_attention,
+                                                                monkeypatch):
     from deeptutor.tasks.service import StudentTasks, TaskService
     from deeptutor.teaching.workbench import workbench
 
     with as_account("tina"):
         task = TaskService().create("homework", "Essay")
-        TaskService().publish(task["id"])
+    course_id = _fixtures["in_course"](task["id"])
     import asyncio
 
     monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", _no_suggestion)
@@ -654,41 +634,20 @@ def test_the_workbench_lists_hand_ins_classes_and_what_was_sent(as_account, teac
     with as_account("tina"):
         board = workbench()
     assert [(i["task_title"], i["username"]) for i in board["to_grade"]] == [("Essay", "sara")]
-    assert board["classes"][0]["student_count"] == 2
+    assert "classes" not in board
     kinds = {(i["kind"], i["id"]) for i in board["sent"]}
-    assert ("task", task["id"]) in kinds and ("practice_set", set_id) in kinds
+    assert {("task", task["id"]), ("practice_set", set_id), ("course", course_id)} <= kinds
     sam = next(row for row in board["attention"] if row["username"] == "sam")
-    assert sam["class_id"] and sam["flags"][0]["kind"] == "inactive"
+    assert sam["item"]["kind"] in ("course", "practice_set") and sam["flags"][0]["kind"] == "inactive"
     with as_account("adam"):
         assert workbench() == {"role": "admin"}  # administrators see no students
 
 
-def test_the_class_report_has_periods_trends_flags_and_exports(as_account, teaching_users, fresh_attention):
-    import csv
-    import io
-
-    from deeptutor.classes.report import ReportService
-
-    _published_set(as_account)
-    with as_account("tina"):
-        class_id = _class_id(as_account)
-        report = ReportService().class_report(class_id, days=7)
-        assert report["period_days"] == 7
-        row = report["students"][0]
-        assert len(row["overall"]["trend"]) == 8 and "period_minutes" in row["overall"]
-        assert any(flag["kind"] == "inactive" for flag in row["flags"])
-        assert ReportService().class_report(class_id, days=5)["period_days"] is None  # only 7 or 30
-        rows = list(csv.reader(io.StringIO(ReportService().export_csv(class_id))))
-    assert rows[0][0] == "student" and {r[0] for r in rows[1:]} == {"sara", "sam"}
-    assert "inactive" in rows[1][-1]
-
-
-def test_a_point_answered_wrong_for_a_week_is_stuck_and_the_report_shows_its_numbers(
+def test_a_point_answered_wrong_for_a_week_is_stuck(
     sara_instance, as_account, teaching_users, fresh_attention,
 ):
     import time
 
-    from deeptutor.classes.report import ReportService
     from deeptutor.learning.models import QuizAttempt
     from deeptutor.learning.storage import LearningStore
 
@@ -708,28 +667,3 @@ def test_a_point_answered_wrong_for_a_week_is_stuck_and_the_report_shows_its_num
     assert (stuck["kp_id"], stuck["days"], stuck["wrong"]) == (kp.id, 9, 3)
     assert not any(f["kind"] == "stuck" for f in fresh_attention.for_teacher(teaching_users["tom"]["id"]).get(
         teaching_users["sara"]["id"], []))  # Tom's report has no stake in Tina's path
-    with as_account("tina"):
-        detail = ReportService().student_report(_class_id(as_account), teaching_users["sara"]["id"])
-    point = next(p for p in detail["teacher_paths"][0]["knowledge_points"] if p["id"] == kp.id)
-    assert (point["answers"], point["wrong"], point["stuck_days"]) == (3, 3, 9)
-
-
-def test_the_class_sees_who_has_mastered_each_point_of_a_path(sara_instance, as_account, teaching_users):
-    from deeptutor.classes.report import ReportService
-    from deeptutor.classes.service import ClassNotFound
-
-    with as_account("tina"):
-        class_id = _class_id(as_account)
-        points = ReportService().class_path_points(class_id, sara_instance.template_id)["points"]
-    assert points and all(p["students"] == 1 for p in points)
-    assert points[0]["not_mastered"] == [teaching_users["sara"]["id"]]
-    with as_account("tom"), pytest.raises(ClassNotFound):
-        ReportService().class_path_points(class_id, sara_instance.template_id)
-
-
-def test_the_class_permission_route_accepts_every_key():
-    from deeptutor.api.routers.classes import StudentPolicyUpdate
-    from deeptutor.multi_user.roles import STUDENT_POLICY_DEFAULTS
-
-    body = {key: True for key in STUDENT_POLICY_DEFAULTS} | {"ai_daily_tokens": 5000}
-    assert StudentPolicyUpdate(**body).model_dump(exclude_none=True) == body
