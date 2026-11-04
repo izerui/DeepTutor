@@ -56,6 +56,31 @@ def _mine() -> list[dict[str, Any]]:
     return own[:MINE_LIMIT]
 
 
+def _joined() -> list[dict[str, Any]]:
+    """What one joined from the market, newest first, for every role (traceability #6)."""
+    from deeptutor.catalog import items
+    from deeptutor.catalog.enrollment import DIRECT
+    from deeptutor.catalog.market import _study_target
+    from deeptutor.catalog.store import db
+
+    user = get_current_user()
+    marks = ",".join("?" for _ in DIRECT)
+    with db.read() as conn:
+        rows = conn.execute(
+            f"SELECT kind, item_id, MAX(joined_at) AS at FROM enrollments WHERE user_id = ? AND left_at IS NULL "  # nosec B608
+            f"AND via IN ({marks}) GROUP BY kind, item_id ORDER BY at DESC LIMIT 12",
+            (user.id, *DIRECT),
+        ).fetchall() if conn else []
+    out = []
+    for row in rows:
+        info = items.info(row["kind"], row["item_id"])
+        if info is None or info.closed:
+            continue
+        out.append({"kind": row["kind"], "id": row["item_id"], "title": info.title, "joined_at": row["at"],
+                    "study": _study_target(row["kind"], row["item_id"])})
+    return out[:MINE_LIMIT * 2]
+
+
 def _mine_courses() -> list[dict[str, Any]]:
     """The learner's own courses still in play, most recently changed first (batch 4 §4)."""
     from deeptutor.services.courses import get_course_service
@@ -81,7 +106,7 @@ async def home() -> dict[str, Any]:
 
         retired = classes_retired()
         for name, loader in (
-            ("market", _market), ("mine", _mine), ("mine_courses", _mine_courses),
+            ("market", _market), ("mine", _mine), ("mine_courses", _mine_courses), ("joined", _joined),
             # Platform batch 3 §3: announcements of the courses and paths one joined.
             ("announcements", _content_announcements if retired else AnnouncementService().for_home),
         ):

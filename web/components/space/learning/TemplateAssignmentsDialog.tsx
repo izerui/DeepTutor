@@ -97,7 +97,7 @@ export function TemplateAssignmentsDialog({
         <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4 sm:p-5">
           <div className="min-w-0">
             <h2 id="template-assignments-title" className="text-base font-semibold">
-              {t("Manage assignments")}
+              {t("Manage path")}
             </h2>
             <p className="mt-1 truncate text-sm text-[var(--muted-foreground)]">
               {template.title}
@@ -125,7 +125,7 @@ export function TemplateAssignmentsDialog({
               </div>
             )
           ) : rows.length === 0 ? (
-            <p className="text-xs text-[var(--muted-foreground)]">{t("No students assigned yet")}</p>
+            <p className="text-xs text-[var(--muted-foreground)]">{t("Nobody has joined yet")}</p>
           ) : (
             <ul
               aria-label={t("Students")}

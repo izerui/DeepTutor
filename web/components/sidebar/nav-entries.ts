@@ -63,7 +63,7 @@ export function navVisibleForRole(
  * the neighbour it follows below rather than at the bottom of their list.
  */
 export const PRIMARY_NAV: NavEntry[] = [
-  // Spec 2026-11-03 batch 1 §2: what is assigned, what the school published, what is one's own.
+  // Spec 2026-11-03 batch 1 §2: what came from one's courses, what is new in the market, what is one's own.
   { href: '/start', label: 'Home', icon: House, tooltipKey: 'Home page tooltip', surfaces: ['chat'] },
   // Platform batch 1 §5.1: the learning market, for everyone.
   { href: '/market', label: 'Learning market', icon: Store, tooltipKey: 'Learning market tooltip', surfaces: ['chat'] },
@@ -92,15 +92,14 @@ export const PRIMARY_NAV: NavEntry[] = [
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
   // Platform batch 2 §3: classes are retired; the /classes page only explains that.
-  // Spec 2026-10-29 §8: teachers write practice sets; students answer them.
+  // Spec 2026-10-29 §8: teachers write practice sets; everyone answers the ones
+  // they joined from the market or were sent by name (traceability #1).
   {
     href: '/practice-sets',
     label: 'Practice sets',
     icon: ClipboardList,
     tooltipKey: 'Practice sets tooltip',
     surfaces: ['chat'],
-    // Batch 3 §10: students reach their practice sets through tasks.
-    roles: ['admin', 'teacher'],
   },
   // Spec 2026-11-03 batch 1: tasks and homework.
   // Batch 3 §5.4: every hand-in waiting for the teacher.

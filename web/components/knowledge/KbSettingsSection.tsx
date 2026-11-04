@@ -108,6 +108,18 @@ export default function KbSettingsSection({
     }
   };
 
+  // Making it public on submitting it to the market; the same confirmations as the button above.
+  const makePublicForListing = async () => {
+    if (!onVisibilityChange) return;
+    const done = await runWithWithdrawalConfirmation(
+      (confirmed) =>
+        confirmed ? onVisibilityChange("public", { confirmed }) : onVisibilityChange("public", { scope: JOIN_ONLY_SCOPE }),
+      t,
+    );
+    if (!done) throw new Error("Make the knowledge base public first.");
+    setPublishing(false);
+  };
+
   useEffect(() => {
     if (!canWrite || !onMove || sourceWorkspaceId === null) return;
     let alive = true;
@@ -327,8 +339,10 @@ export default function KbSettingsSection({
             </div>
           </div>
         )}
-        {canManage && kb.visibility === "public" && !kb.connector && (
-          <ListingPanel kind="knowledge_base" itemId={kb.kb_id} />
+        {/* Traceability #8: a private one is made public and submitted in one step. */}
+        {canManage && !kb.connector && (kb.visibility === "public" || (onVisibilityChange && (isTeacher || isAdmin))) && (
+          <ListingPanel kind="knowledge_base" itemId={kb.kb_id}
+            makePublic={kb.visibility === "public" ? undefined : makePublicForListing} />
         )}
         {canManage && references !== null && <div className="text-xs text-[var(--muted-foreground)]">
           <h4 className="font-medium">{t("Referenced by")}</h4>

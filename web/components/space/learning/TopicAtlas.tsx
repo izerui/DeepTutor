@@ -237,7 +237,7 @@ export function TopicAtlas({
               ? t(
                   'Tell DeepTutor what you want to learn, mix in your books, notes, and knowledge bases, and it will draft the first outline.'
                 )
-              : t('Paths your teachers assign to you will appear here.')
+              : t('Paths you join from the learning market appear here.')
           }
           action={
             onCreate ? (

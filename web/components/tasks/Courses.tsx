@@ -16,6 +16,7 @@ import {
   createCourse,
   deleteCourse,
   getCourse,
+  handOverCourse,
   listAssignedCourses,
   listMyCourses,
   listMyTasks,
@@ -29,6 +30,7 @@ import {
   type TaskKind,
 } from "@/lib/tasks-api";
 
+import { HandOverPanel } from "./HandOver";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
@@ -273,6 +275,8 @@ function CourseEditor({
           </button>
         )}
       </div>
+      {/* Traceability #5: what an administrator holds goes to a teacher who grades it. */}
+      {isAdmin && <HandOverPanel handOver={(teacherId) => handOverCourse(course.id, teacherId)} onDone={onDeleted} />}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
     </fieldset>
   );
@@ -344,7 +348,7 @@ export function StudentCourses({
   );
 }
 
-/** On the learner's own course shelf: what their teachers laid out, kept apart from their own. */
+/** On the learner's own course shelf: the courses they joined, kept apart from their own. */
 export function TeacherCoursesLink() {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<AssignedCourse[]>([]);
@@ -354,7 +358,7 @@ export function TeacherCoursesLink() {
   if (!courses.length) return null;
   return (
     <section className="space-y-2" data-testid="teacher-courses">
-      <h2 className="text-[13px] font-semibold">{t("From my teachers")}</h2>
+      <h2 className="text-[13px] font-semibold">{t("Courses I joined")}</h2>
       <ul className="flex flex-wrap gap-2">
         {courses.map((course) => (
           <li key={course.id}>

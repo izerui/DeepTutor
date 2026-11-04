@@ -12,6 +12,7 @@ import { getHome, type HomeData } from "@/lib/tasks-api";
 import { getWorkbench, type Workbench } from "@/lib/workbench-api";
 
 import { AiLimitSetting } from "./AiUsage";
+import { HomeAnnouncements, JoinedSection } from "./StudentHome";
 
 const card = "rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--ring)]";
 const SENT_KIND: Record<string, string> = {
@@ -25,13 +26,18 @@ const sentHref = (kind: string, id: string) =>
     : kind === "practice_set" ? `/practice-sets?set=${encodeURIComponent(id)}`
       : kind === "course" ? "/tasks" : MASTERY_HOME;
 
-/** The teacher's and the administrator's own learning, the student home's "mine" block. */
-function MyLearning() {
-  const { t } = useTranslation();
+/** The home data (own learning, what one joined, announcements), read once per page. */
+function useHome(): HomeData | null {
   const [home, setHome] = useState<HomeData | null>(null);
   useEffect(() => {
     getHome().then(setHome).catch(() => setHome(null));
   }, []);
+  return home;
+}
+
+/** The teacher's and the administrator's own learning, the student home's "mine" block. */
+function MyLearning({ home }: { home: HomeData | null }) {
+  const { t } = useTranslation();
   return (
     <section aria-labelledby="home-mine" className="space-y-3">
       <div className="flex items-center justify-between">
@@ -59,6 +65,7 @@ function MyLearning() {
 /** The teacher's home (spec 2026-11-03 batch 3 §5.1). */
 export function TeacherWorkbench() {
   const { t } = useTranslation();
+  const home = useHome();
   const [board, setBoard] = useState<Workbench | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -74,6 +81,8 @@ export function TeacherWorkbench() {
         </p>
       </header>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
+      {/* Traceability #6: announcements of what one joined, as on the student home. */}
+      <HomeAnnouncements items={home?.announcements ?? []} />
       {!board ? (
         <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : (
@@ -175,7 +184,8 @@ export function TeacherWorkbench() {
         </>
       )}
       <MyListings />
-      <MyLearning />
+      <JoinedSection items={home?.joined ?? []} />
+      <MyLearning home={home} />
     </div>
   );
 }
@@ -189,9 +199,11 @@ export function AdminHome() {
     ["/settings", "Models and settings"],
   ];
   const pending = usePendingReviews();
+  const home = useHome();
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-6 py-8" data-testid="admin-home">
       <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
+      <HomeAnnouncements items={home?.announcements ?? []} />
       <div className="grid gap-3 sm:grid-cols-3">
         {links.map(([href, label]) => (
           <Link key={href} href={href} className={card}>
@@ -206,9 +218,15 @@ export function AdminHome() {
           </span>
         </Link>
       </div>
+      {/* Traceability #5: administrators do not grade; what they hold goes on to a teacher. */}
+      <p className="text-[12px] text-[var(--muted-foreground)]" data-testid="admin-hand-over-hint">
+        {t("Courses and tasks handed to you can be handed to a teacher who grades them.")}{" "}
+        <Link href="/tasks?tab=courses" className="text-[var(--primary)] hover:underline">{t("Courses")}</Link>
+      </p>
       <AiLimitSetting />
       <MyListings />
-      <MyLearning />
+      <JoinedSection items={home?.joined ?? []} />
+      <MyLearning home={home} />
     </div>
   );
 }

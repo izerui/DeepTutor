@@ -98,11 +98,12 @@ def _book(item_id: str) -> ItemInfo | None:
         description = book.description if book else ""
     except Exception:
         logger.debug("No manifest for book %s", item_id, exc_info=True)
+    # Content first: "make it public" is then the only thing left, safe to do in one step.
     not_ready = ""
-    if record.visibility != "public":
-        not_ready = "Make the book public first."
-    elif not any(chapter["pages"] for chapter in chapters):
+    if not any(chapter["pages"] for chapter in chapters):
         not_ready = "The book has no written chapter yet."
+    elif record.visibility != "public":
+        not_ready = "Make the book public first."
     return ItemInfo(
         scopes.BOOK, item_id, record.created_by, record.title, description,
         closed=record.visibility != "public", not_ready=not_ready,
@@ -133,10 +134,10 @@ def _knowledge_base(item_id: str) -> ItemInfo | None:
     not_ready = ""
     if kb_registry.is_connector(record):
         not_ready = "Connected knowledge bases cannot be listed."
-    elif record.visibility != "public":
-        not_ready = "Make the knowledge base public first."
     elif not kb_registry.list_documents(item_id):
         not_ready = "The knowledge base has no document yet."
+    elif record.visibility != "public":
+        not_ready = "Make the knowledge base public first."
     return ItemInfo(
         scopes.KNOWLEDGE_BASE, item_id, record.created_by, record.name, "",
         closed=record.visibility != "public", not_ready=not_ready,
@@ -175,6 +176,9 @@ def _practice_set(item_id: str) -> ItemInfo | None:
     elif row["due_at"] is not None:
         # Direction §11.4: the market is self-paced; deadlines belong to course tasks.
         not_ready = "Remove the deadline first: practice in the market has none. Set deadlines on course tasks."
+    elif row["reveal"] == "after_due":
+        # Without a deadline "after the deadline" never comes: learners would never see answers.
+        not_ready = "Show answers right after submitting: practice in the market has no deadline."
     return ItemInfo(
         scopes.PRACTICE_SET, item_id, row["owner_user_id"], row["title"], row["description"],
         closed=row["status"] == "archived", not_ready=not_ready,

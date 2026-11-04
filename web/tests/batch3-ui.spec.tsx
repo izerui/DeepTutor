@@ -107,7 +107,8 @@ it("lists every hand-in and filters by task", async () => {
 });
 
 it("shows each role its entries and students only the features allowed to them", () => {
-  expect(navVisibleForRole("/practice-sets", "student", {})).toBe(false);
+  // Traceability #1: students answer the practice sets they joined or were sent.
+  expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
   expect(navVisibleForRole("/practice-sets", "teacher", null)).toBe(true);
   expect(navVisibleForRole("/grading", "teacher", null)).toBe(true);
   expect(navVisibleForRole("/grading", "admin", null)).toBe(false);

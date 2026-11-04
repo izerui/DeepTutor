@@ -338,3 +338,188 @@ def test_a_path_learner_who_never_opened_it_counts_in_the_report(
     assert len(points["points"]) == 3
     assert all(p["not_mastered"] == [_uid(teaching_users, "sara")] for p in points["points"])
     assert row["paths"][0]["kp_total"] == 3 and row["paths"][0]["kp_mastered"] == 0
+
+
+# ── second review and the requirements check ───────────────
+
+
+def test_market_practice_shows_answers_without_a_deadline(as_account):
+    import time
+
+    from deeptutor.catalog.listings import ListingError
+    from deeptutor.practice_sets import store
+    from deeptutor.practice_sets.service import PracticeError, PracticeSetService
+
+    set_id = _market_set(as_account)
+    with as_account("tina"):
+        PracticeSetService().update(set_id, reveal="after_due", due_at=time.time() + 60)
+    with store.write() as conn:  # the deadline has passed: answers were shown
+        conn.execute("UPDATE practice_sets SET due_at = ? WHERE id = ?", (time.time() - 60, set_id))
+    with as_account("tina"):
+        with pytest.raises(Exception):
+            PracticeSetService().update(set_id, due_at=None)  # R10 alone still holds
+        # Clearing the deadline while showing answers right away is allowed (nothing gets hidden).
+        PracticeSetService().update(set_id, due_at=None, reveal="after_submit")
+        _listings().save("practice_set", set_id, **META)
+        _listings().submit("practice_set", set_id)
+        with pytest.raises(PracticeError):
+            PracticeSetService().update(set_id, reveal="after_due")
+    other = _market_set(as_account)
+    with as_account("tina"):
+        PracticeSetService().update(other, reveal="after_due")
+        _listings().save("practice_set", other, **META)
+        with pytest.raises(ListingError, match="right after"):
+            _listings().submit("practice_set", other)
+
+
+def test_reading_in_another_workspace_counts_as_started(teaching_users):
+    from deeptutor.catalog import migration
+    from deeptutor.multi_user.paths import scope_for_user
+
+    sara = _uid(teaching_users, "sara")
+    progress = (scope_for_user(sara, is_admin=False).root / "projects" / "thesis" / ".deeptutor" / "data" / "user"
+                / "workspace" / "book_learning" / "book_bk_far" / "progress.json")
+    progress.parent.mkdir(parents=True)
+    progress.write_text("{}")
+    migration._reading_cache.clear()
+    assert migration._book_starters("bk_far", [sara]) == {sara}
+
+
+def test_a_migrated_set_with_a_deadline_waits_outside_the_market(as_account, teaching_users):
+    import time
+
+    from deeptutor.catalog import migration
+    from deeptutor.catalog.enrollment import joined_by
+    from deeptutor.practice_sets.service import PracticeSetService
+    from deeptutor.publishing import scope as scopes
+
+    with as_account("tina"):
+        created = PracticeSetService().create("Dated")
+        PracticeSetService().update(created["id"], questions=QUESTIONS, due_at=time.time() + 86400)
+        with scopes.chosen_scope(scopes.Scope(everyone=True)):
+            PracticeSetService().publish(created["id"])
+    import asyncio
+
+    with as_account("sara"):
+        qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
+        asyncio.run(PracticeSetService().submit(created["id"], {qid: "B"}))
+    migration.run()
+    with as_account("tina"):
+        listing = _listings().get("practice_set", created["id"])
+    assert listing["status"] == "unlisted" and "deadline" in listing["reason"]
+    assert ("practice_set", created["id"]) in joined_by(_uid(teaching_users, "sara"))  # she keeps it
+
+
+def test_learners_of_leave_out_what_was_taken_down(as_account, teaching_users):
+    from deeptutor.catalog.enrollment import join
+    from deeptutor.catalog.learners import learners_of
+    from deeptutor.multi_user.context import get_current_user
+
+    set_id = _market_set(as_account)
+    _list(as_account, "practice_set", set_id)
+    with as_account("sam"):
+        join(get_current_user(), "practice_set", set_id)
+    assert _uid(teaching_users, "sam") in learners_of(_uid(teaching_users, "tina"))
+    with as_account("adam"):
+        _listings().take_down("practice_set", set_id, "Wrong.")
+    assert _uid(teaching_users, "sam") not in learners_of(_uid(teaching_users, "tina"))
+
+
+def test_publishing_tells_learners_where_to_go(as_account, teaching_users):
+    from deeptutor.notifications import service as notifications
+
+    _market_set(as_account)  # before retirement: to Tina's class, who hear of it
+    [notice] = [n for n in notifications.list_for(_uid(teaching_users, "sara")) if n["kind"] == "content_published"]
+    assert notice["link"].startswith("/practice-sets?set=")
+
+
+def test_home_lists_what_one_joined(as_account, teaching_users):
+    import asyncio
+
+    from deeptutor.api.routers import home
+    from deeptutor.catalog.enrollment import join
+    from deeptutor.multi_user.context import get_current_user
+
+    set_id = _market_set(as_account)
+    _list(as_account, "practice_set", set_id)
+    with as_account("tom"):  # a teacher learning too
+        join(get_current_user(), "practice_set", set_id)
+        joined = asyncio.run(home.home())["joined"]
+    assert [(j["kind"], j["id"]) for j in joined] == [("practice_set", set_id)]
+    assert joined[0]["study"] == {"kind": "practice_set", "id": set_id}
+
+
+def test_an_administrator_hands_a_course_with_homework_to_a_teacher(as_account, teaching_users):
+    from deeptutor.tasks.courses import CourseService
+    from deeptutor.tasks.service import TaskError, TaskService
+    from deeptutor.tasks.store import db as task_db
+
+    _retire()
+    with as_account("tina"):
+        homework = TaskService().create("homework", "Essay")
+        course = CourseService().create("Course")
+        CourseService().update(course["id"], task_ids=[homework["id"]])
+        CourseService().publish(course["id"])
+    from deeptutor.tasks.service import transfer_tasks
+
+    transfer_tasks(_uid(teaching_users, "tina"), _uid(teaching_users, "adam"))  # Tina left
+    with as_account("tom"), pytest.raises(TaskError):
+        CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))  # administrators only
+    with as_account("adam"):
+        with pytest.raises(TaskError):
+            CourseService().hand_over(course["id"], _uid(teaching_users, "sara"))  # a student cannot grade
+        CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))
+    with task_db.read() as conn:
+        owners = {r[0] for r in conn.execute(
+            "SELECT owner_user_id FROM tasks WHERE id = ? UNION SELECT owner_user_id FROM courses WHERE id = ?",
+            (homework["id"], course["id"]),
+        )}
+    assert owners == {_uid(teaching_users, "tom")}
+
+
+def test_sign_ups_per_address_can_be_raised(monkeypatch):
+    import importlib
+
+    from deeptutor.multi_user import rate_limit
+
+    monkeypatch.setenv("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", "50")
+    assert importlib.reload(rate_limit).REGISTER_PER_ADDRESS == (50, 3600)
+    monkeypatch.delenv("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY")
+    assert importlib.reload(rate_limit).REGISTER_PER_ADDRESS == (5, 3600)
+
+
+def test_a_teachers_calendar_has_their_tasks_and_the_courses_they_joined(as_account, teaching_users):
+    import asyncio
+    import time
+
+    from deeptutor.api.routers import tasks as tasks_router
+    from deeptutor.catalog.enrollment import join
+    from deeptutor.multi_user.context import get_current_user
+    from deeptutor.tasks.courses import CourseService
+    from deeptutor.tasks.service import TaskService
+
+    _retire()
+    soon = time.time() + 86400
+    for owner, title in (("tina", "Tina's"), ("tom", "Tom's")):
+        with as_account(owner):
+            task = TaskService().create("note", title)
+            TaskService().update(task["id"], due_at=soon)
+            course = CourseService().create(f"{title} course")
+            CourseService().update(course["id"], task_ids=[task["id"]])
+            CourseService().publish(course["id"])
+        if owner == "tom":
+            _list(as_account, "course", course["id"], owner="tom")
+    with as_account("tina"):
+        join(get_current_user(), "course", course["id"])  # Tina learns in Tom's course
+        events = asyncio.run(tasks_router.calendar())["events"]
+    assert {(e["title"], e["mine"]) for e in events} == {("Tina's", True), ("Tom's", False)}
+
+
+def test_content_is_checked_before_visibility(as_account, teaching_users, tmp_path):
+    from deeptutor.book import registry as book_registry
+    from deeptutor.catalog import items
+
+    record = book_registry.register_book(
+        base_dir=tmp_path / "books", dir_name="book_bk_empty", title="Empty", created_by=_uid(teaching_users, "tina"),
+    )
+    assert items.info("book", record.book_id).not_ready == "The book has no written chapter yet."

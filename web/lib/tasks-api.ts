@@ -175,6 +175,17 @@ export interface HomeData {
   /** Batch 4 §4: one's own courses still in play. */
   mine_courses?: { id: string; name: string; color: string; updated_at: number }[];
   can_create_path: boolean;
+  /** Traceability #6: what one joined from the market, newest first (every role). */
+  joined?: JoinedItem[];
+}
+
+/** One thing joined from the learning market, and where studying it opens. */
+export interface JoinedItem {
+  kind: import("./catalog-api").CatalogKind;
+  id: string;
+  title: string;
+  joined_at: number;
+  study: import("./catalog-api").StudyTarget;
 }
 
 /** The student home in one request (spec 2026-11-03 batch 1 §6). */
@@ -227,6 +238,12 @@ export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.course);
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
 export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
+/** Traceability #5: an administrator gives a course they hold (with its homework) to a teacher. */
+export const handOverCourse = (courseId: string, teacherId: string) =>
+  call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: teacherId }));
+/** The same for a task that is in no course. */
+export const handOverTask = (taskId: string, teacherId: string) =>
+  call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: teacherId }));
 
 // The calendar (spec 2026-11-03 batch 2 §7).
 export interface CalendarEvent {

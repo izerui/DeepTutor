@@ -72,7 +72,8 @@ services:
       # visitor address nginx sets can be trusted. To reach 3782 from elsewhere,
       # drop the "127.0.0.1:" prefix AND remove DEEPTUTOR_TRUSTED_INGRESS below.
       - "127.0.0.1:${DEEPTUTOR_FRONTEND_PORT:-3782}:3782"
-      - "${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
+      # The browser reaches the backend through the frontend; keep it off the network too.
+      - "127.0.0.1:${DEEPTUTOR_BACKEND_PORT:-8001}:8001"
 
     volumes:
       # Every account, conversation and setting lives under ./data; moving
@@ -92,6 +93,9 @@ services:
       # port 3782 is published on 127.0.0.1 only. If either stops holding, remove
       # this line: anyone reaching 3782 directly could forge X-Real-IP.
       - DEEPTUTOR_TRUSTED_INGRESS=1
+      # New accounts per visitor address per hour (default 5). Raise it when many
+      # people sign up from one address, e.g. a school network behind one NAT.
+      #   - DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY=50
       #   - DEEPTUTOR_APT_PACKAGES=ffmpeg
       # Unraid / NAS bind mounts:
       #   - PUID=99

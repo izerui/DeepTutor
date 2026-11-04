@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, Plus } from "lucide-react";
@@ -23,11 +25,14 @@ import { formatDate } from "./practice-format";
 
 /**
  * Practice sets (spec 2026-10-29 §8): teachers and administrators write and
- * publish them; students answer the ones published to them.
+ * publish them; everyone answers the ones they joined or were sent by name.
  */
 export default function PracticeSetsHub() {
   const { t } = useTranslation();
   const { isAdmin, isTeacher, loading } = useAuthStatus();
+  // ``?set=`` opens one directly (a notification, the market's "Go study", a report).
+  const params = useSearchParams();
+  const setParam = params?.get("set") ?? null;
 
   if (loading) return <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />;
   return (
@@ -36,11 +41,65 @@ export default function PracticeSetsHub() {
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Practice sets")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
           {isAdmin || isTeacher
-            ? t("Write question sets, publish them to classes or people, and see how students did.")
-            : t("Question sets your teachers published to you. Your answers go to your own question bank.")}
+            ? t("Write question sets, publish them, then put them in the learning market, and see how learners did.")
+            : t("Practice sets you joined or were sent. Your answers go to your own question bank.")}
         </p>
       </header>
-      {isAdmin || isTeacher ? <AuthorView /> : <StudentView />}
+      {isAdmin || isTeacher ? (
+        <AuthorTabs key={setParam ?? ""} setParam={setParam} tabParam={params?.get("tab") ?? null}
+          courseParam={params?.get("course") ?? null} />
+      ) : (
+        <StudentView key={setParam ?? ""} initialSet={setParam} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Teachers and administrators write sets, and also learn from the ones they
+ * joined (traceability #3). ``?set=`` of a set they do not own opens it to answer.
+ */
+function AuthorTabs({ setParam, tabParam, courseParam }: { setParam: string | null; tabParam: string | null; courseParam: string | null }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"mine" | "joined" | null>(() =>
+    setParam ? null : tabParam === "joined" ? "joined" : "mine",
+  );
+  // The set named in the address opens once, in the tab it belongs to.
+  const [openSet, setOpenSet] = useState<string | null>(setParam);
+
+  useEffect(() => {
+    if (tab !== null || !setParam) return;
+    let alive = true;
+    listMySets()
+      .then((rows) => alive && setTab(rows.some((row) => row.id === setParam) ? "mine" : "joined"))
+      .catch(() => alive && setTab("mine"));
+    return () => {
+      alive = false;
+    };
+  }, [tab, setParam]);
+
+  if (tab === null) return <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />;
+  const tabClass = (on: boolean) =>
+    `rounded-lg px-3 py-1.5 text-[13px] ${on ? "bg-[var(--muted)] font-medium text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`;
+  const choose = (next: "mine" | "joined") => {
+    setOpenSet(null);
+    setTab(next);
+  };
+  return (
+    <div className="space-y-4">
+      <div role="tablist" className="flex gap-1">
+        <button type="button" role="tab" aria-selected={tab === "mine"} className={tabClass(tab === "mine")} onClick={() => choose("mine")}>
+          {t("My practice sets")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => choose("joined")}>
+          {t("Practice sets I joined")}
+        </button>
+      </div>
+      {tab === "mine" ? (
+        <AuthorView initialSet={openSet} courseParam={openSet ? courseParam : null} />
+      ) : (
+        <StudentView initialSet={openSet} />
+      )}
     </div>
   );
 }
@@ -51,23 +110,17 @@ const statusLabel: Record<PracticeSetSummary["status"], string> = {
   archived: "Archived",
 };
 
-function AuthorView() {
+function AuthorView({ initialSet, courseParam }: { initialSet: string | null; courseParam: string | null }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuthStatus();
   const [sets, setSets] = useState<PracticeSetSummary[] | null>(null);
-  // ``?set=`` opens one directly (a remedial draft made from a class report, batch 3 §3.1).
-  const [selected, setSelected] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("set"),
-  );
+  // ``?set=`` of one's own set opens it (a remedial draft made from a report, batch 3 §3.1).
+  const [selected, setSelected] = useState<string | null>(initialSet);
   // Follow-ups §3: ``&course=`` (from a course's report) goes with that set and the
   // remedial drafts made from it, so they can be added to the course once published.
-  const [courseLink, setCourseLink] = useState<{ course: string; sets: string[] } | null>(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    const course = params.get("course");
-    const set = params.get("set");
-    return course && set ? { course, sets: [set] } : null;
-  });
+  const [courseLink, setCourseLink] = useState<{ course: string; sets: string[] } | null>(() =>
+    courseParam && initialSet ? { course: courseParam, sets: [initialSet] } : null,
+  );
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -203,13 +256,12 @@ function WithdrawSection() {
   );
 }
 
-function StudentView() {
+/** The sets one joined from the market or was sent by name (remedial), to answer. */
+function StudentView({ initialSet }: { initialSet: string | null }) {
   const { t } = useTranslation();
   const [sets, setSets] = useState<AssignedSet[] | null>(null);
-  // ``?set=`` opens one directly (a task's "go do it" link, spec 2026-11-03 batch 1).
-  const [selected, setSelected] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("set"),
-  );
+  // ``?set=`` opens one directly (a notification, or the market's "Go study").
+  const [selected, setSelected] = useState<string | null>(initialSet);
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {
@@ -232,7 +284,12 @@ function StudentView() {
   if (error) return <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>;
   if (sets === null) return <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />;
   if (sets.length === 0) {
-    return <p className="text-[13px] text-[var(--muted-foreground)]">{t("No practice sets for you yet.")}</p>;
+    return (
+      <p className="text-[13px] text-[var(--muted-foreground)]">
+        {t("Practice sets you join from the learning market appear here.")}{" "}
+        <Link href="/market" className="text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
+      </p>
+    );
   }
   return (
     <ul className="grid gap-3 sm:grid-cols-2">

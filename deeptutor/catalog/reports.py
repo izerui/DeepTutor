@@ -17,6 +17,8 @@ from deeptutor.classes.report import PERIODS, ReportService, _snapshots
 from deeptutor.publishing import scope as scopes
 
 KINDS = (scopes.COURSE, scopes.MASTERY_PATH)
+#: Learners per query: with an item's tasks or sets, stays under SQLite's 999 parameters.
+CHUNK = 400
 
 
 class LearnerReportService(ReportService):
@@ -53,8 +55,16 @@ class LearnerReportService(ReportService):
         sets = {t["target_id"] for t in tasks if t["kind"] == "practice_set" and t["target_id"]}
         return paths, sets, [t["id"] for t in tasks]
 
+    @classmethod
+    def _task_progress(cls, task_ids: list[str], learners: list[str]) -> dict[str, dict[str, int]]:
+        """In chunks: many learners must not exceed SQLite's parameter limit (review 2)."""
+        out: dict[str, dict[str, int]] = {}
+        for start in range(0, len(learners), CHUNK):
+            out.update(cls._task_progress_chunk(task_ids, learners[start:start + CHUNK]))
+        return out if learners else {}
+
     @staticmethod
-    def _task_progress(task_ids: list[str], learners: list[str]) -> dict[str, dict[str, int]]:
+    def _task_progress_chunk(task_ids: list[str], learners: list[str]) -> dict[str, dict[str, int]]:
         from deeptutor.tasks.store import db as task_db
 
         out = {u: {"done": 0, "total": len(task_ids), "to_grade": 0, "returned": 0, "graded": 0, "last": None}
@@ -83,8 +93,17 @@ class LearnerReportService(ReportService):
                     out[row[0]][key] = int(row[2])
         return out
 
-    @staticmethod
+    @classmethod
     def _period_counts(
+        cls, learners: list[str], paths: dict[str, str], sets: set[str], task_ids: list[str], since: float,
+    ) -> dict[str, dict[str, int]]:
+        out: dict[str, dict[str, int]] = {}
+        for start in range(0, len(learners), CHUNK):
+            out.update(cls._period_counts_chunk(learners[start:start + CHUNK], paths, sets, task_ids, since))
+        return out
+
+    @staticmethod
+    def _period_counts_chunk(
         learners: list[str], paths: dict[str, str], sets: set[str], task_ids: list[str], since: float,
     ) -> dict[str, dict[str, int]]:
         """Per learner, since *since*: answers on the item's paths and sets, tasks completed — on this item only."""

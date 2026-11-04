@@ -99,6 +99,19 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     }
   };
 
+  // The same request as "Make public" above, for submitting to the market at once.
+  const makePublicForListing = async () => {
+    if (!sharing?.can_set_visibility || blocked) throw new Error("Make the book public first.");
+    await bookApi.setVisibility(requestedRef, {
+      visibility: "public",
+      kb_choices: choices,
+      scope: JOIN_ONLY_SCOPE,
+      force: isAdmin && force,
+    }, workspaceId);
+    if (!alive.current) return;
+    setSharing((current) => (current ? { ...current, visibility: "public" } : current));
+  };
+
   return <Dialog open title={makingPublic ? t("Make this book public?") : t("Make this book private?")}
     onClose={onClose} closeLabel={t("Close")} busy={busy} size={makingPublic ? "md" : "lg"}
     footer={<>
@@ -117,9 +130,6 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
           ? t("Only the book's owner can open a private book, plus anything that references it.")
           : t("Only you can open a private book, plus anything that references it.")}</p>
       {!sharing && !error && <p role="status">{t("Loading…")}</p>}
-      {!makingPublic && sharing?.can_set_visibility && (
-        <ListingPanel kind="book" itemId={sharing.book_id} onChanged={onChanged} />
-      )}
       {makingPublic && !!sharing?.kbs.private_kbs.length && <fieldset className="space-y-2">
         <legend className="mb-2 font-medium">{t("Private knowledge bases this book uses")}</legend>
         {sharing.kbs.private_kbs.map(kb => <label key={kb.kb_id} className="flex flex-wrap items-center justify-between gap-2">
@@ -144,6 +154,11 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
         <input type="checkbox" checked={force} disabled={busy} onChange={event => setForce(event.target.checked)} />
         <span>{t("Publish anyway; the blocked knowledge bases stay unavailable to readers")}</span>
       </label>}
+      {/* Traceability #8: still private, it is made public and submitted in one step. */}
+      {sharing?.can_set_visibility && (
+        <ListingPanel kind="book" itemId={sharing.book_id} onChanged={onChanged}
+          makePublic={makingPublic ? makePublicForListing : undefined} />
+      )}
       {error && <p role="alert" className="break-words text-red-600">{error}</p>}
     </div>
   </Dialog>;

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { setPublicRegistration } from "@/lib/admin-api";
 import { fetchRegistrationOpen } from "@/lib/auth";
 
-/** Public sign-up switch (spec 2026-10-29 D19). Class invite links admit either way. */
+/** Public sign-up switch (spec 2026-10-29 D19); when off, administrators create the accounts. */
 export function RegistrationToggle() {
   const { t } = useTranslation();
   const [open, setOpen] = useState<boolean | null>(null);
@@ -20,7 +20,7 @@ export function RegistrationToggle() {
   return (
     <label
       className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--foreground)]"
-      title={t("When off, new students can only sign up through a class invite link.")}
+      title={t("When off, only administrators create accounts.")}
     >
       <input
         type="checkbox"

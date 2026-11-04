@@ -118,8 +118,8 @@ def test_books_reach_class_teachers_too_and_student_shares_stay(as_account, teac
     assert members("book", book.book_id) == {
         teaching_users[n]["id"] for n in ("sara", "sam", "tom")
     }
-    assert members("book", shared.book_id) == set()  # a student's old share is left as it was
-    assert scopes._stored_scope(scopes.BOOK, shared.book_id).classes
+    # A student's old share stays as it was: the same classmates keep reading it (review 2 #2).
+    assert members("book", shared.book_id) == {teaching_users[n]["id"] for n in ("sam", "tina", "tom")}
 
 
 def test_a_class_course_keeps_handing_out_its_tasks(as_account, teaching_users):

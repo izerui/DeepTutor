@@ -118,9 +118,12 @@ export function ReviewDetail({
   entry,
   onDone,
   canClassify = false,
+  onClassified,
 }: {
   entry: CatalogEntry;
   onDone: () => void;
+  /** The classification was saved (the list's "Needs classification" marks change). */
+  onClassified?: () => void;
   /** The "In the market" tab: the administrator may correct the classification. */
   canClassify?: boolean;
 }) {
@@ -196,6 +199,7 @@ export function ReviewDetail({
             setItem({ ...item, ...next, preview: item.preview, events: item.events });
             setClassifying(false);
             getReviewItem(item.kind, item.id).then(setItem).catch(() => undefined);
+            onClassified?.();
           }}
         />
       ) : (
@@ -264,10 +268,13 @@ export default function ReviewDesk() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [refresh, setRefresh] = useState(0);
+  // Traceability #9: listings in the market still missing a classification (e.g. migrated).
+  const [onlyUnclassified, setOnlyUnclassified] = useState(false);
   // Only the answer for the list now asked for is shown.
   const key = `${tab}|${search}|${refresh}`;
   const [answer, setAnswer] = useState<{ key: string; rows: CatalogEntry[] | null; error: string } | null>(null);
-  const rows = answer?.key === key ? answer.rows : null;
+  const answered = answer?.key === key ? answer.rows : null;
+  const rows = answered && tab === "listed" && onlyUnclassified ? answered.filter((row) => row.needs_classification) : answered;
   const error = answer?.key === key ? answer.error : "";
 
   useEffect(() => {
@@ -311,6 +318,12 @@ export default function ReviewDesk() {
                 <input className={inputClass} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search the market")} placeholder={t("Search the market")} />
               </form>
             )}
+            {tab === "listed" && (
+              <label className="flex items-center gap-2 text-[12.5px]">
+                <input type="checkbox" checked={onlyUnclassified} onChange={(e) => setOnlyUnclassified(e.target.checked)} />
+                {t("Only those needing classification")}
+              </label>
+            )}
             {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
             {rows === null ? (
               !error && <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
@@ -327,7 +340,15 @@ export default function ReviewDesk() {
                       <button type="button" aria-current={on ? "true" : undefined}
                         className={`w-full space-y-0.5 p-2.5 text-left text-[12.5px] hover:bg-[var(--muted)]/40 ${on ? "bg-[var(--muted)]/60" : ""}`}
                         onClick={() => setSelected(row)}>
-                        <span className="block truncate font-medium">{row.title}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="min-w-0 flex-1 truncate font-medium">{row.title}</span>
+                          {tab === "listed" && row.needs_classification && (
+                            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300"
+                              data-testid="needs-classification">
+                              {t("Needs classification")}
+                            </span>
+                          )}
+                        </span>
                         <span className="block text-[11px] text-[var(--muted-foreground)]">
                           {kindLabel(row.kind, t)} · {authorLabel(row, t)}
                           {tab === "pending" && row.submitted_at ? ` · ${formatDay(row.submitted_at)}` : ""}
@@ -342,7 +363,8 @@ export default function ReviewDesk() {
           </div>
           <div className="min-w-0 flex-1">
             {selected ? (
-              <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} canClassify={tab === "listed"} onDone={() => {
+              <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} canClassify={tab === "listed"}
+                onClassified={() => setRefresh((v) => v + 1)} onDone={() => {
                 setSelected(null);
                 setRefresh((v) => v + 1);
               }} />

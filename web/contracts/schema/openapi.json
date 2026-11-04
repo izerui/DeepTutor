@@ -4659,6 +4659,21 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HandOver": {
+        "properties": {
+          "teacher_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Teacher Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "teacher_id"
+        ],
+        "title": "HandOver",
+        "type": "object"
+      },
       "ImaConfigUpdate": {
         "properties": {
           "api_key": {
@@ -75006,6 +75021,89 @@
         ]
       }
     },
+    "/api/tasks/courses/{course_id}/hand-over": {
+      "post": {
+        "description": "Traceability #5: an administrator gives a course they hold to a teacher, homework included.",
+        "operationId": "hand_over_course_api_tasks_courses__course_id__hand_over_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandOver"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hand Over Course",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/api/tasks/courses/{course_id}/practice-sets": {
       "post": {
         "description": "Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task.",
@@ -75612,6 +75710,88 @@
           }
         },
         "summary": "Archive Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}/hand-over": {
+      "post": {
+        "operationId": "hand_over_task_api_tasks__task_id__hand_over_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandOver"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hand Over Task",
         "tags": [
           "tasks"
         ]

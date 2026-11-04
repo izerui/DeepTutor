@@ -76,9 +76,9 @@ def _owner(kind: str, item_id: str) -> str | None:
     return items.owner(kind, item_id)
 
 
-def _student_owned_share(kind: str, owner: str, accounts: dict[str, dict[str, Any]]) -> bool:
-    """A book or knowledge base a student once made public stays as it is (direction §9.3)."""
-    return kind in (scopes.BOOK, scopes.KNOWLEDGE_BASE) and (accounts.get(owner) or {}).get("role") == "student"
+def _non_member_targets(kind: str, item_id: str) -> bool:
+    stored = scopes._stored_scope(kind, item_id)
+    return stored is not None and bool(stored.everyone or stored.classes or stored.groups)
 
 
 def _unmanaged_assigned_paths() -> list[str]:
@@ -113,8 +113,11 @@ def _move_receivers(accounts: dict[str, dict[str, Any]]) -> tuple[list[str], lis
     now = time.time()
     for kind, item_id in keys:
         owner = _owner(kind, item_id)
-        if owner is None or _student_owned_share(kind, owner, accounts):
+        if owner is None:
+            scopes.forget(kind, item_id)  # the item is gone; so are its receivers
             continue
+        # A student's old share stays as it was (direction §9.3): the same classmates
+        # keep reading it, as members, and it does not go to the market (review 2 #2).
         receivers = _receivers(kind, item_id, owner)
         with db.write() as conn:
             conn.executemany(
@@ -210,6 +213,10 @@ def run() -> bool:
     for template_id in paths:
         enrollment.reconcile_path(template_id)
     kept = _keep_policies(accounts)
+    left = [key for key in _scoped_items() if _non_member_targets(*key)]
+    if left:
+        # The fast paths after retirement assume only named people remain in scopes.
+        raise RuntimeError(f"Receivers left on {len(left)} items; classes stay until the next start")
     with db.write() as conn:
         conn.execute(
             "INSERT INTO catalog_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

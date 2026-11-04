@@ -272,6 +272,8 @@ def _nodes() -> dict[str, dict[str, Any]]:
             value = json.loads(row["names_json"] if "names_json" in row.keys() else "{}") or {}
         except ValueError:
             value = {}
+        if not isinstance(value, dict):
+            value = {}
         return {k: str(v) for k, v in value.items() if k in OTHER_LANGUAGES and str(v).strip()}
 
     for row in rows:

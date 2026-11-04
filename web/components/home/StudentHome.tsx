@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import { AiUsageNote } from "./AiUsage";
+import { authorTaskHref, isContentKey } from "./task-links";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
-import { authorLabel, itemHref, kindLabel } from "@/components/catalog/catalog-format";
+import { authorLabel, itemHref, kindLabel, studyHref } from "@/components/catalog/catalog-format";
 import type { HomeAnnouncement } from "@/lib/catalog-api";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
-import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData } from "@/lib/tasks-api";
+import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData, type JoinedItem } from "@/lib/tasks-api";
 
 const card = "rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--ring)]";
 
@@ -73,8 +74,30 @@ export function HomeAnnouncements({ items }: { items: HomeAnnouncement[] }) {
   );
 }
 
+/** Traceability #6: what one joined from the learning market; each opens where it is studied. */
+export function JoinedSection({ items }: { items: JoinedItem[] }) {
+  const { t } = useTranslation();
+  if (!items.length) return null;
+  return (
+    <section aria-labelledby="home-joined" className="space-y-3" data-testid="home-joined">
+      <div className="flex items-center justify-between">
+        <h2 id="home-joined" className="text-[13px] font-semibold">{t("What I joined")}</h2>
+        <Link href="/market" className="text-[12.5px] text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((item) => (
+          <Link key={`${item.kind}:${item.id}`} href={studyHref(item.study)} className={card}>
+            <span className="block truncate text-[14px] font-medium">{item.title}</span>
+            <span className="text-[11.5px] text-[var(--muted-foreground)]">{kindLabel(item.kind, t)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
- * The student home (spec 2026-11-03 batch 1 §6): what teachers assigned,
+ * The student home (spec 2026-11-03 batch 1 §6): tasks from the courses one joined,
  * what is new in the learning market, and one's own learning — never mixed.
  */
 export default function StudentHome() {
@@ -93,13 +116,17 @@ export default function StudentHome() {
 
   // ``?task=`` (a notification's link) opens one task directly, also when already here.
   const taskParam = useSearchParams().get("task");
+  const router = useRouter();
   useEffect(() => {
     const key = taskParam;
     if (!key) return;
     getAssignedTask(key)
       .then(setSelected)
-      .catch(() => setError(t("This task is no longer available.")));
-  }, [t, taskParam]);
+      .catch(() =>
+        // Older notifications named a practice set or a path as a task; open it directly.
+        isContentKey(key) ? router.replace(authorTaskHref(key, false)) : setError(t("This task is no longer available.")),
+      );
+  }, [t, taskParam, router]);
 
   const showHistory = () =>
     listAssignedTasks()
@@ -112,7 +139,7 @@ export default function StudentHome() {
         <div>
           <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
           <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-            {t("What your teachers assigned, what is new in the market, and what you are learning yourself.")}
+            {t("Tasks from your courses, what is new in the market, and what you are learning yourself.")}
           </p>
         </div>
         <Link href="/chat" className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[13px]">
@@ -137,7 +164,7 @@ export default function StudentHome() {
         <>
           <HomeAnnouncements items={home.announcements ?? []} />
           <section aria-labelledby="home-assigned" className="space-y-3">
-            <h2 id="home-assigned" className="text-[13px] font-semibold">{t("From my teachers")}</h2>
+            <h2 id="home-assigned" className="text-[13px] font-semibold">{t("From my courses")}</h2>
             {home.assigned.length === 0 ? (
               <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to do right now.")}</p>
             ) : (
@@ -160,6 +187,8 @@ export default function StudentHome() {
               </div>
             )}
           </section>
+
+          <JoinedSection items={home.joined ?? []} />
 
           {(home.market ?? []).length > 0 && (
             <section aria-labelledby="home-market" className="space-y-3">

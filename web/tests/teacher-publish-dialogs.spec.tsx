@@ -344,7 +344,7 @@ it("offers publishing only on an own card; other teachers' paths are manage-only
   const others = screen.getByRole("region", { name: "Other teacher paths" });
   expect(within(others).queryByRole("button", { name: /Publish/ })).toBeNull();
   expect(within(others).getByText(/Only tom can edit and publish this path/)).toBeVisible();
-  fireEvent.click(within(others).getByRole("button", { name: "Manage assignments" }));
+  fireEvent.click(within(others).getByRole("button", { name: "Manage path" }));
   expect(onManage.mock.calls[0][0].id).toBe("tpl_tom");
 });
 

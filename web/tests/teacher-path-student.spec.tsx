@@ -134,7 +134,7 @@ describe('TopicAtlas for students', () => {
         onRetry={() => {}}
       />
     )
-    const assigned = screen.getByRole('region', { name: 'From my teachers' })
+    const assigned = screen.getByRole('region', { name: 'Published by teachers' })
     const link = within(assigned).getByRole('link', { name: /C15 Waves/ })
     expect(link.getAttribute('href')).toBe('/learning/mastery/assigned_tpl1/sessions')
     expect(within(assigned).getByText('Published by tina')).toBeInTheDocument()
@@ -156,7 +156,7 @@ describe('TopicAtlas for students', () => {
         onCreate={onCreate}
       />
     )
-    expect(screen.queryByRole('region', { name: 'From my teachers' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Published by teachers' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'My topics' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /New topic/ }))
     expect(onCreate).toHaveBeenCalledTimes(1)
@@ -165,7 +165,7 @@ describe('TopicAtlas for students', () => {
   it('offers no dead create control in an empty library without permission', () => {
     render(<TopicAtlas topics={[]} loading={false} error={null} onRetry={() => {}} />)
     expect(
-      screen.getByText('Paths your teachers assign to you will appear here.')
+      screen.getByText('Paths you join from the learning market appear here.')
     ).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()
   })

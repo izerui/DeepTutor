@@ -75,9 +75,10 @@ export function notificationText(item: AppNotification, t: Translate): string {
     case "course_published":
       return t("{{teacher}} published the course “{{title}}”", { teacher: p.teacher, title });
     case "practice_regraded":
-      return t("Your score on “{{title}}” was changed by your teacher", { title });
+      return t("Your score on “{{title}}” was changed", { title });
     case "material_withdrawn":
-      return t("Material “{{material}}” cited by “{{title}}” no longer reaches {{count}} of its students", {
+      // Batch 3 §6: the material was withdrawn, made private or deleted; count is all learners.
+      return t("Material “{{material}}” cited by “{{title}}” is no longer available ({{count}} learners affected)", {
         material: p.material, title, count: p.count,
       });
     case "content_transferred":

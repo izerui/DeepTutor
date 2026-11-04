@@ -165,16 +165,27 @@ def _course_starters(course_id: str) -> set[str]:
     return done | handed
 
 
-def _book_starters(book_id: str, people: list[str]) -> set[str]:
-    from deeptutor.classes.report import _student_paths
+_reading_cache: dict[str, set[str]] = {}
 
+
+def _books_read(user_id: str) -> set[str]:
+    """Books with reading progress anywhere under the account — every workspace, not only the default."""
+    if user_id not in _reading_cache:
+        from deeptutor.multi_user.paths import scope_for_user
+
+        root = scope_for_user(user_id, is_admin=False).root
+        _reading_cache[user_id] = {
+            path.parent.name[len("book_"):]
+            for path in root.rglob("book_learning/book_*/progress.json") if path.is_file()
+        } if root.exists() else set()
+    return _reading_cache[user_id]
+
+
+def _book_starters(book_id: str, people: list[str]) -> set[str]:
     out = set()
     for user_id in people:
         try:
-            progress = (
-                _student_paths(user_id).get_workspace_dir() / "book_learning" / f"book_{book_id}" / "progress.json"
-            )
-            if progress.is_file():
+            if book_id in _books_read(user_id):
                 out.add(user_id)
         except Exception:
             logger.warning("Could not read the reading progress of %s", user_id, exc_info=True)
@@ -204,12 +215,17 @@ def _migrate_one(kind: str, item_id: str, accounts: dict[str, dict[str, Any]]) -
         return
     now = time.time()
     starters = _starters(kind, item_id, info.owner, accounts)
+    # Practice in the market has no deadline (direction §11.4): a set with one goes in as taken
+    # out of the market — those who started keep it; its author clears the deadline to put it back.
+    status, reason = "listed", ""
+    if kind == scopes.PRACTICE_SET and info.not_ready:
+        status, reason = "unlisted", info.not_ready
     with db.write() as conn:
         conn.execute(
             "INSERT INTO listings (kind, item_id, owner_user_id, status, title, summary, approved_once, migrated, "
-            "created_at, updated_at, listed_at) VALUES (?, ?, ?, 'listed', ?, ?, 1, 1, ?, ?, ?) "
+            "reason, created_at, updated_at, listed_at) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?) "
             "ON CONFLICT(kind, item_id) DO NOTHING",
-            (kind, item_id, info.owner, info.title[:80], info.description[:1000], now, now, now),
+            (kind, item_id, info.owner, status, info.title[:80], info.description[:1000], reason, now, now, now),
         )
         conn.executemany(
             "INSERT INTO enrollments (kind, item_id, user_id, via, joined_at) VALUES (?, ?, ?, ?, ?) "
@@ -247,6 +263,7 @@ def run() -> int:
     """List what reached everyone; return how many items were migrated."""
     if done():
         return 0
+    _reading_cache.clear()
     from deeptutor.classes.service import _accounts
 
     accounts = _accounts()

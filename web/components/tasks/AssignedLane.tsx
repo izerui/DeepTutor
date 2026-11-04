@@ -10,7 +10,7 @@ import { listAssignedTasks, type AssignedTask } from "@/lib/tasks-api";
 import { formatWhen, STATE_LABEL, STATE_TONE } from "./task-format";
 
 /**
- * The task board's read-only "assigned by teachers" lane (spec 2026-11-03
+ * The task board's read-only "from my courses" lane (spec 2026-11-03
  * batch 1 §2). It reads the tasks; the student's own cards are untouched.
  */
 export function AssignedLane() {
@@ -28,9 +28,9 @@ export function AssignedLane() {
 
   if (!student || !tasks || tasks.length === 0) return null;
   return (
-    <section aria-label={t("From my teachers")} className="mb-4 rounded-2xl border border-border/45 bg-secondary/40 p-3">
+    <section aria-label={t("From my courses")} className="mb-4 rounded-2xl border border-border/45 bg-secondary/40 p-3">
       <h2 className="mb-2 px-1 text-[13px] font-semibold">
-        {t("From my teachers")} <span className="font-normal text-[var(--muted-foreground)]">· {t("read-only")}</span>
+        {t("From my courses")} <span className="font-normal text-[var(--muted-foreground)]">· {t("read-only")}</span>
       </h2>
       <ul className="flex gap-2 overflow-x-auto pb-1">
         {tasks.map((task) => (

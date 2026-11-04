@@ -59,7 +59,7 @@ it("still shows an older class announcement on the home, by its class name (plat
     announcements: [{ id: "a1", class_id: "cls_1", class_name: "Physics 1", author: "", text: "Bring a calculator.", pinned: true, created_at: 1, updated_at: 1, can_edit: false }],
   });
   render(<StudentHome />);
-  expect(await screen.findByRole("heading", { name: "From my teachers" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "From my courses" })).toBeTruthy();
   expect(screen.queryByRole("region", { name: "Class announcements" })).toBeNull();
   const block = screen.getByRole("region", { name: "Announcements" });
   expect(within(block).getByText("Bring a calculator.")).toBeTruthy();

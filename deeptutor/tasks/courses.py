@@ -218,6 +218,32 @@ class CourseService:
         self.update(course_id, task_ids=[*items, task["id"]])
         return self.get(course_id)
 
+    def hand_over(self, course_id: str, teacher_id: str) -> dict[str, Any]:
+        """An administrator gives a course they hold — with its tasks and their homework — to a teacher.
+
+        Homework of a departed teacher reaches the administrator, who may not grade it
+        (R21); handing the course on lets a teacher grade it (traceability #5).
+        """
+        from deeptutor.tasks.service import _hand_tasks_to
+
+        if _role(self.actor) != "admin":
+            raise TaskError("Only administrators hand courses over.")
+        with db.read() as conn:
+            row = self._owned(conn, course_id)
+            items = self._items(conn, course_id)
+        with db.write() as conn:
+            _hand_tasks_to(conn, self.actor.id, teacher_id, items)
+            conn.execute(
+                "UPDATE courses SET owner_user_id = ?, updated_at = ? WHERE id = ?", (teacher_id, time.time(), course_id),
+            )
+        from deeptutor.catalog.listings import follow_owners
+        from deeptutor.notifications.service import notify
+
+        follow_owners(self.actor.id)
+        notify([teacher_id], "tasks_transferred", {"count": len(items) or 1}, link=f"/tasks?tab=courses",
+               dedupe_key=f"course_handed_over:{course_id}:{teacher_id}")
+        return {"id": course_id, "owner_user_id": teacher_id, "title": row["title"]}
+
     def _publish_drafts(self, course_id: str) -> None:
         from deeptutor.publishing import scope as scopes
 

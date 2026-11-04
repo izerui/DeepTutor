@@ -33,7 +33,11 @@ def where_learners_are(teacher_id: str) -> dict[str, tuple[str, str]]:
         if conn is None:
             return {}
         rows = conn.execute(
-            "SELECT kind, item_id, user_id FROM enrollments WHERE left_at IS NULL"
+            "SELECT e.kind, e.item_id, e.user_id FROM enrollments e WHERE e.left_at IS NULL "
+            # Not through anything an administrator took down (review 2).
+            "AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.kind = e.kind AND l.item_id = e.item_id AND l.blocked = 1) "
+            "AND NOT (e.via LIKE 'course:%' AND EXISTS (SELECT 1 FROM listings l WHERE l.kind = 'course' "
+            "AND l.item_id = substr(e.via, 8) AND l.blocked = 1))"
         ).fetchall()
     owners: dict[tuple[str, str], str | None] = {}
     found: dict[str, tuple[str, str]] = {}

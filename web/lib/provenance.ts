@@ -36,7 +36,7 @@ export function provenanceLabel(provenance: Provenance | null | undefined, t: Tr
 export function provenanceGroupTitle(kind: ProvenanceKind, t: Translate, viewerIsStudent: boolean): string {
   switch (kind) {
     case "teacher":
-      return viewerIsStudent ? t("From my teachers") : t("From other teachers");
+      return viewerIsStudent ? t("Published by teachers") : t("From other teachers");
     case "school":
       return t("Published by the platform");
     case "shared":

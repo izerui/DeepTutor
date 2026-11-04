@@ -67,7 +67,7 @@ export function TeacherCardActions({
             className={BUTTON}
           >
             <Users aria-hidden className="h-3 w-3" />
-            {t('Manage assignments')}
+            {t('Manage path')}
           </button>
         )}
       </span>
@@ -124,7 +124,7 @@ export function UnlistedTeacherTemplates({
                 className={`${BUTTON} self-start sm:self-center`}
               >
                 <Users aria-hidden className="h-3 w-3" />
-                {t('Manage assignments')}
+                {t('Manage path')}
               </button>
             </li>
           )

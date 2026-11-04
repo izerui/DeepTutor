@@ -12502,6 +12502,23 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/tasks/{task_id}/hand-over": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Hand Over Task */
+    readonly post: operations["hand_over_task_api_tasks__task_id__hand_over_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/tasks/{task_id}/publish": {
     readonly parameters: {
       readonly query?: never;
@@ -12705,6 +12722,26 @@ export interface paths {
     readonly put?: never;
     /** Archive Course */
     readonly post: operations["archive_course_api_tasks_courses__course_id__archive_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/tasks/courses/{course_id}/hand-over": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Hand Over Course
+     * @description Traceability #5: an administrator gives a course they hold to a teacher, homework included.
+     */
+    readonly post: operations["hand_over_course_api_tasks_courses__course_id__hand_over_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -15671,6 +15708,11 @@ export interface components {
       readonly allowed_surfaces: readonly string[];
       /** Extensions */
       readonly extensions: readonly string[];
+    };
+    /** HandOver */
+    readonly HandOver: {
+      /** Teacher Id */
+      readonly teacher_id: string;
     };
     /** HTTPValidationError */
     readonly HTTPValidationError: {
@@ -20662,6 +20704,7 @@ export type SchemaGuardianMaterialsPayload =
   components["schemas"]["GuardianMaterialsPayload"];
 export type SchemaGuardianRestrictionsPayload =
   components["schemas"]["GuardianRestrictionsPayload"];
+export type SchemaHandOver = components["schemas"]["HandOver"];
 export type SchemaHttpValidationError =
   components["schemas"]["HTTPValidationError"];
 export type SchemaImaConfigUpdate = components["schemas"]["ImaConfigUpdate"];
@@ -49428,6 +49471,45 @@ export interface operations {
       };
     };
   };
+  readonly hand_over_task_api_tasks__task_id__hand_over_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly task_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["HandOver"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly publish_task_api_tasks__task_id__publish_post: {
     readonly parameters: {
       readonly query?: never;
@@ -49920,6 +50002,45 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly hand_over_course_api_tasks_courses__course_id__hand_over_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly course_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["HandOver"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {

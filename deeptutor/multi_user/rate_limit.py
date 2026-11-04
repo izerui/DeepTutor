@@ -25,8 +25,18 @@ CREATE TABLE IF NOT EXISTS rate_buckets (
     "Rate limit",
 )
 
-#: (count, window seconds)
-REGISTER_PER_ADDRESS = (5, 3600)
+def _hourly(name: str, default: int) -> int:
+    import os
+
+    try:
+        value = int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+#: (count, window seconds). Per address configurable: one school network may sign up many.
+REGISTER_PER_ADDRESS = (_hourly("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", 5), 3600)
 #: Across the whole site, for when the address is unknown or spoofed.
 REGISTER_SITE_WIDE = (60, 3600)
 LOGIN_FAILURES_PER_USERNAME = (10, 900)

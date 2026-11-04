@@ -79,6 +79,10 @@ class SendBack(BaseModel):
     attempt: int | None = None
 
 
+class HandOver(BaseModel):
+    teacher_id: str = Field(min_length=1, max_length=200)
+
+
 class CoursePracticeSet(BaseModel):
     set_id: str = Field(min_length=1, max_length=200)
 
@@ -126,6 +130,17 @@ async def add_course_task(course_id: str, body: TaskCreate):
     return {"course": await _call(lambda: _courses().add_new_task(course_id, body.kind, body.title))}
 
 
+@router.post("/courses/{course_id}/hand-over")
+async def hand_over_course(course_id: str, body: HandOver):
+    """Traceability #5: an administrator gives a course they hold to a teacher, homework included."""
+    return {"course": await _call(lambda: _courses().hand_over(course_id, body.teacher_id))}
+
+
+@router.post("/{task_id}/hand-over")
+async def hand_over_task(task_id: str, body: HandOver):
+    return {"task": await _call(lambda: TaskService().hand_over(task_id, body.teacher_id))}
+
+
 @router.post("/courses/{course_id}/practice-sets")
 async def add_course_practice_set(course_id: str, body: CoursePracticeSet):
     """Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task."""
@@ -157,21 +172,28 @@ async def calendar():
     """Opening times and deadlines: what reached a student, or what an author assigned."""
 
     def build() -> list[dict[str, Any]]:
+        from deeptutor.classes.service import _role
+
         student = StudentTasks()
+        items = []
         if student._is_student():
+            # What reached one: a student's, or a teacher's or administrator's joined courses.
             entries = [e for e in student.assigned() if e["state"] != "closed"]
-            items = [(e["key"], e["title"], e["kind"], e["state"], e.get("open_at"), e["due_at"]) for e in entries]
-        else:
-            items = [
-                (t["id"], t["title"], t["kind"], t["status"], t["open_at"], t["due_at"])
+            items += [(e["key"], e["title"], e["kind"], e["state"], e.get("open_at"), e["due_at"], False)
+                      for e in entries]
+        if _role(student.actor) != "student":
+            items += [
+                (t["id"], t["title"], t["kind"], t["status"], t["open_at"], t["due_at"], True)
                 for t in TaskService().list_mine() if t["status"] == "published"
             ]
         events = []
-        for key, title, kind, state, opens, due in items:
+        for key, title, kind, state, opens, due, mine in items:
             if opens:
-                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "open", "at": opens})
+                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "open", "at": opens,
+                               "mine": mine})
             if due:
-                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "due", "at": due})
+                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "due", "at": due,
+                               "mine": mine})
         return sorted(events, key=lambda e: e["at"])
 
     return {"events": await _call(build)}

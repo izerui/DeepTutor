@@ -23,6 +23,8 @@ import {
   type ReportKind,
   type ReportPoints,
 } from "@/lib/catalog-api";
+import { CommentEditor } from "@/components/comments/Comments";
+import { writtenComments, type TeacherComment } from "@/lib/comments-api";
 import { remedialFromPath } from "@/lib/practice-sets-api";
 
 import { catalogError, itemHref, kindLabel } from "./catalog-format";
@@ -323,11 +325,21 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
   const [actionError, setActionError] = useState("");
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
+  // Traceability #4: what the author already wrote to this learner, per path, read once.
+  const [comments, setComments] = useState<Record<string, TeacherComment[]>>({});
 
   useEffect(() => {
     let alive = true;
     getLearnerDetail(kind, itemId, userId)
-      .then((next) => alive && setDetail(next))
+      .then((next) => {
+        if (!alive) return;
+        setDetail(next);
+        for (const path of next.paths) {
+          writtenComments("path_point", path.template_id, userId)
+            .then((rows) => alive && setComments((cur) => ({ ...cur, [path.template_id]: rows })))
+            .catch(() => alive && setComments((cur) => ({ ...cur, [path.template_id]: [] })));
+        }
+      })
       .catch((err) => alive && setError(catalogError(err, t)));
     return () => {
       alive = false;
@@ -401,6 +413,11 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
                       {t("{{answers}} answers, {{wrong}} wrong", { answers: kp.answers, wrong: kp.wrong ?? 0 })}
                       {kp.stuck_days != null && ` · ${t("stuck for {{days}} days", { days: kp.stuck_days })}`}
                     </p>
+                  )}
+                  {/* Traceability #4: a word to the learner on a point not mastered yet or stuck. */}
+                  {kp.id && (!kp.mastered || kp.stuck_days != null) && (
+                    <CommentEditor kind="path_point" subject={path.template_id} target={kp.id} studentId={userId}
+                      preloaded={comments[path.template_id] ?? null} />
                   )}
                 </li>
               ))}

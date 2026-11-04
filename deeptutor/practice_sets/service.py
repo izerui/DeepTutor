@@ -399,7 +399,7 @@ class PracticeSetService:
         if questions is not None:
             sets.append("draft_questions_json = ?")
             values.append(json.dumps(normalize_questions(questions), ensure_ascii=False))
-        if due_at not in ("", None):
+        if due_at not in ("", None) or reveal == "after_due":
             from deeptutor.catalog.listings import status as listing_status
 
             if listing_status("practice_set", set_id) in ("pending", "listed"):
@@ -418,10 +418,14 @@ class PracticeSetService:
         with store.write() as conn:
             row = self._owned(conn, set_id)
             new_due = (float(due_at) if due_at is not None else None) if due_at != "" else row["due_at"]
+            new_reveal = reveal if reveal is not None else row["reveal"]
             if (
-                row["reveal"] == "after_due" and row["due_at"] is not None and _now() >= row["due_at"]
+                row["reveal"] == "after_due" and new_reveal == "after_due"
+                and row["due_at"] is not None and _now() >= row["due_at"]
                 and (new_due is None or new_due > row["due_at"])
             ):
+                # Switching to answers right after submitting in the same change is fine:
+                # nothing shown is hidden again (needed to clear a deadline for the market).
                 # R10: the answers were shown at the deadline; a later one would hide nothing.
                 raise PracticeConflict("The answers were already shown; the deadline can no longer move later.")
             if sets:
@@ -448,7 +452,8 @@ class PracticeSetService:
             } if conn else set()
         notify(
             reached - done, kind, {"title": title, **params},
-            link=f"/start?task=practice_set:{set_id}", dedupe_key=f"{kind}:practice_set:{set_id}:{params}",
+            # Straight to the set: once classes retire a set is no longer shown as a task (traceability #2).
+            link=f"/practice-sets?set={set_id}", dedupe_key=f"{kind}:practice_set:{set_id}:{params}",
         )
 
     def publish(self, set_id: str) -> dict[str, Any]:

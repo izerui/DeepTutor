@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAuthStatus } from "@/hooks/useAuthStatus";
-import { listCalendar, type CalendarEvent } from "@/lib/tasks-api";
+import { listCalendar, listMyTasks, type CalendarEvent } from "@/lib/tasks-api";
 
 const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 
@@ -21,9 +21,17 @@ export default function TaskCalendar() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
 
+  const author = isAdmin || isTeacher;
+  // Traceability #7: an author's own tasks open in the editor, others' under "Courses I joined".
+  const [mine, setMine] = useState<Set<string> | null>(null);
+
   useEffect(() => {
     listCalendar().then(setEvents).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
   }, [t]);
+  useEffect(() => {
+    if (!author) return;
+    listMyTasks().then((rows) => setMine(new Set(rows.map((row) => row.id)))).catch(() => setMine(new Set()));
+  }, [author]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -43,7 +51,11 @@ export default function TaskCalendar() {
     new Date(2024, 0, 1 + i).toLocaleDateString(i18n.language, { weekday: "short" }),
   );
   const link = (event: CalendarEvent) =>
-    isAdmin || isTeacher ? `/tasks?task=${encodeURIComponent(event.key)}` : `/start?task=${encodeURIComponent(event.key)}`;
+    !author
+      ? `/start?task=${encodeURIComponent(event.key)}`
+      : mine === null || mine.has(event.key)
+        ? `/tasks?task=${encodeURIComponent(event.key)}`
+        : `/tasks?tab=joined&task=${encodeURIComponent(event.key)}`;
 
   return (
     <div className="space-y-4">

@@ -12,8 +12,10 @@ import { listMySets, type PracticeSetSummary } from "@/lib/practice-sets-api";
 import {
   archiveTask,
   deleteTask,
+  getAssignedTask,
   getTask,
   gradeHomework,
+  handOverTask,
   homeworkFileUrl,
   listAssignedTasks,
   listMyTasks,
@@ -27,6 +29,7 @@ import {
 import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
 
 import { CourseAuthorView, StudentCourses } from "./Courses";
+import { HandOverPanel } from "./HandOver";
 import { StudentTaskDetail } from "./StudentTaskDetail";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
@@ -50,7 +53,7 @@ export default function TasksHub() {
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
           {isAdmin || isTeacher
             ? t("Edit the tasks of your courses, collect homework and grade it.")
-            : t("Everything your teachers assigned to you.")}
+            : t("Tasks from the courses you joined.")}
         </p>
       </header>
       {isAdmin || isTeacher ? <AuthorTabs isAdmin={isAdmin} /> : <StudentView />}
@@ -67,9 +70,11 @@ function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   // ``?course=`` (a notification about a joined course) opens what the author joined.
   const params = useSearchParams();
   const courseParam = params.get("course");
-  // ``?tab=courses`` returns from a course's learning report.
+  // ``?tab=courses`` returns from a course's learning report; ``?tab=joined&task=``
+  // opens a task of a course one joined (traceability #7).
+  const tabParam = params.get("tab");
   const [tab, setTab] = useState<"tasks" | "courses" | "joined">(
-    courseParam ? "joined" : params.get("tab") === "courses" ? "courses" : "tasks",
+    courseParam || tabParam === "joined" ? "joined" : tabParam === "courses" ? "courses" : "tasks",
   );
   const [openTask, setOpenTask] = useState<string | null>(null);
   const tabClass = (on: boolean) =>
@@ -302,6 +307,7 @@ function TargetPicker({
 
 function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChanged: () => void; onDeleted: () => void }) {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -408,6 +414,10 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
           </button>
         )}
       </div>
+      {/* Traceability #5: a task in no course goes on its own to a teacher who grades it. */}
+      {isAdmin && !task.course_id && (
+        <HandOverPanel handOver={(teacherId) => handOverTask(task.id, teacherId)} onDone={onDeleted} />
+      )}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 
       {!draft && <StudentsTable task={task} onChanged={(next) => { setTask(next); onChanged(); }} />}
@@ -526,18 +536,33 @@ export function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; s
 
 function StudentView() {
   const { t } = useTranslation();
-  const courseParam = useSearchParams().get("course");
+  const params = useSearchParams();
+  const courseParam = params.get("course");
+  // ``?task=`` (a notification's link, or ``/start?task=`` for a teacher) opens that task.
+  const taskParam = params.get("task");
   const [tasks, setTasks] = useState<AssignedTask[] | null>(null);
   const [selected, setSelected] = useState<AssignedTask | null>(null);
   const [error, setError] = useState("");
+  const [taskError, setTaskError] = useState("");
   const refresh = useCallback(() => {
     listAssignedTasks().then(setTasks).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
   }, [t]);
   useEffect(refresh, [refresh]);
+  useEffect(() => {
+    if (!taskParam) return;
+    let alive = true;
+    getAssignedTask(taskParam)
+      .then((task) => alive && (setSelected(task), setTaskError("")))
+      .catch(() => alive && setTaskError(t("This task is no longer available.")));
+    return () => {
+      alive = false;
+    };
+  }, [taskParam, t]);
   if (error) return <p role="alert" className="text-[12px] text-red-600">{error}</p>;
   if (!tasks) return <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />;
   return (
     <div className="space-y-4">
+      {taskError && <p role="alert" className="text-[12px] text-red-600">{taskError}</p>}
       {selected && <StudentTaskDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); }} />}
       <StudentCourses courseId={courseParam} onOpenTask={setSelected} />
       {tasks.length === 0 ? (

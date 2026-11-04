@@ -55,6 +55,12 @@ export function actionLabel(action: ListingAction, isAdmin: boolean, t: Translat
   }
 }
 
+/** The server's ``not_ready`` for content that is still private (traceability #8). */
+export const PRIVATE_NOT_READY: readonly string[] = [
+  "Make the book public first.",
+  "Make the knowledge base public first.",
+];
+
 /** What still keeps the form from being submitted; empty when complete. */
 export function missingField(fields: ListingFields, t: Translate): string {
   if (!fields.title.trim()) return t("Give it a title.");
@@ -89,6 +95,7 @@ export function ListingPanel({
   onChanged,
   onStatus,
   reloadKey,
+  makePublic,
 }: {
   kind: CatalogKind;
   itemId: string;
@@ -97,6 +104,11 @@ export function ListingPanel({
   onStatus?: (status: ListingStatus) => void;
   /** Read the listing again when this changes (the item was saved, so ``not_ready`` may have changed). */
   reloadKey?: string;
+  /**
+   * Traceability #8: makes a private book or knowledge base public (for those who
+   * join only). Given, a private item is made public and submitted in one step.
+   */
+  makePublic?: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const { isAdmin, isTeacher, enabled, loading } = useAuthStatus();
@@ -164,14 +176,21 @@ export function ListingPanel({
     }
   };
   const save = () => saveListing(kind, itemId, fields);
+  // Still private: the submit (or put back) also makes it public first.
+  const privateItem = Boolean(makePublic) && PRIVATE_NOT_READY.includes(listing.not_ready ?? "");
   const act = (action: ListingAction) =>
     run(async () => {
       if (action === "submit" && (dirty || listing.status === "none")) await save();
+      if (privateItem && (action === "submit" || action === "relist")) await makePublic!();
       return listingAction(kind, itemId, action);
     }, action === "submit" ? (isAdmin ? t("It is in the market now.") : t("Submitted for review.")) : t("Done."));
 
   const showReason = (listing.status === "rejected" || listing.status === "taken_down") && listing.reason;
-  const submitBlocked = Boolean(listing.not_ready) || Boolean(missing);
+  const submitBlocked = (Boolean(listing.not_ready) && !privateItem) || Boolean(missing);
+  const label = (action: ListingAction) =>
+    privateItem && action === "submit"
+      ? isAdmin ? t("Make public and list now") : t("Make public and submit for review")
+      : privateItem && action === "relist" ? t("Make public and put back") : actionLabel(action, isAdmin, t);
 
   return (
     <section aria-labelledby={`listing-${kind}-${itemId}`} className="space-y-3 rounded-xl border border-[var(--border)] p-3" data-testid="listing-panel">
@@ -228,8 +247,12 @@ export function ListingPanel({
         </div>
       </fieldset>
 
-      {listing.not_ready && <p className="text-[12px] text-amber-700 dark:text-amber-300">{t(listing.not_ready)}</p>}
-      {!listing.not_ready && missing && buttons.includes("submit") && (
+      {privateItem ? (
+        <p className="text-[12px] text-[var(--muted-foreground)]">
+          {t("It is still private. It becomes public when you submit; only people who join it can read it.")}
+        </p>
+      ) : listing.not_ready && <p className="text-[12px] text-amber-700 dark:text-amber-300">{t(listing.not_ready)}</p>}
+      {(!listing.not_ready || privateItem) && missing && buttons.includes("submit") && (
         <p className="text-[12px] text-[var(--muted-foreground)]">{missing}</p>
       )}
 
@@ -243,7 +266,7 @@ export function ListingPanel({
           <button key={action} type="button" className={action === "submit" || action === "relist" ? primaryClass : actionClass}
             disabled={busy || (action === "submit" && submitBlocked)}
             onClick={() => void act(action)}>
-            {actionLabel(action, isAdmin, t)}
+            {label(action)}
           </button>
         ))}
       </div>

@@ -27,6 +27,6 @@ it("labels a teacher's item as published by them, for students and teachers alik
   expect(provenanceLabel({ kind: "shared", name: "sam" }, t, false)).toBe("Shared by sam");
   expect(provenanceLabel({ kind: "school", name: "" }, t, true)).toBe("Published by the platform");
   expect(provenanceLabel(undefined, t, true)).toBe("Mine");
-  expect(provenanceGroupTitle("teacher", t, true)).toBe("From my teachers");
+  expect(provenanceGroupTitle("teacher", t, true)).toBe("Published by teachers");
   expect(provenanceGroupTitle("teacher", t, false)).toBe("From other teachers");
 });

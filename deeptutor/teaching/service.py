@@ -744,7 +744,7 @@ class TeachingService:
                 {a.student_user_id for a in self.store.list_assignments(template.id) if a.status == "active"},
                 "content_published",
                 {"content": "mastery_path", "title": template.title, "teacher": user.username},
-                link=f"/start?task=mastery_path:{template.id}", dedupe_key=f"content_published:mastery_path:{template.id}",
+                link=f"/learning/mastery/assigned_{template.id}", dedupe_key=f"content_published:mastery_path:{template.id}",
             )
         return warnings
 

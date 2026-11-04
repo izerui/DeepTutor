@@ -77,7 +77,7 @@ it("keeps what teachers assigned apart from the student's own learning", async (
     mine: [{ path_id: "topic_1", name: "My algebra", mastered: 2, total: 5, updated_at: 1 }],
   });
   render(<StudentHome />);
-  expect(await screen.findByRole("heading", { name: "From my teachers" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "From my courses" })).toBeTruthy();
   expect(screen.getByText("Essay")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "New in the market" })).toBeTruthy();
   expect(screen.getByRole("link", { name: /School handbook/ }).getAttribute("href")).toBe("/market/item?kind=book&id=b1");

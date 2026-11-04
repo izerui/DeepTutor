@@ -44,6 +44,10 @@ def _reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
     actor = _actor(user_id, account)
     token = set_current_user(actor)
     try:
+        from deeptutor.publishing.scope import reconcile_student
+
+        # As opening the learning list would: stale path assignments are settled first.
+        reconcile_student(user_id)
         teaching = TeachingStore()
         out: dict[str, Any] = {
             "practice_set": sorted(s["id"] for s in PracticeSetService(actor).assigned()),
@@ -73,12 +77,29 @@ def _reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
         reset_current_user(token)
 
 
-def _everyone_items() -> set[tuple[str, str]]:
-    """Items published to everyone before the migration (they go to the market, joined only by who started)."""
-    from deeptutor.catalog.migration import _candidates
+def _everyone_items() -> dict[tuple[str, str], set[str]]:
+    """Items published to everyone before the migration -> who had started on them.
+
+    They go to the market; only who started joins. Losing one is by design only
+    for someone who never started it.
+    """
+    from deeptutor.catalog import items
+    from deeptutor.catalog.migration import _candidates, _starters
     from deeptutor.classes.service import _accounts
 
-    return set(_candidates(_accounts()))
+    accounts = _accounts()
+    out = {}
+    for kind, item_id in _candidates(accounts):
+        owner = items.owner(kind, item_id) or ""
+        out[(kind, item_id)] = _starters(kind, item_id, owner, accounts)
+    return out
+
+
+def _safe_reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _reach(user_id, account)
+    except Exception as exc:  # one broken account must not stop the check
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def run() -> dict[str, Any]:
@@ -87,28 +108,35 @@ def run() -> dict[str, Any]:
 
     accounts = {u: a for u, a in _accounts().items() if not a["disabled"] and a["role"] != "admin"}
     everyone = _everyone_items()
-    before = {u: _reach(u, a) for u, a in sorted(accounts.items())}
+    before = {u: _safe_reach(u, a) for u, a in sorted(accounts.items())}
     migration.run()
     retired = retire_classes.run()
-    after = {u: _reach(u, a) for u, a in sorted(accounts.items())}
+    after = {u: _safe_reach(u, a) for u, a in sorted(accounts.items())}
     people = []
     unexpected_total = 0
     for user_id, account in sorted(accounts.items(), key=lambda kv: kv[1]["username"]):
         lost: dict[str, list[str]] = {}
         expected: dict[str, list[str]] = {}
+        errors = [f"{when}: {snap['error']}" for when, snap in (("before", before[user_id]), ("after", after[user_id]))
+                  if "error" in snap]
         for kind in ("practice_set", "mastery_path", "task", "course", "book", "knowledge_base"):
+            if errors:
+                break
             for item_id in sorted(set(before[user_id][kind]) - set(after[user_id][kind])):
-                bucket = expected if (kind, item_id) in everyone else lost
+                started = everyone.get((kind, item_id))
+                by_design = started is not None and user_id not in started
+                bucket = expected if by_design else lost
                 bucket.setdefault(kind, []).append(item_id)
-        changed = {
+        changed = {} if errors else {
             key: {"before": before[user_id].get(key), "after": after[user_id].get(key)}
             for key in ("policy", "ai_daily_tokens") if before[user_id].get(key) != after[user_id].get(key)
         }
-        unexpected = sum(len(v) for v in lost.values()) + len(changed)
+        unexpected = sum(len(v) for v in lost.values()) + len(changed) + len(errors)
         unexpected_total += unexpected
         people.append({
             "username": account["username"], "role": account["role"], "lost": lost,
-            "not_started_everyone_items": expected, "abilities_changed": changed, "ok": unexpected == 0,
+            "not_started_everyone_items": expected, "abilities_changed": changed, "errors": errors,
+            "ok": unexpected == 0,
         })
     return {"classes_retired": retired or retire_classes.retired(), "people": people, "problems": unexpected_total}
 
@@ -132,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
                 line += f"  LOST {person['lost']}"
             if person["abilities_changed"]:
                 line += f"  ABILITIES {person['abilities_changed']}"
+            if person["errors"]:
+                line += f"  ERROR {person['errors']}"
             if person["not_started_everyone_items"]:
                 count = sum(len(v) for v in person["not_started_everyone_items"].values())
                 line += f"  (by design: {count} item(s) published to everyone, never started, now in the market)"

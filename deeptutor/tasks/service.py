@@ -90,6 +90,20 @@ def _accounts() -> dict[str, dict[str, Any]]:
 # ── targets ────────────────────────────────────────────────
 
 
+def _hand_tasks_to(conn, admin_id: str, teacher_id: str, task_ids: list[str]) -> int:
+    """Inside a write: the administrator's tasks among *task_ids* go to an active teacher."""
+    account = _accounts().get(teacher_id) or {}
+    if account.get("role") != "teacher" or account.get("disabled"):
+        raise TaskError("Choose an active teacher.")
+    if not task_ids:
+        return 0
+    marks = ",".join("?" for _ in task_ids)
+    return int(conn.execute(
+        f"UPDATE tasks SET owner_user_id = ?, updated_at = ? WHERE owner_user_id = ? AND id IN ({marks})",  # nosec B608
+        (teacher_id, _now(), admin_id, *task_ids),
+    ).rowcount)
+
+
 def _check_attempt(current: int, seen: int | None) -> None:
     if seen is not None and int(current) != int(seen):
         raise TaskConflict("The student handed in again just now. Reload before grading.")
@@ -465,6 +479,19 @@ class TaskService:
         if published and "due_at" in sets and sets["due_at"] != row["due_at"]:
             self._notify_open(row, "task_due_changed", {"due_at": sets["due_at"]})
         return self.get(task_id)
+
+    def hand_over(self, task_id: str, teacher_id: str) -> dict[str, Any]:
+        """An administrator gives a task they hold (and its homework) to a teacher (traceability #5)."""
+        if _role(self.actor) != "admin":
+            raise TaskError("Only administrators hand tasks over.")
+        with db.write() as conn:
+            self._owned(conn, task_id)
+            _hand_tasks_to(conn, self.actor.id, teacher_id, [task_id])
+        from deeptutor.notifications.service import notify
+
+        notify([teacher_id], "tasks_transferred", {"count": 1}, link=f"/tasks?task={task_id}",
+               dedupe_key=f"task_handed_over:{task_id}:{teacher_id}")
+        return {"id": task_id, "owner_user_id": teacher_id}
 
     def publish(self, task_id: str, *, quiet: bool = False) -> dict[str, Any]:
         """Check what it names, settle its receivers (§3.2), then publish and notify.
