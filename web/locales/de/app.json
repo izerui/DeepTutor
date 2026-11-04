@@ -5986,5 +5986,6 @@
   "settings.modelImport.unverified": "Einige Modelle geben keinen Typ an. Teste sie, bevor du sie mit diesem Dienst verwendest.",
   "settings.modelImport.draftHint": "Modelle werden zum Entwurf hinzugefügt. Änderungen anwenden, um sie zu speichern; das Standardmodell bleibt gleich.",
   "settings.modelImport.selected": "Ausgewählt: {{count}}",
-  "Search models…": "Modelle suchen…"
+  "Search models…": "Modelle suchen…",
+  "Playback speed": "Wiedergabegeschwindigkeit"
 }

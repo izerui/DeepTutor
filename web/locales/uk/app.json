@@ -6030,5 +6030,6 @@
   "settings.modelImport.unverified": "Деякі моделі не вказують тип. Перевірте їх перед використанням для цієї служби.",
   "settings.modelImport.draftHint": "Моделі додаються до чернетки. Застосуйте зміни, щоб зберегти їх; типова модель залишається незмінною.",
   "settings.modelImport.selected": "Вибрано: {{count}}",
-  "Search models…": "Пошук моделей…"
+  "Search models…": "Пошук моделей…",
+  "Playback speed": "Швидкість відтворення"
 }

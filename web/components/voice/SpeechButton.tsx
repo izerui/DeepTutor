@@ -36,17 +36,25 @@ export function PlayAudioButton({
   autoPlayFresh,
   selection = false,
   className,
+  playbackRate = 1,
 }: {
   content: string
   conversationKey?: string
   autoPlayFresh: boolean
   selection?: boolean
   className?: string
+  playbackRate?: number
 }) {
   const { t } = useTranslation()
   const { autoplayEnabled } = useVoiceAutoplay(conversationKey)
   const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle')
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const rateRef = useRef(playbackRate)
+  useEffect(() => {
+    rateRef.current = playbackRate
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate
+  }, [playbackRate])
+
   const urlRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const genRef = useRef(0)
@@ -125,6 +133,7 @@ export function PlayAudioButton({
       urlRef.current = url
       audio.src = url
       audio.load()
+      audio.playbackRate = rateRef.current
       audio.onended = () => {
         if (gen !== genRef.current) return
         setState('idle')

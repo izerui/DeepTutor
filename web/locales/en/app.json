@@ -5986,5 +5986,6 @@
   "settings.modelImport.unverified": "Some models do not declare their type. Test them before using them for this service.",
   "settings.modelImport.draftHint": "Models are added to your draft. Apply changes to save them; the default model stays the same.",
   "settings.modelImport.selected": "Selected: {{count}}",
-  "Search models…": "Search models…"
+  "Search models…": "Search models…",
+  "Playback speed": "Playback speed"
 }
