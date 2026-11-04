@@ -8,8 +8,16 @@ import { useTranslation } from "react-i18next";
 
 import { actionClass } from "@/components/classes/ClassesHub";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
-import { CATALOG_KINDS, getCatalogItem, type CatalogItemDetail, type CatalogKind } from "@/lib/catalog-api";
+import {
+  CATALOG_KINDS,
+  getCatalogItem,
+  REPORT_KINDS,
+  type CatalogItemDetail,
+  type CatalogKind,
+  type ReportKind,
+} from "@/lib/catalog-api";
 
+import { AnnouncementsPanel } from "./Announcements";
 import { authorHref, authorLabel, catalogError, formatDay, kindLabel, STATUS_TONE, statusLabel } from "./catalog-format";
 import { CatalogPreview } from "./CatalogPreview";
 import { JoinButton } from "./JoinButton";
@@ -57,6 +65,8 @@ export default function ItemIntro() {
   }
 
   const classification = [...item.stages, ...item.subjects].map(nameOf);
+  // Platform batch 3 §3: a course's or a path's announcements, for who joined it and its author.
+  const hasLearners = REPORT_KINDS.includes(item.kind as ReportKind);
   return (
     <article className="space-y-5" data-testid="item-intro">
       {back}
@@ -82,8 +92,17 @@ export default function ItemIntro() {
             {t("Manage listing")}
           </button>
         )}
+        {item.mine && hasLearners && (
+          <Link href={`/reports?kind=${encodeURIComponent(item.kind)}&id=${encodeURIComponent(item.id)}`} className={actionClass}>
+            {t("Learning report")}
+          </Link>
+        )}
       </div>
       {item.mine && managing && <ListingPanel kind={item.kind} itemId={item.id} onChanged={load} />}
+
+      {hasLearners && (item.mine || item.joined) && (
+        <AnnouncementsPanel kind={item.kind as ReportKind} itemId={item.id} canPost={item.mine} />
+      )}
 
       {item.summary && <p className="whitespace-pre-line text-[13.5px] leading-relaxed">{item.summary}</p>}
 

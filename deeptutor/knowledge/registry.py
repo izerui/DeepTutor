@@ -772,8 +772,10 @@ def unregister_kb(kb_id: str) -> None:
         _revoke(conn, record, _references_of(conn, record.kb_id), reason="kb_deleted")
         conn.execute("DELETE FROM kb_registry WHERE kb_id = ?", (record.kb_id,))
     from deeptutor.catalog.listings import forget
+    from deeptutor.catalog.material_notice import notify_lost
 
     forget("knowledge_base", record.kb_id)
+    notify_lost("knowledge_base", record.kb_id, owner=record.created_by, name=record.name)  # batch 3 §6
 
 
 @contextmanager
@@ -919,8 +921,10 @@ def set_visibility(
         raise KbRegistryError(f"Knowledge base {kb_id} disappeared after visibility update.")
     if visibility == "private":
         from deeptutor.catalog.listings import content_closed
+        from deeptutor.catalog.material_notice import notify_lost
 
         content_closed("knowledge_base", record.kb_id)  # platform batch 1 §2
+        notify_lost("knowledge_base", record.kb_id, owner=record.created_by, name=record.name)  # batch 3 §6
     return updated
 
 
@@ -1573,6 +1577,11 @@ def can_read(record: KbRecord, user: CurrentUser) -> bool:
         return True
     if not classification_is_consistent(record):
         return False
+    from deeptutor.catalog.enrollment import access_state
+
+    if access_state("knowledge_base", record.kb_id)[0]:
+        # Taken down (platform batch 3 §6): not through a path citing it either.
+        return bool(user.is_admin and record.visibility == "public")
     connector = is_connector(record)
     if record.visibility == "public" and not connector:
         from deeptutor.publishing.scope import KNOWLEDGE_BASE, allows

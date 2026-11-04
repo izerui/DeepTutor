@@ -65,8 +65,12 @@ export default function TasksHub() {
 function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
   // ``?course=`` (a notification about a joined course) opens what the author joined.
-  const courseParam = useSearchParams().get("course");
-  const [tab, setTab] = useState<"tasks" | "courses" | "joined">(courseParam ? "joined" : "tasks");
+  const params = useSearchParams();
+  const courseParam = params.get("course");
+  // ``?tab=courses`` returns from a course's learning report.
+  const [tab, setTab] = useState<"tasks" | "courses" | "joined">(
+    courseParam ? "joined" : params.get("tab") === "courses" ? "courses" : "tasks",
+  );
   const [openTask, setOpenTask] = useState<string | null>(null);
   const tabClass = (on: boolean) =>
     `rounded-lg px-3 py-1.5 text-[13px] ${on ? "bg-[var(--muted)] font-medium text-[var(--foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`;

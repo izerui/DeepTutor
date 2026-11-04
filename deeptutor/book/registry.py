@@ -687,10 +687,14 @@ def unregister_book(book_id: str) -> None:
     """Revoke, unregister and release KBs together; services guard physical deletion."""
     from .sharing import unregister
 
+    record = get_book(book_id)
     unregister(book_id)
     from deeptutor.catalog.listings import forget
+    from deeptutor.catalog.material_notice import notify_lost
 
     forget("book", _validate_id(strip_ref(book_id)))
+    if record is not None:
+        notify_lost("book", record.book_id, owner=record.created_by, name=record.title)  # batch 3 §6
 
 
 def _relocate_book(conn: sqlite3.Connection, book_id: str, base_dir: Path | str) -> None:
@@ -805,6 +809,11 @@ def _read_decision(
 
     if owns(current.created_by, user):
         return True
+    from deeptutor.catalog.enrollment import access_state
+
+    if access_state("book", current.book_id)[0]:
+        # Taken down (platform batch 3 §6): not through a path citing it either.
+        return bool(user.is_admin and current.visibility == "public")
     if current.visibility == "public":
         from deeptutor.publishing.scope import BOOK, allows
 
@@ -1028,8 +1037,10 @@ def set_book_visibility(
         )
     if visibility == "private":
         from deeptutor.catalog.listings import content_closed
+        from deeptutor.catalog.material_notice import notify_lost
 
         content_closed("book", record.book_id)  # platform batch 1 §2
+        notify_lost("book", record.book_id, owner=record.created_by, name=record.title)  # batch 3 §6
     return record
 
 

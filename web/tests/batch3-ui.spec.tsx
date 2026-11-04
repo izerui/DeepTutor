@@ -80,7 +80,7 @@ it("makes a remedial draft and hands its suggested students to the editor", asyn
   expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
 });
 
-it("lays out the workbench: hand-ins and what was sent, no classes or attention (platform batch 2)", async () => {
+it("lays out the workbench: hand-ins, attention and what was sent, no classes", async () => {
   workbench.getWorkbench.mockResolvedValue({
     role: "teacher",
     to_grade: [{ task_id: "t1", task_title: "Essay", student_id: "u_sara", username: "sara", submitted_at: 1, late: true, attempt: 1 }],
@@ -94,6 +94,7 @@ it("lays out the workbench: hand-ins and what was sent, no classes or attention 
   expect(screen.getByText("1 / 2 done")).toBeTruthy();
   expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
   expect(screen.queryByRole("heading", { name: /Students who need attention/ })).toBeNull();
+  expect(screen.getByText("Everyone is on track.")).toBeTruthy();
 });
 
 it("filters the class report to students who need attention and changes the period", async () => {

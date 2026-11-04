@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
 import { SourceBadge } from "@/components/common/SourceBadge";
+import { AnnouncementsPanel } from "@/components/catalog/Announcements";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
 import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import {
@@ -239,6 +240,18 @@ function CourseEditor({
         </>
       )}
       {course.status === "published" && <ListingPanel kind="course" itemId={course.id} onChanged={onChanged} />}
+      {course.status === "published" && (
+        <>
+          {/* Platform batch 3 §1, §3: how its learners are doing, and announcements to them. */}
+          {/* Administrators do not read learning data (D2). */}
+          {!isAdmin && (
+            <Link href={`/reports?kind=course&id=${encodeURIComponent(course.id)}`} className={actionClass}>
+              {t("Learning report")}
+            </Link>
+          )}
+          <AnnouncementsPanel kind="course" itemId={course.id} canPost />
+        </>
+      )}
       <div className="flex flex-wrap gap-2">
         {course.status === "draft" && (
           <button type="button" className={primaryClass} disabled={course.tasks.length === 0}
@@ -304,6 +317,7 @@ export function StudentCourses({
             {open === course.id && (
               <div className="mt-2 space-y-2">
                 {course.description && <p className="whitespace-pre-line text-[12.5px]">{course.description}</p>}
+                <AnnouncementsPanel kind="course" itemId={course.id} />
                 <ol className="space-y-1">
                   {course.tasks.map((task, index) => (
                     <li key={task.key}>

@@ -16,7 +16,17 @@ export interface ToGrade {
 export interface Workbench {
   role: string;
   to_grade?: ToGrade[];
-  attention?: { student_id: string; username: string; class_id: string; flags: AttentionFlag[] }[];
+  /**
+   * Platform batch 3 §2: learners of this teacher's content; ``item`` is one
+   * course or path they joined (its report), ``null`` on an older install.
+   */
+  attention?: {
+    student_id: string;
+    username: string;
+    class_id: string;
+    item?: { kind: "course" | "mastery_path"; id: string; title: string } | null;
+    flags: AttentionFlag[];
+  }[];
   attention_total?: number;
   classes?: { id: string; name: string; student_count: number; active_this_week: number }[];
   sent?: {

@@ -67,6 +67,9 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("{{teacher}} commented on “{{title}}”", { teacher: p.teacher, title });
     case "class_announcement":
       return t("{{teacher}} posted an announcement in {{name}}", { teacher: p.teacher, name: p.class_name });
+    // Platform batch 3 §3: an announcement in a course or a Mastery Path one joined.
+    case "content_announcement":
+      return t("{{teacher}} posted an announcement in “{{title}}”", { teacher: p.teacher, title });
     case "task_opened":
       return t("“{{title}}” is open now", { title });
     case "course_published":

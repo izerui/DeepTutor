@@ -1486,6 +1486,41 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/catalog/announcements/{announcement_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Update Announcement */
+    readonly put: operations["update_announcement_api_catalog_announcements__announcement_id__put"];
+    readonly post?: never;
+    /** Delete Announcement */
+    readonly delete: operations["delete_announcement_api_catalog_announcements__announcement_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/announcements/mine": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** My Announcements */
+    readonly get: operations["my_announcements_api_catalog_announcements_mine_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/catalog/authors/{author_id}": {
     readonly parameters: {
       readonly query?: never;
@@ -1531,6 +1566,24 @@ export interface paths {
     readonly get: operations["item_api_catalog_items__kind___item_id__get"];
     readonly put?: never;
     readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/announcements": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Item Announcements */
+    readonly get: operations["item_announcements_api_catalog_items__kind___item_id__announcements_get"];
+    readonly put?: never;
+    /** Post Announcement */
+    readonly post: operations["post_announcement_api_catalog_items__kind___item_id__announcements_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -1650,6 +1703,74 @@ export interface paths {
     };
     /** My Listings */
     readonly get: operations["my_listings_api_catalog_listings_mine_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/reports/{kind}/{item_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Learner Report */
+    readonly get: operations["learner_report_api_catalog_reports__kind___item_id__get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/reports/{kind}/{item_id}/export": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Learner Report Export */
+    readonly get: operations["learner_report_export_api_catalog_reports__kind___item_id__export_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/reports/{kind}/{item_id}/learners/{user_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Learner Detail */
+    readonly get: operations["learner_detail_api_catalog_reports__kind___item_id__learners__user_id__get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/reports/{kind}/{item_id}/points/{template_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Learner Report Points */
+    readonly get: operations["learner_report_points_api_catalog_reports__kind___item_id__points__template_id__get"];
     readonly put?: never;
     readonly post?: never;
     readonly delete?: never;
@@ -13513,6 +13634,19 @@ export interface components {
        */
       readonly source_anchor: string;
     };
+    /** AnnouncementBody */
+    readonly AnnouncementBody: {
+      /**
+       * Pinned
+       * @default false
+       */
+      readonly pinned: boolean;
+      /**
+       * Text
+       * @default
+       */
+      readonly text: string;
+    };
     /** AnnouncementPost */
     readonly AnnouncementPost: {
       /**
@@ -13522,13 +13656,6 @@ export interface components {
       readonly pinned: boolean;
       /** Text */
       readonly text: string;
-    };
-    /** AnnouncementUpdate */
-    readonly AnnouncementUpdate: {
-      /** Pinned */
-      readonly pinned?: boolean | null;
-      /** Text */
-      readonly text?: string | null;
     };
     /**
      * AnswerImageItem
@@ -14904,6 +15031,20 @@ export interface components {
       readonly book_id: string;
       /** Page Id */
       readonly page_id: string;
+    };
+    /** AnnouncementUpdate */
+    readonly deeptutor__api__routers__catalog__AnnouncementUpdate: {
+      /** Pinned */
+      readonly pinned?: boolean | null;
+      /** Text */
+      readonly text?: string | null;
+    };
+    /** AnnouncementUpdate */
+    readonly deeptutor__api__routers__classes__AnnouncementUpdate: {
+      /** Pinned */
+      readonly pinned?: boolean | null;
+      /** Text */
+      readonly text?: string | null;
     };
     /** LLMSelectionPayload */
     readonly deeptutor__api__routers__co_writer__LLMSelectionPayload: {
@@ -20139,9 +20280,8 @@ export type SchemaAdminPasswordReset =
 export type SchemaAnnotationInfo = components["schemas"]["AnnotationInfo"];
 export type SchemaAnnotationPayload =
   components["schemas"]["AnnotationPayload"];
+export type SchemaAnnouncementBody = components["schemas"]["AnnouncementBody"];
 export type SchemaAnnouncementPost = components["schemas"]["AnnouncementPost"];
-export type SchemaAnnouncementUpdate =
-  components["schemas"]["AnnouncementUpdate"];
 export type SchemaAnswerImageItem = components["schemas"]["AnswerImageItem"];
 export type SchemaAnswerImageUpload =
   components["schemas"]["AnswerImageUpload"];
@@ -20299,6 +20439,10 @@ export type SchemaDedupRequest = components["schemas"]["DedupRequest"];
 export type SchemaDeepDiveRequest = components["schemas"]["DeepDiveRequest"];
 export type SchemaDeeptutorApiRoutersBookProgressRequest =
   components["schemas"]["deeptutor__api__routers__book__ProgressRequest"];
+export type SchemaDeeptutorApiRoutersCatalogAnnouncementUpdate =
+  components["schemas"]["deeptutor__api__routers__catalog__AnnouncementUpdate"];
+export type SchemaDeeptutorApiRoutersClassesAnnouncementUpdate =
+  components["schemas"]["deeptutor__api__routers__classes__AnnouncementUpdate"];
 export type SchemaDeeptutorApiRoutersCoWriterLlmSelectionPayload =
   components["schemas"]["deeptutor__api__routers__co_writer__LLMSelectionPayload"];
 export type SchemaDeeptutorApiRoutersMemoryLlmSelectionPayload =
@@ -24037,6 +24181,119 @@ export interface operations {
       };
     };
   };
+  readonly update_announcement_api_catalog_announcements__announcement_id__put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly announcement_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["deeptutor__api__routers__catalog__AnnouncementUpdate"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_announcement_api_catalog_announcements__announcement_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly announcement_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly my_announcements_api_catalog_announcements_mine_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly author_api_catalog_authors__author_id__get: {
     readonly parameters: {
       readonly query?: never;
@@ -24134,6 +24391,86 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly item_announcements_api_catalog_items__kind___item_id__announcements_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly post_announcement_api_catalog_items__kind___item_id__announcements_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["AnnouncementBody"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -24472,6 +24809,162 @@ export interface operations {
         readonly Authorization?: string | null;
       };
       readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly learner_report_api_catalog_reports__kind___item_id__get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly days?: number | null;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly learner_report_export_api_catalog_reports__kind___item_id__export_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly days?: number | null;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly learner_detail_api_catalog_reports__kind___item_id__learners__user_id__get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+        readonly user_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly learner_report_points_api_catalog_reports__kind___item_id__points__template_id__get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+        readonly template_id: string;
+      };
       readonly cookie?: {
         readonly dt_token?: string | null;
       };
@@ -25633,7 +26126,7 @@ export interface operations {
     };
     readonly requestBody: {
       readonly content: {
-        readonly "application/json": components["schemas"]["AnnouncementUpdate"];
+        readonly "application/json": components["schemas"]["deeptutor__api__routers__classes__AnnouncementUpdate"];
       };
     };
     readonly responses: {

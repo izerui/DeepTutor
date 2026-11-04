@@ -10,6 +10,7 @@ import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import { AiUsageNote } from "./AiUsage";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
 import { authorLabel, itemHref, kindLabel } from "@/components/catalog/catalog-format";
+import type { HomeAnnouncement } from "@/lib/catalog-api";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData } from "@/lib/tasks-api";
 
@@ -31,6 +32,44 @@ function TaskCard({ task, onOpen, selected }: { task: AssignedTask; onOpen: () =
         {task.due_at ? t("Due {{date}}", { date: formatWhen(task.due_at) }) : ""}
       </span>
     </button>
+  );
+}
+
+/** Where an announcement's item opens for a learner: the course, or the path's intro. */
+export function announcementHref(item: HomeAnnouncement): string | null {
+  if (!item.item_id) return null;
+  if (item.kind === "course") return `/tasks?course=${encodeURIComponent(item.item_id)}`;
+  if (item.kind === "mastery_path") return itemHref("mastery_path", item.item_id);
+  return null;
+}
+
+/** Platform batch 3 §3: the newest announcements of the courses and paths one joined. */
+export function HomeAnnouncements({ items }: { items: HomeAnnouncement[] }) {
+  const { t } = useTranslation();
+  if (!items.length) return null;
+  return (
+    <section aria-labelledby="home-announcements" className="space-y-2">
+      <h2 id="home-announcements" className="text-[13px] font-semibold">{t("Announcements")}</h2>
+      <ul className="space-y-2">
+        {items.map((item) => {
+          const title = item.item_title || item.class_name || "";
+          const href = announcementHref(item);
+          return (
+            <li key={item.id} className="rounded-xl border border-[var(--border)] p-3 text-[12.5px]">
+              <p className="whitespace-pre-line text-[var(--foreground)]">{item.text}</p>
+              <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                {href ? (
+                  <Link href={href} className="text-[var(--primary)] hover:underline">{title}</Link>
+                ) : (
+                  title
+                )}
+                {" · "}{item.author || t("Former teacher")} · {formatWhen(item.created_at)}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -96,7 +135,7 @@ export default function StudentHome() {
         <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : (
         <>
-          {/* Platform batch 2 §3: class announcements are gone (course announcements come in batch 3). */}
+          <HomeAnnouncements items={home.announcements ?? []} />
           <section aria-labelledby="home-assigned" className="space-y-3">
             <h2 id="home-assigned" className="text-[13px] font-semibold">{t("From my teachers")}</h2>
             {home.assigned.length === 0 ? (

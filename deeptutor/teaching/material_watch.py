@@ -83,7 +83,8 @@ def watching(kind: str, item_id: str) -> Iterator[None]:
     """Around a change to a book's or knowledge base's reach: tell authors whose students lost it."""
     from deeptutor.publishing import scope as scopes
 
-    if kind not in (scopes.KNOWLEDGE_BASE, scopes.BOOK):
+    if kind not in (scopes.KNOWLEDGE_BASE, scopes.BOOK) or scopes.classes_retired():
+        # Once classes are retired, catalog.material_notice tells authors instead (platform batch 3 §6).
         yield
         return
     try:

@@ -161,7 +161,8 @@ export const submitHomework = (taskId: string, text: string, files: File[]) => {
 };
 
 export interface HomeData {
-  announcements?: import("./classes-api").Announcement[];
+  /** Platform batch 3 §3: the newest announcements of what one joined. */
+  announcements?: import("./catalog-api").HomeAnnouncement[];
   assigned: AssignedTask[];
   history_count: number;
   /** Platform batch 1 §5.3: newly listed in the market (30 days, at most 6). */

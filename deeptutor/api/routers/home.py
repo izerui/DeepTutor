@@ -18,6 +18,12 @@ SCHOOL_LIMIT = 6
 MINE_LIMIT = 4
 
 
+def _content_announcements() -> list[dict[str, Any]]:
+    from deeptutor.catalog.announcements import AnnouncementService as ContentAnnouncements
+
+    return ContentAnnouncements().mine()
+
+
 def _market() -> list[dict[str, Any]]:
     """Platform batch 1 §5.3: newly listed in the market, for everyone."""
     import time
@@ -76,8 +82,8 @@ async def home() -> dict[str, Any]:
         retired = classes_retired()
         for name, loader in (
             ("market", _market), ("mine", _mine), ("mine_courses", _mine_courses),
-            # Platform batch 2 §3: class announcements go with the classes.
-            ("announcements", (lambda: []) if retired else AnnouncementService().for_home),
+            # Platform batch 3 §3: announcements of the courses and paths one joined.
+            ("announcements", _content_announcements if retired else AnnouncementService().for_home),
         ):
             try:
                 sections[name] = loader()

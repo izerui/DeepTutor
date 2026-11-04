@@ -98,7 +98,7 @@ export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onC
             {submission.late ? ` · ${t("Late")}` : ""}
             {submission.status === "graded" && submission.class_average != null && (
               <span className="ml-2 font-normal text-[var(--muted-foreground)]">
-                {t("Class average {{score}} / {{max}}", { score: submission.class_average, max: task.settings.max_score ?? 100 })}
+                {t("Learners' average {{score}} / {{max}}", { score: submission.class_average, max: task.settings.max_score ?? 100 })}
               </span>
             )}
           </p>

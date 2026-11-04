@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Archive, Loader2, Trash2, UserMinus, X } from "lucide-react";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
 
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   archiveTemplate,
@@ -14,6 +16,7 @@ import {
   type TemplateAssignment,
 } from "@/lib/teaching-api";
 
+import { AnnouncementsPanel } from "@/components/catalog/Announcements";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
 
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -33,6 +36,7 @@ export function TemplateAssignmentsDialog({
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
   const [rows, setRows] = useState<TemplateAssignment[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
@@ -166,7 +170,19 @@ export function TemplateAssignmentsDialog({
 
           {/* Platform batch 1 §4.4: no more picking students; the path is listed in the market. */}
           {canAssign ? (
-            <ListingPanel kind="mastery_path" itemId={templateId} onChanged={onChanged} />
+            <>
+              <ListingPanel kind="mastery_path" itemId={templateId} onChanged={onChanged} />
+              {/* Platform batch 3 §1, §3: its learners' report, and announcements to them. */}
+              {!isAdmin && (
+              <Link
+                href={`/reports?kind=mastery_path&id=${encodeURIComponent(templateId)}`}
+                className="inline-flex h-8 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-medium hover:bg-[var(--accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              >
+                {t("Learning report")}
+              </Link>
+              )}
+              <AnnouncementsPanel kind="mastery_path" itemId={templateId} canPost />
+            </>
           ) : (
             template.status === "draft" && (
               <p className="text-xs text-[var(--muted-foreground)]">

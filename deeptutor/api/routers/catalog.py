@@ -289,3 +289,83 @@ async def unmerge_tag(tag: str) -> dict[str, Any]:
     from deeptutor.catalog.tags import unmerge
 
     return await _admin(unmerge, tag)
+
+
+# ── learning reports (batch 3 §1) ──────────────────────────
+
+
+def _reports():
+    from deeptutor.catalog.reports import LearnerReportService
+
+    return LearnerReportService()
+
+
+@router.get("/reports/{kind}/{item_id}")
+async def learner_report(kind: str, item_id: str, days: int | None = Query(default=None)) -> dict[str, Any]:
+    return await _call(_reports().report, kind, item_id, days)
+
+
+@router.get("/reports/{kind}/{item_id}/points/{template_id}")
+async def learner_report_points(kind: str, item_id: str, template_id: str) -> dict[str, Any]:
+    return await _call(_reports().points, kind, item_id, template_id)
+
+
+@router.get("/reports/{kind}/{item_id}/export")
+async def learner_report_export(kind: str, item_id: str, days: int | None = Query(default=None)):
+    from fastapi.responses import Response
+
+    text = await _call(_reports().export, kind, item_id, days)
+    return Response(
+        content="\ufeff" + text, media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="report-{kind}-{item_id}.csv"'},
+    )
+
+
+@router.get("/reports/{kind}/{item_id}/learners/{user_id}")
+async def learner_detail(kind: str, item_id: str, user_id: str) -> dict[str, Any]:
+    return await _call(_reports().learner, kind, item_id, user_id)
+
+
+# ── announcements (batch 3 §3) ─────────────────────────────
+
+
+class AnnouncementBody(BaseModel):
+    text: str = Field(default="", max_length=6000)
+    pinned: bool = False
+
+
+class AnnouncementUpdate(BaseModel):
+    text: str | None = Field(default=None, max_length=6000)
+    pinned: bool | None = None
+
+
+def _announcements():
+    from deeptutor.catalog.announcements import AnnouncementService
+
+    return AnnouncementService()
+
+
+@router.get("/announcements/mine")
+async def my_announcements() -> dict[str, Any]:
+    return {"announcements": await _call(_announcements().mine)}
+
+
+@router.get("/items/{kind}/{item_id}/announcements")
+async def item_announcements(kind: str, item_id: str) -> dict[str, Any]:
+    return {"announcements": await _call(_announcements().list_for, kind, item_id)}
+
+
+@router.post("/items/{kind}/{item_id}/announcements")
+async def post_announcement(kind: str, item_id: str, body: AnnouncementBody) -> dict[str, Any]:
+    return await _call(_announcements().post, kind, item_id, body.text, body.pinned)
+
+
+@router.put("/announcements/{announcement_id}")
+async def update_announcement(announcement_id: str, body: AnnouncementUpdate) -> dict[str, Any]:
+    return await _call(_announcements().update, announcement_id, text=body.text, pinned=body.pinned)
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: str) -> dict[str, Any]:
+    await _call(_announcements().delete, announcement_id)
+    return {"deleted": True}

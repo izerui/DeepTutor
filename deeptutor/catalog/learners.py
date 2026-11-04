@@ -25,6 +25,11 @@ def _owner(kind: str, item_id: str) -> str | None:
 
 
 def learners_of(teacher_id: str) -> set[str]:
+    return set(where_learners_are(teacher_id))
+
+
+def where_learners_are(teacher_id: str) -> dict[str, tuple[str, str]]:
+    """Each active learner of the teacher's content -> one (kind, id) they joined; courses and paths first."""
     from deeptutor.classes.service import _accounts
 
     with db.read() as conn:
@@ -34,16 +39,20 @@ def learners_of(teacher_id: str) -> set[str]:
             "SELECT kind, item_id, user_id FROM enrollments WHERE left_at IS NULL"
         ).fetchall()
     owners: dict[tuple[str, str], str | None] = {}
-    found: set[str] = set()
+    found: dict[str, tuple[str, str]] = {}
+    rank = {scopes.COURSE: 0, scopes.MASTERY_PATH: 1}
     for row in rows:
         key = (row["kind"], row["item_id"])
         if key not in owners:
             owners[key] = _owner(*key)
-        if owners[key] == teacher_id:
-            found.add(row["user_id"])
+        if owners[key] != teacher_id:
+            continue
+        current = found.get(row["user_id"])
+        if current is None or rank.get(key[0], 9) < rank.get(current[0], 9):
+            found[row["user_id"]] = key
     accounts = _accounts()
-    found.discard(teacher_id)
-    return {u for u in found if u in accounts and not accounts[u]["disabled"]}
+    found.pop(teacher_id, None)
+    return {u: key for u, key in found.items() if u in accounts and not accounts[u]["disabled"]}
 
 
-__all__ = ["learners_of"]
+__all__ = ["learners_of", "where_learners_are"]

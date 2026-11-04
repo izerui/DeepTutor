@@ -418,6 +418,9 @@ class ListingService:
             from deeptutor.teaching.instances import notify_instance_closed
 
             notify_instance_closed(item_id)
+        from deeptutor.catalog.material_notice import notify_lost
+
+        notify_lost(kind, item_id, owner=row["owner_user_id"], name=row["title"])  # batch 3 §6
         _notify([row["owner_user_id"]], "listing_taken_down", row, reason=reason)
         return describe(row)
 
@@ -547,6 +550,9 @@ def forget(kind: str, item_id: str) -> None:
             with db.write() as conn:
                 conn.execute("DELETE FROM listings WHERE kind = ? AND item_id = ?", (kind, item_id))
         enrollment.forget_item(kind, item_id)
+        from deeptutor.catalog.announcements import forget_item
+
+        forget_item(kind, item_id)
     except Exception:
         logger.exception("Could not forget the listing of %s %s", kind, item_id)
 

@@ -27,12 +27,12 @@ const graded = (average: number | null): AssignedTask => ({
     comment: "", return_reason: "", graded_at: 2, class_average: average },
 });
 
-it("shows the class average beside a graded homework, and nothing when too few are graded", () => {
+it("shows the learners' average beside a graded homework, and nothing when too few are graded", () => {
   const { unmount } = render(<StudentTaskDetail task={graded(75)} onChanged={vi.fn()} />);
-  expect(screen.getByText("Class average 75 / 100")).toBeTruthy();
+  expect(screen.getByText("Learners' average 75 / 100")).toBeTruthy();
   unmount();
   render(<StudentTaskDetail task={graded(null)} onChanged={vi.fn()} />);
-  expect(screen.queryByText(/Class average/)).toBeNull();
+  expect(screen.queryByText(/Learners' average/)).toBeNull();
 });
 
 const note = (kind: string, params: Record<string, unknown>): AppNotification =>

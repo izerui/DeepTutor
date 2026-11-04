@@ -108,10 +108,28 @@ def workbench(actor=None) -> dict[str, Any]:
     from deeptutor.publishing.scope import classes_retired
 
     if classes_retired():
-        # Platform batch 2 §7: no classes; who needs attention moves to course reports (batch 3).
+        # Platform batch 3 §2: the teacher's learners, each with the course or path to open.
+        from deeptutor.catalog import items
+        from deeptutor.catalog.learners import where_learners_are
+
+        where = where_learners_are(actor.id)
+        flags = attention.for_teacher(actor.id)
+        accounts = _accounts()
+        needing = []
+        for s, f in flags.items():
+            if not f:
+                continue
+            kind, item_id = where.get(s, ("", ""))
+            info = items.info(kind, item_id) if kind else None
+            needing.append({
+                "student_id": s, "username": (accounts.get(s) or {}).get("username", ""), "class_id": "",
+                "item": {"kind": kind, "id": item_id, "title": info.title if info else ""} if kind else None,
+                "flags": f,
+            })
+        needing.sort(key=lambda row: (-len(row["flags"]), row["username"]))
         return {
-            "role": role, "to_grade": to_grade(actor.id), "attention": [], "attention_total": 0,
-            "classes": [], "sent": _sent(actor),
+            "role": role, "to_grade": to_grade(actor.id), "attention": needing[:ATTENTION_LIMIT],
+            "attention_total": len(needing), "classes": [], "sent": _sent(actor),
         }
     flags = attention.for_teacher(actor.id)
     accounts = _accounts()

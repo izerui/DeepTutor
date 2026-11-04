@@ -1,5 +1,14 @@
 import { apiFetch, apiUrl } from "./api";
 import type { ScopeUpdate } from "./publish-api";
+import type {
+  AttemptTally,
+  AttentionFlag,
+  OverallReport,
+  PracticeSetResult,
+  TeacherPathReport,
+} from "./classes-api";
+
+export type { AttentionFlag } from "./classes-api";
 
 /** The learning market is system-level: never workspace-scoped (platform batch 1 §8). */
 const BASE = "/api/catalog";
@@ -301,3 +310,111 @@ export const mergeTags = (fromTag: string, toTag: string) =>
   call<AdminTags>("/admin/tags/merge", send("POST", { from_tag: fromTag, to_tag: toTag }));
 export const unmergeTag = (fromTag: string) =>
   call<AdminTags>(`/admin/tags/merge/${encodeURIComponent(fromTag)}`, send("DELETE"));
+
+// ── Learning reports of a course or a Mastery Path (platform batch 3 §1) ──
+
+/** Only courses and Mastery Paths have learners to report on. */
+export type ReportKind = "course" | "mastery_path";
+export const REPORT_KINDS: readonly ReportKind[] = ["course", "mastery_path"];
+
+/** A course's tasks for one learner: done of total, and homework by status. */
+export interface LearnerTasks {
+  done: number;
+  total: number;
+  to_grade: number;
+  returned: number;
+  graded: number;
+}
+
+export interface LearnerPath {
+  template_id: string;
+  title: string;
+  revision: number;
+  kp_total: number;
+  kp_mastered: number;
+  attempts: AttemptTally;
+  last_activity: number | null;
+}
+
+export interface LearnerRow {
+  id: string;
+  username: string;
+  overall: OverallReport;
+  paths: LearnerPath[];
+  practice_sets: PracticeSetResult[];
+  /** ``null`` for a Mastery Path (no tasks). */
+  tasks: LearnerTasks | null;
+  flags: AttentionFlag[];
+}
+
+export interface LearnerReport {
+  kind: ReportKind;
+  id: string;
+  title: string;
+  period_days: number | null;
+  paths: { template_id: string; title: string }[];
+  practice_sets: string[];
+  learners: LearnerRow[];
+}
+
+export interface ReportPoints {
+  template_id: string;
+  title: string;
+  points: { id: string; name: string; students: number; mastered: number; not_mastered: string[] }[];
+}
+
+export interface LearnerDetail {
+  id: string;
+  username: string;
+  paths: TeacherPathReport[];
+  practice_sets: PracticeSetResult[];
+  tasks: LearnerTasks | null;
+}
+
+const report = (kind: string, id: string) => `/reports${item(kind, id)}`;
+const period = (days?: number | null) => (days ? `?days=${days}` : "");
+
+export const getLearnerReport = (kind: string, id: string, days?: number | null) =>
+  call<LearnerReport>(`${report(kind, id)}${period(days)}`);
+export const getReportPoints = (kind: string, id: string, templateId: string) =>
+  call<ReportPoints>(`${report(kind, id)}/points/${encodeURIComponent(templateId)}`);
+export const reportExportUrl = (kind: string, id: string, days?: number | null) =>
+  apiUrl(`${BASE}${report(kind, id)}/export${period(days)}`);
+export const getLearnerDetail = (kind: string, id: string, userId: string) =>
+  call<LearnerDetail>(`${report(kind, id)}/learners/${encodeURIComponent(userId)}`);
+
+// ── Announcements of a course or a Mastery Path (platform batch 3 §3) ──
+
+export interface ContentAnnouncement {
+  id: string;
+  kind: ReportKind;
+  item_id: string;
+  item_title: string;
+  author: string;
+  text: string;
+  pinned: boolean;
+  created_at: number;
+  updated_at: number;
+  can_edit: boolean;
+  can_delete: boolean;
+}
+
+/**
+ * What the home's announcements hold: content announcements, or on an install
+ * whose classes were not retired yet, the older class announcements.
+ */
+export type HomeAnnouncement = Pick<ContentAnnouncement, "id" | "author" | "text" | "pinned" | "created_at"> &
+  Partial<Pick<ContentAnnouncement, "kind" | "item_id" | "item_title">> & { class_id?: string; class_name?: string };
+
+export const ANNOUNCEMENT_MAX = 5000;
+
+export const listItemAnnouncements = (kind: string, id: string) =>
+  call<{ announcements: ContentAnnouncement[] }>(`/items${item(kind, id)}/announcements`).then((r) => r.announcements);
+export const postItemAnnouncement = (kind: string, id: string, text: string, pinned: boolean) =>
+  call<ContentAnnouncement>(`/items${item(kind, id)}/announcements`, send("POST", { text, pinned }));
+export const updateItemAnnouncement = (announcementId: string, patch: { text?: string; pinned?: boolean }) =>
+  call<ContentAnnouncement>(`/announcements/${encodeURIComponent(announcementId)}`, send("PUT", patch));
+export const deleteItemAnnouncement = (announcementId: string) =>
+  call<{ deleted: boolean }>(`/announcements/${encodeURIComponent(announcementId)}`, send("DELETE"));
+export const listMyAnnouncements = () =>
+  call<{ announcements: ContentAnnouncement[] }>("/announcements/mine").then((r) => r.announcements);
