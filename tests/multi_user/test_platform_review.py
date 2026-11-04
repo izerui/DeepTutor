@@ -483,9 +483,15 @@ def test_sign_ups_per_address_can_be_raised(monkeypatch):
     from deeptutor.multi_user import rate_limit
 
     monkeypatch.setenv("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", "50")
-    assert importlib.reload(rate_limit).REGISTER_PER_ADDRESS == (50, 3600)
+    monkeypatch.setenv("DEEPTUTOR_REGISTER_SITE_HOURLY", "500")
+    reloaded = importlib.reload(rate_limit)
+    assert reloaded.REGISTER_PER_ADDRESS == (50, 3600) and reloaded.REGISTER_SITE_WIDE == (500, 3600)
     monkeypatch.delenv("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY")
-    assert importlib.reload(rate_limit).REGISTER_PER_ADDRESS == (5, 3600)
+    monkeypatch.delenv("DEEPTUTOR_REGISTER_SITE_HOURLY")
+    defaults = importlib.reload(rate_limit)
+    # Generous for a campus network: many students behind one address sign up together.
+    assert defaults.REGISTER_PER_ADDRESS == (300, 3600) and defaults.REGISTER_SITE_WIDE == (2000, 3600)
+    assert defaults.LOGIN_FAILURES_PER_ADDRESS == (300, 900) and defaults.LOGIN_FAILURES_PER_USERNAME == (10, 900)
 
 
 def test_a_teachers_calendar_has_their_tasks_and_the_courses_they_joined(as_account, teaching_users):

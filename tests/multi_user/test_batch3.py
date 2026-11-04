@@ -36,6 +36,10 @@ def _register(client, name, ip="1.2.3.4"):
 
 def test_one_address_signs_up_at_most_five_accounts_an_hour(auth_client, monkeypatch):
     import deeptutor.api.routers.auth as auth_router
+    from deeptutor.multi_user import rate_limit
+
+    # The limit is configurable (generous by default for campus networks); test it at 5.
+    monkeypatch.setattr(rate_limit, "REGISTER_PER_ADDRESS", (5, 3600))
 
     # The test client's peer counts as the trusted frontend proxy.
     monkeypatch.setattr(auth_router, "TRUSTED_FRONTEND_PROXY_IPS", frozenset({"testclient"}))

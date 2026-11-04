@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS rate_buckets (
     "Rate limit",
 )
 
-def _hourly(name: str, default: int) -> int:
+def _setting(name: str, default: int) -> int:
     import os
 
     try:
@@ -35,12 +35,15 @@ def _hourly(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
-#: (count, window seconds). Per address configurable: one school network may sign up many.
-REGISTER_PER_ADDRESS = (_hourly("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", 5), 3600)
+#: (count, window seconds). Generous by default: on a campus or education network hundreds
+#: of students reach the site from one address and may all sign up in the same hour.
+#: Each can be changed in the deployment's environment.
+REGISTER_PER_ADDRESS = (_setting("DEEPTUTOR_REGISTER_PER_ADDRESS_HOURLY", 300), 3600)
 #: Across the whole site, for when the address is unknown or spoofed.
-REGISTER_SITE_WIDE = (60, 3600)
-LOGIN_FAILURES_PER_USERNAME = (10, 900)
-LOGIN_FAILURES_PER_ADDRESS = (30, 900)
+REGISTER_SITE_WIDE = (_setting("DEEPTUTOR_REGISTER_SITE_HOURLY", 2000), 3600)
+#: Guessing one account's password: not tied to an address, so not loosened.
+LOGIN_FAILURES_PER_USERNAME = (_setting("DEEPTUTOR_LOGIN_FAILURES_PER_ACCOUNT", 10), 900)
+LOGIN_FAILURES_PER_ADDRESS = (_setting("DEEPTUTOR_LOGIN_FAILURES_PER_ADDRESS", 300), 900)
 
 
 class RateLimited(Exception):
