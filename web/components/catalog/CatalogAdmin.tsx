@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import {
   addTaxonomyNode,
   deleteTaxonomyNode,

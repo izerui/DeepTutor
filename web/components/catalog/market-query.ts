@@ -1,7 +1,8 @@
 import type { MarketQuery, SortOrder } from "@/lib/catalog-api";
 
-export type FacetKey = "stage" | "subject" | "kind" | "difficulty" | "tag" | "author";
-export const FACET_KEYS: readonly FacetKey[] = ["stage", "subject", "kind", "difficulty", "tag", "author"];
+export type FacetKey = "stage" | "subject" | "grade" | "kind" | "difficulty" | "tag" | "author";
+export const FACET_KEYS: readonly FacetKey[] = ["stage", "subject", "grade", "kind", "difficulty", "tag", "author"];
+const SORTS: readonly SortOrder[] = ["newest", "popular", "rating"];
 
 const list = (value: string | null) => (value ? value.split(",").map((v) => v.trim()).filter(Boolean) : []);
 
@@ -13,12 +14,14 @@ export function parseMarketQuery(params: URLSearchParams | { get: (key: string) 
     q: params.get("q") ?? "",
     stage: list(params.get("stage")),
     subject: list(params.get("subject")),
+    grade: list(params.get("grade")),
     kind: list(params.get("kind")),
     difficulty: list(params.get("difficulty")),
     tag: list(params.get("tag")),
     author: list(params.get("author")),
-    sort: (sort === "popular" ? "popular" : "newest") as SortOrder,
+    sort: SORTS.includes(sort as SortOrder) ? (sort as SortOrder) : "newest",
     page: Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1,
+    favorites: ["1", "true"].includes(params.get("favorites") ?? ""),
   };
 }
 
@@ -38,7 +41,10 @@ export function removeValue(query: MarketQuery, key: FacetKey, value: string): M
   return { ...query, [key]: (query[key] ?? []).filter((v) => v !== value), page: 1 };
 }
 
-/** Every condition cleared; the sort stays. */
+/** Every condition cleared; the sort and the "My favorites" tab stay. */
 export function clearConditions(query: MarketQuery): MarketQuery {
-  return { q: "", stage: [], subject: [], kind: [], difficulty: [], tag: [], author: [], sort: query.sort, page: 1 };
+  return {
+    q: "", stage: [], subject: [], grade: [], kind: [], difficulty: [], tag: [], author: [],
+    sort: query.sort, page: 1, favorites: query.favorites,
+  };
 }

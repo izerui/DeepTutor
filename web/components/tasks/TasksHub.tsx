@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { bookApi } from "@/lib/book-api";
 import type { Book, Chapter } from "@/lib/book-types";
@@ -454,7 +454,7 @@ function StudentsTable({ task, onChanged }: { task: TaskDetail; onChanged: (next
   );
 }
 
-function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentId: string; onChanged: (next: TaskDetail) => void }) {
+export function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentId: string; onChanged: (next: TaskDetail) => void }) {
   const { t } = useTranslation();
   const submission = task.students.find((s) => s.id === studentId)!.submission!;
   const [score, setScore] = useState<string>(String(submission.score ?? submission.ai_score ?? ""));
@@ -469,6 +469,10 @@ function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentI
       onChanged(await action());
     } catch (err) {
       setError(err instanceof Error ? t(err.message) : String(err));
+      // Follow-ups §5: the student handed in again meanwhile; show the new hand-in.
+      if ((err as { status?: number } | null)?.status === 409) {
+        await getTask(task.id).then(onChanged).catch(() => undefined);
+      }
     } finally {
       setBusy(false);
     }
@@ -506,12 +510,12 @@ function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentI
       <textarea aria-label={t("Comment")} placeholder={t("Comment")} rows={3} className={inputClass} value={comment} onChange={(e) => setComment(e.target.value)} />
       <div className="flex flex-wrap gap-2">
         <button type="button" className={primaryClass} disabled={busy || score === ""}
-          onClick={() => void run(() => gradeHomework(task.id, studentId, Number(score), comment))}>
+          onClick={() => void run(() => gradeHomework(task.id, studentId, Number(score), comment, submission.attempt))}>
           {t("Save grade")}
         </button>
         <input aria-label={t("Why it goes back")} placeholder={t("Why it goes back")} className={`${inputClass} w-56`} value={reason} onChange={(e) => setReason(e.target.value)} />
         <button type="button" className={actionClass} disabled={busy || !reason.trim()}
-          onClick={() => void run(() => sendBackHomework(task.id, studentId, reason))}>
+          onClick={() => void run(() => sendBackHomework(task.id, studentId, reason, submission.attempt))}>
           {t("Send back")}
         </button>
       </div>

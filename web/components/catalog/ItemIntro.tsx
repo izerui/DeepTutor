@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, Star, Users } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass } from "@/components/classes/ClassesHub";
+import { actionClass } from "@/components/common/form-styles";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
 import {
   CATALOG_KINDS,
@@ -20,8 +20,10 @@ import {
 import { AnnouncementsPanel } from "./Announcements";
 import { authorHref, authorLabel, catalogError, formatDay, kindLabel, STATUS_TONE, statusLabel } from "./catalog-format";
 import { CatalogPreview } from "./CatalogPreview";
+import { FavoriteButton } from "./FavoriteButton";
 import { JoinButton } from "./JoinButton";
 import { ListingPanel } from "./ListingPanel";
+import { formatRating, ReviewsSection } from "./Reviews";
 import { useTaxonomy } from "./useTaxonomy";
 
 /** An item's introduction (§5.1): ``/market/item?kind=…&id=…`` (``&manage=1`` opens the author's listing). */
@@ -33,7 +35,7 @@ export default function ItemIntro() {
   const [item, setItem] = useState<CatalogItemDetail | null>(null);
   const [error, setError] = useState("");
   const [managing, setManaging] = useState(params?.get("manage") === "1");
-  const { nameOf } = useTaxonomy();
+  const { nameOf, classificationOf } = useTaxonomy();
 
   const load = useCallback(() => {
     if (!kind || !id) return;
@@ -64,7 +66,7 @@ export default function ItemIntro() {
     );
   }
 
-  const classification = [...item.stages, ...item.subjects].map(nameOf);
+  const classification = classificationOf(item);
   // Platform batch 3 §3: a course's or a path's announcements, for who joined it and its author.
   const hasLearners = REPORT_KINDS.includes(item.kind as ReportKind);
   return (
@@ -81,12 +83,21 @@ export default function ItemIntro() {
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-[var(--muted-foreground)]">
           <Link href={authorHref(item.owner_id)} className="text-[var(--primary)] hover:underline">{authorLabel(item, t)}</Link>
           <span className="inline-flex items-center gap-1"><Users size={12} aria-hidden />{t("{{count}} learners", { count: item.learners ?? 0 })}</span>
+          {item.rating != null && (item.rating_count ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1" data-testid="intro-rating">
+              <Star size={12} aria-hidden className="text-amber-500" fill="currentColor" />
+              {t("{{rating}} ({{count}} reviews)", { rating: formatRating(item.rating), count: item.rating_count })}
+            </span>
+          )}
           {item.updated_at ? <span>{t("Updated {{date}}", { date: formatDay(item.updated_at) })}</span> : null}
         </p>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
         <JoinButton item={item} onChanged={load} />
+        {(item.status === "listed" || item.favorited) && (
+          <FavoriteButton key={`${item.kind}:${item.id}:${Boolean(item.favorited)}`} kind={item.kind} itemId={item.id} favorited={Boolean(item.favorited)} />
+        )}
         {item.mine && (
           <button type="button" className={actionClass} aria-expanded={managing} onClick={() => setManaging((v) => !v)}>
             {t("Manage listing")}
@@ -107,10 +118,10 @@ export default function ItemIntro() {
       {item.summary && <p className="whitespace-pre-line text-[13.5px] leading-relaxed">{item.summary}</p>}
 
       <dl className="grid gap-x-6 gap-y-2 text-[12.5px] sm:grid-cols-[max-content_1fr]">
-        {classification.length > 0 && (
+        {classification && (
           <>
             <dt className="text-[var(--muted-foreground)]">{t("Classification")}</dt>
-            <dd>{classification.join(" · ")}</dd>
+            <dd>{classification}</dd>
           </>
         )}
         {item.difficulty && (
@@ -136,6 +147,9 @@ export default function ItemIntro() {
       <section aria-label={t("Preview")}>
         <CatalogPreview kind={item.kind} itemId={item.id} preview={item.preview ?? {}} />
       </section>
+
+      <ReviewsSection kind={item.kind} itemId={item.id}
+        onRated={(next) => setItem((cur) => (cur ? { ...cur, rating: next.average, rating_count: next.count } : cur))} />
     </article>
   );
 }

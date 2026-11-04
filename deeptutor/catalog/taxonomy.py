@@ -191,19 +191,45 @@ DIFFICULTIES: list[tuple[str, str, str]] = [
 
 MAX_STAGES = 3
 MAX_SUBJECTS = 3
+MAX_GRADES = 3
+
+_CN_GRADES = ["一年级", "二年级", "三年级", "四年级", "五年级", "六年级", "七年级", "八年级", "九年级", "高一", "高二", "高三"]
+#: Primary and secondary school grades (follow-ups §2): stage -> grade numbers.
+GRADE_STAGES: dict[str, tuple[int, ...]] = {"primary": (1, 2, 3, 4, 5, 6), "junior": (7, 8, 9), "senior": (10, 11, 12)}
+
+
+def _grade_names(number: int) -> dict[str, str]:
+    french = "1re année" if number == 1 else f"{number}e année"
+    return {"zh": _CN_GRADES[number - 1], "en": f"Grade {number}", "de": f"{number}. Klasse", "fr": french,
+            "pl": f"Klasa {number}", "uk": f"{number} клас"}
+
+
+def grades() -> list[dict[str, Any]]:
+    return [
+        {"id": f"grade.{number}", "stage": stage, "names": _grade_names(number)}
+        for stage, numbers in GRADE_STAGES.items() for number in numbers
+    ]
+
+
+def grade_stage(grade_id: str) -> str | None:
+    return next((g["stage"] for g in grades() if g["id"] == grade_id), None)
 
 
 @lru_cache(maxsize=1)
 def _preset() -> dict[str, dict[str, Any]]:
     """The built-in nodes: id -> {parent, names, position}."""
+    from deeptutor.catalog.taxonomy_i18n import localized
+
     out: dict[str, dict[str, Any]] = {}
     for s_index, (key, zh, en, subjects) in enumerate(_STAGES):
-        out[key] = {"parent": "", "names": {"zh": zh, "en": en}, "position": s_index * 10.0}
+        out[key] = {"parent": "", "names": localized({"zh": zh, "en": en}), "position": s_index * 10.0}
         for j, (sub, szh, sen, children) in enumerate(subjects):
             sid = f"{key}.{sub}"
-            out[sid] = {"parent": key, "names": {"zh": szh, "en": sen}, "position": j * 10.0}
+            out[sid] = {"parent": key, "names": localized({"zh": szh, "en": sen}), "position": j * 10.0}
             for k, (child, czh, cen) in enumerate(children):
-                out[f"{sid}.{child}"] = {"parent": sid, "names": {"zh": czh, "en": cen}, "position": k * 10.0}
+                out[f"{sid}.{child}"] = {
+                    "parent": sid, "names": localized({"zh": czh, "en": cen}), "position": k * 10.0,
+                }
     return out
 
 
@@ -250,10 +276,11 @@ def _nodes() -> dict[str, dict[str, Any]]:
         found = nodes.get(row["node_id"])
         if found is None:
             continue
-        if row["name_zh"]:
-            found["names"]["zh"] = row["name_zh"]
-        if row["name_en"]:
-            found["names"]["en"] = row["name_en"]
+        if row["name_zh"] or row["name_en"]:
+            # Renamed by an administrator: the built-in translations no longer match.
+            found["names"] = {
+                "zh": row["name_zh"] or found["names"]["zh"], "en": row["name_en"] or found["names"]["en"],
+            }
         found["hidden"] = bool(row["hidden"])
         if row["position"] is not None:
             found["position"] = row["position"]
@@ -290,9 +317,12 @@ def tree(*, include_hidden: bool = False) -> dict[str, Any]:
                 "children": [shape(child) for child in _children(nodes, subject, include_hidden)],
             })
         stages.append({**shape(stage), "subjects": subjects})
+    from deeptutor.catalog.taxonomy_i18n import localized
+
     return {
         "stages": stages,
-        "difficulties": [{"id": key, "names": {"zh": zh, "en": en}} for key, zh, en in DIFFICULTIES],
+        "grades": grades(),
+        "difficulties": [{"id": key, "names": localized({"zh": zh, "en": en})} for key, zh, en in DIFFICULTIES],
     }
 
 
@@ -348,6 +378,20 @@ def ancestors(subject_id: str) -> list[str]:
 
 class TaxonomyError(ValueError):
     pass
+
+
+def validate_grades(grade_ids: list[str], stages: list[str]) -> list[str]:
+    """Grades are optional; each must belong to one of the chosen stages."""
+    cleaned = list(dict.fromkeys(str(g) for g in grade_ids or []))
+    if len(cleaned) > MAX_GRADES:
+        raise TaxonomyError(f"Choose at most {MAX_GRADES} grades.")
+    for grade in cleaned:
+        stage = grade_stage(grade)
+        if stage is None:
+            raise TaxonomyError("Unknown grade.")
+        if stage not in stages:
+            raise TaxonomyError("Each grade must belong to one of the chosen stages.")
+    return cleaned
 
 
 def validate(
@@ -516,7 +560,8 @@ def delete_node(node_id: str) -> dict[str, Any]:
 
 
 __all__ = [
-    "DIFFICULTIES", "MAX_STAGES", "MAX_SUBJECTS", "TaxonomyError", "add_node", "admin_tree", "ancestors",
+    "DIFFICULTIES", "GRADE_STAGES", "MAX_GRADES", "MAX_STAGES", "MAX_SUBJECTS", "TaxonomyError", "add_node",
+    "admin_tree", "ancestors", "grade_stage", "grades", "validate_grades",
     "delete_node", "is_difficulty", "is_stage", "is_subject", "move_node", "node", "stage_of", "tree",
     "update_node", "validate",
 ]

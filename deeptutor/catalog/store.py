@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS listings (
     summary TEXT NOT NULL DEFAULT '',
     stages_json TEXT NOT NULL DEFAULT '[]',
     subjects_json TEXT NOT NULL DEFAULT '[]',
+    -- Primary and secondary school grades (follow-ups §2).
+    grades_json TEXT NOT NULL DEFAULT '[]',
     difficulty TEXT NOT NULL DEFAULT '',
     tags_json TEXT NOT NULL DEFAULT '[]',
     -- Once approved (or listed by an administrator), relisting needs no review.
@@ -102,12 +104,40 @@ CREATE TABLE IF NOT EXISTS content_announcements (
 );
 CREATE INDEX IF NOT EXISTS idx_content_announcements_item ON content_announcements(kind, item_id, created_at DESC);
 
+-- Ratings and reviews by people who joined (follow-ups §1).
+CREATE TABLE IF NOT EXISTS reviews (
+    kind TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    text TEXT NOT NULL DEFAULT '',
+    reply TEXT NOT NULL DEFAULT '',
+    reply_at REAL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (kind, item_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_user ON reviews(user_id);
+
+CREATE TABLE IF NOT EXISTS favorites (
+    kind TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    PRIMARY KEY (kind, item_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS catalog_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 """,
     "Catalog",
+    # Columns added after the first release, for stores made before them.
+    columns={
+        "listings": {"grades_json": "TEXT NOT NULL DEFAULT '[]'", "blocked": "INTEGER NOT NULL DEFAULT 0"},
+    },
 )
 
 __all__ = ["STATES", "db"]

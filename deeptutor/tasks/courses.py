@@ -190,6 +190,24 @@ class CourseService:
         self.update(course_id, task_ids=[*items, task["id"]])
         return self.get(course_id)
 
+    def add_practice_set(self, course_id: str, set_id: str) -> dict[str, Any]:
+        """One's published practice set as the course's next task (follow-ups §3)."""
+        from deeptutor.practice_sets import store as practice_store
+
+        with db.read() as conn:
+            self._owned(conn, course_id)
+            items = self._items(conn, course_id)
+        with practice_store.read() as conn:
+            row = conn.execute(
+                "SELECT title, owner_user_id, status FROM practice_sets WHERE id = ?", (set_id,)
+            ).fetchone() if conn else None
+        if row is None or row["owner_user_id"] != self.actor.id or row["status"] != "published":
+            raise TaskError("Choose a practice set you published.")
+        task = self.tasks.create("practice_set", row["title"])
+        self.tasks.update(task["id"], target_id=set_id)
+        self.update(course_id, task_ids=[*items, task["id"]])
+        return self.get(course_id)
+
     def _publish_drafts(self, course_id: str) -> None:
         from deeptutor.publishing import scope as scopes
 

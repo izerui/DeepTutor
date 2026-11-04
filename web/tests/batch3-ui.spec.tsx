@@ -3,25 +3,22 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // Spec 2026-11-03 batch 3 §13: review and regrade, options, remedial, the
 // workbench, attention, grading, navigation by role, AI left, similar questions.
-const { practice, workbench, classes, t } = vi.hoisted(() => ({
+const { practice, workbench, t } = vi.hoisted(() => ({
   practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn(), remedialFromSet: vi.fn(), remedialFromPath: vi.fn() },
   workbench: { getWorkbench: vi.fn(), listToGrade: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
     getSchoolAiLimit: vi.fn(), setSchoolAiLimit: vi.fn(), AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }] },
-  classes: { getClassReport: vi.fn(), getStudentReport: vi.fn(), getClassPathPoints: vi.fn(), classReportExportUrl: vi.fn(() => "/export") },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
 vi.mock("@/lib/practice-sets-api", () => practice);
 vi.mock("@/lib/workbench-api", () => workbench);
-vi.mock("@/lib/classes-api", () => classes);
 vi.mock("@/lib/tasks-api", () => ({ getHome: vi.fn(() => Promise.resolve({ mine: [] })) }));
 vi.mock("@/lib/book-api", () => ({ bookApi: { list: vi.fn(() => Promise.resolve({ books: [] })), getSpine: vi.fn() } }));
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/comments/Comments", () => ({ CommentEditor: () => null, MyComments: () => null }));
 
-import { ClassReportSection } from "@/components/classes/ClassReport";
 import { AiUsageNote } from "@/components/home/AiUsage";
 import { TeacherWorkbench } from "@/components/home/Workbench";
 import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
@@ -30,7 +27,7 @@ import { navVisibleForRole } from "@/components/sidebar/nav-entries";
 import GradingQueue from "@/components/tasks/GradingQueue";
 
 beforeEach(() => {
-  [practice, workbench, classes].forEach((group) =>
+  [practice, workbench].forEach((group) =>
     Object.values(group).forEach((fn) => typeof fn === "function" && "mockReset" in fn && (fn as ReturnType<typeof vi.fn>).mockReset()));
   push.mockReset();
 });
@@ -95,24 +92,6 @@ it("lays out the workbench: hand-ins, attention and what was sent, no classes", 
   expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
   expect(screen.queryByRole("heading", { name: /Students who need attention/ })).toBeNull();
   expect(screen.getByText("Everyone is on track.")).toBeTruthy();
-});
-
-it("filters the class report to students who need attention and changes the period", async () => {
-  const overall = { path_count: 0, self_study_path_count: 0, kp_total: 0, kp_mastered: 0, attempts: { correct: 0, partial: 0, incorrect: 0 },
-    last_activity: null, question_bank: { total: 0, correct: 0, partial: 0, incorrect: 0 }, study_minutes_total: 0, study_minutes_7d: 0,
-    period_minutes: 12, period_answers: 3, trend: Array(8).fill({ minutes: 1, answers: 0 }) };
-  classes.getClassReport.mockResolvedValue({ class_id: "c1", class_name: "Physics 1", students: [
-    { id: "u_sara", username: "sara", teacher_paths: [], overall, flags: [] },
-    { id: "u_sam", username: "sam", teacher_paths: [], overall, flags: [{ kind: "stuck", kp_id: "k", name: "Limits", days: 9, wrong: 3, template_id: "tpl" }] },
-  ] });
-  render(<ClassReportSection classId="c1" />);
-  fireEvent.click(screen.getByRole("button", { name: "View learning report" }));
-  expect(await screen.findByText("Stuck on “Limits” for 9 days, 3 wrong")).toBeTruthy();
-  expect(classes.getClassReport).toHaveBeenCalledWith("c1", 7);
-  fireEvent.click(screen.getByLabelText("Only students who need attention"));
-  expect(screen.queryByText("sara")).toBeNull();
-  fireEvent.change(screen.getByRole("combobox", { name: "Period" }), { target: { value: "30" } });
-  await waitFor(() => expect(classes.getClassReport).toHaveBeenLastCalledWith("c1", 30));
 });
 
 it("lists every hand-in and filters by task", async () => {

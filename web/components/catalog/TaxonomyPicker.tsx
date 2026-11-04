@@ -10,10 +10,13 @@ import { indexTaxonomy, loadFullTaxonomy, pickName, type TaxonomyIndexEntry } fr
 
 export const MAX_STAGES = 3;
 export const MAX_SUBJECTS = 3;
+export const MAX_GRADES = 3;
 
 export interface Classification {
   stages: string[];
   subjects: string[];
+  /** Follow-ups §2: optional, at most 3, each under a chosen stage. */
+  grades: string[];
   difficulty: string;
 }
 
@@ -44,7 +47,13 @@ export function TaxonomyPicker({
     if (value.stages.includes(id)) {
       const stage = taxonomy.stages.find((s) => s.id === id);
       const inStage = new Set(stage?.subjects.flatMap((s) => [s.id, ...s.children.map((c) => c.id)]) ?? []);
-      onChange({ ...value, stages: value.stages.filter((s) => s !== id), subjects: value.subjects.filter((s) => !inStage.has(s)) });
+      const stageGrades = new Set((taxonomy.grades ?? []).filter((g) => g.stage === id).map((g) => g.id));
+      onChange({
+        ...value,
+        stages: value.stages.filter((s) => s !== id),
+        subjects: value.subjects.filter((s) => !inStage.has(s)),
+        grades: value.grades.filter((g) => !stageGrades.has(g)),
+      });
     } else if (value.stages.length < MAX_STAGES) {
       onChange({ ...value, stages: [...value.stages, id] });
     }
@@ -54,6 +63,14 @@ export function TaxonomyPicker({
     else if (value.subjects.length < MAX_SUBJECTS) onChange({ ...value, subjects: [...value.subjects, id] });
   };
   const subjectsFull = value.subjects.length >= MAX_SUBJECTS;
+  const toggleGrade = (id: string) => {
+    if (value.grades.includes(id)) onChange({ ...value, grades: value.grades.filter((g) => g !== id) });
+    else if (value.grades.length < MAX_GRADES) onChange({ ...value, grades: [...value.grades, id] });
+  };
+  const gradesFull = value.grades.length >= MAX_GRADES;
+  const gradeStages = taxonomy.stages.filter(
+    (stage) => value.stages.includes(stage.id) && (taxonomy.grades ?? []).some((g) => g.stage === stage.id),
+  );
 
   // Platform batch 2 §8.1: an entry an administrator hid stays on what already uses
   // it. The public classification omits it, so it is kept and shown here by name
@@ -146,6 +163,30 @@ export function TaxonomyPicker({
             ))
         )}
       </fieldset>
+
+      {gradeStages.length > 0 && (
+        <fieldset className="space-y-1.5" disabled={disabled} data-testid="grade-picker">
+          <legend className="text-[12.5px] font-medium">
+            {t("Grade")} <span className="font-normal text-[var(--muted-foreground)]">{t("(optional, up to 3)")}</span>
+          </legend>
+          {gradeStages.map((stage) => (
+            <div key={stage.id} className="space-y-1">
+              {gradeStages.length > 1 && <p className="text-[11.5px] text-[var(--muted-foreground)]">{pickName(stage.names, lang)}</p>}
+              <div className="flex flex-wrap gap-1.5">
+                {(taxonomy.grades ?? []).filter((g) => g.stage === stage.id).map((grade) => {
+                  const on = value.grades.includes(grade.id);
+                  return (
+                    <button key={grade.id} type="button" aria-pressed={on} className={chip(on)}
+                      disabled={!on && gradesFull} onClick={() => toggleGrade(grade.id)}>
+                      {pickName(grade.names, lang)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </fieldset>
+      )}
 
       {kept.length > 0 && (
         <fieldset className="space-y-1.5" disabled={disabled} data-testid="taxonomy-kept">

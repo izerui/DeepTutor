@@ -4,7 +4,7 @@ import { Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { primaryClass } from "@/components/classes/ClassesHub";
+import { primaryClass } from "@/components/common/form-styles";
 import { bookApi } from "@/lib/book-api";
 import { browserStorage } from "@/shared/storage";
 import type { Book, Chapter } from "@/lib/book-types";

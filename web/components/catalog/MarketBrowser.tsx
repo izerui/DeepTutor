@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass } from "@/components/common/form-styles";
 import { PageHeader, pageGridClass } from "@/components/layout/FeaturePage";
 import { marketQueryString, searchMarket, type MarketPage, type MarketQuery, type SortOrder } from "@/lib/catalog-api";
 
@@ -13,7 +13,7 @@ import { catalogError } from "./catalog-format";
 import { ActiveFilters, FacetSidebar } from "./FacetSidebar";
 import { ItemCard } from "./ItemCard";
 import { clearConditions, hasConditions, parseMarketQuery } from "./market-query";
-import { useTaxonomy } from "./useTaxonomy";
+import { subjectLabel, useTaxonomy } from "./useTaxonomy";
 
 /** The learning market (platform batch 1 §5.1); every condition lives in the address. */
 export default function MarketBrowser() {
@@ -23,7 +23,8 @@ export default function MarketBrowser() {
   const params = useSearchParams();
   const queryKey = params?.toString() ?? "";
   const query = useMemo(() => parseMarketQuery(new URLSearchParams(queryKey)), [queryKey]);
-  const { taxonomy, index, nameOf } = useTaxonomy();
+  const { taxonomy, index, nameOf, classificationOf, language } = useTaxonomy();
+  const subjectNameOf = (id: string) => subjectLabel(id, index, language, (query.stage ?? []).length !== 1);
   // The newest answer, and the address it answers; older answers stay shown while loading.
   const [answer, setAnswer] = useState<{ key: string; result: MarketPage | null; error: string } | null>(null);
   const result = answer?.result ?? null;
@@ -66,6 +67,24 @@ export default function MarketBrowser() {
         title={t("Learning market")}
         description={t("Find books, knowledge bases, Mastery Paths, practice sets and courses, and join to learn.")}
       />
+      {/* Follow-ups §1: "My favorites" is a tab of the market (``favorites=1`` in the address). */}
+      <div role="tablist" aria-label={t("Learning market")} className="mb-4 flex gap-1 border-b border-[var(--border)]">
+        {([
+          [false, t("All")],
+          [true, t("My favorites")],
+        ] as const).map(([favorites, label]) => {
+          const on = Boolean(query.favorites) === favorites;
+          return (
+            <button key={String(favorites)} type="button" role="tab" aria-selected={on}
+              className={`-mb-px border-b-2 px-3 py-1.5 text-[13px] transition-colors ${
+                on ? "border-[var(--primary)] font-medium text-[var(--foreground)]" : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }`}
+              onClick={() => go({ ...query, favorites, page: 1 })}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
       <form
         className="mb-5 flex flex-wrap items-center gap-2"
         role="search"
@@ -86,6 +105,7 @@ export default function MarketBrowser() {
             value={query.sort ?? "newest"} onChange={(e) => go({ ...query, sort: e.target.value as SortOrder, page: 1 })}>
             <option value="newest">{t("Newest")}</option>
             <option value="popular">{t("Most learners")}</option>
+            <option value="rating">{t("Highest rated")}</option>
           </select>
         </label>
       </form>
@@ -95,7 +115,7 @@ export default function MarketBrowser() {
           <FacetSidebar query={query} facets={result?.facets ?? null} taxonomy={taxonomy} index={index} onChange={go} />
         </div>
         <div className="min-w-0 flex-1 space-y-3">
-          <ActiveFilters query={query} nameOf={nameOf} authorNames={authorNames} onChange={go} />
+          <ActiveFilters query={query} nameOf={nameOf} subjectNameOf={subjectNameOf} authorNames={authorNames} onChange={go} />
           {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
           {result && (
             <p className="text-[12px] text-[var(--muted-foreground)]" role="status">
@@ -106,7 +126,11 @@ export default function MarketBrowser() {
             <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
           ) : result && result.items.length === 0 ? (
             <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
-              <p className="text-[13px] text-[var(--muted-foreground)]">{t("Nothing matches these conditions.")}</p>
+              <p className="text-[13px] text-[var(--muted-foreground)]">
+                {query.favorites && !hasConditions(query)
+                  ? t("No favorites yet. Use the heart on anything in the market to keep it here.")
+                  : t("Nothing matches these conditions.")}
+              </p>
               {hasConditions(query) && (
                 <button type="button" className={actionClass} onClick={() => go(clearConditions(query))}>
                   {t("Clear filters")}
@@ -116,7 +140,20 @@ export default function MarketBrowser() {
           ) : (
             <div className={pageGridClass(3)} aria-busy={loading}>
               {(result?.items ?? []).map((entry) => (
-                <ItemCard key={`${entry.kind}:${entry.id}`} entry={entry} nameOf={nameOf} />
+                <ItemCard key={`${entry.kind}:${entry.id}`} entry={entry} nameOf={nameOf} classificationOf={classificationOf}
+                  onFavoriteChanged={(favorited) => {
+                    // On "My favorites", an item taken out leaves the list at once.
+                    if (query.favorites && !favorited) {
+                      setAnswer((cur) => cur?.result ? {
+                        ...cur,
+                        result: {
+                          ...cur.result,
+                          total: Math.max(0, cur.result.total - 1),
+                          items: cur.result.items.filter((item) => item.kind !== entry.kind || item.id !== entry.id),
+                        },
+                      } : cur);
+                    }
+                  }} />
               ))}
             </div>
           )}

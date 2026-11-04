@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { primaryClass } from "@/components/classes/ClassesHub";
+import { primaryClass } from "@/components/common/form-styles";
 import { MyComments } from "@/components/comments/Comments";
 import { submitSet, takeSet, type ResultValue, type SubmitResult, type TakeView } from "@/lib/practice-sets-api";
-import { formatDate } from "./PracticeSetsHub";
+import { formatDate } from "./practice-format";
 import { QuestionAnswer } from "./QuestionAnswer";
 
 const RESULT_LABEL: Record<ResultValue, string> = {

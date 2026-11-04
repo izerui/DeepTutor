@@ -1590,6 +1590,24 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/catalog/items/{kind}/{item_id}/favorite": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Add Favorite */
+    readonly put: operations["add_favorite_api_catalog_items__kind___item_id__favorite_put"];
+    readonly post?: never;
+    /** Remove Favorite */
+    readonly delete: operations["remove_favorite_api_catalog_items__kind___item_id__favorite_delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/catalog/items/{kind}/{item_id}/join": {
     readonly parameters: {
       readonly query?: never;
@@ -1603,6 +1621,75 @@ export interface paths {
     readonly post: operations["join_api_catalog_items__kind___item_id__join_post"];
     /** Leave */
     readonly delete: operations["leave_api_catalog_items__kind___item_id__join_delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/reviews": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Item Reviews */
+    readonly get: operations["item_reviews_api_catalog_items__kind___item_id__reviews_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/reviews/{user_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /** Delete Review */
+    readonly delete: operations["delete_review_api_catalog_items__kind___item_id__reviews__user_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/reviews/{user_id}/reply": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Reply Review */
+    readonly put: operations["reply_review_api_catalog_items__kind___item_id__reviews__user_id__reply_put"];
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/reviews/mine": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /** Save Review */
+    readonly put: operations["save_review_api_catalog_items__kind___item_id__reviews_mine_put"];
+    readonly post?: never;
+    /** Delete My Review */
+    readonly delete: operations["delete_my_review_api_catalog_items__kind___item_id__reviews_mine_delete"];
     readonly options?: never;
     readonly head?: never;
     readonly patch?: never;
@@ -12624,6 +12711,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/tasks/courses/{course_id}/practice-sets": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Add Course Practice Set
+     * @description Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task.
+     */
+    readonly post: operations["add_course_practice_set_api_tasks_courses__course_id__practice_sets_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/tasks/courses/{course_id}/publish": {
     readonly parameters: {
       readonly query?: never;
@@ -14423,6 +14530,8 @@ export interface components {
        * @default
        */
       readonly difficulty: string;
+      /** Grades */
+      readonly grades?: readonly string[];
       /** Stages */
       readonly stages?: readonly string[];
       /** Subjects */
@@ -14668,6 +14777,11 @@ export interface components {
     readonly CourseCreate: {
       /** Title */
       readonly title: string;
+    };
+    /** CoursePracticeSet */
+    readonly CoursePracticeSet: {
+      /** Set Id */
+      readonly set_id: string;
     };
     /** CourseUpdate */
     readonly CourseUpdate: {
@@ -15489,6 +15603,8 @@ export interface components {
     };
     /** Grade */
     readonly Grade: {
+      /** Attempt */
+      readonly attempt?: number | null;
       /**
        * Comment
        * @default
@@ -16237,6 +16353,8 @@ export interface components {
        * @default
        */
       readonly difficulty: string;
+      /** Grades */
+      readonly grades?: readonly string[];
       /** Stages */
       readonly stages?: readonly string[];
       /** Subjects */
@@ -18077,6 +18195,14 @@ export interface components {
       /** Rename To */
       readonly rename_to: string;
     };
+    /** ReplyBody */
+    readonly ReplyBody: {
+      /**
+       * Text
+       * @default
+       */
+      readonly text: string;
+    };
     /** ResolveRequest */
     readonly ResolveRequest: {
       /**
@@ -18095,6 +18221,16 @@ export interface components {
       readonly book_id: string;
       /** Expected Revision */
       readonly expected_revision?: number | null;
+    };
+    /** ReviewBody */
+    readonly ReviewBody: {
+      /** Stars */
+      readonly stars: number;
+      /**
+       * Text
+       * @default
+       */
+      readonly text: string;
     };
     /** ReviewRequest */
     readonly ReviewRequest: {
@@ -18257,6 +18393,8 @@ export interface components {
     };
     /** SendBack */
     readonly SendBack: {
+      /** Attempt */
+      readonly attempt?: number | null;
       /** Reason */
       readonly reason: string;
     };
@@ -20405,6 +20543,8 @@ export type SchemaConnectSubagentRequest =
 export type SchemaConnectWeKnoraRequest =
   components["schemas"]["ConnectWeKnoraRequest"];
 export type SchemaCourseCreate = components["schemas"]["CourseCreate"];
+export type SchemaCoursePracticeSet =
+  components["schemas"]["CoursePracticeSet"];
 export type SchemaCourseUpdate = components["schemas"]["CourseUpdate"];
 export type SchemaCreateBookRequest =
   components["schemas"]["CreateBookRequest"];
@@ -20730,9 +20870,11 @@ export type SchemaRemedialFromSet = components["schemas"]["RemedialFromSet"];
 export type SchemaRenamePathRequest =
   components["schemas"]["RenamePathRequest"];
 export type SchemaRenameTagRequest = components["schemas"]["RenameTagRequest"];
+export type SchemaReplyBody = components["schemas"]["ReplyBody"];
 export type SchemaResolveRequest = components["schemas"]["ResolveRequest"];
 export type SchemaResumeBookRequest =
   components["schemas"]["ResumeBookRequest"];
+export type SchemaReviewBody = components["schemas"]["ReviewBody"];
 export type SchemaReviewRequest = components["schemas"]["ReviewRequest"];
 export type SchemaReviewSettingsRequest =
   components["schemas"]["ReviewSettingsRequest"];
@@ -24336,6 +24478,8 @@ export interface operations {
       readonly query?: {
         readonly author?: string;
         readonly difficulty?: string;
+        readonly favorites?: boolean;
+        readonly grade?: string;
         readonly kind?: string;
         readonly page?: number;
         readonly q?: string;
@@ -24494,6 +24638,82 @@ export interface operations {
       };
     };
   };
+  readonly add_favorite_api_catalog_items__kind___item_id__favorite_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly remove_favorite_api_catalog_items__kind___item_id__favorite_delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly join_api_catalog_items__kind___item_id__join_post: {
     readonly parameters: {
       readonly query?: never;
@@ -24533,6 +24753,208 @@ export interface operations {
     };
   };
   readonly leave_api_catalog_items__kind___item_id__join_delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly item_reviews_api_catalog_items__kind___item_id__reviews_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly page?: number;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_review_api_catalog_items__kind___item_id__reviews__user_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+        readonly user_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly reply_review_api_catalog_items__kind___item_id__reviews__user_id__reply_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+        readonly user_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReplyBody"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly save_review_api_catalog_items__kind___item_id__reviews_mine_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReviewBody"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_my_review_api_catalog_items__kind___item_id__reviews_mine_delete: {
     readonly parameters: {
       readonly query?: never;
       readonly header?: {
@@ -49490,6 +49912,45 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly add_course_practice_set_api_tasks_courses__course_id__practice_sets_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly course_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["CoursePracticeSet"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {

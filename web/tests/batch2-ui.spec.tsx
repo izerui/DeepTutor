@@ -2,21 +2,18 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 
 // Spec 2026-11-03 batch 2 §10: comments, announcements, courses, opening times, the calendar.
-const { tasks, comments, classes, t } = vi.hoisted(() => ({
+const { tasks, comments, t } = vi.hoisted(() => ({
   tasks: { getHome: vi.fn(), getAssignedTask: vi.fn(), listAssignedTasks: vi.fn(), listAssignedCourses: vi.fn(), listCalendar: vi.fn(), markTaskDone: vi.fn(), submitHomework: vi.fn() },
   comments: { myComments: vi.fn(), writtenComments: vi.fn(), writeComment: vi.fn(), deleteComment: vi.fn() },
-  classes: { listAnnouncements: vi.fn(), postAnnouncement: vi.fn(), updateAnnouncement: vi.fn(), deleteAnnouncement: vi.fn() },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
 vi.mock("@/lib/tasks-api", () => tasks);
 vi.mock("@/lib/comments-api", () => comments);
-vi.mock("@/lib/classes-api", () => classes);
 vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, isTeacher: false, loading: false }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
-import { AnnouncementsSection } from "@/components/classes/ClassOrg";
 import { CommentEditor, MyComments } from "@/components/comments/Comments";
 import StudentHome from "@/components/home/StudentHome";
 import { StudentCourses } from "@/components/tasks/Courses";
@@ -32,7 +29,7 @@ const note: AssignedTask = {
 };
 
 beforeEach(() => {
-  [tasks, comments, classes].forEach((group) => Object.values(group).forEach((fn) => fn.mockReset()));
+  [tasks, comments].forEach((group) => Object.values(group).forEach((fn) => fn.mockReset()));
 });
 
 it("lets the teacher write one comment and save it again as an edit", async () => {
@@ -54,25 +51,6 @@ it("shows the student their teachers' comments, naming the point", async () => {
   expect(await screen.findByText("Limits again.")).toBeTruthy();
   expect(screen.getByText("Limits:")).toBeTruthy();
   expect(comments.myComments).toHaveBeenCalledWith("path_point", "tpl_1");
-});
-
-it("posts a pinned announcement and gives students no editing", async () => {
-  classes.listAnnouncements.mockResolvedValue([]);
-  classes.postAnnouncement.mockResolvedValue({});
-  const { unmount } = render(<AnnouncementsSection classId="cls_1" canPost />);
-  fireEvent.change(await screen.findByLabelText("New announcement"), { target: { value: "Exam Friday" } });
-  fireEvent.click(screen.getByLabelText("Pin to top"));
-  fireEvent.click(screen.getByRole("button", { name: "Post" }));
-  await waitFor(() => expect(classes.postAnnouncement).toHaveBeenCalledWith("cls_1", "Exam Friday", true));
-  unmount();
-
-  classes.listAnnouncements.mockResolvedValue([
-    { id: "a1", class_id: "cls_1", class_name: "Physics 1", author: "tina", text: "Exam Friday", pinned: true, created_at: 1, updated_at: 1, can_edit: false },
-  ]);
-  render(<AnnouncementsSection classId="cls_1" canPost={false} />);
-  expect(await screen.findByText("Exam Friday")).toBeTruthy();
-  expect(screen.queryByLabelText("New announcement")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
 });
 
 it("still shows an older class announcement on the home, by its class name (platform batch 3 §3)", async () => {

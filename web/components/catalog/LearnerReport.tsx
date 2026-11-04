@@ -6,16 +6,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, primaryClass } from "@/components/classes/ClassesHub";
-import { flagText } from "@/components/classes/attention-format";
+import { actionClass, primaryClass } from "@/components/common/form-styles";
+import { flagText } from "@/components/catalog/attention-format";
+import { DownloadButton } from "@/components/common/DownloadButton";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
 import { rememberSuggested } from "@/components/practice-sets/SetReview";
 import {
   getLearnerDetail,
   getLearnerReport,
   getReportPoints,
+  downloadReport,
   REPORT_KINDS,
-  reportExportUrl,
   type LearnerDetail,
   type LearnerReport as Report,
   type LearnerRow,
@@ -36,12 +37,19 @@ function when(seconds: number | null | undefined, never: string): string {
 /** Where the author manages it: the course editor, or the path's intro page. */
 const backHref = (kind: ReportKind, id: string) => (kind === "course" ? "/tasks?tab=courses" : itemHref(kind, id));
 
+/**
+ * A practice set opened from a report; from a course's report it carries the
+ * course (follow-ups §3), so remedial practice made there can be added to it.
+ */
+export const practiceSetHref = (setId: string, kind: ReportKind, itemId: string) =>
+  `/practice-sets?set=${encodeURIComponent(setId)}${kind === "course" ? `&course=${encodeURIComponent(itemId)}` : ""}`;
+
 /** A remedial draft opens in the practice-set editor with its suggested receivers handed over. */
-function useOpenRemedial() {
+function useOpenRemedial(kind: ReportKind, itemId: string) {
   const router = useRouter();
   return (draft: Awaited<ReturnType<typeof remedialFromPath>>) => {
     rememberSuggested(draft);
-    router.push(`/practice-sets?set=${encodeURIComponent(draft.set.id)}`);
+    router.push(practiceSetHref(draft.set.id, kind, itemId));
   };
 }
 
@@ -141,7 +149,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
           <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
           {t("Only learners who need attention")}
         </label>
-        <a className={actionClass} href={reportExportUrl(kind, itemId, days)} download>{t("Export CSV")}</a>
+        <DownloadButton download={() => downloadReport(kind, itemId, days)} label={t("Export CSV")} />
       </div>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 
@@ -222,7 +230,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
           <ul className="space-y-1 text-[12.5px]">
             {report.practice_sets.map((setId) => (
               <li key={setId}>
-                <Link href={`/practice-sets?set=${encodeURIComponent(setId)}`} className="text-[var(--primary)] hover:underline">
+                <Link href={practiceSetHref(setId, kind, itemId)} className="text-[var(--primary)] hover:underline">
                   {setTitles.get(setId) || t("Practice set")}
                 </Link>
               </li>
@@ -237,7 +245,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
 /** One path of the item: who has mastered each point; remedial for the rest (§1, §4). */
 function PathPoints({ kind, itemId, templateId, title }: { kind: ReportKind; itemId: string; templateId: string; title: string }) {
   const { t } = useTranslation();
-  const openRemedial = useOpenRemedial();
+  const openRemedial = useOpenRemedial(kind, itemId);
   const [data, setData] = useState<ReportPoints | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -303,7 +311,7 @@ function PathPoints({ kind, itemId, templateId, title }: { kind: ReportKind; ite
 /** One learner on this item: each point's mastery, practice results, tasks. */
 function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId: string; userId: string }) {
   const { t } = useTranslation();
-  const openRemedial = useOpenRemedial();
+  const openRemedial = useOpenRemedial(kind, itemId);
   const [detail, setDetail] = useState<LearnerDetail | null>(null);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");

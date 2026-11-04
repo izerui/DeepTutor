@@ -107,6 +107,10 @@ _ADDED_COLUMNS = {
         "attempts_limit": "INTEGER",
         # Which attempt is the student's score: ``best`` or ``first``.
         "score_mode": "TEXT NOT NULL DEFAULT 'best'",
+        # Who made it; unchanged when it is handed over (follow-ups §4). ``NULL`` on
+        # sets made before: not known, so an administrator owning one is treated as
+        # having received it.
+        "created_by": "TEXT",
     },
     "practice_submissions": {
         # Handed to the set's author for review (batch 3 §2.1): the text of

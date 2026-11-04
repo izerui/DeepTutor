@@ -1,5 +1,5 @@
 import { apiFetch, apiUrl } from "./api";
-import type { AttentionFlag } from "./classes-api";
+import type { AttentionFlag } from "./report-types";
 
 /** One hand-in waiting for the teacher (spec 2026-11-03 batch 3 §5.4). */
 export interface ToGrade {

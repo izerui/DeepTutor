@@ -19,7 +19,7 @@ export default function AuthorProfile() {
   const id = useSearchParams()?.get("id") ?? "";
   const [author, setAuthor] = useState<AuthorPage | null>(null);
   const [error, setError] = useState("");
-  const { nameOf } = useTaxonomy();
+  const { nameOf, classificationOf } = useTaxonomy();
 
   useEffect(() => {
     if (!id) return;
@@ -67,7 +67,7 @@ export default function AuthorProfile() {
               <section key={kind} className="space-y-2">
                 <h2 className="text-[13.5px] font-semibold">{kindLabel(kind, t)} <span className="font-normal text-[var(--muted-foreground)]">({items.length})</span></h2>
                 <div className={pageGridClass(3)}>
-                  {items.map((entry) => <ItemCard key={`${entry.kind}:${entry.id}`} entry={entry} nameOf={nameOf} />)}
+                  {items.map((entry) => <ItemCard key={`${entry.kind}:${entry.id}`} entry={entry} nameOf={nameOf} classificationOf={classificationOf} />)}
                 </div>
               </section>
             );

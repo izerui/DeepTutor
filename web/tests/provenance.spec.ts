@@ -20,10 +20,11 @@ it("groups what was handed out before one's own, leaving out empty groups", () =
   ]);
 });
 
-it("labels a teacher's item as assigned for students and shared for teachers", () => {
+it("labels a teacher's item as published by them, for students and teachers alike", () => {
   const tina = { kind: "teacher" as const, name: "tina" };
-  expect(provenanceLabel(tina, t, true)).toBe("Assigned by tina");
-  expect(provenanceLabel(tina, t, false)).toBe("Shared by tina");
+  expect(provenanceLabel(tina, t, true)).toBe("Published by tina");
+  expect(provenanceLabel(tina, t, false)).toBe("Published by tina");
+  expect(provenanceLabel({ kind: "shared", name: "sam" }, t, false)).toBe("Shared by sam");
   expect(provenanceLabel({ kind: "school", name: "" }, t, true)).toBe("Published by the platform");
   expect(provenanceLabel(undefined, t, true)).toBe("Mine");
   expect(provenanceGroupTitle("teacher", t, true)).toBe("From my teachers");

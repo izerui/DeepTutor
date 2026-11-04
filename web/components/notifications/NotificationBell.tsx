@@ -93,6 +93,11 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("“{{title}}” was not approved: {{reason}}", { title, reason: p.reason });
     case "listing_taken_down":
       return t("“{{title}}” was taken out of the market: {{reason}}", { title, reason: p.reason });
+    // Follow-ups §1: new reviews of one's item, at most one notification a day (counted).
+    case "listing_reviewed":
+      return (item.count ?? 1) > 1
+        ? t("{{count}} new reviews of “{{title}}”", { title, count: item.count })
+        : t("Someone reviewed “{{title}}”", { title });
     default:
       return item.kind;
   }

@@ -81,7 +81,7 @@ export function TeacherPathBanner({
           <span>
             {origin.provenance?.kind === 'school'
               ? t('Published by the platform')
-              : t('From {{teacher}}', { teacher: origin.teacher_name || t('Teacher') })}
+              : t('Published by {{name}}', { name: origin.teacher_name || t('Teacher') })}
           </span>
           <span aria-hidden="true">·</span>
           <span>{t('The outline is set by your teacher')}</span>

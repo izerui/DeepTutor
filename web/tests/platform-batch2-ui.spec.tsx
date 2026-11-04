@@ -229,7 +229,7 @@ it("renames, hides, adds, moves and deletes classification entries and refreshes
 
   // Any change makes the market's classification load again.
   catalog.getTaxonomy.mockClear();
-  render(<TaxonomyPicker taxonomy={publicTaxonomy} value={{ stages: [], subjects: [], difficulty: "" }} onChange={vi.fn()} />);
+  render(<TaxonomyPicker taxonomy={publicTaxonomy} value={{ stages: [], subjects: [], grades: [], difficulty: "" }} onChange={vi.fn()} />);
   const { loadTaxonomy } = await import("@/components/catalog/useTaxonomy");
   await loadTaxonomy();
   expect(catalog.getTaxonomy).toHaveBeenCalledTimes(1);
@@ -273,7 +273,7 @@ it("lets an administrator edit the classification of a listing in the market, no
   fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(catalog.classifyListing).toHaveBeenCalledWith("practice_set", "set_1", {
-      stages: ["senior"], subjects: ["senior.math"], difficulty: "", tags: ["algebra", "exam"],
+      stages: ["senior"], subjects: ["senior.math"], grades: [], difficulty: "", tags: ["algebra", "exam"],
     }),
   );
   await waitFor(() => expect(screen.queryByTestId("classification-editor")).toBeNull());
@@ -290,16 +290,16 @@ it("keeps a hidden entry a listing already uses, named where known", async () =>
   catalog.getAdminTaxonomy.mockResolvedValue(adminTree({ hidden: true }));
   const change = vi.fn();
   const visible: Taxonomy = { ...publicTaxonomy, stages: [{ ...publicTaxonomy.stages[0], subjects: [] }] };
-  render(<TaxonomyPicker taxonomy={visible} value={{ stages: ["senior"], subjects: ["senior.math"], difficulty: "" }} onChange={change} />);
+  render(<TaxonomyPicker taxonomy={visible} value={{ stages: ["senior"], subjects: ["senior.math"], grades: [], difficulty: "" }} onChange={change} />);
   const kept = screen.getByTestId("taxonomy-kept");
   expect(await within(kept).findByRole("button", { name: "Math" })).toBeTruthy();
   fireEvent.click(within(kept).getByRole("button", { name: "Math" }));
-  expect(change).toHaveBeenCalledWith({ stages: ["senior"], subjects: [], difficulty: "" });
+  expect(change).toHaveBeenCalledWith({ stages: ["senior"], subjects: [], grades: [], difficulty: "" });
 });
 
 it("shows the raw id of a hidden entry when its name cannot be looked up", async () => {
   catalog.getAdminTaxonomy.mockRejectedValue(new Error("Only administrators manage the classification."));
-  render(<TaxonomyPicker taxonomy={publicTaxonomy} value={{ stages: ["senior"], subjects: ["senior.old"], difficulty: "" }} onChange={vi.fn()} />);
+  render(<TaxonomyPicker taxonomy={publicTaxonomy} value={{ stages: ["senior"], subjects: ["senior.old"], grades: [], difficulty: "" }} onChange={vi.fn()} />);
   expect(await within(screen.getByTestId("taxonomy-kept")).findByRole("button", { name: "senior.old" })).toBeTruthy();
 });
 

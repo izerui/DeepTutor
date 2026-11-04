@@ -8,7 +8,7 @@ import { CATALOG_KINDS, type MarketFacets, type MarketQuery, type Taxonomy } fro
 
 import { kindLabel } from "./catalog-format";
 import { clearConditions, removeValue, toggleValue, type FacetKey } from "./market-query";
-import { pickName, type TaxonomyIndexEntry } from "./useTaxonomy";
+import { pickName, subjectLabel, type TaxonomyIndexEntry } from "./useTaxonomy";
 
 const TOP_TAGS = 20;
 const TOP_AUTHORS = 10;
@@ -37,7 +37,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** Narrow a condition when a stage goes: subjects of that stage go with it. */
+/** Narrow a condition when a stage goes: subjects and grades of that stage go with it. */
 export function toggleFacet(
   query: MarketQuery,
   key: FacetKey,
@@ -47,6 +47,7 @@ export function toggleFacet(
   const next = toggleValue(query, key, value);
   if (key === "stage" && (query.stage ?? []).includes(value)) {
     next.subject = (next.subject ?? []).filter((id) => index.get(id)?.stage !== value);
+    next.grade = (next.grade ?? []).filter((id) => index.get(id)?.stage !== value);
   }
   return next;
 }
@@ -85,6 +86,14 @@ export function FacetSidebar({
   const subjects = subjectStages.flatMap((s) => s.subjects).filter(
     (s) => has("subject", s.id) || count(facets?.subjects, s.id) > 0 || s.children.some((c) => has("subject", c.id)),
   );
+  // Follow-ups §7: outside one stage a subject says which stage it is under.
+  const subjectName = (id: string) => subjectLabel(id, index, lang, chosenStages.length !== 1);
+  // Follow-ups §2: grades only once a stage that has them is chosen (or a grade already is).
+  const allGrades = taxonomy?.grades ?? [];
+  const grades = allGrades.filter(
+    (g) => has("grade", g.id) || (chosenStages.includes(g.stage) && count(facets?.grades, g.id) > 0),
+  );
+  const showGrades = (query.grade ?? []).length > 0 || allGrades.some((g) => chosenStages.includes(g.stage));
 
   const allTags = facets?.tags ?? [];
   const tagNeedle = tagSearch.trim().toLocaleLowerCase();
@@ -119,7 +128,7 @@ export function FacetSidebar({
                 <div className="flex items-center">
                   {children.length > 0 ? (
                     <button type="button" aria-expanded={expanded}
-                      aria-label={t("More specific subjects of {{name}}", { name: pickName(s.names, lang) })}
+                      aria-label={t("More specific subjects of {{name}}", { name: subjectName(s.id) })}
                       className="rounded p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
                       onClick={() => setOpen((cur) => ({ ...cur, [s.id]: !expanded }))}>
                       {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -127,7 +136,7 @@ export function FacetSidebar({
                   ) : (
                     <span className="w-[16px]" />
                   )}
-                  <Option on={has("subject", s.id)} label={pickName(s.names, lang)} count={count(facets?.subjects, s.id)}
+                  <Option on={has("subject", s.id)} label={subjectName(s.id)} count={count(facets?.subjects, s.id)}
                     onToggle={() => toggle("subject", s.id)} />
                 </div>
                 {expanded && (
@@ -141,6 +150,15 @@ export function FacetSidebar({
               </div>
             );
           })}
+        </Group>
+      )}
+
+      {showGrades && grades.length > 0 && (
+        <Group title={t("Grade")}>
+          {grades.map((g) => (
+            <Option key={g.id} on={has("grade", g.id)} label={pickName(g.names, lang)} count={count(facets?.grades, g.id)}
+              onToggle={() => toggle("grade", g.id)} />
+          ))}
         </Group>
       )}
 
@@ -192,11 +210,14 @@ export function FacetSidebar({
 export function ActiveFilters({
   query,
   nameOf,
+  subjectNameOf = nameOf,
   authorNames,
   onChange,
 }: {
   query: MarketQuery;
   nameOf: (id: string) => string;
+  /** A subject's name, led by its stage when not exactly one stage is chosen. */
+  subjectNameOf?: (id: string) => string;
   authorNames: Record<string, string>;
   onChange: (next: MarketQuery) => void;
 }) {
@@ -204,7 +225,8 @@ export function ActiveFilters({
   const chips: { key: FacetKey | "q"; value: string; label: string }[] = [];
   if (query.q?.trim()) chips.push({ key: "q", value: query.q, label: `“${query.q.trim()}”` });
   for (const value of query.stage ?? []) chips.push({ key: "stage", value, label: nameOf(value) });
-  for (const value of query.subject ?? []) chips.push({ key: "subject", value, label: nameOf(value) });
+  for (const value of query.subject ?? []) chips.push({ key: "subject", value, label: subjectNameOf(value) });
+  for (const value of query.grade ?? []) chips.push({ key: "grade", value, label: nameOf(value) });
   for (const value of query.kind ?? []) chips.push({ key: "kind", value, label: kindLabel(value, t) });
   for (const value of query.difficulty ?? []) chips.push({ key: "difficulty", value, label: nameOf(value) });
   for (const value of query.tag ?? []) chips.push({ key: "tag", value, label: `#${value}` });

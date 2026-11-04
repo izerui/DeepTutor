@@ -15,17 +15,16 @@ type Translate = (key: string, values?: Record<string, unknown>) => string;
 export const PROVENANCE_ORDER: readonly ProvenanceKind[] = ["teacher", "school", "own", "shared"];
 
 /**
- * The label for an item. A student sees what a teacher published as
- * "assigned by"; a teacher sees a colleague's item as "shared by".
+ * The label for an item. What a teacher published reads "Published by tina"
+ * for everyone (follow-ups §7); an administrator's, "Published by the platform".
+ * ``viewerIsStudent`` only changes the group headings.
  */
-export function provenanceLabel(provenance: Provenance | null | undefined, t: Translate, viewerIsStudent: boolean): string {
+export function provenanceLabel(provenance: Provenance | null | undefined, t: Translate, _viewerIsStudent?: boolean): string {
   switch (provenance?.kind ?? "own") {
     case "school":
       return t("Published by the platform");
     case "teacher":
-      return viewerIsStudent
-        ? t("Assigned by {{name}}", { name: provenance?.name ?? "" })
-        : t("Shared by {{name}}", { name: provenance?.name ?? "" });
+      return t("Published by {{name}}", { name: provenance?.name ?? "" });
     case "shared":
       return t("Shared by {{name}}", { name: provenance?.name ?? "" });
     default:

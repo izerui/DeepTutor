@@ -90,6 +90,11 @@ def _accounts() -> dict[str, dict[str, Any]]:
 # ── targets ────────────────────────────────────────────────
 
 
+def _check_attempt(current: int, seen: int | None) -> None:
+    if seen is not None and int(current) != int(seen):
+        raise TaskConflict("The student handed in again just now. Reload before grading.")
+
+
 def _course_of(task_id: str) -> dict[str, str]:
     with db.read() as conn:
         if conn is None:
@@ -636,7 +641,10 @@ class TaskService:
         if _role(self.actor) == "admin":
             raise TaskForbidden("Homework is graded by teachers; administrators can only withdraw the task.")
 
-    def grade(self, task_id: str, student_id: str, score: float, comment: str) -> dict[str, Any]:
+    def grade(
+        self, task_id: str, student_id: str, score: float, comment: str, *, attempt: int | None = None,
+    ) -> dict[str, Any]:
+        """*attempt*: the hand-in the teacher read; refused when the student handed in again since (follow-ups §5)."""
         self._require_author()
         self._require_teacher_for_homework()
         with db.read() as conn:
@@ -646,11 +654,12 @@ class TaskService:
             raise TaskError(f"The score must be between 0 and {max_score:g}.")
         with db.write() as conn:
             submission = conn.execute(
-                "SELECT status, submitted_at, late FROM task_submissions WHERE task_id = ? AND student_id = ?",
+                "SELECT status, submitted_at, late, attempt FROM task_submissions WHERE task_id = ? AND student_id = ?",
                 (task_id, student_id),
             ).fetchone()
             if submission is None:
                 raise TaskNotFound("No homework from this student.")
+            _check_attempt(submission["attempt"], attempt)
             regraded = submission["status"] == "graded"
             if submission["status"] == "returned":
                 # Graded after all: the hand-in counts again (sending back had removed it).
@@ -672,7 +681,9 @@ class TaskService:
         )
         return self.detail(task_id)
 
-    def send_back(self, task_id: str, student_id: str, reason: str) -> dict[str, Any]:
+    def send_back(
+        self, task_id: str, student_id: str, reason: str, *, attempt: int | None = None,
+    ) -> dict[str, Any]:
         self._require_author()
         self._require_teacher_for_homework()
         reason = str(reason or "").strip()
@@ -681,6 +692,11 @@ class TaskService:
         with db.read() as conn:
             row = self._owned(conn, task_id)
         with db.write() as conn:
+            current = conn.execute(
+                "SELECT attempt FROM task_submissions WHERE task_id = ? AND student_id = ?", (task_id, student_id)
+            ).fetchone()
+            if current is not None:
+                _check_attempt(current["attempt"], attempt)
             if conn.execute(
                 "UPDATE task_submissions SET status = 'returned', return_reason = ? "
                 "WHERE task_id = ? AND student_id = ?",
@@ -755,10 +771,16 @@ class StudentTasks:
         """Published or withdrawn tasks that reach the student, or that they worked on."""
         from deeptutor.publishing import scope as scopes
 
+        # Once classes are retired a task reaches only those who joined it (through its
+        # course), so only those tasks are read, not every task (follow-ups §6).
+        wanted: list[str] | None = None
+        if scopes.classes_retired():
+            from deeptutor.catalog.enrollment import joined_by
+
+            wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK]
         with db.read() as conn:
             if conn is None:
                 return []
-            rows = conn.execute("SELECT * FROM tasks WHERE status != 'draft'").fetchall()
             mine = {
                 r[0] for r in conn.execute(
                     "SELECT task_key FROM task_completions WHERE student_id = ? "
@@ -766,6 +788,17 @@ class StudentTasks:
                     (self.actor.id, self.actor.id),
                 )
             }
+            if wanted is None:
+                rows = conn.execute("SELECT * FROM tasks WHERE status != 'draft'").fetchall()
+            else:
+                ids = sorted(set(wanted) | mine)
+                rows = [
+                    row for start in range(0, len(ids), 500)
+                    for row in conn.execute(
+                        f"SELECT * FROM tasks WHERE status != 'draft' AND id IN ({','.join('?' for _ in ids[start:start + 500])})",  # nosec B608
+                        ids[start:start + 500],
+                    )
+                ]
         student = _role(self.actor) == "student"
         classes = scopes.member_class_ids(self.actor.id) if student else set()
         out = []

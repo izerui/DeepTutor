@@ -30,6 +30,7 @@ class ListingBody(BaseModel):
     summary: str = Field(default="", max_length=2000)
     stages: list[str] = Field(default_factory=list, max_length=10)
     subjects: list[str] = Field(default_factory=list, max_length=10)
+    grades: list[str] = Field(default_factory=list, max_length=10)
     difficulty: str = Field(default="", max_length=40)
     tags: list[str] = Field(default_factory=list, max_length=20)
 
@@ -59,19 +60,21 @@ async def items(
     q: str = Query(default="", max_length=100),
     stage: str = Query(default="", max_length=2000),
     subject: str = Query(default="", max_length=2000),
+    grade: str = Query(default="", max_length=500),
     kind: str = Query(default="", max_length=200),
     difficulty: str = Query(default="", max_length=200),
     tag: str = Query(default="", max_length=2000),
     author: str = Query(default="", max_length=2000),
-    sort: str = Query(default="newest", pattern="^(newest|popular)$"),
+    sort: str = Query(default="newest", pattern="^(newest|popular|rating)$"),
     page: int = Query(default=1, ge=1, le=10_000),
+    favorites: bool = Query(default=False),
 ) -> dict[str, Any]:
     from deeptutor.catalog.market import Filters, parse_list, search
 
     filters = Filters(
-        q=q, stages=parse_list(stage), subjects=parse_list(subject), kinds=parse_list(kind),
+        q=q, stages=parse_list(stage), subjects=parse_list(subject), grades=parse_list(grade), kinds=parse_list(kind),
         difficulties=parse_list(difficulty), tags=parse_list(tag), authors=parse_list(author),
-        sort=sort, page=page,
+        sort=sort, page=page, favorites=favorites,
     )
     return await _call(search, get_current_user(), filters)
 
@@ -121,7 +124,7 @@ async def get_listing(kind: str, item_id: str) -> dict[str, Any]:
 async def save_listing(kind: str, item_id: str, body: ListingBody) -> dict[str, Any]:
     return await _call(
         _listings().save, kind, item_id, title=body.title, summary=body.summary, stages=body.stages,
-        subjects=body.subjects, difficulty=body.difficulty, tags=body.tags,
+        subjects=body.subjects, difficulty=body.difficulty, tags=body.tags, grades=body.grades,
     )
 
 
@@ -181,6 +184,7 @@ async def take_down(kind: str, item_id: str, body: ReasonBody) -> dict[str, Any]
 class ClassificationBody(BaseModel):
     stages: list[str] = Field(default_factory=list, max_length=10)
     subjects: list[str] = Field(default_factory=list, max_length=10)
+    grades: list[str] = Field(default_factory=list, max_length=10)
     difficulty: str = Field(default="", max_length=40)
     tags: list[str] = Field(default_factory=list, max_length=20)
 
@@ -189,7 +193,7 @@ class ClassificationBody(BaseModel):
 async def classify(kind: str, item_id: str, body: ClassificationBody) -> dict[str, Any]:
     return await _call(
         _listings().classify, kind, item_id, stages=body.stages, subjects=body.subjects,
-        difficulty=body.difficulty, tags=body.tags,
+        difficulty=body.difficulty, tags=body.tags, grades=body.grades,
     )
 
 
@@ -369,3 +373,56 @@ async def update_announcement(announcement_id: str, body: AnnouncementUpdate) ->
 async def delete_announcement(announcement_id: str) -> dict[str, Any]:
     await _call(_announcements().delete, announcement_id)
     return {"deleted": True}
+
+
+# ── reviews and favorites (follow-ups §1) ─────────────────
+
+
+class ReviewBody(BaseModel):
+    stars: int = Field(ge=1, le=5)
+    text: str = Field(default="", max_length=2000)
+
+
+class ReplyBody(BaseModel):
+    text: str = Field(default="", max_length=2000)
+
+
+def _reviews():
+    from deeptutor.catalog.reviews import ReviewService
+
+    return ReviewService()
+
+
+@router.get("/items/{kind}/{item_id}/reviews")
+async def item_reviews(kind: str, item_id: str, page: int = Query(default=1, ge=1, le=10_000)) -> dict[str, Any]:
+    return await _call(_reviews().list_for, kind, item_id, page)
+
+
+@router.put("/items/{kind}/{item_id}/reviews/mine")
+async def save_review(kind: str, item_id: str, body: ReviewBody) -> dict[str, Any]:
+    return await _call(_reviews().save, kind, item_id, body.stars, body.text)
+
+
+@router.delete("/items/{kind}/{item_id}/reviews/mine")
+async def delete_my_review(kind: str, item_id: str) -> dict[str, Any]:
+    return await _call(_reviews().delete, kind, item_id)
+
+
+@router.delete("/items/{kind}/{item_id}/reviews/{user_id}")
+async def delete_review(kind: str, item_id: str, user_id: str) -> dict[str, Any]:
+    return await _call(_reviews().delete, kind, item_id, user_id)
+
+
+@router.put("/items/{kind}/{item_id}/reviews/{user_id}/reply")
+async def reply_review(kind: str, item_id: str, user_id: str, body: ReplyBody) -> dict[str, Any]:
+    return await _call(_reviews().reply, kind, item_id, user_id, body.text)
+
+
+@router.put("/items/{kind}/{item_id}/favorite")
+async def add_favorite(kind: str, item_id: str) -> dict[str, Any]:
+    return await _call(_reviews().favorite, kind, item_id, True)
+
+
+@router.delete("/items/{kind}/{item_id}/favorite")
+async def remove_favorite(kind: str, item_id: str) -> dict[str, Any]:
+    return await _call(_reviews().favorite, kind, item_id, False)

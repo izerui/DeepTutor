@@ -1,5 +1,6 @@
 import type { Provenance } from "./provenance";
 import { apiFetch, apiUrl } from "./api";
+import { downloadAuthenticated } from "./authenticated-download";
 
 /** Practice sets are system-level: never workspace-scoped (spec 2026-10-29 §8). */
 const BASE = "/api/practice-sets";
@@ -240,6 +241,8 @@ export const questionsFromBank = (entryIds: number[]) =>
 export const getReport = (setId: string) => call<PracticeReport>(`${id(setId)}/report`);
 /** The results as a CSV download (batch 3 §6.1). */
 export const reportExportUrl = (setId: string) => apiUrl(`${BASE}${id(setId)}/export`);
+/** Follow-ups §7: downloaded with the sign-in credentials. */
+export const downloadSetReport = (setId: string) => downloadAuthenticated(reportExportUrl(setId), "practice-set-results.csv");
 export const getAttempt = (setId: string, submissionId: string) =>
   call<{ attempt: ReviewAttempt }>(`${id(setId)}/submissions${id(submissionId)}`).then((r) => r.attempt);
 export const regradeQuestion = (setId: string, submissionId: string, questionId: string, points: number) =>

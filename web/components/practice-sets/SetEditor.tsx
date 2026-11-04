@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { CommentEditor } from "@/components/comments/Comments";
+import { DownloadButton } from "@/components/common/DownloadButton";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
 import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
@@ -14,8 +15,8 @@ import {
   archiveSet,
   deleteSet,
   generateQuestions,
+  downloadSetReport,
   getReport,
-  reportExportUrl,
   getSet,
   publishSet,
   questionsFromBank,
@@ -27,7 +28,8 @@ import {
   type Reveal,
   type ScoreMode,
 } from "@/lib/practice-sets-api";
-import { formatDate } from "./PracticeSetsHub";
+import { addCoursePracticeSet, getCourse } from "@/lib/tasks-api";
+import { formatDate } from "./practice-format";
 import { AttemptReview, BookSource, OptionBars, RemedialFromSet, takeSuggested } from "./SetReview";
 
 const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
@@ -67,12 +69,15 @@ export function SetEditor({
   onChanged,
   onDeleted,
   onOpenSet,
+  courseId,
 }: {
   setId: string;
   onChanged: () => void;
   onDeleted: () => void;
   /** Opens another set, e.g. a remedial draft made from this one (batch 3 §3.1). */
   onOpenSet?: (setId: string) => void;
+  /** Follow-ups §3: opened from this course's report; once published it can be added to the course. */
+  courseId?: string | null;
 }) {
   const { t } = useTranslation();
   const [saved, setSaved] = useState<PracticeSetDraft | null>(null);
@@ -191,6 +196,9 @@ export function SetEditor({
       )}
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
       {notice && <p role="status" className="text-[12px] text-[var(--muted-foreground)]">{notice}</p>}
+      {courseId && saved.status === "published" && saved.current_revision > 0 && (
+        <AddToCourse courseId={courseId} setId={setId} />
+      )}
 
       <section className={sectionClass}>
         <textarea
@@ -561,6 +569,54 @@ function GeneratePanel({
   );
 }
 
+/**
+ * Follow-ups §3: remedial practice made from a course's report goes back into the
+ * course as its next "do this practice set" task (published at once with a
+ * published course, otherwise with the course).
+ */
+function AddToCourse({ courseId, setId }: { courseId: string; setId: string }) {
+  const { t } = useTranslation();
+  const [title, setTitle] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "busy" | "added">("idle");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    getCourse(courseId)
+      // Already one of the course's tasks (e.g. the set the remedial practice was made from): nothing to add.
+      .then((course) => alive && setTitle((course.tasks ?? []).some((task) => task.target_id === setId) ? null : course.title))
+      .catch(() => alive && setTitle(null));
+    return () => {
+      alive = false;
+    };
+  }, [courseId, setId]);
+
+  // Not one's own course (or gone), or already in it: nothing to offer.
+  if (title === null && state !== "added") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--muted)]/40 p-2 text-[12.5px]" data-testid="add-to-course">
+      {state === "added" ? (
+        <p role="status">{t("Added to the course")}</p>
+      ) : (
+        <button type="button" className={primaryClass} disabled={state === "busy"}
+          onClick={() => {
+            setState("busy");
+            setError("");
+            addCoursePracticeSet(courseId, setId)
+              .then(() => setState("added"))
+              .catch((err) => {
+                setError(err instanceof Error ? t(err.message) : String(err));
+                setState("idle");
+              });
+          }}>
+          {t("Add to course “{{title}}”", { title })}
+        </button>
+      )}
+      {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
+    </div>
+  );
+}
+
 function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId: string) => void }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<PracticeReport | null>(null);
@@ -591,9 +647,7 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
       <div className="flex items-center justify-between gap-2">
         <h3 className={titleClass}>{t("Results")}</h3>
         {open && (
-          <a className={actionClass} href={reportExportUrl(setId)} download>
-            {t("Export CSV")}
-          </a>
+          <DownloadButton download={() => downloadSetReport(setId)} label={t("Export CSV")} />
         )}
       </div>
       {!open ? (

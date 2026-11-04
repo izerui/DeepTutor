@@ -211,8 +211,11 @@ def run_stages(
 def _catalog_forget(user_id: str) -> None:
     from deeptutor.catalog import enrollment, listings
 
+    from deeptutor.catalog import reviews
+
     listings.follow_owners(user_id)
     enrollment.forget_user(user_id)
+    reviews.forget_user(user_id)
 
 
 def _practice_review():

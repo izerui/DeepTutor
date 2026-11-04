@@ -20,7 +20,7 @@ from deeptutor.multi_user.models import CurrentUser
 
 PAGE_SIZE = 24
 TAG_FACET_LIMIT = 200
-SORTS = ("newest", "popular")
+SORTS = ("newest", "popular", "rating")
 
 
 @dataclass
@@ -29,20 +29,27 @@ class Filters:
     stages: list[str] = field(default_factory=list)
     subjects: list[str] = field(default_factory=list)
     kinds: list[str] = field(default_factory=list)
+    grades: list[str] = field(default_factory=list)
     difficulties: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     authors: list[str] = field(default_factory=list)
     sort: str = "newest"
     page: int = 1
+    #: Only the viewer's favorites (follow-ups §1).
+    favorites: bool = False
 
 
 def _entries(accounts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     with db.read() as conn:
         rows = conn.execute("SELECT * FROM listings WHERE status = 'listed'").fetchall() if conn else []
+    from deeptutor.catalog.reviews import ratings
+
     counts = enrollment.joined_counts()
+    rated = ratings()
     out = []
     for row in rows:
         entry = describe(row, learners=counts.get((row["kind"], row["item_id"]), 0))
+        entry["rating"], entry["rating_count"] = rated.get((row["kind"], row["item_id"]), (None, 0))
         entry["author"] = author_name(row["owner_user_id"], accounts)
         entry["author_role"] = author_role(row["owner_user_id"], accounts)
         entry["_subjects"] = {a for s in entry["subjects"] for a in taxonomy.ancestors(s)}
@@ -59,13 +66,15 @@ def _keyword(entry: dict[str, Any], q: str) -> bool:
     )
 
 
-_DIMENSIONS = ("stage", "subject", "kind", "difficulty", "tag", "author")
+_DIMENSIONS = ("stage", "subject", "grade", "kind", "difficulty", "tag", "author")
 
 
 def _passes(entry: dict[str, Any], f: Filters, skip: str = "") -> bool:
     if skip != "stage" and f.stages and not set(f.stages) & set(entry["stages"]):
         return False
     if skip != "subject" and f.subjects and not set(f.subjects) & entry["_subjects"]:
+        return False
+    if skip != "grade" and f.grades and not set(f.grades) & set(entry["grades"]):
         return False
     if skip != "kind" and f.kinds and entry["kind"] not in f.kinds:
         return False
@@ -86,6 +95,8 @@ def _facets(entries: list[dict[str, Any]], f: Filters) -> dict[str, Any]:
             out["stages"] = dict(Counter(s for e in open_entries for s in e["stages"]))
         elif dimension == "subject":
             out["subjects"] = dict(Counter(s for e in open_entries for s in e["_subjects"]))
+        elif dimension == "grade":
+            out["grades"] = dict(Counter(g for e in open_entries for g in e["grades"]))
         elif dimension == "kind":
             out["kinds"] = dict(Counter(e["kind"] for e in open_entries))
         elif dimension == "difficulty":
@@ -111,23 +122,34 @@ def _facets(entries: list[dict[str, Any]], f: Filters) -> dict[str, Any]:
     return out
 
 
-def _public(entry: dict[str, Any], joined: dict[tuple[str, str], str]) -> dict[str, Any]:
+def _public(
+    entry: dict[str, Any], joined: dict[tuple[str, str], str], favorites: set[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     clean = {k: v for k, v in entry.items() if not k.startswith("_")}
     clean["joined"] = joined.get((entry["kind"], entry["id"]))
+    clean["favorited"] = (entry["kind"], entry["id"]) in (favorites or set())
     return clean
 
 
 def search(viewer: CurrentUser, f: Filters) -> dict[str, Any]:
     from deeptutor.classes.service import _accounts
 
+    from deeptutor.catalog.reviews import favorites_of
+
     accounts = _accounts()
     entries = _entries(accounts)
+    favorites = favorites_of(viewer.id)
+    if f.favorites:
+        entries = [e for e in entries if (e["kind"], e["id"]) in favorites]
     if f.q.strip():
         entries = [e for e in entries if _keyword(e, f.q.strip())]
     facets = _facets(entries, f)
     results = [e for e in entries if _passes(e, f)]
     if f.sort == "popular":
         results.sort(key=lambda e: (-e["learners"], -(e["listed_at"] or 0)))
+    elif f.sort == "rating":
+        # Unrated last; then by average, by how many rated, by newest.
+        results.sort(key=lambda e: (e["rating"] is None, -(e["rating"] or 0), -e["rating_count"], -(e["listed_at"] or 0)))
     else:
         results.sort(key=lambda e: -(e["listed_at"] or 0))
     page = max(1, int(f.page or 1))
@@ -137,7 +159,7 @@ def search(viewer: CurrentUser, f: Filters) -> dict[str, Any]:
         "total": len(results),
         "page": page,
         "page_size": PAGE_SIZE,
-        "items": [_public(e, joined) for e in results[start:start + PAGE_SIZE]],
+        "items": [_public(e, joined, favorites) for e in results[start:start + PAGE_SIZE]],
         "facets": facets,
     }
 
@@ -182,8 +204,12 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
     member = (kind, item_id) in joined
     if row["status"] != "listed" and not (mine or _role(viewer) == "admin" or member):
         raise ListingNotFound("Not found.")
+    from deeptutor.catalog.reviews import favorites_of, ratings
+
     accounts = _accounts()
     entry = describe(row)
+    entry["rating"], entry["rating_count"] = ratings().get((kind, item_id), (None, 0))
+    entry["favorited"] = (kind, item_id) in favorites_of(viewer.id)
     entry["author"] = author_name(row["owner_user_id"], accounts)
     entry["author_role"] = author_role(row["owner_user_id"], accounts)
     return {

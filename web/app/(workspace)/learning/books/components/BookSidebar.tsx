@@ -7,10 +7,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Compass,
-  Download,
   Loader2,
   RotateCcw,
 } from "lucide-react";
+import { DownloadButton } from "@/components/common/DownloadButton";
+import { downloadAuthenticated } from "@/lib/authenticated-download";
 import { bookApi } from "@/lib/book-api";
 import { bookRequestRef } from "@/lib/book-sharing";
 import { useTranslation } from "react-i18next";
@@ -176,14 +177,12 @@ export default function BookSidebar({
       )}
 
       {book && (
-        <a
-          href={bookApi.exportUrl(requestedRef || bookRequestRef(book))}
-          download
-          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
-        >
-          <Download className="h-3.5 w-3.5" />
-          {t("Export Markdown")}
-        </a>
+        <DownloadButton
+          download={() => downloadAuthenticated(bookApi.exportUrl(requestedRef || bookRequestRef(book)), "book.md")}
+          label={t("Export Markdown")}
+          icon
+          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)] disabled:opacity-50"
+        />
       )}
 
       {/* Rebuild deletes every page AND resets progress — reading position,

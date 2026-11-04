@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { usePendingReviews } from "@/components/catalog/AdminNav";
 import { MyListings } from "@/components/catalog/MyListings";
-import { flagText } from "@/components/classes/attention-format";
+import { flagText } from "@/components/catalog/attention-format";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getHome, type HomeData } from "@/lib/tasks-api";
 import { getWorkbench, type Workbench } from "@/lib/workbench-api";

@@ -77,6 +77,7 @@ def describe(row, *, learners: int | None = None) -> dict[str, Any]:
         "summary": row["summary"],
         "stages": stages,
         "subjects": subjects,
+        "grades": json.loads(_col(row, "grades_json", "[]") or "[]"),
         "difficulty": row["difficulty"],
         "tags": json.loads(row["tags_json"] or "[]"),
         "approved_once": bool(row["approved_once"]),
@@ -89,6 +90,11 @@ def describe(row, *, learners: int | None = None) -> dict[str, Any]:
         "needs_classification": not stages or not subjects,
         "learners": learners if learners is not None else enrollment.joined_count(row["kind"], row["item_id"]),
     }
+
+
+def _col(row, name: str, default: Any = None) -> Any:
+    """A column a store made before it existed may lack (read-only reads do not migrate)."""
+    return row[name] if name in row.keys() else default
 
 
 def clean_tags(tags: list[str]) -> list[str]:
@@ -211,7 +217,7 @@ class ListingService:
             return {
                 "kind": kind, "id": item_id, "owner_id": info.owner, "status": "none",
                 "title": info.title[:TITLE_MAX], "summary": info.description[:SUMMARY_MAX],
-                "stages": [], "subjects": [], "difficulty": "", "tags": [], "approved_once": False,
+                "stages": [], "subjects": [], "grades": [], "difficulty": "", "tags": [], "approved_once": False,
                 "migrated": False, "reason": "", "submitted_at": None, "listed_at": None, "updated_at": None,
                 "needs_classification": True, "learners": 0, "not_ready": info.not_ready,
             }
@@ -219,7 +225,7 @@ class ListingService:
 
     def save(
         self, kind: str, item_id: str, *, title: str, summary: str, stages: list[str], subjects: list[str],
-        difficulty: str, tags: list[str],
+        difficulty: str, tags: list[str], grades: list[str] | None = None,
     ) -> dict[str, Any]:
         """The listing's text and classification; checked in full only on submission."""
         info = self._own_item(kind, item_id)
@@ -233,6 +239,7 @@ class ListingService:
             before = _row(conn, kind, item_id) if conn else None
         try:
             stages, subjects, difficulty = taxonomy.validate(stages, subjects, difficulty, keep=_classification(before))
+            grades = taxonomy.validate_grades(grades or [], stages)
         except taxonomy.TaxonomyError as exc:
             raise ListingError(str(exc)) from exc
         tags = clean_tags(tags)
@@ -256,6 +263,10 @@ class ListingService:
                     "difficulty = ?, tags_json = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
                     (*values, kind, item_id),
                 )
+            conn.execute(
+                "UPDATE listings SET grades_json = ? WHERE kind = ? AND item_id = ?",
+                (json.dumps(grades), kind, item_id),
+            )
         return self.get(kind, item_id)
 
     def submit(self, kind: str, item_id: str) -> dict[str, Any]:
@@ -426,6 +437,7 @@ class ListingService:
 
     def classify(
         self, kind: str, item_id: str, *, stages: list[str], subjects: list[str], difficulty: str, tags: list[str],
+        grades: list[str] | None = None,
     ) -> dict[str, Any]:
         """An administrator corrects anyone's classification and tags, never the text (batch 2 §8.3)."""
         self._require_admin()
@@ -435,15 +447,16 @@ class ListingService:
             raise ListingNotFound("Not found.")
         try:
             stages, subjects, difficulty = taxonomy.validate(stages, subjects, difficulty, keep=_classification(row))
+            grades = taxonomy.validate_grades(grades or [], stages)
         except taxonomy.TaxonomyError as exc:
             raise ListingError(str(exc)) from exc
         tags = clean_tags(tags)
         with db.write() as conn:
             conn.execute(
-                "UPDATE listings SET stages_json = ?, subjects_json = ?, difficulty = ?, tags_json = ?, updated_at = ? "
-                "WHERE kind = ? AND item_id = ?",
-                (json.dumps(stages), json.dumps(subjects), difficulty, json.dumps(tags, ensure_ascii=False),
-                 time.time(), kind, item_id),
+                "UPDATE listings SET stages_json = ?, subjects_json = ?, grades_json = ?, difficulty = ?, tags_json = ?, "
+                "updated_at = ? WHERE kind = ? AND item_id = ?",
+                (json.dumps(stages), json.dumps(subjects), json.dumps(grades), difficulty,
+                 json.dumps(tags, ensure_ascii=False), time.time(), kind, item_id),
             )
             _event(conn, kind, item_id, self.actor.id, "reclassified")
             row = _row(conn, kind, item_id)
@@ -551,8 +564,10 @@ def forget(kind: str, item_id: str) -> None:
                 conn.execute("DELETE FROM listings WHERE kind = ? AND item_id = ?", (kind, item_id))
         enrollment.forget_item(kind, item_id)
         from deeptutor.catalog.announcements import forget_item
+        from deeptutor.catalog.reviews import forget_item as forget_reviews
 
         forget_item(kind, item_id)
+        forget_reviews(kind, item_id)
     except Exception:
         logger.exception("Could not forget the listing of %s %s", kind, item_id)
 

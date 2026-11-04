@@ -12,6 +12,7 @@ const { catalog, practice, workbench, tasks, push, search, t } = vi.hoisted(() =
     postItemAnnouncement: vi.fn(),
     updateItemAnnouncement: vi.fn(),
     deleteItemAnnouncement: vi.fn(),
+    downloadReport: vi.fn(),
   },
   practice: { remedialFromPath: vi.fn() },
   workbench: { getWorkbench: vi.fn() },
@@ -106,15 +107,20 @@ it("reports a course: tasks, homework, practice score, flags, the period and an 
   expect(within(sara).getByText("4 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 / 4")).toBeTruthy();
   expect(within(sara).getByText("2 tasks overdue")).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Export CSV" }).getAttribute("href")).toContain("/api/catalog/reports/course/crs_1/export?days=7");
-  expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href")).toBe("/practice-sets?set=ps_1");
+  // Follow-ups §7: the CSV is fetched with the sign-in credentials, not a bare link.
+  catalog.downloadReport.mockResolvedValue(undefined);
+  fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+  await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", 7));
+  // Follow-ups §3: a practice set opened from a course's report carries the course.
+  expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href")).toBe("/practice-sets?set=ps_1&course=crs_1");
 
   fireEvent.click(screen.getByLabelText("Only learners who need attention"));
   expect(screen.queryByRole("button", { name: "tom" })).toBeNull();
 
   fireEvent.change(screen.getByLabelText("Period"), { target: { value: "" } });
   await waitFor(() => expect(catalog.getLearnerReport).toHaveBeenLastCalledWith("course", "crs_1", null));
-  expect(screen.getByRole("link", { name: "Export CSV" }).getAttribute("href")).not.toContain("days=");
+  fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+  await waitFor(() => expect(catalog.downloadReport).toHaveBeenLastCalledWith("course", "crs_1", null));
 });
 
 it("reports a path without the course columns, and shows a learner's detail", async () => {

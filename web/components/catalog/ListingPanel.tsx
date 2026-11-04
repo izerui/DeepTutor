@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
   CatalogApiError,
@@ -20,7 +20,7 @@ import {
 
 import { catalogError, itemHref, STATUS_TONE, statusLabel } from "./catalog-format";
 import { TagInput } from "./TagInput";
-import { MAX_STAGES, MAX_SUBJECTS, TaxonomyPicker } from "./TaxonomyPicker";
+import { MAX_GRADES, MAX_STAGES, MAX_SUBJECTS, TaxonomyPicker } from "./TaxonomyPicker";
 import { useTaxonomy } from "./useTaxonomy";
 
 export const TITLE_MAX = 80;
@@ -63,7 +63,7 @@ export function missingField(fields: ListingFields, t: Translate): string {
   if (fields.summary.trim().length > SUMMARY_MAX) return t("The introduction has at most 1000 characters.");
   if (fields.stages.length === 0) return t("Choose at least one stage.");
   if (fields.subjects.length === 0) return t("Choose at least one subject.");
-  if (fields.stages.length > MAX_STAGES || fields.subjects.length > MAX_SUBJECTS) return t("Choose at most 3 of each.");
+  if (fields.stages.length > MAX_STAGES || fields.subjects.length > MAX_SUBJECTS || fields.grades.length > MAX_GRADES) return t("Choose at most 3 of each.");
   if (!fields.difficulty) return t("Choose a difficulty.");
   return "";
 }
@@ -73,6 +73,7 @@ const fieldsOf = (listing: AuthorListing): ListingFields => ({
   summary: listing.summary ?? "",
   stages: listing.stages ?? [],
   subjects: listing.subjects ?? [],
+  grades: listing.grades ?? [],
   difficulty: listing.difficulty ?? "",
   tags: listing.tags ?? [],
 });
@@ -196,7 +197,7 @@ export function ListingPanel({ kind, itemId, onChanged }: { kind: CatalogKind; i
         {taxonomy ? (
           <TaxonomyPicker
             taxonomy={taxonomy}
-            value={{ stages: fields.stages, subjects: fields.subjects, difficulty: fields.difficulty }}
+            value={{ stages: fields.stages, subjects: fields.subjects, grades: fields.grades, difficulty: fields.difficulty }}
             onChange={(next) => setFields({ ...fields, ...next })}
           />
         ) : taxonomyError ? (

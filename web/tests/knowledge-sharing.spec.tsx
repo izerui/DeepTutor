@@ -213,7 +213,7 @@ it("groups public/private/connectors and removes creation and external connectio
   for (const name of ["From other teachers", "Published by the platform", "Mine", "My connectors"]) {
     expect(screen.getByRole("heading", { name: new RegExp(name) })).toBeTruthy();
   }
-  expect(screen.getByText("Shared by teacher")).toBeTruthy();
+  expect(screen.getByText("Published by teacher")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "New knowledge base" })).toBeNull();
   rerender(<KnowledgeHome {...common} activeSection="knowledge-engines" kbs={[]} />);
   expect(screen.queryByText("External knowledge sources")).toBeNull();

@@ -336,9 +336,9 @@ class PracticeSetService:
         now = _now()
         with store.write() as conn:
             conn.execute(
-                "INSERT INTO practice_sets (id, owner_user_id, title, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (set_id, self.actor.id, title, now, now),
+                "INSERT INTO practice_sets (id, owner_user_id, title, created_at, updated_at, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (set_id, self.actor.id, title, now, now, self.actor.id),
             )
         return self.get(set_id)
 

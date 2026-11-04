@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import {
   approveListing,
   classifyListing,
@@ -71,6 +71,7 @@ export function ClassificationEditor({
   const [fields, setFields] = useState({
     stages: item.stages ?? [],
     subjects: item.subjects ?? [],
+    grades: item.grades ?? [],
     difficulty: item.difficulty ?? "",
     tags: item.tags ?? [],
   });
@@ -93,7 +94,7 @@ export function ClassificationEditor({
       {taxonomy ? (
         <TaxonomyPicker
           taxonomy={taxonomy}
-          value={{ stages: fields.stages, subjects: fields.subjects, difficulty: fields.difficulty }}
+          value={{ stages: fields.stages, subjects: fields.subjects, grades: fields.grades, difficulty: fields.difficulty }}
           onChange={(next) => setFields({ ...fields, ...next })}
         />
       ) : taxonomyError ? (
@@ -124,7 +125,7 @@ export function ReviewDetail({
   canClassify?: boolean;
 }) {
   const { t } = useTranslation();
-  const { nameOf } = useTaxonomy();
+  const { nameOf, classificationOf } = useTaxonomy();
   const [classifying, setClassifying] = useState(false);
   const [item, setItem] = useState<ReviewItem | null>(null);
   const [reason, setReason] = useState("");
@@ -162,7 +163,7 @@ export function ReviewDetail({
     return error ? <p role="alert" className="text-[12px] text-red-600">{error}</p> : <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />;
   }
   const trimmed = reason.trim();
-  const classification = [...item.stages, ...item.subjects].map(nameOf).join(" · ");
+  const classification = classificationOf(item);
   return (
     <div className="space-y-4" data-testid="review-detail">
       <div className="space-y-1">

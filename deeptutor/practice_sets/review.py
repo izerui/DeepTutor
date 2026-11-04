@@ -54,11 +54,12 @@ class PracticeReview:
         from deeptutor.practice_sets.service import PracticeForbidden, _role
 
         self.service._require_author()
-        if _role(self.actor) == "admin":
-            # Batch 3 §2.1, R21: answers go to teachers only — also on a set handed to an
-            # administrator when its teacher left; they see scores and may withdraw.
-            raise PracticeForbidden("Students' answers are shown to teachers only.")
         row = self.service._owned(conn, set_id)
+        if _role(self.actor) == "admin" and _col(row, "created_by") != self.actor.id:
+            # Batch 3 §2.1, R21: answers go to the teacher who wrote the set — not to an
+            # administrator it was handed to when its teacher left (follow-ups §4: an
+            # administrator who wrote it reads them like a teacher).
+            raise PracticeForbidden("Students' answers are shown to teachers only.")
         submission = conn.execute(
             "SELECT * FROM practice_submissions WHERE id = ? AND set_id = ?", (submission_id, set_id)
         ).fetchone()

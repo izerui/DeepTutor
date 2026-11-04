@@ -1,4 +1,4 @@
-import type { AttentionFlag } from "@/lib/classes-api";
+import type { AttentionFlag } from "@/lib/report-types";
 
 type Translate = (key: string, values?: Record<string, unknown>) => string;
 

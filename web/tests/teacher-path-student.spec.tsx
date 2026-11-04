@@ -137,7 +137,7 @@ describe('TopicAtlas for students', () => {
     const assigned = screen.getByRole('region', { name: 'From my teachers' })
     const link = within(assigned).getByRole('link', { name: /C15 Waves/ })
     expect(link.getAttribute('href')).toBe('/learning/mastery/assigned_tpl1/sessions')
-    expect(within(assigned).getByText('Assigned by tina')).toBeInTheDocument()
+    expect(within(assigned).getByText('Published by tina')).toBeInTheDocument()
     expect(within(assigned).getByText('Next: Wavelength')).toBeInTheDocument()
     const own = screen.getByRole('region', { name: 'Active learning topics' })
     expect(within(own).getByRole('heading', { name: 'My topics' })).toBeInTheDocument()
@@ -194,7 +194,7 @@ describe('TeacherPathBanner', () => {
         })}
       />
     )
-    expect(screen.getByText('From tina')).toBeInTheDocument()
+    expect(screen.getByText('Published by tina')).toBeInTheDocument()
     expect(screen.getByText('The outline is set by your teacher')).toBeInTheDocument()
     const notice = screen.getByRole('status')
     expect(notice).toHaveTextContent('Your teacher updated this course')
@@ -266,7 +266,7 @@ describe('TeacherPathBanner', () => {
     expect(screen.getByRole('link', { name: 'Waves book' }).getAttribute('href')).toBe(
       '/learning/books/book%3Abk_waves?mastery_template=tpl1'
     )
-    expect(screen.queryByText('From tina')).toBeNull()
+    expect(screen.queryByText('Published by tina')).toBeNull()
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Course materials are temporarily unavailable'
     )

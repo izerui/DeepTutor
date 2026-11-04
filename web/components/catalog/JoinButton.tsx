@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, primaryClass } from "@/components/common/form-styles";
 import { joinItem, leaveItem, type CatalogItemDetail } from "@/lib/catalog-api";
 
 import { catalogError, studyHref } from "./catalog-format";

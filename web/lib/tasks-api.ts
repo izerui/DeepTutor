@@ -135,12 +135,16 @@ export const publishTask = (taskId: string, scope?: ScopeUpdate) =>
 export const archiveTask = (taskId: string) =>
   call<{ task: TaskSummary }>(`${id(taskId)}/archive`, send("POST")).then((r) => r.task);
 export const deleteTask = (taskId: string) => call<{ ok: boolean }>(id(taskId), send("DELETE"));
-export const gradeHomework = (taskId: string, studentId: string, score: number, comment: string) =>
-  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/grade`, send("POST", { score, comment })).then(
+/**
+ * ``attempt``: the hand-in the teacher read (follow-ups §5). When the student
+ * handed in again meanwhile, the server refuses with 409.
+ */
+export const gradeHomework = (taskId: string, studentId: string, score: number, comment: string, attempt?: number) =>
+  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/grade`, send("POST", { score, comment, attempt })).then(
     (r) => r.task,
   );
-export const sendBackHomework = (taskId: string, studentId: string, reason: string) =>
-  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/send-back`, send("POST", { reason })).then(
+export const sendBackHomework = (taskId: string, studentId: string, reason: string, attempt?: number) =>
+  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/send-back`, send("POST", { reason, attempt })).then(
     (r) => r.task,
   );
 export const homeworkFileUrl = (taskId: string, studentId: string, name: string) =>
@@ -216,6 +220,9 @@ export const updateCourse = (courseId: string, fields: { title?: string; descrip
   call<{ course: CourseDetail }>(`/courses${id(courseId)}`, send("PUT", fields)).then((r) => r.course);
 export const addCourseTask = (courseId: string, kind: TaskKind, title: string) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/tasks`, send("POST", { kind, title })).then((r) => r.course);
+/** Follow-ups §3: one's published practice set (e.g. remedial) becomes the course's next task. */
+export const addCoursePracticeSet = (courseId: string, setId: string) =>
+  call<{ course: CourseDetail }>(`/courses${id(courseId)}/practice-sets`, send("POST", { set_id: setId })).then((r) => r.course);
 export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.course);
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));

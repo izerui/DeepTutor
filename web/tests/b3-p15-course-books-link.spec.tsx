@@ -53,7 +53,7 @@ it('hides the Course books link when the learning policy excludes books', () => 
   expect(screen.queryByText(/Course books/)).toBeNull()
   expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
   // The provenance line is unaffected.
-  expect(screen.getByText('From tina')).toBeTruthy()
+  expect(screen.getByText('Published by tina')).toBeTruthy()
 })
 
 it('renders nothing in compact mode when the only content was the hidden books', () => {

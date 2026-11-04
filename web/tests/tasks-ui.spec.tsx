@@ -37,7 +37,7 @@ it("hands homework in and shows it waiting for grading", async () => {
   });
   const changed = vi.fn();
   render(<StudentTaskDetail task={homework} onChanged={changed} />);
-  expect(screen.getByText("Assigned by tina")).toBeTruthy();
+  expect(screen.getByText("Published by tina")).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Your answer"), { target: { value: "Waves carry energy." } });
   fireEvent.click(screen.getByRole("button", { name: "Hand in" }));
   await waitFor(() => expect(api.submitHomework).toHaveBeenCalledWith("task_1", "Waves carry energy.", []));

@@ -38,7 +38,7 @@ export function resetTaxonomyCache() {
 }
 
 export interface TaxonomyIndexEntry {
-  kind: "stage" | "subject" | "difficulty";
+  kind: "stage" | "subject" | "grade" | "difficulty";
   names: TaxonomyName;
   stage?: string;
   parent?: string | null;
@@ -56,13 +56,70 @@ export function indexTaxonomy(taxonomy: Taxonomy | null): Map<string, TaxonomyIn
       }
     }
   }
+  for (const grade of taxonomy.grades ?? []) index.set(grade.id, { kind: "grade", names: grade.names, stage: grade.stage });
   for (const difficulty of taxonomy.difficulties ?? []) index.set(difficulty.id, { kind: "difficulty", names: difficulty.names });
   return index;
 }
 
-/** Chinese names for a Chinese interface, English ones otherwise. */
-export const pickName = (names: TaxonomyName | undefined, language: string | undefined) =>
-  names ? (language?.startsWith("zh") ? names.zh : names.en) : "";
+const NAME_LANGUAGES = ["zh", "en", "de", "fr", "pl", "uk"] as const;
+
+/**
+ * The name in the interface language (follow-ups §7): the built-in entries have
+ * German, French, Polish and Ukrainian names too; otherwise English (Chinese for
+ * a Chinese interface).
+ */
+export function pickName(names: TaxonomyName | undefined, language: string | undefined): string {
+  if (!names) return "";
+  const code = NAME_LANGUAGES.find((lang) => language?.toLowerCase().startsWith(lang));
+  if (code === "zh") return names.zh || names.en;
+  return (code && names[code]) || names.en || names.zh;
+}
+
+/**
+ * A subject's name, led by its stage (and first-level subject) when it is shown
+ * outside the context of one stage (follow-ups §7): "Primary school · Mathematics".
+ */
+export function subjectLabel(
+  id: string,
+  index: Map<string, TaxonomyIndexEntry>,
+  language: string | undefined,
+  withStage: boolean,
+): string {
+  const found = index.get(id);
+  if (!found) return id;
+  const own = pickName(found.names, language);
+  if (!withStage || found.kind !== "subject") return own;
+  const parts = [found.stage ? pickName(index.get(found.stage)?.names, language) : "", found.parent ? pickName(index.get(found.parent)?.names, language) : "", own];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * One line for an item's classification: per stage, its grades and subjects
+ * ("Primary school · Grade 3 · Mathematics"); several stages are separated by " / ",
+ * so every subject stays next to its stage.
+ */
+export function classificationLabel(
+  entry: { stages?: string[]; subjects?: string[]; grades?: string[] },
+  index: Map<string, TaxonomyIndexEntry>,
+  language: string | undefined,
+): string {
+  const stages = entry.stages ?? [];
+  const name = (id: string) => {
+    const found = index.get(id);
+    return found ? pickName(found.names, language) : id;
+  };
+  const used = new Set<string>();
+  const groups = stages.map((stage) => {
+    const under = [...(entry.grades ?? []), ...(entry.subjects ?? [])].filter((id) => index.get(id)?.stage === stage);
+    under.forEach((id) => used.add(id));
+    return [name(stage), ...under.map(name)].join(" · ");
+  });
+  // Anything not under one of its stages (unknown, or hidden later) keeps its own stage in front.
+  for (const id of [...(entry.grades ?? []), ...(entry.subjects ?? [])]) {
+    if (!used.has(id)) groups.push(subjectLabel(id, index, language, true));
+  }
+  return groups.join(" / ");
+}
 
 /** ``enabled`` false: nothing is loaded (e.g. a panel that will not show). */
 export function useTaxonomy(enabled = true) {
@@ -88,5 +145,9 @@ export function useTaxonomy(enabled = true) {
     },
     [index, language],
   );
-  return { taxonomy, index, nameOf, error, language };
+  const classificationOf = useMemo(
+    () => (entry: { stages?: string[]; subjects?: string[]; grades?: string[] }) => classificationLabel(entry, index, language),
+    [index, language],
+  );
+  return { taxonomy, index, nameOf, classificationOf, error, language };
 }

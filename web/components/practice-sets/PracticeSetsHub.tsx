@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, Plus } from "lucide-react";
 
-import { actionClass, inputClass, primaryClass } from "@/components/classes/ClassesHub";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
@@ -19,8 +19,7 @@ import {
 import { SetEditor } from "./SetEditor";
 import { TakeSet } from "./TakeSet";
 
-export const formatDate = (timestamp: number | null | undefined) =>
-  timestamp ? new Date(timestamp * 1000).toLocaleString() : "";
+import { formatDate } from "./practice-format";
 
 /**
  * Practice sets (spec 2026-10-29 §8): teachers and administrators write and
@@ -60,6 +59,15 @@ function AuthorView() {
   const [selected, setSelected] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("set"),
   );
+  // Follow-ups §3: ``&course=`` (from a course's report) goes with that set and the
+  // remedial drafts made from it, so they can be added to the course once published.
+  const [courseLink, setCourseLink] = useState<{ course: string; sets: string[] } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const course = params.get("course");
+    const set = params.get("set");
+    return course && set ? { course, sets: [set] } : null;
+  });
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -134,7 +142,12 @@ function AuthorView() {
       <section className="min-w-0">
         {selected ? (
           <SetEditor key={selected} setId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }}
-            onOpenSet={(id) => { setSelected(id); refresh(); }} />
+            courseId={courseLink?.sets.includes(selected) ? courseLink.course : null}
+            onOpenSet={(id) => {
+              setCourseLink((cur) => (cur && cur.sets.includes(selected) ? { ...cur, sets: [...cur.sets, id] } : cur));
+              setSelected(id);
+              refresh();
+            }} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
             <ClipboardList size={16} className="mr-2" />

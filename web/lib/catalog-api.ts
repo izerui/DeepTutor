@@ -1,4 +1,5 @@
 import { apiFetch, apiUrl } from "./api";
+import { downloadAuthenticated } from "./authenticated-download";
 import type { ScopeUpdate } from "./publish-api";
 import type {
   AttemptTally,
@@ -6,9 +7,9 @@ import type {
   OverallReport,
   PracticeSetResult,
   TeacherPathReport,
-} from "./classes-api";
+} from "./report-types";
 
-export type { AttentionFlag } from "./classes-api";
+export type { AttentionFlag } from "./report-types";
 
 /** The learning market is system-level: never workspace-scoped (platform batch 1 §8). */
 const BASE = "/api/catalog";
@@ -17,14 +18,19 @@ export type CatalogKind = "book" | "knowledge_base" | "mastery_path" | "practice
 export const CATALOG_KINDS: readonly CatalogKind[] = ["book", "knowledge_base", "mastery_path", "practice_set", "course"];
 
 export type ListingStatus = "none" | "draft" | "pending" | "rejected" | "listed" | "unlisted" | "taken_down";
-export type SortOrder = "newest" | "popular";
+export type SortOrder = "newest" | "popular" | "rating";
 
 /** Published for the market: nobody receives it until they join (platform batch 1 §4.4). */
 export const JOIN_ONLY_SCOPE: ScopeUpdate = { everyone: false, users: [], classes: [], groups: [], join_only: true };
 
+/** Chinese and English always; the built-in entries also in German, French, Polish and Ukrainian. */
 export interface TaxonomyName {
   zh: string;
   en: string;
+  de?: string;
+  fr?: string;
+  pl?: string;
+  uk?: string;
 }
 export interface TaxonomyNode {
   id: string;
@@ -36,9 +42,14 @@ export interface TaxonomySubject extends TaxonomyNode {
 export interface TaxonomyStage extends TaxonomyNode {
   subjects: TaxonomySubject[];
 }
+/** Follow-ups §2: primary and secondary school grades, a fixed list under their stage. */
+export interface TaxonomyGrade extends TaxonomyNode {
+  stage: string;
+}
 export interface Taxonomy {
   stages: TaxonomyStage[];
   difficulties: TaxonomyNode[];
+  grades?: TaxonomyGrade[];
 }
 
 export interface CatalogEntry {
@@ -50,6 +61,8 @@ export interface CatalogEntry {
   summary: string;
   stages: string[];
   subjects: string[];
+  /** Follow-ups §2: 0 to 3 grades, each under one of its stages. */
+  grades?: string[];
   difficulty: string;
   tags: string[];
   approved_once: boolean;
@@ -65,11 +78,17 @@ export interface CatalogEntry {
   author?: string;
   author_role?: string;
   joined?: null | "self" | "migrated" | "course";
+  /** Follow-ups §1: average stars (``null`` when nobody rated it), how many rated it. */
+  rating?: number | null;
+  rating_count?: number;
+  /** In the viewer's favorites. */
+  favorited?: boolean;
 }
 
 export interface MarketFacets {
   stages: Record<string, number>;
   subjects: Record<string, number>;
+  grades?: Record<string, number>;
   kinds: Record<string, number>;
   difficulties: Record<string, number>;
   tags: { tag: string; count: number }[];
@@ -88,12 +107,15 @@ export interface MarketQuery {
   q?: string;
   stage?: string[];
   subject?: string[];
+  grade?: string[];
   kind?: string[];
   difficulty?: string[];
   tag?: string[];
   author?: string[];
   sort?: SortOrder;
   page?: number;
+  /** Only the viewer's favorites (the "My favorites" tab). */
+  favorites?: boolean;
 }
 
 export interface BookPreview {
@@ -158,6 +180,7 @@ export interface ListingFields {
   summary: string;
   stages: string[];
   subjects: string[];
+  grades: string[];
   difficulty: string;
   tags: string[];
 }
@@ -204,11 +227,12 @@ const item = (kind: string, id: string) => `/${encodeURIComponent(kind)}/${encod
 export function marketQueryString(query: MarketQuery): string {
   const params = new URLSearchParams();
   if (query.q?.trim()) params.set("q", query.q.trim());
-  for (const key of ["stage", "subject", "kind", "difficulty", "tag", "author"] as const) {
+  for (const key of ["stage", "subject", "grade", "kind", "difficulty", "tag", "author"] as const) {
     const values = query[key];
     if (values && values.length) params.set(key, values.join(","));
   }
   if (query.sort && query.sort !== "newest") params.set("sort", query.sort);
+  if (query.favorites) params.set("favorites", "1");
   if (query.page && query.page > 1) params.set("page", String(query.page));
   return params.toString();
 }
@@ -249,6 +273,7 @@ export const takeDownListing = (kind: string, id: string, reason: string) =>
 export interface ClassificationFields {
   stages: string[];
   subjects: string[];
+  grades: string[];
   difficulty: string;
   tags: string[];
 }
@@ -380,6 +405,9 @@ export const getReportPoints = (kind: string, id: string, templateId: string) =>
   call<ReportPoints>(`${report(kind, id)}/points/${encodeURIComponent(templateId)}`);
 export const reportExportUrl = (kind: string, id: string, days?: number | null) =>
   apiUrl(`${BASE}${report(kind, id)}/export${period(days)}`);
+/** Follow-ups §7: downloaded with the sign-in credentials, so token-only deployments work too. */
+export const downloadReport = (kind: string, id: string, days?: number | null) =>
+  downloadAuthenticated(reportExportUrl(kind, id, days), "learning-report.csv");
 export const getLearnerDetail = (kind: string, id: string, userId: string) =>
   call<LearnerDetail>(`${report(kind, id)}/learners/${encodeURIComponent(userId)}`);
 
@@ -418,3 +446,50 @@ export const deleteItemAnnouncement = (announcementId: string) =>
   call<{ deleted: boolean }>(`/announcements/${encodeURIComponent(announcementId)}`, send("DELETE"));
 export const listMyAnnouncements = () =>
   call<{ announcements: ContentAnnouncement[] }>("/announcements/mine").then((r) => r.announcements);
+
+// ── Reviews and favorites (follow-ups §1) ──
+
+export const REVIEW_TEXT_MAX = 1000;
+export const REVIEW_REPLY_MAX = 1000;
+
+export interface ItemReview {
+  user_id: string;
+  author: string;
+  stars: number;
+  text: string;
+  reply: string | null;
+  reply_at: number | null;
+  created_at: number;
+  updated_at: number;
+  mine: boolean;
+  /** The viewer is the item's author. */
+  can_reply: boolean;
+  /** One's own, or any (administrators). */
+  can_delete: boolean;
+}
+
+export interface ItemReviews {
+  average: number | null;
+  count: number;
+  /** Newest first, one page. */
+  reviews: ItemReview[];
+  mine: ItemReview | null;
+  /** Joined and not its author. */
+  can_review: boolean;
+}
+
+const reviews = (kind: string, id: string) => `/items${item(kind, id)}/reviews`;
+
+export const listReviews = (kind: string, id: string, page = 1) =>
+  call<ItemReviews>(`${reviews(kind, id)}${page > 1 ? `?page=${page}` : ""}`);
+export const saveMyReview = (kind: string, id: string, stars: number, text: string) =>
+  call<ItemReviews>(`${reviews(kind, id)}/mine`, send("PUT", { stars, text }));
+export const deleteMyReview = (kind: string, id: string) => call<ItemReviews>(`${reviews(kind, id)}/mine`, send("DELETE"));
+/** Administrators: anyone's review. */
+export const deleteReview = (kind: string, id: string, userId: string) =>
+  call<ItemReviews>(`${reviews(kind, id)}/${encodeURIComponent(userId)}`, send("DELETE"));
+/** The item's author answers a review; an empty text removes the answer. */
+export const replyToReview = (kind: string, id: string, userId: string, text: string) =>
+  call<ItemReviews>(`${reviews(kind, id)}/${encodeURIComponent(userId)}/reply`, send("PUT", { text }));
+export const setFavorite = (kind: string, id: string, on: boolean) =>
+  call<{ favorited: boolean }>(`/items${item(kind, id)}/favorite`, send(on ? "PUT" : "DELETE"));

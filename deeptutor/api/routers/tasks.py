@@ -70,10 +70,17 @@ class CourseUpdate(BaseModel):
 class Grade(BaseModel):
     score: float
     comment: str = Field(default="", max_length=20_000)
+    #: The hand-in the teacher read (follow-ups §5); omitted by older clients.
+    attempt: int | None = None
 
 
 class SendBack(BaseModel):
     reason: str = Field(min_length=1, max_length=20_000)
+    attempt: int | None = None
+
+
+class CoursePracticeSet(BaseModel):
+    set_id: str = Field(min_length=1, max_length=200)
 
 
 # ── courses (spec 2026-11-03 batch 2 §5) ───────────────────
@@ -117,6 +124,12 @@ async def update_course(course_id: str, body: CourseUpdate):
 @router.post("/courses/{course_id}/tasks")
 async def add_course_task(course_id: str, body: TaskCreate):
     return {"course": await _call(lambda: _courses().add_new_task(course_id, body.kind, body.title))}
+
+
+@router.post("/courses/{course_id}/practice-sets")
+async def add_course_practice_set(course_id: str, body: CoursePracticeSet):
+    """Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task."""
+    return {"course": await _call(lambda: _courses().add_practice_set(course_id, body.set_id))}
 
 
 @router.post("/courses/{course_id}/publish")
@@ -234,12 +247,14 @@ async def delete_task(task_id: str):
 
 @router.post("/{task_id}/students/{student_id}/grade")
 async def grade(task_id: str, student_id: str, body: Grade):
-    return {"task": await _call(TaskService().grade, task_id, student_id, body.score, body.comment)}
+    return {"task": await _call(
+        lambda: TaskService().grade(task_id, student_id, body.score, body.comment, attempt=body.attempt))}
 
 
 @router.post("/{task_id}/students/{student_id}/send-back")
 async def send_back(task_id: str, student_id: str, body: SendBack):
-    return {"task": await _call(TaskService().send_back, task_id, student_id, body.reason)}
+    return {"task": await _call(
+        lambda: TaskService().send_back(task_id, student_id, body.reason, attempt=body.attempt))}
 
 
 @router.get("/{task_id}/students/{student_id}/files/{name}")
