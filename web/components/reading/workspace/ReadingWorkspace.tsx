@@ -34,9 +34,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { JumpRequest } from "@/components/reading/PdfDocumentView";
-import { READER_ASK_EVENT, ReaderPane } from "@/components/reading/ReaderPane";
 import { ReadingActionsProvider } from "@/components/reading/ReadingActionsProvider";
-import { focusReadingComposer } from "@/components/reading/reading-actions-context";
+import { focusReadingComposer, READER_ASK_EVENT } from "@/components/reading/reading-actions-context";
 import { useChatStateAdapter } from "@/features/chat/ChatStateAdapter";
 import type { ReaderHeading } from "@/lib/reading-outline";
 import { setReadingViewport } from "@/lib/reading-turn-state";
@@ -106,6 +105,8 @@ const WorkspaceValueDialog = dynamic(
   () => import("./dialogs").then((module) => module.WorkspaceValueDialog),
   { ssr: false },
 );
+
+const ReaderPane = dynamic(() => import("@/components/reading/ReaderPane").then(module => module.ReaderPane));
 
 const MediaReadingStage = dynamic(
   () => import("./MediaReadingStage").then((module) => module.MediaReadingStage),
