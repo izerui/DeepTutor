@@ -5,7 +5,7 @@ import type { ScopeUpdate } from "./publish-api";
 /** Tasks are system-level: never workspace-scoped (spec 2026-11-03 batch 1). */
 const BASE = "/api/tasks";
 
-export type TaskKind = "mastery_path" | "practice_set" | "book" | "homework" | "note";
+export type TaskKind = "mastery_path" | "practice_set" | "book" | "note";
 /** ``not_open``: published, but its opening time has not come (spec 2026-11-03 batch 2 §6). */
 export type TaskState = "not_open" | "open" | "overdue" | "completed" | "closed";
 
@@ -14,8 +14,6 @@ export interface TaskSettings {
   chapter_ids?: string[];
   chapter_titles?: string[];
   page_ids?: string[];
-  max_score?: number;
-  rubric?: string;
 }
 
 export interface TaskSummary {
@@ -40,27 +38,8 @@ export interface TaskSummary {
 export interface MyTask extends TaskSummary {
   total: number;
   completed: number;
-  to_grade: number;
   /** False when what it asks for can no longer be opened by anyone. */
   target_available: boolean;
-}
-
-export interface Submission {
-  text: string;
-  files: { name: string; size: number }[];
-  attempt: number;
-  submitted_at: number;
-  late: boolean;
-  status: "submitted" | "returned" | "graded";
-  score: number | null;
-  comment: string;
-  return_reason: string;
-  graded_at: number | null;
-  /** R6 / batch 4 §1: the class average once 3 or more are graded; never a ranking. */
-  class_average?: number | null;
-  /** Teacher only. */
-  ai_score?: number | null;
-  ai_reason?: string;
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -72,7 +51,6 @@ export interface TaskDetail extends TaskSummary {
     completed_at: number | null;
     late: boolean;
     self_reported: boolean;
-    submission: Submission | null;
   }[];
 }
 
@@ -92,7 +70,6 @@ export interface AssignedTask {
   completed_at: number | null;
   late: boolean;
   provenance: Provenance;
-  submission?: Submission | null;
 }
 
 export class TasksApiError extends Error {
@@ -135,34 +112,12 @@ export const publishTask = (taskId: string, scope?: ScopeUpdate) =>
 export const archiveTask = (taskId: string) =>
   call<{ task: TaskSummary }>(`${id(taskId)}/archive`, send("POST")).then((r) => r.task);
 export const deleteTask = (taskId: string) => call<{ ok: boolean }>(id(taskId), send("DELETE"));
-/**
- * ``attempt``: the hand-in the teacher read (follow-ups §5). When the student
- * handed in again meanwhile, the server refuses with 409.
- */
-export const gradeHomework = (taskId: string, studentId: string, score: number, comment: string, attempt?: number) =>
-  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/grade`, send("POST", { score, comment, attempt })).then(
-    (r) => r.task,
-  );
-export const sendBackHomework = (taskId: string, studentId: string, reason: string, attempt?: number) =>
-  call<{ task: TaskDetail }>(`${id(taskId)}/students${id(studentId)}/send-back`, send("POST", { reason, attempt })).then(
-    (r) => r.task,
-  );
-export const homeworkFileUrl = (taskId: string, studentId: string, name: string) =>
-  apiUrl(`${BASE}${id(taskId)}/students${id(studentId)}/files${id(name)}`);
 
 export const listAssignedTasks = () => call<{ tasks: AssignedTask[] }>("/assigned").then((r) => r.tasks);
 export const getAssignedTask = (key: string) =>
   call<{ task: AssignedTask }>(`/assigned/${key.split("/").map(encodeURIComponent).join("/")}`).then((r) => r.task);
 export const markTaskDone = (taskId: string) =>
   call<{ task: AssignedTask }>(`/assigned${id(taskId)}/done`, send("POST")).then((r) => r.task);
-export const submitHomework = (taskId: string, text: string, files: File[]) => {
-  const form = new FormData();
-  form.append("text", text);
-  for (const file of files) form.append("files", file);
-  return call<{ task: AssignedTask }>(`/assigned${id(taskId)}/submit`, { method: "POST", body: form }).then(
-    (r) => r.task,
-  );
-};
 
 export interface HomeData {
   /** Platform batch 3 §3: the newest announcements of what one joined. */
@@ -238,7 +193,7 @@ export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.course);
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
 export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
-/** Traceability #5: an administrator gives a course they hold (with its homework) to a teacher. */
+/** Traceability #5: an administrator gives a course they hold to a teacher. */
 export const handOverCourse = (courseId: string, teacherId: string) =>
   call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: teacherId }));
 /** The same for a task that is in no course. */

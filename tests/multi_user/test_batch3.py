@@ -613,27 +613,17 @@ def test_mistakes_rising_needs_five_and_twice_the_week_before(as_account, teachi
     assert "mistakes_rising" not in _flags(fresh_attention, teaching_users, "sara")
 
 
-async def _no_suggestion(_task_id, _student_id):
-    return None
-
-
-def test_the_workbench_lists_hand_ins_learners_and_what_was_sent(as_account, teaching_users, fresh_attention,
-                                                                monkeypatch):
-    from deeptutor.tasks.service import StudentTasks, TaskService
+def test_the_workbench_lists_learners_and_what_was_sent(as_account, teaching_users, fresh_attention):
+    from deeptutor.tasks.service import TaskService
     from deeptutor.teaching.workbench import workbench
 
     with as_account("tina"):
-        task = TaskService().create("homework", "Essay")
+        task = TaskService().create("note", "Read")
     course_id = _fixtures["in_course"](task["id"])
-    import asyncio
-
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", _no_suggestion)
-    with as_account("sara"):
-        asyncio.run(StudentTasks().submit(task["id"], "Waves carry energy.", []))
     set_id = _published_set(as_account)
     with as_account("tina"):
         board = workbench()
-    assert [(i["task_title"], i["username"]) for i in board["to_grade"]] == [("Essay", "sara")]
+    assert "to_grade" not in board  # homework was removed (spec 2026-11-05)
     assert "classes" not in board
     kinds = {(i["kind"], i["id"]) for i in board["sent"]}
     assert {("task", task["id"]), ("practice_set", set_id), ("course", course_id)} <= kinds

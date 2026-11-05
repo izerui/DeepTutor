@@ -11,7 +11,6 @@ import {
   ListTodo,
   MessagesSquare,
   PenLine,
-  PenSquare,
   Settings,
   Store,
   type LucideIcon,
@@ -100,9 +99,7 @@ export const PRIMARY_NAV: NavEntry[] = [
     tooltipKey: 'Practice sets tooltip',
     surfaces: ['chat'],
   },
-  // Spec 2026-11-03 batch 1: tasks and homework.
-  // Batch 3 §5.4: every hand-in waiting for the teacher.
-  { href: '/grading', label: 'Grading', icon: PenSquare, tooltipKey: 'Grading tooltip', surfaces: ['chat'], roles: ['teacher'] },
+  // Spec 2026-11-03 batch 1: tasks.
   { href: '/tasks', label: 'Tasks', icon: ClipboardCheck, tooltipKey: 'Tasks tooltip', surfaces: ['chat'] },
   // Spec 2026-11-03 batch 2 §7: openings and deadlines by month.
   { href: '/calendar', label: 'Calendar', icon: CalendarDays, tooltipKey: 'Calendar tooltip', surfaces: ['chat'] },

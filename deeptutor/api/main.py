@@ -183,6 +183,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Knowledge-base registry backfill failed")
 
+    # Spec 2026-11-05: homework was removed; its tasks, hand-ins and files go once.
+    try:
+        from deeptutor.tasks.service import remove_homework
+
+        await asyncio.to_thread(remove_homework)
+    except Exception:
+        logger.exception("Removing homework failed")
+
     # Platform batch 1 §7: content published to everyone moves into the market once.
     try:
         from deeptutor.catalog.migration import run_at_startup
@@ -688,7 +696,7 @@ app.include_router(
 )
 app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
 app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
-# Spec 2026-11-03 batch 1: tasks and homework, notifications, the student home.
+# Spec 2026-11-03 batch 1: tasks, notifications, the student home.
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"], dependencies=_auth)
 app.include_router(home.router, prefix="/api/home", tags=["home"], dependencies=_auth)

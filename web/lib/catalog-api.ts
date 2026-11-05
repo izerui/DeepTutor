@@ -344,13 +344,10 @@ export const unmergeTag = (fromTag: string) =>
 export type ReportKind = "course" | "mastery_path";
 export const REPORT_KINDS: readonly ReportKind[] = ["course", "mastery_path"];
 
-/** A course's tasks for one learner: done of total, and homework by status. */
+/** A course's tasks for one learner: done of total. */
 export interface LearnerTasks {
   done: number;
   total: number;
-  to_grade: number;
-  returned: number;
-  graded: number;
 }
 
 export interface LearnerPath {

@@ -74,7 +74,7 @@ const courseReport: LearnerReport = {
   paths: [{ template_id: "tpl_1", title: "Algebra" }], practice_sets: ["ps_1"],
   learners: [
     row({
-      tasks: { done: 2, total: 5, to_grade: 1, returned: 0, graded: 1 },
+      tasks: { done: 2, total: 5 },
       practice_sets: [{ set_id: "ps_1", title: "Week 1 quiz", attempts: 2, first_score: 3, best_score: 4, best_max_score: 5,
         max_score: 5, late: false, last_submitted_at: 1 }],
       flags: [{ kind: "overdue", count: 2 }],
@@ -90,7 +90,7 @@ const points = {
   ],
 };
 
-it("reports a course: tasks, homework, practice score, flags and an export link", async () => {
+it("reports a course: tasks, practice score, flags and an export link, no homework column", async () => {
   search.value = "kind=course&id=crs_1";
   catalog.getLearnerReport.mockResolvedValue(courseReport);
   catalog.getReportPoints.mockResolvedValue(points);
@@ -100,7 +100,7 @@ it("reports a course: tasks, homework, practice score, flags and an export link"
   expect(catalog.getLearnerReport).toHaveBeenCalledWith("course", "crs_1", 7);
   const sara = screen.getByRole("button", { name: "sara" }).closest("tr")!;
   expect(within(sara).getByText("2 / 5")).toBeTruthy();
-  expect(within(sara).getByText("1 · 0 · 1")).toBeTruthy();
+  expect(screen.queryByText(/Homework/)).toBeNull();
   expect(within(sara).getByText("4 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 / 4")).toBeTruthy();
   expect(within(sara).getByText("2 tasks overdue")).toBeTruthy();
@@ -250,7 +250,7 @@ it("shows the newest announcements on the home, each linking to its course or pa
 
 it("lists learners who need attention on the workbench, linked to the item's report", async () => {
   workbench.getWorkbench.mockResolvedValue({
-    role: "teacher", to_grade: [], sent: [], classes: [], attention_total: 2,
+    role: "teacher", sent: [], classes: [], attention_total: 2,
     attention: [
       { student_id: "u_sara", username: "sara", class_id: "", item: { kind: "course", id: "crs_1", title: "Physics" },
         flags: [{ kind: "inactive", days: 9 }] },

@@ -414,15 +414,15 @@ def test_home_lists_what_one_joined(as_account, teaching_users):
     assert joined[0]["study"] == {"kind": "practice_set", "id": set_id}
 
 
-def test_an_administrator_hands_a_course_with_homework_to_a_teacher(as_account, teaching_users):
+def test_an_administrator_hands_a_course_with_its_tasks_to_a_teacher(as_account, teaching_users):
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskError, TaskService
     from deeptutor.tasks.store import db as task_db
 
     with as_account("tina"):
-        homework = TaskService().create("homework", "Essay")
+        task = TaskService().create("note", "Read")
         course = CourseService().create("Course")
-        CourseService().update(course["id"], task_ids=[homework["id"]])
+        CourseService().update(course["id"], task_ids=[task["id"]])
         CourseService().publish(course["id"])
     from deeptutor.tasks.service import transfer_tasks
 
@@ -431,12 +431,12 @@ def test_an_administrator_hands_a_course_with_homework_to_a_teacher(as_account, 
         CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))  # administrators only
     with as_account("adam"):
         with pytest.raises(TaskError):
-            CourseService().hand_over(course["id"], _uid(teaching_users, "sara"))  # a student cannot grade
+            CourseService().hand_over(course["id"], _uid(teaching_users, "sara"))  # only to a teacher
         CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))
     with task_db.read() as conn:
         owners = {r[0] for r in conn.execute(
             "SELECT owner_user_id FROM tasks WHERE id = ? UNION SELECT owner_user_id FROM courses WHERE id = ?",
-            (homework["id"], course["id"]),
+            (task["id"], course["id"]),
         )}
     assert owners == {_uid(teaching_users, "tom")}
 

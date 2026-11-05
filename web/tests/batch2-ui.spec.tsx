@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // Spec 2026-11-03 batch 2 §10: comments, announcements, courses, opening times, the calendar.
 const { tasks, comments, t } = vi.hoisted(() => ({
-  tasks: { getHome: vi.fn(), getAssignedTask: vi.fn(), listAssignedTasks: vi.fn(), listAssignedCourses: vi.fn(), listCalendar: vi.fn(), markTaskDone: vi.fn(), submitHomework: vi.fn() },
+  tasks: { getHome: vi.fn(), getAssignedTask: vi.fn(), listAssignedTasks: vi.fn(), listAssignedCourses: vi.fn(), listCalendar: vi.fn(), markTaskDone: vi.fn() },
   comments: { myComments: vi.fn(), writtenComments: vi.fn(), writeComment: vi.fn(), deleteComment: vi.fn() },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
@@ -25,7 +25,7 @@ const later = Date.UTC(2030, 0, 15, 9) / 1000;
 const note: AssignedTask = {
   key: "task_2", task_id: "task_2", kind: "note", title: "Revise", description: "", target_id: "",
   target_title: "", settings: {}, due_at: null, open_at: later, state: "not_open", completed_at: null,
-  late: false, provenance: { kind: "teacher", name: "tina" }, submission: null,
+  late: false, provenance: { kind: "teacher", name: "tina" },
 };
 
 beforeEach(() => {

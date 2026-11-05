@@ -27,11 +27,7 @@ def _offline(monkeypatch, teaching_users):
     async def ungraded(pending):
         return {}
 
-    async def no_suggestion(_task_id, _student_id):
-        return None
-
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
 
 
 def _uid(teaching_users, name):
@@ -71,7 +67,7 @@ def _leave(as_account, name, kind, item_id):
 
 @pytest.fixture
 def course(as_account):
-    """Tina's listed course: a practice set and a homework, in that order."""
+    """Tina's listed course: a practice set and a note, in that order."""
     from types import SimpleNamespace
 
     from deeptutor.practice_sets.service import PracticeSetService
@@ -84,12 +80,12 @@ def course(as_account):
         PracticeSetService().publish(practice["id"])
         exercise = TaskService().create("practice_set", "Do week 1")
         TaskService().update(exercise["id"], target_id=practice["id"])
-        homework = TaskService().create("homework", "Essay")
+        note = TaskService().create("note", "Read chapter 1")
         created = CourseService().create("Arithmetic course")
-        CourseService().update(created["id"], task_ids=[exercise["id"], homework["id"]])
+        CourseService().update(created["id"], task_ids=[exercise["id"], note["id"]])
         CourseService().publish(created["id"])
     _list_and_approve(as_account, "course", created["id"])
-    return SimpleNamespace(id=created["id"], set_id=practice["id"], exercise=exercise["id"], homework=homework["id"])
+    return SimpleNamespace(id=created["id"], set_id=practice["id"], exercise=exercise["id"], note=note["id"])
 
 
 def _answer(as_account, name, set_id, choice="B"):
@@ -100,11 +96,11 @@ def _answer(as_account, name, set_id, choice="B"):
         asyncio.run(PracticeSetService().submit(set_id, {qid: choice}))
 
 
-def _hand_in(as_account, name, task_id):
+def _mark_done(as_account, name, task_id):
     from deeptutor.tasks.service import StudentTasks
 
     with as_account(name):
-        asyncio.run(StudentTasks().submit(task_id, "My essay.", []))
+        StudentTasks().mark_done(task_id)
 
 
 def _reports():
@@ -120,19 +116,20 @@ def test_course_report_shows_its_learners(as_account, teaching_users, course):
     _join(as_account, "sara", "course", course.id)
     _join(as_account, "sam", "course", course.id)
     _answer(as_account, "sara", course.set_id)
-    _hand_in(as_account, "sara", course.homework)
+    _mark_done(as_account, "sara", course.note)
     _leave(as_account, "sam", "course", course.id)
     with as_account("tina"):
         report = _reports().report("course", course.id)
     assert [row["username"] for row in report["learners"]] == ["sara"]  # Sam left
     sara = report["learners"][0]
-    assert sara["tasks"]["done"] == 2 and sara["tasks"]["total"] == 2  # answered, handed in
-    assert sara["tasks"]["to_grade"] == 1
+    assert sara["tasks"]["done"] == 2 and sara["tasks"]["total"] == 2  # answered, marked done
+    assert set(sara["tasks"]) == {"done", "total", "last"}  # no homework columns (spec 2026-11-05)
     assert [p["set_id"] for p in sara["practice_sets"]] == [course.set_id]
     with as_account("tina"):
         csv_text = _reports().export("course", course.id)
         detail = _reports().learner("course", course.id, _uid(teaching_users, "sara"))
     assert csv_text.splitlines()[1].startswith("sara,")
+    assert "homework" not in csv_text.splitlines()[0]
     assert detail["tasks"]["done"] == 2
 
 
@@ -329,13 +326,13 @@ def test_a_course_reading_a_book_is_found(as_account, teaching_users, course):
 # ── handing over (§7) ──────────────────────────────────────
 
 
-def test_homework_goes_to_the_successor(as_account, teaching_users, course):
+def test_a_course_task_goes_to_the_successor(as_account, teaching_users, course):
     from deeptutor.tasks.service import transfer_tasks
     from deeptutor.tasks.store import db as task_db
 
     transfer_tasks(_uid(teaching_users, "tina"), _uid(teaching_users, "adam"))
     with task_db.read() as conn:
-        owner = conn.execute("SELECT owner_user_id FROM tasks WHERE id = ?", (course.homework,)).fetchone()[0]
+        owner = conn.execute("SELECT owner_user_id FROM tasks WHERE id = ?", (course.note,)).fetchone()[0]
     assert owner == _uid(teaching_users, "adam")
 
 

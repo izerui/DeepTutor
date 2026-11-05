@@ -25,14 +25,6 @@ QUESTIONS = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def _no_model(monkeypatch):
-    async def _quiet(_task_id, _student_id):
-        return None
-
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", _quiet)
-
-
 @pytest.fixture
 def ids(teaching_users):
     return {name: row["id"] for name, row in teaching_users.items()}

@@ -1113,25 +1113,6 @@
         "title": "Body_speech_to_text_api_voice_stt_post",
         "type": "object"
       },
-      "Body_submit_homework_api_tasks_assigned__task_id__submit_post": {
-        "properties": {
-          "files": {
-            "items": {
-              "contentMediaType": "application/octet-stream",
-              "type": "string"
-            },
-            "title": "Files",
-            "type": "array"
-          },
-          "text": {
-            "default": "",
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "title": "Body_submit_homework_api_tasks_assigned__task_id__submit_post",
-        "type": "object"
-      },
       "Body_upload_avatar_api_auth_profile_avatar_put": {
         "properties": {
           "file": {
@@ -4387,36 +4368,6 @@
           "glob"
         ],
         "title": "GitHubSourceInfo",
-        "type": "object"
-      },
-      "Grade": {
-        "properties": {
-          "attempt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attempt"
-          },
-          "comment": {
-            "default": "",
-            "maxLength": 20000,
-            "title": "Comment",
-            "type": "string"
-          },
-          "score": {
-            "title": "Score",
-            "type": "number"
-          }
-        },
-        "required": [
-          "score"
-        ],
-        "title": "Grade",
         "type": "object"
       },
       "GrantPayload": {
@@ -10250,32 +10201,6 @@
         "title": "ScopeUpdate",
         "type": "object"
       },
-      "SendBack": {
-        "properties": {
-          "attempt": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attempt"
-          },
-          "reason": {
-            "maxLength": 20000,
-            "minLength": 1,
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "SendBack",
-        "type": "object"
-      },
       "ServerPayload": {
         "description": "A server definition plus the credential values to store beside it.",
         "properties": {
@@ -11827,7 +11752,6 @@
               "mastery_path",
               "practice_set",
               "book",
-              "homework",
               "note"
             ],
             "title": "Kind",
@@ -27613,74 +27537,6 @@
           }
         },
         "summary": "Home",
-        "tags": [
-          "home"
-        ]
-      }
-    },
-    "/api/home/to-grade": {
-      "get": {
-        "description": "Batch 3 §5.4: every hand-in waiting for the current teacher.",
-        "operationId": "to_grade_list_api_home_to_grade_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response To Grade List Api Home To Grade Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "To Grade List",
         "tags": [
           "home"
         ]
@@ -70974,87 +70830,6 @@
         ]
       }
     },
-    "/api/tasks/assigned/{task_id}/submit": {
-      "post": {
-        "operationId": "submit_homework_api_tasks_assigned__task_id__submit_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_submit_homework_api_tasks_assigned__task_id__submit_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Homework",
-        "tags": [
-          "tasks"
-        ]
-      }
-    },
     "/api/tasks/calendar": {
       "get": {
         "description": "Opening times and deadlines: what reached a student, or what an author assigned.",
@@ -71614,7 +71389,7 @@
     },
     "/api/tasks/courses/{course_id}/hand-over": {
       "post": {
-        "description": "Traceability #5: an administrator gives a course they hold to a teacher, homework included.",
+        "description": "Traceability #5: an administrator gives a course they hold to a teacher.",
         "operationId": "hand_over_course_api_tasks_courses__course_id__hand_over_post",
         "parameters": [
           {
@@ -72472,278 +72247,6 @@
           }
         },
         "summary": "Publish Task",
-        "tags": [
-          "tasks"
-        ]
-      }
-    },
-    "/api/tasks/{task_id}/students/{student_id}/files/{name}": {
-      "get": {
-        "operationId": "homework_file_api_tasks__task_id__students__student_id__files__name__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "student_id",
-            "required": true,
-            "schema": {
-              "title": "Student Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Homework File",
-        "tags": [
-          "tasks"
-        ]
-      }
-    },
-    "/api/tasks/{task_id}/students/{student_id}/grade": {
-      "post": {
-        "operationId": "grade_api_tasks__task_id__students__student_id__grade_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "student_id",
-            "required": true,
-            "schema": {
-              "title": "Student Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Grade"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Grade",
-        "tags": [
-          "tasks"
-        ]
-      }
-    },
-    "/api/tasks/{task_id}/students/{student_id}/send-back": {
-      "post": {
-        "operationId": "send_back_api_tasks__task_id__students__student_id__send_back_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "student_id",
-            "required": true,
-            "schema": {
-              "title": "Student Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SendBack"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Send Back",
         "tags": [
           "tasks"
         ]

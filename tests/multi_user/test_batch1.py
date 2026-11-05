@@ -1,6 +1,7 @@
-"""Batch 1 of the 2026-11-02 plan: tasks, homework, notifications, the student home.
+"""Batch 1 of the 2026-11-02 plan: tasks, notifications, the student home.
 
-Spec: docs/superpowers/specs/2026-11-03-batch1-design.md
+Spec: docs/superpowers/specs/2026-11-03-batch1-design.md (homework removed:
+docs/superpowers/specs/2026-11-05-remove-homework.md)
 """
 
 from __future__ import annotations
@@ -16,22 +17,11 @@ from deeptutor.practice_sets.service import PracticeConflict, PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import Scope
 from deeptutor.tasks.service import StudentTasks, TaskError, TaskForbidden, TaskNotFound, TaskService
-from deeptutor.tasks.service import suggest_grade as real_suggest_grade
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
      "correct_answer": "B", "explanation": "Add."},
 ]
-
-
-@pytest.fixture(autouse=True)
-def _no_model(monkeypatch):
-    """Homework suggestions never reach a real model; tests that want one set it."""
-
-    async def _quiet(_task_id, _student_id):
-        return None
-
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", _quiet)
 
 
 def _kinds(as_account, name: str) -> list[str]:
@@ -60,15 +50,6 @@ def _in_course(*task_ids: str, **options) -> str:
     return _fixtures["in_course"](*task_ids, **options)
 
 
-def _homework(as_account, *, due_at: float | None = None) -> str:
-    with as_account("tina"):
-        service = TaskService()
-        task = service.create("homework", "Essay")
-        service.update(task["id"], description="Write about waves.", due_at=due_at)
-    _in_course(task["id"])
-    return task["id"]
-
-
 def _note(as_account, title: str = "Revise") -> str:
     with as_account("tina"):
         note = TaskService().create("note", title)
@@ -89,86 +70,14 @@ def _entry(as_account, name: str, key: str):
         return {e["key"]: e for e in StudentTasks().assigned()}.get(key)
 
 
-def _submit(as_account, name: str, task_id: str, text: str = "Waves carry energy.", files=()):
-    with as_account(name):
-        return asyncio.run(StudentTasks().submit(task_id, text, list(files)))
-
-
-# ── the homework round trip ────────────────────────────────
-
-
-def test_homework_goes_out_comes_back_and_is_graded(as_account):
-    task_id = _homework(as_account)
-    # A course announces its tasks once, as the course.
-    assert "course_published" in _kinds(as_account, "sara")
-    assert _entry(as_account, "sara", task_id)["state"] == "open"
-
-    done = _submit(as_account, "sara", task_id, files=[("notes.txt", b"draft")])
-    assert done["state"] == "completed" and done["submission"]["status"] == "submitted"
-    _submit(as_account, "sam", task_id)
-    with as_account("tina"):
-        [ping] = [n for n in notifications.list_for(_uid("tina")) if n["kind"] == "homework_submitted"]
-        assert ping["count"] == 2  # summed per task and day
-        detail = TaskService().detail(task_id)
-    sara = next(s for s in detail["students"] if s["username"] == "sara")
-    assert sara["submission"]["files"] == [{"name": "notes.txt", "size": 5}]
-
-    with as_account("tina"):
-        TaskService().send_back(task_id, _uid("sara"), "Add an example.")
-    entry = _entry(as_account, "sara", task_id)
-    assert entry["state"] == "open" and entry["submission"]["return_reason"] == "Add an example."
-    assert "homework_returned" in _kinds(as_account, "sara")
-
-    _submit(as_account, "sara", task_id, text="Waves carry energy, like sound.")
-    with as_account("tina"):
-        TaskService().grade(task_id, _uid("sara"), 92, "Good.")
-    entry = _entry(as_account, "sara", task_id)
-    assert entry["state"] == "completed"
-    assert (entry["submission"]["score"], entry["submission"]["comment"]) == (92, "Good.")
-    assert entry["submission"]["attempt"] == 2
-    assert "ai_score" not in entry["submission"]  # the suggestion is the teacher's only
-    assert "homework_graded" in _kinds(as_account, "sara")
-    with as_account("sara"), pytest.raises(Exception):
-        asyncio.run(StudentTasks().submit(task_id, "again", []))
-
-
-def test_the_ai_suggestion_reaches_the_teacher_only(as_account, monkeypatch):
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", real_suggest_grade)  # with a stub model
-
-    async def fake_complete(prompt: str, system_prompt: str):
-        assert "Waves carry energy" in prompt
-        return '{"score": 88, "reason": "Clear, one example missing."}'
-
-    monkeypatch.setattr("deeptutor.services.llm.complete", fake_complete)
-    task_id = _homework(as_account)
-    _submit(as_account, "sara", task_id)
-    with as_account("tina"):
-        sara = next(s for s in TaskService().detail(task_id)["students"] if s["username"] == "sara")
-    assert (sara["submission"]["ai_score"], sara["submission"]["ai_reason"]) == (88, "Clear, one example missing.")
-
-
-def test_homework_files_open_for_their_student_and_teacher_only(as_account):
-    task_id = _homework(as_account)
-    _submit(as_account, "sara", task_id, files=[("photo.png", b"\x89PNG")])
-    for name, allowed in (("sara", True), ("tina", True), ("sam", False), ("tom", False)):
-        with as_account(name):
-            if allowed:
-                assert TaskService().file_path(task_id, _uid("sara"), "photo.png").read_bytes() == b"\x89PNG"
-            else:
-                with pytest.raises(TaskNotFound):
-                    TaskService().file_path(task_id, _uid("sara"), "photo.png")
-    with as_account("sara"), pytest.raises(TaskError):
-        asyncio.run(StudentTasks().submit(task_id, "x", [("run.exe", b"MZ")]))
-
-
 # ── rules for publishing a task ────────────────────────────
 
 
-def test_homework_never_goes_to_everyone_and_admins_assign_none(as_account):
+def test_a_task_never_goes_to_everyone_nor_on_its_own(as_account):
     from deeptutor.tasks.courses import CourseService
 
     with as_account("tina"):
-        task = TaskService().create("homework", "Essay")
+        task = TaskService().create("note", "Revise")
         # A task goes out with a course, never on its own.
         with pytest.raises(TaskError):
             TaskService().publish(task["id"])
@@ -179,8 +88,6 @@ def test_homework_never_goes_to_everyone_and_admins_assign_none(as_account):
         assert scopes.get_scope(scopes.TASK, task["id"]) is None
         assert scopes.get_scope(scopes.COURSE, course_id) is None
         assert TaskService().get(task["id"])["status"] == "draft"
-    with as_account("adam"), pytest.raises(TaskForbidden):
-        TaskService().create("homework", "Admin essay")
 
 
 def test_a_task_must_not_reach_students_its_content_does_not(as_account, make_learners):
@@ -238,13 +145,14 @@ def test_a_practice_set_task_completes_and_completion_stays(as_account):
 
 def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account):
     with as_account("tina"):
-        task = TaskService().create("homework", "Essay")
+        task = TaskService().create("note", "Revise")
     task_id = task["id"]
     course_id = _in_course(task_id)
     _leave_course("sara", course_id)
     assert _entry(as_account, "sara", task_id) is None  # nothing done yet: it simply goes
     _fixtures["deliver"]("course", course_id, "sara")
-    _submit(as_account, "sara", task_id)
+    with as_account("sara"):
+        StudentTasks().mark_done(task_id)
     _leave_course("sara", course_id)
     entry = _entry(as_account, "sara", task_id)
     assert entry["state"] == "completed"  # their own record stays, in their history
@@ -256,6 +164,9 @@ def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account
 
 def test_notes_are_marked_done_by_the_student(as_account):
     note = _note(as_account, "Revise chapter 3")
+    # A course announces its tasks once, as the course.
+    assert "course_published" in _kinds(as_account, "sara")
+    assert _entry(as_account, "sara", note)["state"] == "open"
     with as_account("sara"):
         assert StudentTasks().mark_done(note)["state"] == "completed"
     with as_account("tina"):
@@ -291,7 +202,10 @@ def test_book_tasks_complete_when_every_chosen_page_was_opened(as_account, teach
 
 
 def test_deadlines_mark_overdue_remind_once_and_announce_changes(as_account):
-    task_id = _homework(as_account, due_at=time.time() + 3600)
+    with as_account("tina"):
+        task_id = TaskService().create("note", "Revise")["id"]
+        TaskService().update(task_id, due_at=time.time() + 3600)
+    _in_course(task_id)
     for _ in range(2):
         assert _entry(as_account, "sara", task_id)["state"] == "open"
     assert _kinds(as_account, "sara").count("task_due_soon") == 1
@@ -299,7 +213,8 @@ def test_deadlines_mark_overdue_remind_once_and_announce_changes(as_account):
         TaskService().update(task_id, due_at=time.time() - 60)
     assert _entry(as_account, "sara", task_id)["state"] == "overdue"
     assert "task_due_changed" in _kinds(as_account, "sara")
-    done = _submit(as_account, "sara", task_id)
+    with as_account("sara"):
+        done = StudentTasks().mark_done(task_id)
     assert done["state"] == "completed" and done["late"]
 
 
@@ -323,36 +238,40 @@ def test_a_departing_teachers_tasks_go_to_the_admin_who_hands_the_course_on(teac
     from deeptutor.tasks.courses import CourseService
 
     with as_account("tina"):
-        homework = TaskService().create("homework", "Essay")["id"]
-    course_id = _in_course(homework)
+        first = TaskService().create("note", "Read")["id"]
+    course_id = _in_course(first)
     note = _note(as_account)
     asyncio.run(auth_router.update_user_role(
         "tina", auth_router.SetRoleRequest(role="student"),
         current=auth_router.TokenPayload(username="adam", role="admin", user_id=_uid("adam")),
     ))
-    # Every task goes to the administrator, homework too.
+    # Every task goes to the administrator.
     with as_account("adam"):
-        assert TaskService().get(homework)["kind"] == "homework"
+        assert TaskService().get(first)["kind"] == "note"
         assert TaskService().get(note)["kind"] == "note"
         CourseService().hand_over(course_id, _uid("tom"))
     with as_account("tom"):
-        assert TaskService().get(homework)["kind"] == "homework"
+        assert TaskService().get(first)["title"] == "Read"
     assert "tasks_transferred" in _kinds(as_account, "tom")
 
 
-def test_a_deleted_students_homework_and_notifications_go(teaching_users, as_account):
+def test_a_deleted_students_completions_and_notifications_go(teaching_users, as_account):
     from deeptutor.multi_user.account_handoff import run_stages
-    from deeptutor.tasks.store import files_root
 
-    task_id = _homework(as_account)
-    _submit(as_account, "sara", task_id, files=[("a.txt", b"x")])
-    assert (files_root() / task_id / _uid("sara")).exists()
+    task_id = _note(as_account)
+    with as_account("sara"):
+        StudentTasks().mark_done(task_id)
+    assert notifications.list_for(_uid("sara"))
     failed, _ = run_stages(_uid("sara"), _uid("adam"), ("task_records", "notifications"))
     assert failed == []
-    assert not (files_root() / task_id / _uid("sara")).exists()
     assert notifications.list_for(_uid("sara")) == []
     with as_account("tina"):
-        assert all(s["username"] != "sara" or s["submission"] is None for s in TaskService().detail(task_id)["students"])
+        assert all(s["username"] != "sara" or not s["completed"] for s in TaskService().detail(task_id)["students"])
+    # Sam's state is untouched.
+    with as_account("sam"):
+        StudentTasks().mark_done(task_id)
+    with as_account("tina"):
+        assert next(s for s in TaskService().detail(task_id)["students"] if s["username"] == "sam")["completed"]
 
 
 # ── the student home ───────────────────────────────────────
@@ -361,7 +280,7 @@ def test_a_deleted_students_homework_and_notifications_go(teaching_users, as_acc
 def test_the_home_lists_open_tasks_and_counts_history(as_account):
     from deeptutor.api.routers import home
 
-    open_task = _homework(as_account)
+    open_task = _note(as_account, "Read chapter 1")
     note = _note(as_account)
     with as_account("sara"):
         StudentTasks().mark_done(note)

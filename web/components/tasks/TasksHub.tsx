@@ -14,13 +14,10 @@ import {
   deleteTask,
   getAssignedTask,
   getTask,
-  gradeHomework,
   handOverTask,
-  homeworkFileUrl,
   listAssignedTasks,
   listMyTasks,
   publishTask,
-  sendBackHomework,
   updateTask,
   type AssignedTask,
   type MyTask,
@@ -40,7 +37,7 @@ const fromLocalInput = (value: string) => (value ? new Date(value).getTime() / 1
 
 /**
  * Tasks (spec 2026-11-03 batch 1): teachers and administrators assign them and
- * grade homework; students see every task they received, by state.
+ * see who has done them; students see every task they received, by state.
  */
 export default function TasksHub() {
   const { t } = useTranslation();
@@ -52,7 +49,7 @@ export default function TasksHub() {
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Tasks")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
           {isAdmin || isTeacher
-            ? t("Edit the tasks of your courses, collect homework and grade it.")
+            ? t("Edit the tasks of your courses and see who has done them.")
             : t("Tasks from the courses you joined.")}
         </p>
       </header>
@@ -168,7 +165,6 @@ function AuthorView({ initialTask = null, onGoToCourses }: { initialTask?: strin
                       <span className="text-[11.5px] text-[var(--muted-foreground)]">
                         {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
                         {task.status !== "draft" && ` · ${t("{{done}} / {{total}} done", { done: task.completed, total: task.total })}`}
-                        {task.to_grade > 0 && ` · ${t("{{count}} to grade", { count: task.to_grade })}`}
                         {!task.target_available && ` · ${t("Content unavailable")}`}
                       </span>
                     </button>
@@ -184,7 +180,7 @@ function AuthorView({ initialTask = null, onGoToCourses }: { initialTask?: strin
           <TaskEditor key={selected} taskId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
-            {t("Pick a task to edit or grade it.")}
+            {t("Pick a task to edit it.")}
           </div>
         )}
       </section>
@@ -277,28 +273,6 @@ function TargetPicker({
             ))}
           </fieldset>
         )}
-      </div>
-    );
-  }
-  if (task.kind === "homework") {
-    return (
-      <div className="space-y-2 text-[12.5px]">
-        <label className="flex items-center gap-2">
-          {t("Full mark")}
-          <input
-            type="number" min={1} max={1000} className={`${inputClass} w-24`}
-            value={task.settings.max_score ?? 100}
-            onChange={(e) => onChange({ settings: { ...task.settings, max_score: Number(e.target.value) || 100 } })}
-          />
-        </label>
-        <label className="block">
-          {t("Grading points (optional, the AI suggestion follows them)")}
-          <textarea
-            rows={3} className={`${inputClass} mt-1`}
-            value={task.settings.rubric ?? ""}
-            onChange={(e) => onChange({ settings: { ...task.settings, rubric: e.target.value } })}
-          />
-        </label>
       </div>
     );
   }
@@ -414,20 +388,19 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
           </button>
         )}
       </div>
-      {/* Traceability #5: a task in no course goes on its own to a teacher who grades it. */}
+      {/* Traceability #5: a task in no course goes on its own to a teacher. */}
       {isAdmin && !task.course_id && (
         <HandOverPanel handOver={(teacherId) => handOverTask(task.id, teacherId)} onDone={onDeleted} />
       )}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 
-      {!draft && <StudentsTable task={task} onChanged={(next) => { setTask(next); onChanged(); }} />}
+      {!draft && <StudentsTable task={task} />}
     </fieldset>
   );
 }
 
-function StudentsTable({ task, onChanged }: { task: TaskDetail; onChanged: (next: TaskDetail) => void }) {
+function StudentsTable({ task }: { task: TaskDetail }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState<string | null>(null);
   return (
     <section className="space-y-2">
       <h3 className="text-[13px] font-semibold">{t("Students")}</h3>
@@ -436,101 +409,20 @@ function StudentsTable({ task, onChanged }: { task: TaskDetail; onChanged: (next
       ) : (
         <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
           {task.students.map((student) => (
-            <li key={student.id} className="p-3 text-[13px]">
-              <button type="button" className="flex w-full flex-wrap items-center gap-2 text-left" onClick={() => setOpen(open === student.id ? null : student.id)}>
-                <span className="font-medium">{student.username}</span>
-                {!student.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Not in scope")}</span>}
-                <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                  {task.kind === "homework"
-                    ? student.submission
-                      ? student.submission.status === "graded"
-                        ? t("Graded: {{score}} / {{max}}", { score: student.submission.score, max: task.settings.max_score ?? 100 })
-                        : student.submission.status === "returned" ? t("Sent back") : t("To grade")
-                      : t("Not handed in")
-                    : student.completed
-                      ? student.self_reported ? t("Done (self-reported)") : t("Done")
-                      : t("Not done")}
-                  {(student.late || student.submission?.late) && ` · ${t("Late")}`}
-                </span>
-              </button>
-              {open === student.id && task.kind === "homework" && student.submission && (
-                <GradePanel task={task} studentId={student.id} onChanged={onChanged} />
-              )}
+            <li key={student.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">
+              <span className="font-medium">{student.username}</span>
+              {!student.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Not in scope")}</span>}
+              <span className="text-[11.5px] text-[var(--muted-foreground)]">
+                {student.completed
+                  ? student.self_reported ? t("Done (self-reported)") : t("Done")
+                  : t("Not done")}
+                {student.late && ` · ${t("Late")}`}
+              </span>
             </li>
           ))}
         </ul>
       )}
     </section>
-  );
-}
-
-export function GradePanel({ task, studentId, onChanged }: { task: TaskDetail; studentId: string; onChanged: (next: TaskDetail) => void }) {
-  const { t } = useTranslation();
-  const submission = task.students.find((s) => s.id === studentId)!.submission!;
-  const [score, setScore] = useState<string>(String(submission.score ?? submission.ai_score ?? ""));
-  const [comment, setComment] = useState(submission.comment ?? "");
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const run = async (action: () => Promise<TaskDetail>) => {
-    setBusy(true);
-    setError("");
-    try {
-      onChanged(await action());
-    } catch (err) {
-      setError(err instanceof Error ? t(err.message) : String(err));
-      // Follow-ups §5: the student handed in again meanwhile; show the new hand-in.
-      if ((err as { status?: number } | null)?.status === 409) {
-        await getTask(task.id).then(onChanged).catch(() => undefined);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="mt-2 space-y-2 rounded-lg bg-[var(--muted)]/40 p-3" data-testid="grade-panel">
-      <p className="text-[11.5px] text-[var(--muted-foreground)]">
-        {t("Handed in {{date}} (attempt {{n}})", { date: formatWhen(submission.submitted_at), n: submission.attempt })}
-      </p>
-      <p className="whitespace-pre-line">{submission.text}</p>
-      {submission.files.length > 0 && (
-        <ul className="text-[12.5px]">
-          {submission.files.map((f) => (
-            <li key={f.name}>
-              <a className="text-[var(--primary)] hover:underline" href={homeworkFileUrl(task.id, studentId, f.name)} target="_blank" rel="noreferrer">
-                {f.name}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-      {submission.ai_score != null && (
-        <p className="text-[12.5px]">
-          {t("AI suggests {{score}}: {{reason}}", { score: submission.ai_score, reason: submission.ai_reason })}{" "}
-          <button type="button" className="text-[var(--primary)] hover:underline" onClick={() => setScore(String(submission.ai_score))}>
-            {t("Use it")}
-          </button>
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <input type="number" aria-label={t("Score")} className={`${inputClass} w-24`} value={score} min={0} max={task.settings.max_score ?? 100}
-          onChange={(e) => setScore(e.target.value)} />
-        <span className="text-[12px]">/ {task.settings.max_score ?? 100}</span>
-      </div>
-      <textarea aria-label={t("Comment")} placeholder={t("Comment")} rows={3} className={inputClass} value={comment} onChange={(e) => setComment(e.target.value)} />
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={primaryClass} disabled={busy || score === ""}
-          onClick={() => void run(() => gradeHomework(task.id, studentId, Number(score), comment, submission.attempt))}>
-          {t("Save grade")}
-        </button>
-        <input aria-label={t("Why it goes back")} placeholder={t("Why it goes back")} className={`${inputClass} w-56`} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button type="button" className={actionClass} disabled={busy || !reason.trim()}
-          onClick={() => void run(() => sendBackHomework(task.id, studentId, reason, submission.attempt))}>
-          {t("Send back")}
-        </button>
-      </div>
-      {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
-    </div>
   );
 }
 

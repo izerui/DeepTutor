@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
-// Spec 2026-11-03 batch 4 §7: class averages, the new notices, own courses on the home page.
+// Spec 2026-11-03 batch 4 §7: the new notices, own courses on the home page.
 const { tasks, t } = vi.hoisted(() => ({
-  tasks: { getHome: vi.fn(), getAssignedTask: vi.fn(), listAssignedTasks: vi.fn(), markTaskDone: vi.fn(), submitHomework: vi.fn() },
+  tasks: { getHome: vi.fn(), getAssignedTask: vi.fn(), listAssignedTasks: vi.fn(), markTaskDone: vi.fn() },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
 }));
@@ -15,25 +15,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSea
 
 import StudentHome from "@/components/home/StudentHome";
 import { notificationText } from "@/components/notifications/NotificationBell";
-import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import type { AppNotification } from "@/lib/notifications-api";
-import type { AssignedTask } from "@/lib/tasks-api";
-
-const graded = (average: number | null): AssignedTask => ({
-  key: "task_1", task_id: "task_1", kind: "homework", title: "Essay", description: "", target_id: "", target_title: "",
-  settings: { max_score: 100 }, due_at: null, state: "completed", completed_at: 1, late: false,
-  provenance: { kind: "teacher", name: "tina" },
-  submission: { text: "x", files: [], attempt: 1, submitted_at: 1, late: false, status: "graded", score: 90,
-    comment: "", return_reason: "", graded_at: 2, class_average: average },
-});
-
-it("shows the learners' average beside a graded homework, and nothing when too few are graded", () => {
-  const { unmount } = render(<StudentTaskDetail task={graded(75)} onChanged={vi.fn()} />);
-  expect(screen.getByText("Learners' average 75 / 100")).toBeTruthy();
-  unmount();
-  render(<StudentTaskDetail task={graded(null)} onChanged={vi.fn()} />);
-  expect(screen.queryByText(/Learners' average/)).toBeNull();
-});
 
 const note = (kind: string, params: Record<string, unknown>): AppNotification =>
   ({ id: "n", kind, params, link: "", count: 1, created_at: 1, read: false }) as AppNotification;

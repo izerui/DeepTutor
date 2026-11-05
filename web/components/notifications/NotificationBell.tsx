@@ -53,14 +53,6 @@ export function notificationText(item: AppNotification, t: Translate): string {
         : t("“{{title}}” no longer has a deadline", { title });
     case "task_due_soon":
       return t("“{{title}}” is due {{date}}", { title, date: day(p.due_at) });
-    case "homework_graded":
-      return t("Your homework “{{title}}” was graded: {{score}} / {{max}}", { title, score: p.score, max: p.max_score });
-    case "homework_regraded":
-      return t("The grade of “{{title}}” changed: {{score}} / {{max}}", { title, score: p.score, max: p.max_score });
-    case "homework_returned":
-      return t("Your homework “{{title}}” was sent back: {{reason}}", { title, reason: p.reason });
-    case "homework_submitted":
-      return t("{{count}} new hand-ins for “{{title}}”", { title, count: item.count });
     case "teacher_comment":
       return t("{{teacher}} commented on “{{title}}”", { teacher: p.teacher, title });
     // Platform batch 3 §3: an announcement in a course or a Mastery Path one joined.

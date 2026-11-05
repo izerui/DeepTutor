@@ -1,5 +1,5 @@
 """Platform follow-ups: reviews and favorites, grades, remedial into a course,
-administrators' own practice sets, grading a hand-in that changed, task reads.
+administrators' own practice sets, task reads.
 
 Spec: docs/superpowers/specs/2026-11-04-platform-followups-design.md
 """
@@ -25,11 +25,7 @@ def _offline(monkeypatch, teaching_users):
     async def ungraded(pending):
         return {}
 
-    async def no_suggestion(_task_id, _student_id):
-        return None
-
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
 
 
 def _uid(teaching_users, name):
@@ -226,36 +222,3 @@ def test_an_administrator_reads_answers_of_their_own_set_only(as_account, teachi
         PracticeReview().attempt(handed, handed_submission)
 
 
-# ── grading what the teacher read (§5) ─────────────────────
-
-
-def test_grading_a_hand_in_that_changed_is_refused(as_account, teaching_users):
-    from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.service import StudentTasks, TaskConflict, TaskService
-
-    with as_account("tina"):
-        homework = TaskService().create("homework", "Essay")
-        course = CourseService().create("Course")
-        CourseService().update(course["id"], task_ids=[homework["id"]])
-        CourseService().publish(course["id"])
-    import time
-
-    from deeptutor.catalog.enrollment import refresh_course
-    from deeptutor.catalog.store import db
-
-    sara = _uid(teaching_users, "sara")
-    with db.write() as conn:  # joined without a listing: the course is not in the market
-        conn.execute(
-            "INSERT INTO enrollments (kind, item_id, user_id, via, joined_at) VALUES ('course', ?, ?, 'self', ?)",
-            (course["id"], sara, time.time()),
-        )
-    refresh_course(course["id"])
-    with as_account("sara"):
-        asyncio.run(StudentTasks().submit(homework["id"], "First.", []))
-        asyncio.run(StudentTasks().submit(homework["id"], "Second.", []))
-    with as_account("tina"):
-        with pytest.raises(TaskConflict):
-            TaskService().grade(homework["id"], sara, 80, "ok", attempt=1)
-        with pytest.raises(TaskConflict):
-            TaskService().send_back(homework["id"], sara, "redo", attempt=1)
-        TaskService().grade(homework["id"], sara, 80, "ok", attempt=2)

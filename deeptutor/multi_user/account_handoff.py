@@ -47,7 +47,7 @@ STAGES: tuple[str, ...] = (
     "path_materials",
     "publish_targets",
     "practice_sets",
-    # Spec 2026-11-03 batch 1 §7: tasks, homework and notifications follow too.
+    # Spec 2026-11-03 batch 1 §7: tasks and notifications follow too.
     "tasks",
     "task_records",
     "notifications",

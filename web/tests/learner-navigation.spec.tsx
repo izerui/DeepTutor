@@ -11,7 +11,7 @@ it.each([
   [["reading"], ["/learning"]],
   [["books"], ["/learning"]],
   // Spec 2026-10-29 §5: restricted students keep the chat-surface features (platform batch 2: no classes).
-  [["chat"], ["/start", "/market", "/chat", "/learning", "/practice-sets", "/grading", "/tasks", "/calendar", "/kanban"]],
+  [["chat"], ["/start", "/market", "/chat", "/learning", "/practice-sets", "/tasks", "/calendar", "/kanban"]],
   [[], []],
 ] as [string[], string[]][])("filters the actual nav entries for %j", (allowed, expected) => {
   expect(PRIMARY_NAV_HREFS.filter((href) => navVisibleUnderPolicy(href, allowed))).toEqual(expected);

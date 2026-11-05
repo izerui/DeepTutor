@@ -4,7 +4,7 @@ Lives in ``<SYSTEM_ROOT>/notifications.sqlite3``. A notification stores a
 ``kind`` and its parameters, never rendered text: the web client words it in
 the reader's language. A ``dedupe_key`` makes "the same thing for the same
 person" one row; with ``bump`` a repeat raises its count and marks it unread
-again (new homework, summed per task and day). Rows older than 90 days go
+again (summed per item and day). Rows older than 90 days go
 on the next write. Opening one re-checks access where it points to.
 """
 
@@ -149,6 +149,16 @@ def forget_user(user_id: str) -> None:
     with db.write() as conn:
         conn.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
 
+
+def forget_kinds(kinds: list[str]) -> None:
+    """Notifications of a kind the platform no longer has go (e.g. homework, spec 2026-11-05)."""
+    if not db.path().exists() or not kinds:
+        return
+    with db.write() as conn:
+        conn.execute(
+            f"DELETE FROM notifications WHERE kind IN ({','.join('?' for _ in kinds)})", kinds  # nosec B608
+        )
+
 def notify_handover(successor_id: str, from_user_id: str, from_name: str, counts: dict[str, int]) -> None:
     """One summary to whoever took over a departing teacher's content (spec 2026-11-03 batch 4 §3)."""
     moved = {kind: int(n) for kind, n in counts.items() if n}
@@ -158,4 +168,4 @@ def notify_handover(successor_id: str, from_user_id: str, from_name: str, counts
            link="/start", dedupe_key=f"content_transferred:{from_user_id}:{successor_id}", bump=True)
 
 
-__all__ = ["db", "forget_user", "list_for", "mark_read", "notify", "notify_handover", "unread_count"]
+__all__ = ["db", "forget_kinds", "forget_user", "list_for", "mark_read", "notify", "notify_handover", "unread_count"]

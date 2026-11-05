@@ -79,7 +79,7 @@ export function AiLimitSetting() {
     <section className="space-y-2 rounded-xl border border-[var(--border)] p-4" data-testid="ai-limit-setting">
       <h2 className="text-[13px] font-semibold">{t("Students' daily AI limit")}</h2>
       <p className="text-[12px] text-[var(--muted-foreground)]">
-        {t("The default for every student. A student's own setting can change it. Course tasks can always be done and handed in.")}
+        {t("The default for every student. A student's own setting can change it. Course tasks can always be done.")}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <AiLimitPicker value={value ?? 0} onChange={(v) => setValue(v ?? 0)} />

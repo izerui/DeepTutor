@@ -169,7 +169,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                 <th className={cell}>{t("Answers in period")}</th>
                 {isCourse && <th className={cell}>{t("Tasks done in period")}</th>}
                 {isCourse && <th className={cell}>{t("Tasks done")}</th>}
-                {isCourse && <th className={cell}>{t("Homework: to grade · returned · graded")}</th>}
                 <th className={cell}>{t("Mastered points")}</th>
                 {isCourse && <th className={cell}>{t("Practice: best score")}</th>}
               </tr>
@@ -199,11 +198,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                     {isCourse && <td className={cell}>{row.overall.period_tasks_done ?? 0}</td>}
                     {isCourse && (
                       <td className={cell}>{row.tasks ? `${row.tasks.done} / ${row.tasks.total}` : "—"}</td>
-                    )}
-                    {isCourse && (
-                      <td className={cell}>
-                        {row.tasks ? `${row.tasks.to_grade} · ${row.tasks.returned} · ${row.tasks.graded}` : "—"}
-                      </td>
                     )}
                     <td className={cell}>{points.total ? `${points.mastered} / ${points.total}` : "—"}</td>
                     {isCourse && <td className={cell}>{score ? `${score.score} / ${score.max}` : "—"}</td>}
@@ -355,10 +349,7 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
       {actionError && <p role="alert" className="text-[12px] text-red-600">{actionError}</p>}
       {detail.tasks && (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">
-          {t("{{done}} / {{total}} tasks done · homework: {{toGrade}} to grade, {{returned}} returned, {{graded}} graded", {
-            done: detail.tasks.done, total: detail.tasks.total, toGrade: detail.tasks.to_grade,
-            returned: detail.tasks.returned, graded: detail.tasks.graded,
-          })}
+          {t("{{done}} / {{total}} tasks done", { done: detail.tasks.done, total: detail.tasks.total })}
         </p>
       )}
       {detail.practice_sets.length > 0 && (

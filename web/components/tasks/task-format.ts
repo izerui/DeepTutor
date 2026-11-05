@@ -5,7 +5,6 @@ export const KIND_LABEL: Record<TaskKind, string> = {
   mastery_path: "Mastery Path",
   practice_set: "Practice set",
   book: "Reading",
-  homework: "Homework",
   note: "Note",
 };
 
@@ -28,7 +27,7 @@ export const STATE_TONE: Record<TaskState, string> = {
 export const formatWhen = (timestamp: number | null | undefined) =>
   timestamp ? new Date(timestamp * 1000).toLocaleString() : "";
 
-/** Where a task's "go do it" button leads; homework and notes are done in place. */
+/** Where a task's "go do it" button leads; notes are done in place. */
 export function targetHref(task: Pick<AssignedTask, "kind" | "target_id" | "settings">): string | null {
   switch (task.kind) {
     case "practice_set":

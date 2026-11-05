@@ -4,7 +4,7 @@ For the students who joined a teacher's content, from data that teacher may
 already see:
 
 * ``inactive``: nothing learned in 7 days — no chat turn, Mastery Path
-  answer, practice submission, task completion or hand-in (times only);
+  answer, practice submission or task completion (times only);
 * ``overdue``: this teacher's tasks past their deadline and not done;
 * ``mistakes_rising``: on this teacher's paths and practice sets, at least 5
   wrong answers in the last 7 days and at least twice the 7 days before;
@@ -81,13 +81,12 @@ def _system_last_activity(student_ids: list[str]) -> dict[str, float]:
                 keep(row[0], row[1])
     with task_db.read() as conn:
         if conn is not None:
-            for table, column in (("task_completions", "completed_at"), ("task_submissions", "submitted_at")):
-                for row in conn.execute(
-                    f"SELECT student_id, MAX({column}) FROM {table} WHERE student_id IN ({marks}) "  # nosec B608
-                    "GROUP BY student_id",
-                    student_ids,
-                ):
-                    keep(row[0], row[1])
+            for row in conn.execute(
+                f"SELECT student_id, MAX(completed_at) FROM task_completions WHERE student_id IN ({marks}) "  # nosec B608
+                "GROUP BY student_id",
+                student_ids,
+            ):
+                keep(row[0], row[1])
     return latest
 
 

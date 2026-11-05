@@ -1,8 +1,8 @@
 """The teacher's home: a workbench (spec 2026-11-03 batch 3 §5.1).
 
-From top to bottom: homework to grade, students who need attention, my
-classes, what I sent out and how far students got. The teacher's own
-learning is the student home's "mine" block, loaded by the page itself.
+From top to bottom: learners who need attention, and what I sent out with
+how far learners got. The teacher's own learning is the student home's
+"mine" block, loaded by the page itself.
 Administrators get no workbench (they see no students' data): their home is
 links plus their own learning.
 """
@@ -15,32 +15,6 @@ from deeptutor.multi_user.context import get_current_user
 
 ATTENTION_LIMIT = 20
 SENT_LIMIT = 8
-
-
-def to_grade(teacher_id: str) -> list[dict[str, Any]]:
-    """Every hand-in waiting for this teacher, oldest first."""
-    from deeptutor.multi_user.accounts import accounts as _accounts
-    from deeptutor.tasks.store import db
-
-    with db.read() as conn:
-        if conn is None:
-            return []
-        rows = conn.execute(
-            "SELECT s.task_id, s.student_id, s.submitted_at, s.late, s.attempt, t.title "
-            "FROM task_submissions s JOIN tasks t ON t.id = s.task_id "
-            "WHERE t.owner_user_id = ? AND s.status = 'submitted' ORDER BY s.submitted_at",
-            (teacher_id,),
-        ).fetchall()
-    accounts = _accounts()
-    return [
-        {
-            "task_id": r["task_id"], "task_title": r["title"], "student_id": r["student_id"],
-            "username": (accounts.get(r["student_id"]) or {}).get("username", ""),
-            "submitted_at": r["submitted_at"], "late": bool(r["late"]), "attempt": r["attempt"],
-        }
-        for r in rows
-    ]
-
 
 
 def _sent(actor) -> list[dict[str, Any]]:
@@ -81,7 +55,7 @@ def _sent(actor) -> list[dict[str, Any]]:
 
 
 def workbench(actor=None) -> dict[str, Any]:
-    """A teacher's home: what to grade, learners who need attention (with the course or path to open), what they sent."""
+    """A teacher's home: learners who need attention (with the course or path to open), what they sent."""
     from deeptutor.catalog import attention, items
     from deeptutor.catalog.learners import where_learners_are
     from deeptutor.multi_user.accounts import accounts as _accounts, live_role as _role
@@ -106,9 +80,9 @@ def workbench(actor=None) -> dict[str, Any]:
         })
     needing.sort(key=lambda row: (-len(row["flags"]), row["username"]))
     return {
-        "role": role, "to_grade": to_grade(actor.id), "attention": needing[:ATTENTION_LIMIT],
+        "role": role, "attention": needing[:ATTENTION_LIMIT],
         "attention_total": len(needing), "sent": _sent(actor),
     }
 
 
-__all__ = ["to_grade", "workbench"]
+__all__ = ["workbench"]

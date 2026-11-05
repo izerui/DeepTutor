@@ -126,15 +126,3 @@ async def teacher_workbench() -> dict[str, Any]:
     from deeptutor.teaching.workbench import workbench
 
     return await asyncio.to_thread(workbench)
-
-
-@router.get("/to-grade")
-async def to_grade_list() -> dict[str, Any]:
-    """Batch 3 §5.4: every hand-in waiting for the current teacher."""
-    from deeptutor.multi_user.accounts import live_role as _role
-    from deeptutor.teaching.workbench import to_grade
-
-    user = get_current_user()
-    if _role(user) != "teacher":
-        return {"items": []}
-    return {"items": await asyncio.to_thread(to_grade, user.id)}

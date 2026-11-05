@@ -156,13 +156,9 @@ def _course_starters(course_id: str) -> set[str]:
     with task_db.read() as conn:
         if conn is None:
             return set()
-        done = {r[0] for r in conn.execute(
+        return {r[0] for r in conn.execute(
             f"SELECT DISTINCT student_id FROM task_completions WHERE task_key IN ({marks})", task_ids  # nosec B608
         )}
-        handed = {r[0] for r in conn.execute(
-            f"SELECT DISTINCT student_id FROM task_submissions WHERE task_id IN ({marks})", task_ids  # nosec B608
-        )}
-    return done | handed
 
 
 _reading_cache: dict[str, set[str]] = {}

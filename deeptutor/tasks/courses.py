@@ -1,8 +1,8 @@
 """Teacher courses (spec 2026-11-03 batch 2 §5).
 
 A course is tasks in an order, with a name and a description. Everything a
-student does happens in its tasks — completion, deadlines, opening times,
-homework — so a course adds no rules of its own: it is how a teacher lays
+student does happens in its tasks — completion, deadlines, opening times —
+so a course adds no rules of its own: it is how a teacher lays
 out a term. It reaches students through a publish scope (kind ``course``).
 
 Publishing a course publishes its draft tasks to the course's receivers; an
@@ -56,8 +56,8 @@ class CourseService:
             try:
                 tasks.append(self.tasks.get(task_id))
             except TaskError:
-                # A task handed to someone else (homework to a co-teacher) stays in
-                # the course, shown but not editable here.
+                # A task handed to someone else stays in the course, shown but not
+                # editable here.
                 with db.read() as conn:
                     other = conn.execute(
                         "SELECT id, kind, title, status, due_at, open_at FROM tasks WHERE id = ?", (task_id,)
@@ -190,11 +190,7 @@ class CourseService:
         return self.get(course_id)
 
     def hand_over(self, course_id: str, teacher_id: str) -> dict[str, Any]:
-        """An administrator gives a course they hold — with its tasks and their homework — to a teacher.
-
-        Homework of a departed teacher reaches the administrator, who may not grade it
-        (R21); handing the course on lets a teacher grade it (traceability #5).
-        """
+        """An administrator gives a course they hold, with its tasks, to a teacher (traceability #5)."""
         from deeptutor.tasks.service import _hand_tasks_to
 
         if _role(self.actor) != "admin":

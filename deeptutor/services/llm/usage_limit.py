@@ -2,8 +2,8 @@
 
 Counted in tokens from the account's own usage ledger (``usage_ledger``),
 from local midnight. Only students are limited. Calls made on a teacher's
-behalf — grading a practice set's answers, suggesting a homework grade —
-run under :func:`exempt` and are recorded but not counted.
+behalf — grading a practice set's answers — run under :func:`exempt` and
+are recorded but not counted.
 
 A turn that was admitted runs to its end: only its first call is checked.
 """

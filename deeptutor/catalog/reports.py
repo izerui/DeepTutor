@@ -67,7 +67,7 @@ class LearnerReportService(LearnerData):
     def _task_progress_chunk(task_ids: list[str], learners: list[str]) -> dict[str, dict[str, int]]:
         from deeptutor.tasks.store import db as task_db
 
-        out = {u: {"done": 0, "total": len(task_ids), "to_grade": 0, "returned": 0, "graded": 0, "last": None}
+        out = {u: {"done": 0, "total": len(task_ids), "last": None}
                for u in learners}
         if not task_ids or not learners:
             return out
@@ -83,14 +83,6 @@ class LearnerReportService(LearnerData):
             ):
                 out[row[0]]["done"] = int(row[1])
                 out[row[0]]["last"] = row[2]
-            for row in conn.execute(
-                f"SELECT student_id, status, COUNT(*) FROM task_submissions WHERE task_id IN ({task_marks}) "  # nosec B608
-                f"AND student_id IN ({user_marks}) GROUP BY student_id, status",
-                (*task_ids, *learners),
-            ):
-                key = {"submitted": "to_grade", "returned": "returned", "graded": "graded"}.get(row[1])
-                if key:
-                    out[row[0]][key] = int(row[2])
         return out
 
     @classmethod
@@ -241,7 +233,7 @@ class LearnerReportService(LearnerData):
         writer = csv.writer(out)
         writer.writerow([
             "learner", "last_activity", "answers_in_period", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
-            "homework_to_grade", "practice_sets_done", "practice_score_ratio", "attention",
+            "practice_sets_done", "practice_score_ratio", "attention",
         ])
         for row in report["learners"]:
             overall = row["overall"]
@@ -254,7 +246,7 @@ class LearnerReportService(LearnerData):
             last = overall.get("last_activity")
             writer.writerow([
                 row["username"], _when(last), overall.get("period_answers", 0), kp_mastered, kp_total,
-                tasks.get("done", ""), tasks.get("total", ""), tasks.get("to_grade", ""), len(sets),
+                tasks.get("done", ""), tasks.get("total", ""), len(sets),
                 f"{ratio:.2f}" if ratio is not None else "", "; ".join(flag["kind"] for flag in row["flags"]),
             ])
         return out.getvalue()

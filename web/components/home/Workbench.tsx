@@ -77,7 +77,7 @@ export function TeacherWorkbench() {
       <header>
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {t("What waits for you, who needs attention, what you sent out and listed, and your own learning.")}
+          {t("Who needs attention, what you sent out and listed, and your own learning.")}
         </p>
       </header>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
@@ -87,33 +87,6 @@ export function TeacherWorkbench() {
         <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : (
         <>
-          <section aria-labelledby="wb-grade" className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 id="wb-grade" className="text-[13px] font-semibold">
-                {t("To grade")} <span className="text-[var(--muted-foreground)]">({board.to_grade?.length ?? 0})</span>
-              </h2>
-              <Link href="/grading" className="text-[12.5px] text-[var(--primary)] hover:underline">{t("All hand-ins")}</Link>
-            </div>
-            {(board.to_grade ?? []).length === 0 ? (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to grade.")}</p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
-                {(board.to_grade ?? []).slice(0, 5).map((item) => (
-                  <li key={`${item.task_id}:${item.student_id}`}>
-                    <Link href={`/tasks?task=${encodeURIComponent(item.task_id)}`} className="flex flex-wrap items-center gap-2 p-2.5 text-[12.5px] hover:bg-[var(--muted)]/40">
-                      <span className="font-medium">{item.username}</span>
-                      <span className="text-[var(--muted-foreground)]">{item.task_title}</span>
-                      <span className="ml-auto text-[11.5px] text-[var(--muted-foreground)]">
-                        {new Date(item.submitted_at * 1000).toLocaleString()}
-                        {item.late && ` · ${t("Late")}`}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
           {/* Platform batch 3 §2: learners of my courses and paths; each opens that item's report. */}
           <section aria-labelledby="wb-attention" className="space-y-2">
             <h2 id="wb-attention" className="text-[13px] font-semibold">
@@ -218,9 +191,9 @@ export function AdminHome() {
           </span>
         </Link>
       </div>
-      {/* Traceability #5: administrators do not grade; what they hold goes on to a teacher. */}
+      {/* Traceability #5: what administrators hold can go on to a teacher. */}
       <p className="text-[12px] text-[var(--muted-foreground)]" data-testid="admin-hand-over-hint">
-        {t("Courses and tasks handed to you can be handed to a teacher who grades them.")}{" "}
+        {t("Courses and tasks you hold can be handed to a teacher.")}{" "}
         <Link href="/tasks?tab=courses" className="text-[var(--primary)] hover:underline">{t("Courses")}</Link>
       </p>
       <AiLimitSetting />

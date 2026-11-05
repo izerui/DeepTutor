@@ -14,8 +14,8 @@ export function activeTeachers(users: UserRecord[]): UserRecord[] {
 }
 
 /**
- * Traceability #5: an administrator may not grade homework, so what they hold
- * (e.g. from a departed teacher) is handed to a teacher who grades it.
+ * Traceability #5: what an administrator holds (e.g. from a departed teacher)
+ * is handed to a teacher, who becomes its author.
  */
 export function HandOverPanel({
   handOver,
@@ -46,7 +46,7 @@ export function HandOverPanel({
     <section className="space-y-2 rounded-lg border border-dashed border-[var(--border)] p-3" data-testid="hand-over">
       <h3 className="text-[12.5px] font-medium">{t("Hand over to a teacher")}</h3>
       <p className="text-[11.5px] text-[var(--muted-foreground)]">
-        {t("Administrators do not grade homework. The teacher you choose takes it over, with its homework, and grades it.")}
+        {t("The teacher you choose takes it over and becomes its author.")}
       </p>
       {teachers.length === 0 ? (
         <p className="text-[12px] text-[var(--muted-foreground)]">{t("No active teacher to hand it to.")}</p>

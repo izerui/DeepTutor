@@ -217,7 +217,7 @@ const joinedHome = home({
 
 it("shows a teacher what they joined and the announcements on the workbench", async () => {
   auth.value = teacher;
-  workbench.getWorkbench.mockResolvedValue({ to_grade: [], attention: [], attention_total: 0, sent: [] });
+  workbench.getWorkbench.mockResolvedValue({ attention: [], attention_total: 0, sent: [] });
   tasks.getHome.mockResolvedValue(joinedHome);
   render(<TeacherWorkbench />);
   const joined = await screen.findByTestId("home-joined");
@@ -233,7 +233,7 @@ it("shows an administrator what they joined, the announcements and the hand-over
   expect(await screen.findByTestId("home-joined")).toBeTruthy();
   expect(screen.getByText("Exam on Friday")).toBeTruthy();
   expect(screen.getByTestId("admin-hand-over-hint").textContent).toContain(
-    "Courses and tasks handed to you can be handed to a teacher who grades them.");
+    "Courses and tasks you hold can be handed to a teacher.");
 });
 
 it("shows a student what they joined, under neutral wording", async () => {
@@ -280,8 +280,8 @@ it("links a teacher's calendar by whose task it is", async () => {
   auth.value = teacher;
   const at = new Date().getTime() / 1000;
   tasks.listCalendar.mockResolvedValue([
-    { key: "t_mine", title: "Mine", kind: "homework", state: "published", type: "due", at },
-    { key: "t_other", title: "Theirs", kind: "homework", state: "open", type: "due", at },
+    { key: "t_mine", title: "Mine", kind: "note", state: "published", type: "due", at },
+    { key: "t_other", title: "Theirs", kind: "note", state: "open", type: "due", at },
   ]);
   tasks.listMyTasks.mockResolvedValue([{ id: "t_mine" }]);
   render(<TaskCalendar />);

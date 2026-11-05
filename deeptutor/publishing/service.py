@@ -75,13 +75,10 @@ class PublishService:
 
             with task_db.read() as conn:
                 row = conn.execute(
-                    "SELECT owner_user_id, status, kind FROM tasks WHERE id = ?", (item_id,)
+                    "SELECT owner_user_id, status FROM tasks WHERE id = ?", (item_id,)
                 ).fetchone() if conn else None
             found = row is not None and row["owner_user_id"] == self.actor.id
-            info = {
-                "owner": row["owner_user_id"], "public": row["status"] == "published",
-                "homework": row["kind"] == "homework",
-            } if found else {}
+            info = {"owner": row["owner_user_id"], "public": row["status"] == "published"} if found else {}
         elif kind == PRACTICE_SET:
             from deeptutor.practice_sets import store as practice_store
 

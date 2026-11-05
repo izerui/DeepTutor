@@ -21,11 +21,7 @@ def _offline(monkeypatch):
     async def ungraded(pending):
         return {}
 
-    async def no_suggestion(_task_id, _student_id):
-        return None
-
     monkeypatch.setattr("deeptutor.practice_sets.service._judge", ungraded)
-    monkeypatch.setattr("deeptutor.tasks.service.suggest_grade", no_suggestion)
 
 
 #: The running test's ``deliver`` fixture, and who joins what Tina publishes here.
@@ -99,29 +95,6 @@ def test_no_average_before_the_answers_show(as_account, third_student):
     for name in ("sara", "sam", "sue"):
         _answer(as_account, name, set_id, "B")
     assert _take(as_account, "sara", set_id)["class_average"] is None
-
-
-def test_a_homework_average_shows_beside_a_graded_one(as_account, third_student, teaching_users, in_course):
-    from deeptutor.tasks.service import StudentTasks, TaskService
-
-    with as_account("tina"):
-        task = TaskService().create("homework", "Essay")
-    in_course(task["id"], to=("sara", "sam", "sue"))
-    for name in ("sara", "sam", "sue"):
-        with as_account(name):
-            asyncio.run(StudentTasks().submit(task["id"], "text", []))
-    with as_account("tina"):
-        TaskService().grade(task["id"], teaching_users["sara"]["id"], 90, "")
-        TaskService().grade(task["id"], teaching_users["sam"]["id"], 60, "")
-    with as_account("sara"):
-        assert StudentTasks().get(task["id"])["submission"]["class_average"] is None
-    with as_account("tina"):
-        TaskService().grade(task["id"], teaching_users["sue"]["id"], 75, "")
-    with as_account("sara"):
-        assert StudentTasks().get(task["id"])["submission"]["class_average"] == 75.0
-    with as_account("sam"):
-        sam_view = StudentTasks().get(task["id"])["submission"]
-    assert sam_view["class_average"] == 75.0 and "ranking" not in sam_view
 
 
 # ── hand-over summaries (§3) ───────────────────────────────

@@ -1,19 +1,18 @@
-"""Tasks and homework API (spec 2026-11-03 batch 1 §3–§4)."""
+"""Tasks API (spec 2026-11-03 batch 1 §3)."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 import logging
 from typing import Any, Literal, TypeVar
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
-from deeptutor.tasks.service import MAX_FILES, StudentTasks, TaskError, TaskService
+from deeptutor.tasks.service import StudentTasks, TaskError, TaskService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,15 +28,8 @@ async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-async def _await(call: Awaitable[T]) -> T:
-    try:
-        return await call
-    except TaskError as exc:
-        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-
-
 class TaskCreate(BaseModel):
-    kind: Literal["mastery_path", "practice_set", "book", "homework", "note"]
+    kind: Literal["mastery_path", "practice_set", "book", "note"]
     title: str = Field(min_length=1, max_length=200)
 
 
@@ -65,18 +57,6 @@ class CourseUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=20_000)
     task_ids: list[str] | None = Field(default=None, max_length=200)
-
-
-class Grade(BaseModel):
-    score: float
-    comment: str = Field(default="", max_length=20_000)
-    #: The hand-in the teacher read (follow-ups §5); omitted by older clients.
-    attempt: int | None = None
-
-
-class SendBack(BaseModel):
-    reason: str = Field(min_length=1, max_length=20_000)
-    attempt: int | None = None
 
 
 class HandOver(BaseModel):
@@ -132,7 +112,7 @@ async def add_course_task(course_id: str, body: TaskCreate):
 
 @router.post("/courses/{course_id}/hand-over")
 async def hand_over_course(course_id: str, body: HandOver):
-    """Traceability #5: an administrator gives a course they hold to a teacher, homework included."""
+    """Traceability #5: an administrator gives a course they hold to a teacher."""
     return {"course": await _call(lambda: _courses().hand_over(course_id, body.teacher_id))}
 
 
@@ -227,18 +207,6 @@ async def mark_done(task_id: str):
     return {"task": await _call(StudentTasks().mark_done, task_id)}
 
 
-@router.post("/assigned/{task_id}/submit")
-async def submit_homework(
-    task_id: str,
-    text: str = Form(default=""),
-    files: list[UploadFile] = File(default_factory=list),
-):
-    if len(files) > MAX_FILES:
-        raise HTTPException(status_code=400, detail=f"Attach at most {MAX_FILES} files.")
-    payload = [(f.filename or "file", await f.read()) for f in files]
-    return {"task": await _await(StudentTasks().submit(task_id, text, payload))}
-
-
 @router.get("/{task_id}")
 async def get_task(task_id: str):
     return {"task": await _call(TaskService().detail, task_id)}
@@ -265,21 +233,3 @@ async def archive_task(task_id: str):
 async def delete_task(task_id: str):
     await _call(TaskService().delete, task_id)
     return {"ok": True}
-
-
-@router.post("/{task_id}/students/{student_id}/grade")
-async def grade(task_id: str, student_id: str, body: Grade):
-    return {"task": await _call(
-        lambda: TaskService().grade(task_id, student_id, body.score, body.comment, attempt=body.attempt))}
-
-
-@router.post("/{task_id}/students/{student_id}/send-back")
-async def send_back(task_id: str, student_id: str, body: SendBack):
-    return {"task": await _call(
-        lambda: TaskService().send_back(task_id, student_id, body.reason, attempt=body.attempt))}
-
-
-@router.get("/{task_id}/students/{student_id}/files/{name}")
-async def homework_file(task_id: str, student_id: str, name: str):
-    path = await _call(TaskService().file_path, task_id, student_id, name)
-    return FileResponse(path, filename=name)

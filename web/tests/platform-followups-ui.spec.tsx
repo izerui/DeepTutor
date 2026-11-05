@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 // Platform follow-ups: reviews and favorites, grades, remedial into the course,
-// grading the hand-in one read, provenance wording, subjects by stage, CSV downloads.
+// provenance wording, subjects by stage, CSV downloads.
 const { api, tasks, practice, router, search, listingStatus, t } = vi.hoisted(() => ({
   api: {
     getTaxonomy: vi.fn(),
@@ -14,7 +14,7 @@ const { api, tasks, practice, router, search, listingStatus, t } = vi.hoisted(()
     replyToReview: vi.fn(),
     setFavorite: vi.fn(),
   },
-  tasks: { gradeHomework: vi.fn(), sendBackHomework: vi.fn(), getTask: vi.fn(), getCourse: vi.fn(), addCoursePracticeSet: vi.fn() },
+  tasks: { getTask: vi.fn(), getCourse: vi.fn(), addCoursePracticeSet: vi.fn() },
   practice: { getSet: vi.fn(), getReport: vi.fn() },
   router: { replace: vi.fn(), push: vi.fn() },
   search: { value: "" },
@@ -67,12 +67,10 @@ import { TaxonomyPicker, type Classification } from "@/components/catalog/Taxono
 import { classificationLabel, indexTaxonomy, pickName, resetTaxonomyCache, subjectLabel } from "@/components/catalog/useTaxonomy";
 import { notificationText } from "@/components/notifications/NotificationBell";
 import { SetEditor } from "@/components/practice-sets/SetEditor";
-import { GradePanel } from "@/components/tasks/TasksHub";
 import { downloadAuthenticated, suggestedFilename } from "@/lib/authenticated-download";
 import { marketQueryString, type CatalogEntry, type ItemReview, type ItemReviews, type Taxonomy } from "@/lib/catalog-api";
 import type { AppNotification } from "@/lib/notifications-api";
 import { provenanceLabel } from "@/lib/provenance";
-import type { TaskDetail } from "@/lib/tasks-api";
 
 const taxonomy: Taxonomy = {
   stages: [
@@ -322,40 +320,6 @@ it("leaves the deadline open while the practice set is not in the market", async
   expect(await screen.findByRole("button", { name: "Save draft" })).toBeTruthy();
   expect(screen.queryByTestId("market-no-deadline")).toBeNull();
   expect((container.querySelector('input[type="datetime-local"]') as HTMLInputElement).disabled).toBe(false);
-});
-
-// ── grading the hand-in one read ──
-
-const task = (attempt: number): TaskDetail => ({
-  id: "t1", kind: "homework", title: "Essay", settings: { max_score: 10 },
-  students: [{ id: "u_sara", username: "sara", in_scope: true, submission: {
-    text: "My essay", files: [], attempt, submitted_at: 1, late: false, status: "submitted", score: null, comment: "",
-    return_reason: "", graded_at: null } }],
-} as unknown as TaskDetail);
-
-it("grades and sends back the hand-in the teacher read", async () => {
-  tasks.gradeHomework.mockResolvedValue(task(2));
-  tasks.sendBackHomework.mockResolvedValue(task(2));
-  render(<GradePanel task={task(2)} studentId="u_sara" onChanged={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText("Score"), { target: { value: "8" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save grade" }));
-  await waitFor(() => expect(tasks.gradeHomework).toHaveBeenCalledWith("t1", "u_sara", 8, "", 2));
-  fireEvent.change(screen.getByLabelText("Why it goes back"), { target: { value: "Too short" } });
-  fireEvent.click(screen.getByRole("button", { name: "Send back" }));
-  await waitFor(() => expect(tasks.sendBackHomework).toHaveBeenCalledWith("t1", "u_sara", "Too short", 2));
-});
-
-it("says the student handed in again and reloads the task on a conflict", async () => {
-  const conflict = Object.assign(new Error("The student handed in again just now. Reload before grading."), { status: 409 });
-  tasks.gradeHomework.mockRejectedValue(conflict);
-  tasks.getTask.mockResolvedValue(task(3));
-  const changed = vi.fn();
-  render(<GradePanel task={task(2)} studentId="u_sara" onChanged={changed} />);
-  fireEvent.change(screen.getByLabelText("Score"), { target: { value: "8" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save grade" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("The student handed in again just now. Reload before grading.");
-  await waitFor(() => expect(changed).toHaveBeenCalledWith(task(3)));
-  expect(tasks.getTask).toHaveBeenCalledWith("t1");
 });
 
 // ── downloads with the sign-in credentials ──

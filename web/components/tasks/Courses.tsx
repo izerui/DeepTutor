@@ -118,7 +118,7 @@ function CourseEditor({
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [mine, setMine] = useState<MyTask[]>([]);
   const [pick, setPick] = useState("");
-  const [kind, setKind] = useState<TaskKind>(isAdmin ? "practice_set" : "homework");
+  const [kind, setKind] = useState<TaskKind>("practice_set");
   const [newTitle, setNewTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -151,9 +151,7 @@ function CourseEditor({
     [next[index], next[index + by]] = [next[index + by], next[index]];
     void run(() => updateCourse(course.id, { task_ids: next }));
   };
-  const kinds: TaskKind[] = isAdmin
-    ? ["practice_set", "mastery_path", "book", "note"]
-    : ["homework", "practice_set", "mastery_path", "book", "note"];
+  const kinds: TaskKind[] = ["practice_set", "mastery_path", "book", "note"];
   const addable = mine.filter((task) => task.status !== "archived" && !ids.includes(task.id));
 
   return (
@@ -275,7 +273,7 @@ function CourseEditor({
           </button>
         )}
       </div>
-      {/* Traceability #5: what an administrator holds goes to a teacher who grades it. */}
+      {/* Traceability #5: what an administrator holds goes to a teacher. */}
       {isAdmin && <HandOverPanel handOver={(teacherId) => handOverCourse(course.id, teacherId)} onDone={onDeleted} />}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
     </fieldset>

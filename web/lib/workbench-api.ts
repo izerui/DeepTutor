@@ -1,21 +1,9 @@
 import { apiFetch, apiUrl } from "./api";
 import type { AttentionFlag } from "./report-types";
 
-/** One hand-in waiting for the teacher (spec 2026-11-03 batch 3 §5.4). */
-export interface ToGrade {
-  task_id: string;
-  task_title: string;
-  student_id: string;
-  username: string;
-  submitted_at: number;
-  late: boolean;
-  attempt: number;
-}
-
 /** The teacher's home (batch 3 §5.1); administrators get only ``role``. */
 export interface Workbench {
   role: string;
-  to_grade?: ToGrade[];
   /**
    * Platform batch 3 §2: learners of this teacher's content; ``item`` is one
    * course or path they joined (its report), ``null`` on an older install.
@@ -60,7 +48,6 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getWorkbench = () => call<Workbench>("/api/home/workbench");
-export const listToGrade = () => call<{ items: ToGrade[] }>("/api/home/to-grade").then((r) => r.items);
 export const getMyAiUsage = () => call<AiUsage>("/api/ai-usage/me");
 export const getSchoolAiLimit = () => call<{ daily_tokens: number }>("/api/ai-usage/default").then((r) => r.daily_tokens);
 export const setSchoolAiLimit = (dailyTokens: number) =>

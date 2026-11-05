@@ -2,10 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 
 // Spec 2026-11-03 batch 3 §13: review and regrade, options, remedial, the
-// workbench, attention, grading, navigation by role, AI left, similar questions.
+// workbench, attention, navigation by role, AI left, similar questions.
 const { practice, workbench, t } = vi.hoisted(() => ({
   practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn(), remedialFromSet: vi.fn(), remedialFromPath: vi.fn() },
-  workbench: { getWorkbench: vi.fn(), listToGrade: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
+  workbench: { getWorkbench: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
     getSchoolAiLimit: vi.fn(), setSchoolAiLimit: vi.fn(), AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }] },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
@@ -23,8 +23,7 @@ import { AiUsageNote } from "@/components/home/AiUsage";
 import { TeacherWorkbench } from "@/components/home/Workbench";
 import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
 import { AttemptReview, OptionBars, RemedialFromSet, takeSuggested } from "@/components/practice-sets/SetReview";
-import { navVisibleForRole } from "@/components/sidebar/nav-entries";
-import GradingQueue from "@/components/tasks/GradingQueue";
+import { navVisibleForRole, PRIMARY_NAV } from "@/components/sidebar/nav-entries";
 
 beforeEach(() => {
   [practice, workbench].forEach((group) =>
@@ -77,41 +76,27 @@ it("makes a remedial draft and hands its suggested students to the editor", asyn
   expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
 });
 
-it("lays out the workbench: hand-ins, attention and what was sent, no classes", async () => {
+it("lays out the workbench: attention and what was sent, no classes, nothing to grade", async () => {
   workbench.getWorkbench.mockResolvedValue({
     role: "teacher",
-    to_grade: [{ task_id: "t1", task_title: "Essay", student_id: "u_sara", username: "sara", submitted_at: 1, late: true, attempt: 1 }],
     attention: [],
     attention_total: 0,
     classes: [],
     sent: [{ kind: "practice_set", id: "ps_1", title: "Week 3", done: 1, total: 2, updated_at: 1 }],
   });
   render(<TeacherWorkbench />);
-  expect(await screen.findByText("Essay")).toBeTruthy();
-  expect(screen.getByText("1 / 2 done")).toBeTruthy();
+  expect(await screen.findByText("1 / 2 done")).toBeTruthy();
+  expect(screen.queryByText("To grade")).toBeNull();
   expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
   expect(screen.queryByRole("heading", { name: /Students who need attention/ })).toBeNull();
   expect(screen.getByText("Everyone is on track.")).toBeTruthy();
-});
-
-it("lists every hand-in and filters by task", async () => {
-  workbench.listToGrade.mockResolvedValue([
-    { task_id: "t1", task_title: "Essay", student_id: "a", username: "sara", submitted_at: 1, late: false, attempt: 2 },
-    { task_id: "t2", task_title: "Lab", student_id: "b", username: "sam", submitted_at: 2, late: false, attempt: 1 },
-  ]);
-  render(<GradingQueue />);
-  expect(await screen.findByText("Attempt 2")).toBeTruthy();
-  fireEvent.change(screen.getByRole("combobox"), { target: { value: "t2" } });
-  expect(within(screen.getByTestId("grading-queue")).queryByText("Essay")).toBeNull();
-  expect(screen.getByRole("link", { name: /sam/ }).getAttribute("href")).toBe("/tasks?task=t2");
 });
 
 it("shows each role its entries and students only the features allowed to them", () => {
   // Traceability #1: students answer the practice sets they joined or were sent.
   expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
   expect(navVisibleForRole("/practice-sets", "teacher", null)).toBe(true);
-  expect(navVisibleForRole("/grading", "teacher", null)).toBe(true);
-  expect(navVisibleForRole("/grading", "admin", null)).toBe(false);
+  expect(PRIMARY_NAV.some((entry) => entry.href === "/grading")).toBe(false);
   expect(navVisibleForRole("/partners", "student", { allow_partners: false })).toBe(false);
   expect(navVisibleForRole("/partners", "student", { allow_partners: true })).toBe(true);
   expect(navVisibleForRole("/partners", "teacher", null)).toBe(true);
