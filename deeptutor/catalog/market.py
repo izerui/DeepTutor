@@ -39,6 +39,19 @@ class Filters:
     favorites: bool = False
 
 
+def _empty_courses(course_ids: list[str]) -> set[str]:
+    """Listed courses holding no item, in one read."""
+    if not course_ids:
+        return set()
+    from deeptutor.tasks.store import db as task_db
+
+    with task_db.read() as conn:
+        if conn is None:
+            return set(course_ids)
+        held = {r[0] for r in conn.execute("SELECT DISTINCT course_id FROM course_items")}
+    return set(course_ids) - held
+
+
 def _entries(accounts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     with db.read() as conn:
         rows = conn.execute("SELECT * FROM listings WHERE status = 'listed'").fetchall() if conn else []
@@ -46,8 +59,11 @@ def _entries(accounts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
     counts = enrollment.joined_counts()
     rated = ratings()
+    empty = _empty_courses([row["item_id"] for row in rows if row["kind"] == "course"])
     out = []
     for row in rows:
+        if row["kind"] == "course" and row["item_id"] in empty:
+            continue  # nothing to learn in it (its author removed every item)
         entry = describe(row, learners=counts.get((row["kind"], row["item_id"]), 0))
         entry["rating"], entry["rating_count"] = rated.get((row["kind"], row["item_id"]), (None, 0))
         entry["author"] = author_name(row["owner_user_id"], accounts)

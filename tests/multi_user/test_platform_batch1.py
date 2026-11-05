@@ -460,6 +460,23 @@ def test_joining_a_course_brings_its_tasks_and_content(as_account):
     assert _assigned_sets(as_account, "sara") == []
 
 
+def test_a_listed_course_emptied_by_its_author_leaves_the_market(as_account):
+    from deeptutor.catalog.enrollment import EnrollmentNotFound
+    from deeptutor.tasks.courses import CourseService
+
+    set_id = _market_set(as_account)
+    course_id, _task_id = _market_course(as_account, set_id)
+    _list(as_account, "course", course_id)
+    assert course_id in {e["id"] for e in _search(as_account, "sam")["items"]}
+    _join(as_account, "sara", "course", course_id)
+
+    with as_account("tina"):
+        CourseService().update(course_id, task_ids=[])  # nothing left to learn
+    assert course_id not in {e["id"] for e in _search(as_account, "sam")["items"]}
+    with pytest.raises(EnrollmentNotFound):
+        _join(as_account, "sam", "course", course_id)
+
+
 def test_a_course_adding_a_task_hands_it_to_members(as_account):
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskService

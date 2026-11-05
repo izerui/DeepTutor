@@ -280,10 +280,13 @@ function CourseEditor({
 export function StudentCourses({
   courseId,
   onOpenTask,
+  reload = 0,
 }: {
   /** ``?course=`` (a notification's link): that course is shown open. */
   courseId: string | null;
   onOpenTask: (task: AssignedTask) => void;
+  /** Changes when one of the learner's tasks changed: read the courses again. */
+  reload?: number;
 }) {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<AssignedCourse[]>([]);
@@ -296,7 +299,7 @@ export function StudentCourses({
   }
   useEffect(() => {
     listAssignedCourses().then(setCourses).catch(() => setCourses([]));
-  }, []);
+  }, [reload]);
   if (!courses.length) return null;
   return (
     <section className="space-y-2" data-testid="student-courses">

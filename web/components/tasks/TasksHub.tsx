@@ -415,6 +415,8 @@ function JoinedView() {
   const [selected, setSelected] = useState<AssignedTask | null>(null);
   const [error, setError] = useState("");
   const [taskError, setTaskError] = useState("");
+  // Bumped when a task changes, so the course cards recount what is done.
+  const [changes, setChanges] = useState(0);
   const refresh = useCallback(() => {
     listAssignedTasks().then(setTasks).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
   }, [t]);
@@ -434,8 +436,8 @@ function JoinedView() {
   return (
     <div className="space-y-4">
       {taskError && <p role="alert" className="text-[12px] text-red-600">{taskError}</p>}
-      {selected && <StudentTaskDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); }} />}
-      <StudentCourses courseId={courseParam} onOpenTask={setSelected} />
+      {selected && <StudentTaskDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); setChanges((n) => n + 1); }} />}
+      <StudentCourses courseId={courseParam} onOpenTask={setSelected} reload={changes} />
       {tasks.length === 0 ? (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to do right now.")}</p>
       ) : (

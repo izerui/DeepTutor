@@ -43,7 +43,14 @@ vi.mock("@/lib/workbench-api", () => ({
 }));
 vi.mock("@/components/practice-sets/TakeSet", () => ({ TakeSet: ({ setId }: { setId: string }) => <p>{`take ${setId}`}</p> }));
 vi.mock("@/components/practice-sets/SetEditor", () => ({ SetEditor: ({ setId }: { setId: string }) => <p>{`edit ${setId}`}</p> }));
-vi.mock("@/components/tasks/StudentTaskDetail", () => ({ StudentTaskDetail: ({ task }: { task: { title: string } }) => <p>{`open ${task.title}`}</p> }));
+vi.mock("@/components/tasks/StudentTaskDetail", () => ({
+  StudentTaskDetail: ({ task, onChanged }: { task: AssignedTask; onChanged: (next: AssignedTask) => void }) => (
+    <div>
+      <p>{`open ${task.title}`}</p>
+      <button type="button" onClick={() => onChanged({ ...task, state: "completed" })}>{`finish ${task.title}`}</button>
+    </div>
+  ),
+}));
 vi.mock("@/components/catalog/MyListings", () => ({ MyListings: () => null }));
 vi.mock("@/components/catalog/AdminNav", () => ({ usePendingReviews: () => 0, AdminNav: () => null }));
 vi.mock("@/components/catalog/ListingPanel", () => ({ ListingPanel: () => null }));
@@ -277,6 +284,16 @@ it("opens the task of a joined course from ?tab=joined&task=", async () => {
   expect(screen.getByRole("tab", { name: "Courses I joined" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByText("open Lab report")).toBeTruthy();
   expect(tasks.getAssignedTask).toHaveBeenCalledWith("t_other");
+});
+
+it("recounts a course's done tasks once a task in it is finished", async () => {
+  search.value = "tab=joined&task=t_other";
+  tasks.listAssignedTasks.mockResolvedValue([]);
+  tasks.getAssignedTask.mockResolvedValue({ key: "t_other", title: "Lab report" } as AssignedTask);
+  render(<TasksHub />);
+  fireEvent.click(await screen.findByRole("button", { name: "finish Lab report" }));
+  // The course cards read the courses again, so their "done" count follows.
+  await waitFor(() => expect(tasks.listAssignedCourses).toHaveBeenCalledTimes(2));
 });
 
 // ── #9 ──

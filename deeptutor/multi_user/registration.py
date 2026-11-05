@@ -1,8 +1,8 @@
 """Whether anyone may sign up (spec 2026-10-29 D19).
 
-Public registration is open by default and creates student accounts. An
-administrator can close it; while closed, only a valid class invite link
-admits a new account. Stored in ``<SYSTEM_ROOT>/auth/registration.json``.
+Public registration is open by default and creates learner accounts
+(spec 2026-11-05 one-learner-role). An administrator can close it; while
+closed, only administrators create accounts. Stored in ``<SYSTEM_ROOT>/auth/registration.json``.
 """
 
 from __future__ import annotations

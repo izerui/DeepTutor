@@ -138,7 +138,8 @@ def join(user, kind: str, item_id: str) -> dict[str, Any]:
         raise EnrollmentNotFound("Not found.")
     status = listings.status(kind, item_id)
     info = items.info(kind, item_id)
-    if info is None or status != "listed" or info.closed:
+    # Listed but no longer ready (e.g. a course whose author removed every item): nobody joins it.
+    if info is None or status != "listed" or info.closed or info.not_ready:
         raise EnrollmentNotFound("This is not in the market.")
     from deeptutor.multi_user.ownership import owner_ids
 
