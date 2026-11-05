@@ -199,3 +199,12 @@ def test_no_attention_on_the_workbench_or_in_reports(http, as_account, in_course
     exported = http("GET", f"/api/catalog/reports/course/{course_id}/export")
     header = next(csv.reader(io.StringIO(exported.text.lstrip("﻿"))))
     assert "attention" not in header and header[0] == "learner"
+
+
+def test_scores_cannot_be_changed_by_hand():
+    """Spec 2026-11-05: scores come from the checker or the AI judge; the author only reads attempts."""
+    from deeptutor.api.routers import practice_sets
+    from deeptutor.practice_sets.review import PracticeReview
+
+    assert not hasattr(PracticeReview, "regrade")
+    assert not [r for r in practice_sets.router.routes if "/questions/" in getattr(r, "path", "")]

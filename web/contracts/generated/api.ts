@@ -7388,23 +7388,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/practice-sets/{set_id}/submissions/{submission_id}/questions/{question_id}": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    /** Regrade Question */
-    readonly put: operations["regrade_question_api_practice_sets__set_id__submissions__submission_id__questions__question_id__put"];
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/practice-sets/{set_id}/submit": {
     readonly parameters: {
       readonly query?: never;
@@ -17260,11 +17243,6 @@ export interface components {
         readonly [key: string]: unknown;
       } | null;
     };
-    /** RegradeRequest */
-    readonly RegradeRequest: {
-      /** Points */
-      readonly points: number;
-    };
     /**
      * RenamePathRequest
      * @description An empty name is a valid request: it restores the derived display name.
@@ -19868,7 +19846,6 @@ export type SchemaRegistrationSettings =
   components["schemas"]["RegistrationSettings"];
 export type SchemaRegistryEditPayload =
   components["schemas"]["RegistryEditPayload"];
-export type SchemaRegradeRequest = components["schemas"]["RegradeRequest"];
 export type SchemaRenamePathRequest =
   components["schemas"]["RenamePathRequest"];
 export type SchemaRenameTagRequest = components["schemas"]["RenameTagRequest"];
@@ -36574,47 +36551,6 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly regrade_question_api_practice_sets__set_id__submissions__submission_id__questions__question_id__put: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly question_id: string;
-        readonly set_id: string;
-        readonly submission_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["RegradeRequest"];
-      };
-    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {

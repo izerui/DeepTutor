@@ -148,7 +148,6 @@ export interface ReviewAttempt {
   submitted_at: number;
   score: number;
   max_score: number;
-  regraded_at: number | null;
   questions: {
     question_id: string;
     question: string;
@@ -160,7 +159,6 @@ export interface ReviewAttempt {
     max_points: number;
     /** Subjective answers' text, or the option picked; ``null`` when not kept. */
     answer: string | null;
-    regraded: boolean;
   }[];
 }
 
@@ -235,10 +233,6 @@ export const reportExportUrl = (setId: string) => apiUrl(`${BASE}${id(setId)}/ex
 export const downloadSetReport = (setId: string) => downloadAuthenticated(reportExportUrl(setId), "practice-set-results.csv");
 export const getAttempt = (setId: string, submissionId: string) =>
   call<{ attempt: ReviewAttempt }>(`${id(setId)}/submissions${id(submissionId)}`).then((r) => r.attempt);
-export const regradeQuestion = (setId: string, submissionId: string, questionId: string, points: number) =>
-  call<{ attempt: ReviewAttempt }>(
-    `${id(setId)}/submissions${id(submissionId)}/questions${id(questionId)}`, send("PUT", { points }),
-  ).then((r) => r.attempt);
 export const listAssigned = () => call<{ sets: AssignedSet[] }>("/assigned").then((r) => r.sets);
 export const takeSet = (setId: string) => call<{ set: TakeView }>(`${id(setId)}/take`).then((r) => r.set);
 /** ``revision`` is the version the student opened: answers are graded against it. */

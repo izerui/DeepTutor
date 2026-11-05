@@ -70,10 +70,6 @@ class GenerateRequest(BaseModel):
     chapter_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
-class RegradeRequest(BaseModel):
-    points: float = Field(ge=0, le=100)
-
-
 class FromBankRequest(BaseModel):
     entry_ids: list[int] = Field(min_length=1, max_length=200)
 
@@ -193,13 +189,6 @@ async def review_attempt(set_id: str, submission_id: str):
     from deeptutor.practice_sets.review import PracticeReview
 
     return {"attempt": await _call(PracticeReview().attempt, set_id, submission_id)}
-
-
-@router.put("/{set_id}/submissions/{submission_id}/questions/{question_id}")
-async def regrade_question(set_id: str, submission_id: str, question_id: str, body: RegradeRequest):
-    from deeptutor.practice_sets.review import PracticeReview
-
-    return {"attempt": await _call(PracticeReview().regrade, set_id, submission_id, question_id, body.points)}
 
 
 # ── answering ──────────────────────────────────────────────

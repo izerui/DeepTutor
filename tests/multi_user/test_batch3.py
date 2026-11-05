@@ -250,7 +250,7 @@ def test_the_limit_is_personal_then_the_school_default(as_account, teaching_user
     assert effective_ai_daily_tokens(sara) == 200
 
 
-# ── practice sets: review, regrade, options, export, attempts (§6.1) ──
+# ── practice sets: review, options, export, attempts (§6.1) ──
 
 
 SET_QUESTIONS = [
@@ -311,28 +311,6 @@ def test_the_author_sees_subjective_text_and_picked_options_but_not_blanks(as_ac
         PracticeReview().attempt(set_id, result["submission_id"])
     with as_account("adam"), pytest.raises(Exception):
         PracticeReview().attempt(set_id, result["submission_id"])
-
-
-def test_a_regrade_changes_the_total_and_tells_the_student(as_account, teaching_users):
-    from deeptutor.notifications import service as notifications
-    from deeptutor.practice_sets.review import PracticeReview
-    from deeptutor.practice_sets.service import PracticeError, PracticeSetService
-
-    set_id = _published_set(as_account)
-    result, ids = _answer(as_account, "sara", set_id, choice="B")
-    assert result["score"] == 2.0  # B and "yes" right; the AI (offline) left two ungraded
-    with as_account("tina"):
-        assert _row(PracticeSetService().report(set_id), "sara")["ungraded"] == 2
-        with pytest.raises(PracticeError):
-            PracticeReview().regrade(set_id, result["submission_id"], ids[2], 5)
-        attempt = PracticeReview().regrade(set_id, result["submission_id"], ids[2], 3)
-    graded = next(q for q in attempt["questions"] if q["question_id"] == ids[2])
-    assert (graded["result"], graded["points"], graded["regraded"]) == ("partial", 3.0, True)
-    assert attempt["score"] == 5.0
-    with as_account("tina"):
-        student = _row(PracticeSetService().report(set_id), "sara")
-    assert (student["first_score"], student["ungraded"]) == (5.0, 1)
-    assert "practice_regraded" in [n["kind"] for n in notifications.list_for(teaching_users["sara"]["id"])]
 
 
 def test_option_counts_use_each_students_first_attempt(as_account):

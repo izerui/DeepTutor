@@ -8,7 +8,6 @@ import { bookApi } from "@/lib/book-api";
 import type { Book, Chapter } from "@/lib/book-types";
 import {
   getAttempt,
-  regradeQuestion,
   type PracticeReport,
   type ReviewAttempt,
 } from "@/lib/practice-sets-api";
@@ -55,24 +54,19 @@ export function OptionBars({ question }: { question: PracticeReport["questions"]
   );
 }
 
-/** One attempt question by question; the author changes a question's points (§6.1). */
+/** One attempt question by question, read only (§6.1). */
 export function AttemptReview({
   setId,
   submissionId,
   onClose,
-  onChanged,
 }: {
   setId: string;
   submissionId: string;
   onClose: () => void;
-  onChanged: () => void;
 }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState<ReviewAttempt | null>(null);
-  const [points, setPoints] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
-  // A failed change is shown beside the attempt, which stays on screen.
-  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -108,29 +102,11 @@ export function AttemptReview({
             )}
             <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
               <span className={q.result === "ungraded" ? "font-medium text-amber-700" : ""}>{t(RESULT_LABEL[q.result] ?? q.result)}</span>
-              {q.regraded && <span className="rounded-full bg-[var(--muted)] px-1.5">{t("Changed by you")}</span>}
-              <label className="flex items-center gap-1">
-                {t("Points")}
-                <input type="number" min={0} max={q.max_points} step={0.5} aria-label={t("Points for question {{n}}", { n: index + 1 })}
-                  className="h-7 w-16 rounded border border-[var(--border)] bg-[var(--background)] px-1"
-                  value={points[q.question_id] ?? String(q.points)}
-                  onChange={(e) => setPoints({ ...points, [q.question_id]: e.target.value })} />
-                / {q.max_points}
-              </label>
-              {points[q.question_id] !== undefined && Number(points[q.question_id]) !== q.points && (
-                <button type="button" className="rounded bg-[var(--primary)] px-2 py-0.5 text-[var(--primary-foreground)]"
-                  onClick={() => void regradeQuestion(setId, submissionId, q.question_id, Number(points[q.question_id]))
-                    .then((next) => { setAttempt(next); setPoints({}); setSaveError(""); onChanged(); })
-                    .catch((err) => setSaveError(errorText(err, t)))}>
-                  {t("Save points")}
-                </button>
-              )}
+              <span>{t("Points")} {q.points} / {q.max_points}</span>
             </div>
           </li>
         ))}
       </ol>
-      {saveError && <p role="alert" className="text-[12px] text-red-600">{saveError}</p>}
-      <p className="text-[11px] text-[var(--muted-foreground)]">{t("The student is told when you change a score.")}</p>
     </div>
   );
 }

@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-// Spec 2026-11-03 batch 3 §13: review and regrade, options, the workbench,
+// Spec 2026-11-03 batch 3 §13: review, options, the workbench,
 // navigation by role, AI left, similar questions.
 const { practice, workbench, t } = vi.hoisted(() => ({
-  practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn() },
+  practice: { getAttempt: vi.fn() },
   workbench: { getWorkbench: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
     getSchoolAiLimit: vi.fn(), setSchoolAiLimit: vi.fn(), AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }] },
   t: (key: string, values?: Record<string, unknown>) =>
@@ -32,25 +32,20 @@ beforeEach(() => {
 
 const attempt = {
   id: "sub_1", set_id: "ps_1", revision: 1, student_id: "u_sara", username: "sara", submitted_at: 1,
-  score: 1, max_score: 5, regraded_at: null,
+  score: 1, max_score: 5,
   questions: [
     { question_id: "q1", question: "Explain gravity.", question_type: "short_answer", options: {}, correct_answer: "Mass attracts.",
-      result: "ungraded", points: 0, max_points: 4, answer: "Things fall.", regraded: false },
+      result: "ungraded", points: 0, max_points: 4, answer: "Things fall." },
   ],
 };
 
-it("shows a short answer's text and saves a changed score", async () => {
+it("shows a short answer's text, read only", async () => {
   practice.getAttempt.mockResolvedValue(attempt);
-  practice.regradeQuestion.mockResolvedValue({ ...attempt, score: 4, questions: [{ ...attempt.questions[0], points: 3, result: "partial", regraded: true }] });
-  const changed = vi.fn();
-  render(<AttemptReview setId="ps_1" submissionId="sub_1" onClose={vi.fn()} onChanged={changed} />);
+  render(<AttemptReview setId="ps_1" submissionId="sub_1" onClose={vi.fn()} />);
   expect(await screen.findByText("Things fall.")).toBeTruthy();
   expect(screen.getByText("Not graded")).toBeTruthy();
-  fireEvent.change(screen.getByLabelText("Points for question 1"), { target: { value: "3" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save points" }));
-  await waitFor(() => expect(practice.regradeQuestion).toHaveBeenCalledWith("ps_1", "sub_1", "q1", 3));
-  expect(await screen.findByText("Changed by you")).toBeTruthy();
-  expect(changed).toHaveBeenCalled();
+  expect(screen.queryByRole("spinbutton")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save points" })).toBeNull();
 });
 
 it("draws how many picked each option and marks the right one", () => {

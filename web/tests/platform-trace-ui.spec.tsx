@@ -303,8 +303,7 @@ it("marks listings that need classification in the market tab and filters to the
 const note = (kind: string, params: Record<string, unknown>): AppNotification =>
   ({ id: "n", kind, params, link: "", count: 1, created_at: 1, read: false });
 
-it("words a changed score and withdrawn material without teachers or classes", () => {
-  expect(notificationText(note("practice_regraded", { title: "Waves" }), t)).toBe("Your score on “Waves” was changed");
+it("words withdrawn material without teachers or classes", () => {
   expect(notificationText(note("material_withdrawn", { title: "Optics path", material: "Lenses", count: 7 }), t))
     .toBe("Material “Lenses” cited by “Optics path” is no longer available (7 learners affected)");
 });

@@ -9620,21 +9620,6 @@
         "title": "RegistryEditPayload",
         "type": "object"
       },
-      "RegradeRequest": {
-        "properties": {
-          "points": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Points",
-            "type": "number"
-          }
-        },
-        "required": [
-          "points"
-        ],
-        "title": "RegradeRequest",
-        "type": "object"
-      },
       "RenamePathRequest": {
         "description": "An empty name is a valid request: it restores the derived display name.",
         "properties": {
@@ -49315,106 +49300,6 @@
           }
         },
         "summary": "Review Attempt",
-        "tags": [
-          "practice-sets"
-        ]
-      }
-    },
-    "/api/practice-sets/{set_id}/submissions/{submission_id}/questions/{question_id}": {
-      "put": {
-        "operationId": "regrade_question_api_practice_sets__set_id__submissions__submission_id__questions__question_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "set_id",
-            "required": true,
-            "schema": {
-              "title": "Set Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "submission_id",
-            "required": true,
-            "schema": {
-              "title": "Submission Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "question_id",
-            "required": true,
-            "schema": {
-              "title": "Question Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegradeRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Regrade Question",
         "tags": [
           "practice-sets"
         ]

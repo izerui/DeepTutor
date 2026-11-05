@@ -2,8 +2,6 @@
 
 * one attempt question by question, with the subjective answers' text and
   the option picked — kept for the author only (§2.1);
-* changing one question's points; the total follows and the student is told;
-  their question bank catches up when they next open the set;
 * how many picked each option;
 * the results as CSV.
 """
@@ -19,7 +17,6 @@ from typing import Any
 from deeptutor.practice_sets import store
 from deeptutor.practice_sets.service import (
     OPTION_TYPES,
-    PracticeError,
     PracticeNotFound,
     PracticeSetService,
     _col,
@@ -89,7 +86,6 @@ class PracticeReview:
             "submitted_at": submission["submitted_at"],
             "score": submission["score"],
             "max_score": submission["max_score"],
-            "regraded_at": _col(submission, "regraded_at"),
             "questions": [
                 {
                     "question_id": r["question_id"],
@@ -101,42 +97,10 @@ class PracticeReview:
                     "points": r["points"],
                     "max_points": r.get("max_points", questions.get(r["question_id"], {}).get("points", 0)),
                     "answer": answers.get(r["question_id"]),
-                    "regraded": bool(r.get("regraded")),
                 }
                 for r in json.loads(submission["results_json"])
             ],
         }
-
-    def regrade(self, set_id: str, submission_id: str, question_id: str, points: float) -> dict[str, Any]:
-        """Set one question's points; its result and the total follow (§6.1)."""
-        with store.write() as conn:
-            row, submission, _revision = self._submission(conn, set_id, submission_id)
-            rows = json.loads(submission["results_json"])
-            target = next((r for r in rows if r["question_id"] == question_id), None)
-            if target is None:
-                raise PracticeNotFound("Question not found.")
-            maximum = float(target.get("max_points") or 0)
-            try:
-                points = float(points)
-            except (TypeError, ValueError):
-                raise PracticeError("Points must be a number.") from None
-            if not 0 <= points <= maximum:
-                raise PracticeError(f"Give 0 to {maximum:g} points.")
-            target["points"] = points
-            target["result"] = "correct" if points >= maximum else "incorrect" if points == 0 else "partial"
-            target["regraded"] = True
-            score = sum(float(r["points"] or 0) for r in rows)
-            conn.execute(
-                "UPDATE practice_submissions SET results_json = ?, score = ?, regraded_at = ? WHERE id = ?",
-                (json.dumps(rows), score, time.time(), submission_id),
-            )
-        from deeptutor.notifications.service import notify
-
-        notify(
-            [submission["student_id"]], "practice_regraded", {"title": row["title"]},
-            link=f"/practice-sets?set={set_id}", dedupe_key=f"practice_regraded:{submission_id}", bump=True,
-        )
-        return self.attempt(set_id, submission_id)
 
     def export_csv(self, set_id: str) -> str:
         """Every reported student's results, one row each, with each question's result."""

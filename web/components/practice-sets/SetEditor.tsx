@@ -577,7 +577,6 @@ function ReportSection({ setId }: { setId: string }) {
   const [report, setReport] = useState<PracticeReport | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
-  const [reloads, setReloads] = useState(0);
   const [reviewing, setReviewing] = useState<string | null>(null);
 
   useEffect(() => {
@@ -589,7 +588,7 @@ function ReportSection({ setId }: { setId: string }) {
     return () => {
       alive = false;
     };
-  }, [open, setId, t, reloads]);
+  }, [open, setId, t]);
 
   return (
     <section className={sectionClass}>
@@ -655,7 +654,7 @@ function ReportSection({ setId }: { setId: string }) {
           </div>
           {reviewing && (
             <AttemptReview key={reviewing} setId={setId} submissionId={reviewing}
-              onClose={() => setReviewing(null)} onChanged={() => setReloads((n) => n + 1)} />
+              onClose={() => setReviewing(null)} />
           )}
           <div className="space-y-2">
             <h4 className="text-[12.5px] font-medium">{t("Error rate per question")}</h4>
