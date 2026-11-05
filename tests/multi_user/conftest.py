@@ -410,8 +410,7 @@ def deliver(teaching_users):
 def make_learners(as_account, deliver, teaching_users):
     """``make_learners("tina", "sara", "sam")``: they become Tina's learners.
 
-    A teacher names (assigns, sends a remedial set to, reports on) only their
-    learners: people who joined any of their content. The old fixture class
+    Learners are people who joined any of the teacher's content. The old fixture class
     made Sara and Sam the students of both teachers; this gives the teacher a
     draft course "Learners" (never published, so it reaches nobody) and
     enrolls those accounts in it. One such course per teacher and test.
@@ -617,11 +616,13 @@ def edit_calculus_draft(as_account):
 
 
 @pytest.fixture
-def publish_template(as_account, teaching_users, quiet_change_model, make_learners):
+def publish_template(as_account, teaching_users, quiet_change_model, deliver):
     """Register (or reuse) the template for a draft, preview it, publish it.
 
     Uses whatever KB registry the test set up: plan B's real one (isolated per
     test by its autouse fixture), or ``fake_kb_registry`` when requested.
+    ``students`` join the path once it is published (nobody is handed a path
+    any more); the returned template and count include them.
     """
     import asyncio
 
@@ -637,25 +638,28 @@ def publish_template(as_account, teaching_users, quiet_change_model, make_learne
         kb_choices: dict | None = None,
         book_choices: dict | None = None,
     ) -> dict:
-        if students and teaching_users[name]["role"] != "admin":
-            # A teacher names only their learners (people who joined their content).
-            make_learners(name, *students)
         with as_account(name):
             service = TeachingService()
             template = service.register(path_id, "")
             preview = asyncio.run(service.preview_publish(template.id))
-            return asyncio.run(
+            result = asyncio.run(
                 service.publish(
                     template.id,
                     PublishRequest(
                         draft_revision=preview["draft_revision"],
-                        student_ids=[teaching_users[s]["id"] for s in students],
                         kp_decisions=kp_decisions or {},
                         kb_choices=kb_choices or {},
                         book_choices=book_choices or {},
                     ),
                 )
             )
+        if students:
+            deliver("mastery_path", template.id, *students)
+            with as_account(name):
+                service = TeachingService()
+                described, count = service._describe_with_count(service.get(template.id))
+            result = {**result, "template": described, "affected_students": count}
+        return result
 
     return _publish
 

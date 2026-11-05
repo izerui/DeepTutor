@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listAssignedTasks, type AssignedTask } from "@/lib/tasks-api";
 
-import { formatWhen, STATE_LABEL, STATE_TONE } from "./task-format";
+import { STATE_LABEL, STATE_TONE } from "./task-format";
 
 /**
  * The task board's read-only "from my courses" lane (spec 2026-11-03
@@ -22,7 +22,7 @@ export function AssignedLane() {
   useEffect(() => {
     if (!student) return;
     listAssignedTasks()
-      .then((rows) => setTasks(rows.filter((row) => row.state === "open" || row.state === "overdue")))
+      .then((rows) => setTasks(rows.filter((row) => row.state === "open")))
       .catch(() => setTasks([]));
   }, [student]);
 
@@ -43,9 +43,6 @@ export function AssignedLane() {
                 {t(STATE_LABEL[task.state])}
               </span>
               <span className="mt-1 block truncate font-medium">{task.title}</span>
-              {task.due_at && (
-                <span className="text-[11px] text-[var(--muted-foreground)]">{t("Due {{date}}", { date: formatWhen(task.due_at) })}</span>
-              )}
             </Link>
           </li>
         ))}

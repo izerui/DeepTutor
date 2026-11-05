@@ -117,8 +117,6 @@ export interface PublishPreview {
   can_publish: boolean;
   /** Other people's books or knowledge bases some recipients cannot read (spec 2026-11-02 §4.6). */
   material_warnings?: { kind: string; id: string; name: string; missing: number }[];
-  /** The publisher teaches no class: students must be picked (spec 2026-11-02 §4.1). */
-  needs_students?: boolean;
 }
 
 export interface KpDecision {
@@ -131,27 +129,8 @@ export interface PublishInput {
   kp_decisions: Record<string, KpDecision>;
   kb_choices: Record<string, KbChoice>;
   book_choices: Record<string, KbChoice>;
-  student_ids: string[];
   /** Platform batch 1 §4.4: published for the market; nobody receives it until they join. */
   join_only?: boolean;
-}
-
-export interface StudentOption {
-  id: string;
-  username: string;
-  avatar: string;
-}
-
-export interface TemplateAssignment {
-  template_id: string;
-  student_user_id: string;
-  username: string;
-  avatar: string;
-  status: "active" | "revoked";
-  instance_path_id: string;
-  applied_revision: number;
-  assigned_at: number;
-  revoked_at: number | null;
 }
 
 async function teachingJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -219,32 +198,6 @@ export function publishTemplate(templateId: string, input: PublishInput) {
   );
 }
 
-export async function listAssignments(templateId: string): Promise<TemplateAssignment[]> {
-  const result = await teachingJson<{ assignments: TemplateAssignment[] }>(
-    `/templates/${id(templateId)}/assignments`,
-    { cache: "no-store" },
-  );
-  return result.assignments;
-}
-
-export async function assignStudents(
-  templateId: string,
-  studentIds: string[],
-): Promise<TemplateAssignment[]> {
-  const result = await teachingJson<{ assignments: TemplateAssignment[] }>(
-    `/templates/${id(templateId)}/assignments`,
-    jsonInit("POST", { student_ids: studentIds }),
-  );
-  return result.assignments;
-}
-
-export function revokeAssignment(templateId: string, studentId: string) {
-  return teachingJson<{ ok: boolean }>(
-    `/templates/${id(templateId)}/assignments/${id(studentId)}`,
-    { method: "DELETE" },
-  );
-}
-
 export function archiveTemplate(templateId: string) {
   return teachingJson<TeacherTemplate>(`/templates/${id(templateId)}/archive`, jsonInit("POST"));
 }
@@ -253,10 +206,3 @@ export function deleteTemplate(templateId: string) {
   return teachingJson<{ ok: boolean }>(`/templates/${id(templateId)}`, { method: "DELETE" });
 }
 
-export async function searchStudents(query: string): Promise<StudentOption[]> {
-  const result = await teachingJson<{ students: StudentOption[] }>(
-    `/students?q=${encodeURIComponent(query)}`,
-    { cache: "no-store" },
-  );
-  return result.students;
-}

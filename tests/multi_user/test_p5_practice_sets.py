@@ -120,15 +120,3 @@ def test_a_new_revision_keeps_old_submissions(published_set, as_account, fake_ju
         taken = PracticeSetService().take(published_set)
     assert len(taken["questions"]) == 1
     assert [s["revision"] for s in taken["submissions"]] == [1]
-
-
-def test_answers_wait_for_the_deadline_when_the_teacher_says_so(published_set, as_account, fake_judge):
-    import time
-
-    with as_account("tina"):
-        PracticeSetService().update(published_set, reveal="after_due", due_at=time.time() + 3600)
-    with as_account("sara"):
-        ids = [q["question_id"] for q in PracticeSetService().take(published_set)["questions"]]
-        result = asyncio.run(PracticeSetService().submit(published_set, {ids[0]: "A"}))
-        assert not result["answers_revealed"] and "correct_answer" not in result["results"][0]
-        assert not result["late"]

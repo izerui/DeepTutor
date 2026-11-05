@@ -211,8 +211,8 @@ def _migrate_one(kind: str, item_id: str, accounts: dict[str, dict[str, Any]]) -
         return
     now = time.time()
     starters = _starters(kind, item_id, info.owner, accounts)
-    # Practice in the market has no deadline (direction §11.4): a set with one goes in as taken
-    # out of the market — those who started keep it; its author clears the deadline to put it back.
+    # A practice set not ready for the market goes in as taken out of it — those who
+    # started keep it; its author puts it back once it is ready.
     status, reason = "listed", ""
     if kind == scopes.PRACTICE_SET and info.not_ready:
         status, reason = "unlisted", info.not_ready

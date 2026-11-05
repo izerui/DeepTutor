@@ -10,17 +10,6 @@ vi.mock("@/components/catalog/ListingPanel", () => ({
   ListingPanel: ({ kind, itemId }: { kind: string; itemId: string }) => <div data-testid="listing-panel">{`${kind}:${itemId}`}</div>,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: fixture.t }) }));
-// Spec 2026-11-02 §4.1: a first publication preselects the classes the publisher teaches.
-const scopeFixture = vi.hoisted(() => ({ getScope: vi.fn() }));
-vi.mock("@/lib/publish-api", async () => ({
-  ...(await vi.importActual<typeof import("@/lib/publish-api")>("@/lib/publish-api")),
-  getScope: scopeFixture.getScope,
-}));
-const unscoped = (suggested: string[]) => ({
-  kind: "book", item_id: "same", published: false, audience_size: 0,
-  scope: { everyone: false, users: [], classes: [], managed: false },
-  choices: { classes: [{ id: "c1", name: "Class 1" }] }, suggested_classes: suggested,
-});
 vi.mock("@/lib/book-api", async () => ({
   ...(await vi.importActual<typeof import("@/lib/book-api")>("@/lib/book-api")),
   bookApi: { sharing: fixture.sharing, setVisibility: fixture.setVisibility },
@@ -34,7 +23,6 @@ const sharing = {
 beforeEach(() => {
   fixture.sharing.mockReset().mockResolvedValue(sharing);
   fixture.setVisibility.mockReset().mockResolvedValue({});
-  scopeFixture.getScope.mockReset().mockResolvedValue(unscoped(["c1"]));
 });
 it("defaults private KB choices to the server plan and publishes for the market only", async () => {
   const close = vi.fn();
@@ -48,7 +36,7 @@ it("defaults private KB choices to the server plan and publishes for the market 
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenCalledWith("book:same", {
     visibility: "public", kb_choices: { kb1: "reference_only" }, force: false,
-    scope: { everyone: false, users: [], classes: [], groups: [], join_only: true },
+    scope: { everyone: false, join_only: true },
   }, "w");
 });
 it("shows the market listing instead of receivers once the book is public", async () => {

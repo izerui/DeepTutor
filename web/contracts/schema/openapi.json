@@ -611,24 +611,6 @@
         "title": "AssetSpec",
         "type": "object"
       },
-      "AssignRequest": {
-        "properties": {
-          "student_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 500,
-            "minItems": 1,
-            "title": "Student Ids",
-            "type": "array"
-          }
-        },
-        "required": [
-          "student_ids"
-        ],
-        "title": "AssignRequest",
-        "type": "object"
-      },
       "AttachCourseResourceRequest": {
         "properties": {
           "kind": {
@@ -2018,44 +2000,6 @@
           "model"
         ],
         "title": "CodexReasoningEffortUpdate",
-        "type": "object"
-      },
-      "CommentWrite": {
-        "properties": {
-          "kind": {
-            "enum": [
-              "practice_submission",
-              "path_point"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "ref": {
-            "maxLength": 300,
-            "minLength": 3,
-            "title": "Ref",
-            "type": "string"
-          },
-          "student_id": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Student Id",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 5000,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "ref",
-          "student_id",
-          "text"
-        ],
-        "title": "CommentWrite",
         "type": "object"
       },
       "CommitRequest": {
@@ -8788,14 +8732,6 @@
             },
             "title": "Kp Decisions",
             "type": "object"
-          },
-          "student_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 500,
-            "title": "Student Ids",
-            "type": "array"
           }
         },
         "required": [
@@ -9699,83 +9635,6 @@
         "title": "RegradeRequest",
         "type": "object"
       },
-      "RemedialFromPath": {
-        "properties": {
-          "kp_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 100,
-            "minItems": 1,
-            "title": "Kp Ids",
-            "type": "array"
-          },
-          "student_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 500,
-            "title": "Student Ids",
-            "type": "array"
-          },
-          "template_id": {
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Template Id",
-            "type": "string"
-          },
-          "title_prefix": {
-            "default": "Remedial: ",
-            "maxLength": 40,
-            "title": "Title Prefix",
-            "type": "string"
-          }
-        },
-        "required": [
-          "template_id",
-          "kp_ids"
-        ],
-        "title": "RemedialFromPath",
-        "type": "object"
-      },
-      "RemedialFromSet": {
-        "properties": {
-          "question_ids": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 200,
-            "minItems": 1,
-            "title": "Question Ids",
-            "type": "array"
-          },
-          "set_id": {
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Set Id",
-            "type": "string"
-          },
-          "similar": {
-            "default": 0,
-            "maximum": 3.0,
-            "minimum": 0.0,
-            "title": "Similar",
-            "type": "integer"
-          },
-          "title_prefix": {
-            "default": "Remedial: ",
-            "maxLength": 40,
-            "title": "Title Prefix",
-            "type": "string"
-          }
-        },
-        "required": [
-          "set_id",
-          "question_ids"
-        ],
-        "title": "RemedialFromSet",
-        "type": "object"
-      },
       "RenamePathRequest": {
         "description": "An empty name is a valid request: it restores the derived display name.",
         "properties": {
@@ -10153,7 +10012,7 @@
         "type": "object"
       },
       "ScopeChoice": {
-        "description": "The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1).",
+        "description": "Sent with a first publication (spec 2026-11-02 §4.1): nobody is named, people join.",
         "properties": {
           "everyone": {
             "default": false,
@@ -10164,14 +10023,6 @@
             "default": false,
             "title": "Join Only",
             "type": "boolean"
-          },
-          "users": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 1000,
-            "title": "Users",
-            "type": "array"
           }
         },
         "title": "ScopeChoice",
@@ -10188,14 +10039,6 @@
             "default": false,
             "title": "Everyone",
             "type": "boolean"
-          },
-          "users": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 1000,
-            "title": "Users",
-            "type": "array"
           }
         },
         "title": "ScopeUpdate",
@@ -10687,6 +10530,7 @@
         "type": "object"
       },
       "SetUpdate": {
+        "additionalProperties": false,
         "properties": {
           "attempts_limit": {
             "anyOf": [
@@ -10706,11 +10550,6 @@
             "title": "Clear Attempts Limit",
             "type": "boolean"
           },
-          "clear_due": {
-            "default": false,
-            "title": "Clear Due",
-            "type": "boolean"
-          },
           "description": {
             "anyOf": [
               {
@@ -10722,17 +10561,6 @@
               }
             ],
             "title": "Description"
-          },
-          "due_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due At"
           },
           "questions": {
             "anyOf": [
@@ -10753,6 +10581,7 @@
           "reveal": {
             "anyOf": [
               {
+                "const": "after_submit",
                 "type": "string"
               },
               {
@@ -11788,6 +11617,7 @@
         "type": "object"
       },
       "TaskUpdate": {
+        "additionalProperties": false,
         "properties": {
           "description": {
             "anyOf": [
@@ -11800,28 +11630,6 @@
               }
             ],
             "title": "Description"
-          },
-          "due_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due At"
-          },
-          "open_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Open At"
           },
           "settings": {
             "anyOf": [
@@ -24664,337 +24472,6 @@
         ]
       }
     },
-    "/api/comments": {
-      "put": {
-        "operationId": "write_comment_api_comments_put",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CommentWrite"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Write Comment",
-        "tags": [
-          "comments"
-        ]
-      }
-    },
-    "/api/comments/mine": {
-      "get": {
-        "description": "The current student's comments on one practice set or Mastery Path.",
-        "operationId": "my_comments_api_comments_mine_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "enum": [
-                "practice_submission",
-                "path_point"
-              ],
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "subject",
-            "required": true,
-            "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Subject",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "My Comments",
-        "tags": [
-          "comments"
-        ]
-      }
-    },
-    "/api/comments/written": {
-      "get": {
-        "operationId": "written_api_comments_written_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "enum": [
-                "practice_submission",
-                "path_point"
-              ],
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "subject",
-            "required": true,
-            "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Subject",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "student_id",
-            "required": true,
-            "schema": {
-              "maxLength": 64,
-              "minLength": 1,
-              "title": "Student Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Written",
-        "tags": [
-          "comments"
-        ]
-      }
-    },
-    "/api/comments/{comment_id}": {
-      "delete": {
-        "operationId": "delete_comment_api_comments__comment_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "comment_id",
-            "required": true,
-            "schema": {
-              "title": "Comment Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Comment",
-        "tags": [
-          "comments"
-        ]
-      }
-    },
     "/api/courses": {
       "get": {
         "operationId": "list_courses_api_courses_get",
@@ -36162,80 +35639,6 @@
         ]
       }
     },
-    "/api/mastery-paths/teaching/students": {
-      "get": {
-        "description": "Who a teacher may assign: student accounts, id/username/avatar only (D5).",
-        "operationId": "list_students_api_mastery_paths_teaching_students_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Q",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Students",
-        "tags": [
-          "mastery-teaching"
-        ]
-      }
-    },
     "/api/mastery-paths/teaching/templates": {
       "get": {
         "operationId": "list_templates_api_mastery_paths_teaching_templates_get",
@@ -36509,239 +35912,6 @@
           }
         },
         "summary": "Archive Template",
-        "tags": [
-          "mastery-teaching"
-        ]
-      }
-    },
-    "/api/mastery-paths/teaching/templates/{template_id}/assignments": {
-      "get": {
-        "operationId": "list_assignments_api_mastery_paths_teaching_templates__template_id__assignments_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "template_id",
-            "required": true,
-            "schema": {
-              "title": "Template Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Assignments",
-        "tags": [
-          "mastery-teaching"
-        ]
-      },
-      "post": {
-        "operationId": "assign_students_api_mastery_paths_teaching_templates__template_id__assignments_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "template_id",
-            "required": true,
-            "schema": {
-              "title": "Template Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Assign Students",
-        "tags": [
-          "mastery-teaching"
-        ]
-      }
-    },
-    "/api/mastery-paths/teaching/templates/{template_id}/assignments/{student_id}": {
-      "delete": {
-        "operationId": "revoke_assignment_api_mastery_paths_teaching_templates__template_id__assignments__student_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "template_id",
-            "required": true,
-            "schema": {
-              "title": "Template Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "student_id",
-            "required": true,
-            "schema": {
-              "title": "Student Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Revoke Assignment",
         "tags": [
           "mastery-teaching"
         ]
@@ -49478,153 +48648,6 @@
         ]
       }
     },
-    "/api/practice-sets/remedial/from-path": {
-      "post": {
-        "operationId": "remedial_from_path_api_practice_sets_remedial_from_path_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RemedialFromPath"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remedial From Path",
-        "tags": [
-          "practice-sets"
-        ]
-      }
-    },
-    "/api/practice-sets/remedial/from-set": {
-      "post": {
-        "description": "A draft practice set of the picked questions (batch 3 §3.1).",
-        "operationId": "remedial_from_set_api_practice_sets_remedial_from_set_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RemedialFromSet"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Remedial From Set",
-        "tags": [
-          "practice-sets"
-        ]
-      }
-    },
     "/api/practice-sets/withdrawable": {
       "get": {
         "description": "Administrators: other people's published sets, which they may only withdraw (D10).",
@@ -50548,80 +49571,6 @@
         "summary": "Take Set",
         "tags": [
           "practice-sets"
-        ]
-      }
-    },
-    "/api/publish/people": {
-      "get": {
-        "operationId": "search_people_api_publish_people_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "required": false,
-            "schema": {
-              "default": "",
-              "maxLength": 100,
-              "title": "Q",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Search People",
-        "tags": [
-          "publishing"
         ]
       }
     },
@@ -70830,70 +69779,6 @@
         ]
       }
     },
-    "/api/tasks/calendar": {
-      "get": {
-        "description": "Opening times and deadlines: what reached a student, or what an author assigned.",
-        "operationId": "calendar_api_tasks_calendar_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Calendar",
-        "tags": [
-          "tasks"
-        ]
-      }
-    },
     "/api/tasks/courses": {
       "post": {
         "operationId": "create_course_api_tasks_courses_post",
@@ -71472,7 +70357,7 @@
     },
     "/api/tasks/courses/{course_id}/practice-sets": {
       "post": {
-        "description": "Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task.",
+        "description": "Follow-ups §3: a published practice set becomes the course's next task.",
         "operationId": "add_course_practice_set_api_tasks_courses__course_id__practice_sets_post",
         "parameters": [
           {

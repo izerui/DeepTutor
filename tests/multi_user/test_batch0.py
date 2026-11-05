@@ -36,7 +36,7 @@ def _draft_set(as_account, name: str, title: str = "Week 1") -> str:
     return created["id"]
 
 
-# ── 2. a first publication names its receivers, or nobody (people join) ──
+# ── 2. a first publication names nobody (people join) ──
 
 
 @pytest.mark.first_publish_rule
@@ -51,37 +51,24 @@ def test_without_receivers_a_publication_reaches_nobody_until_they_join(
         assert registry.get_kb(kb.kb_id).visibility == "public"
     scope = get_scope(KNOWLEDGE_BASE, kb.kb_id)
     assert scope is not None and scope.empty
-    other = _kb(teaching_users, tmp_path, "adam", name="other")
-    with as_account("adam"):
-        # "Everyone" is reached through the market only; nothing is published.
-        with scopes.chosen_scope(Scope(everyone=True)):
-            with pytest.raises(scopes.ScopeError):
-                registry.set_visibility(other.kb_id, "public")
-        assert registry.get_kb(other.kb_id).visibility == "private"
-    assert get_scope(KNOWLEDGE_BASE, other.kb_id) is None
 
 
 @pytest.mark.first_publish_rule
-def test_a_chosen_scope_is_checked_and_a_later_publication_keeps_it(
-    teaching_users, as_account, tmp_path, make_learners
-):
+def test_a_later_publication_keeps_an_older_named_scope(teaching_users, as_account, tmp_path):
     from deeptutor.knowledge import registry
 
     kb = _kb(teaching_users, tmp_path, "tina")
     sara = teaching_users["sara"]["id"]
-    make_learners("tina", "sara")
     with as_account("tina"):
-        with scopes.chosen_scope(Scope(users=[teaching_users["uma"]["id"]])):
-            with pytest.raises(scopes.ScopeError):  # uma is neither a student nor a teacher
-                registry.set_visibility(kb.kb_id, "public")
-        with scopes.chosen_scope(Scope(users=[teaching_users["sam"]["id"]])):
-            with pytest.raises(scopes.ScopeError):  # Sam is no learner of Tina's
-                registry.set_visibility(kb.kb_id, "public")
-        with scopes.chosen_scope(Scope(users=[sara])):
-            registry.set_visibility(kb.kb_id, "public")
+        registry.set_visibility(kb.kb_id, "public")
+    # Older data named Sara; it is read, never added to (spec 2026-11-05 §2).
+    scopes._store_scope(KNOWLEDGE_BASE, kb.kb_id, Scope(users=[sara]), actor_id=teaching_users["tina"]["id"])
+    with as_account("tina"):
         registry.set_visibility(kb.kb_id, "private")
         registry.set_visibility(kb.kb_id, "public")
     assert get_scope(KNOWLEDGE_BASE, kb.kb_id).users == [sara]
+    assert scopes.allows(KNOWLEDGE_BASE, kb.kb_id, sara)
+    assert not scopes.allows(KNOWLEDGE_BASE, kb.kb_id, teaching_users["sam"]["id"])
 
 
 @pytest.mark.first_publish_rule
@@ -107,10 +94,9 @@ def test_practice_sets_and_paths_publish_to_nobody_until_they_join(
 
 
 def test_cited_materials_out_of_the_students_reach_are_flagged(
-    teaching_users, as_account, tmp_path, teacher_draft, publish_template, make_learners
+    teaching_users, as_account, tmp_path, teacher_draft, publish_template
 ):
     from deeptutor.knowledge import registry
-    from deeptutor.publishing.service import PublishService
     from deeptutor.teaching.service import TeachingService
     from deeptutor.teaching.snapshot import SourcePlan
 
@@ -118,12 +104,12 @@ def test_cited_materials_out_of_the_students_reach_are_flagged(
     template = TeachingService().store.get_template(
         publish_template(students=("sara", "sam"))["template"]["id"]
     )
-    make_learners("tom", "sara")
     kb = _kb(teaching_users, tmp_path, "tom")
     with as_account("tom"):
         registry.set_visibility(kb.kb_id, "public")
-        PublishService().set_scope(KNOWLEDGE_BASE, kb.kb_id, everyone=False,
-                                   users=[teaching_users["sara"]["id"]], confirm=True)
+    # An older scope of Tom's notes names Sara only.
+    scopes._store_scope(KNOWLEDGE_BASE, kb.kb_id, Scope(users=[teaching_users["sara"]["id"]]),
+                        actor_id=teaching_users["tom"]["id"])
     own = _kb(teaching_users, tmp_path, "tina", name="mine")
     plan = SourcePlan(kb_refs={kb.kb_id: None, own.kb_id: None})
     with as_account("tina"):

@@ -1,6 +1,7 @@
 import type { Provenance } from "./provenance";
 import { apiFetch, apiUrl } from "./api";
 import { downloadAuthenticated } from "./authenticated-download";
+import type { ScopeUpdate } from "./publish-api";
 
 /** Practice sets are system-level: never workspace-scoped (spec 2026-10-29 §8). */
 const BASE = "/api/practice-sets";
@@ -24,7 +25,8 @@ export interface PracticeQuestion {
   points: number;
 }
 
-export type Reveal = "after_submit" | "after_due";
+/** Answers show right after submitting (spec 2026-11-05 §1.4). */
+export type Reveal = "after_submit";
 
 export interface PracticeSetSummary {
   id: string;
@@ -32,7 +34,6 @@ export interface PracticeSetSummary {
   description: string;
   status: "draft" | "published" | "archived";
   current_revision: number;
-  due_at: number | null;
   reveal: Reveal;
   /** Batch 3 §6.1: at most this many attempts (``null``: no limit); which attempt counts. */
   attempts_limit?: number | null;
@@ -57,7 +58,7 @@ export interface AssignedSet extends PracticeSetSummary {
   max_score: number | null;
 }
 
-/** ``pending``: graded, but withheld until the answers may show (after the deadline). */
+/** ``pending``: graded, but withheld until the answers may show. */
 export type ResultValue = "correct" | "partial" | "incorrect" | "ungraded" | "pending";
 
 export interface QuestionResult {
@@ -82,7 +83,7 @@ export interface TakeView extends PracticeSetSummary {
   answers_revealed: boolean;
   questions: PracticeQuestion[];
   /** ``score`` is null while results are withheld. */
-  submissions: { id: string; revision: number; submitted_at: number; late: number; score: number | null; max_score: number }[];
+  submissions: { id: string; revision: number; submitted_at: number; score: number | null; max_score: number }[];
   /** Version of the latest attempt, whose results ``latest_results`` are. */
   latest_revision: number | null;
   latest_results: QuestionResult[];
@@ -91,10 +92,9 @@ export interface TakeView extends PracticeSetSummary {
 export interface SubmitResult {
   submission_id: string;
   revision?: number;
-  /** Null while results are withheld (answers show after the deadline). */
+  /** Null while results are withheld. */
   score: number | null;
   max_score: number;
-  late: boolean;
   answers_revealed: boolean;
   results: QuestionResult[];
 }
@@ -102,7 +102,6 @@ export interface SubmitResult {
 export interface PracticeReport {
   set_id: string;
   title: string;
-  due_at: number | null;
   students: {
     id: string;
     username: string;
@@ -112,11 +111,10 @@ export interface PracticeReport {
     best_score: number | null;
     /** The maximum of the version the best score was on. */
     best_max_score: number | null;
-    /** What a teacher's comment attaches to: the latest attempt. */
+    /** The latest attempt, for reviewing its answers. */
     latest_submission_id?: string | null;
     max_score: number | null;
     minutes: number | null;
-    late: boolean;
     submitted_at: number | null;
     in_scope?: boolean;
     /** The attempt that counts under the set's score mode. */
@@ -148,7 +146,6 @@ export interface ReviewAttempt {
   student_id: string;
   username: string;
   submitted_at: number;
-  late: boolean;
   score: number;
   max_score: number;
   regraded_at: number | null;
@@ -165,11 +162,6 @@ export interface ReviewAttempt {
     answer: string | null;
     regraded: boolean;
   }[];
-}
-
-export interface RemedialDraft {
-  set: PracticeSetDraft;
-  suggested_students: { id: string; username: string }[];
 }
 
 export class PracticeSetsApiError extends Error {
@@ -206,19 +198,17 @@ export const getSet = (setId: string) => call<{ set: PracticeSetDraft }>(id(setI
 export const updateSet = (
   setId: string,
   update: Partial<Pick<PracticeSetDraft, "title" | "description" | "questions" | "reveal" | "score_mode">> & {
-    due_at?: number | null;
     attempts_limit?: number | null;
   },
 ) => {
-  const { due_at, attempts_limit, ...rest } = update;
-  const body: Record<string, unknown> =
-    due_at === undefined ? rest : due_at === null ? { ...rest, clear_due: true } : { ...rest, due_at };
+  const { attempts_limit, ...rest } = update;
+  const body: Record<string, unknown> = { ...rest };
   if (attempts_limit === null) body.clear_attempts_limit = true;
   else if (attempts_limit !== undefined) body.attempts_limit = attempts_limit;
   return call<{ set: PracticeSetDraft }>(id(setId), send("PUT", body)).then((r) => r.set);
 };
 /** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
-export const publishSet = (setId: string, scope?: { everyone: boolean; users: string[]; classes: string[] }) =>
+export const publishSet = (setId: string, scope?: ScopeUpdate) =>
   call<{ set: PracticeSetDraft }>(`${id(setId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.set);
 export const archiveSet = (setId: string) =>
   call<{ set: PracticeSetDraft }>(`${id(setId)}/archive`, send("POST")).then((r) => r.set);
@@ -249,16 +239,6 @@ export const regradeQuestion = (setId: string, submissionId: string, questionId:
   call<{ attempt: ReviewAttempt }>(
     `${id(setId)}/submissions${id(submissionId)}/questions${id(questionId)}`, send("PUT", { points }),
   ).then((r) => r.attempt);
-/** Batch 3 §3.1: a draft remedial set from the picked questions, or a path's points. */
-export const remedialFromSet = (setId: string, questionIds: string[], similar: number, titlePrefix: string) =>
-  call<RemedialDraft>("/remedial/from-set", send("POST", {
-    set_id: setId, question_ids: questionIds, similar, title_prefix: titlePrefix,
-  }));
-export const remedialFromPath = (templateId: string, kpIds: string[], studentIds: string[], titlePrefix: string) =>
-  call<RemedialDraft>("/remedial/from-path", send("POST", {
-    template_id: templateId, kp_ids: kpIds, student_ids: studentIds, title_prefix: titlePrefix,
-  }));
-
 export const listAssigned = () => call<{ sets: AssignedSet[] }>("/assigned").then((r) => r.sets);
 export const takeSet = (setId: string) => call<{ set: TakeView }>(`${id(setId)}/take`).then((r) => r.set);
 /** ``revision`` is the version the student opened: answers are graded against it. */

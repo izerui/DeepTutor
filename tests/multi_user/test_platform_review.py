@@ -100,27 +100,28 @@ def test_everyone_goes_through_the_market(as_account):
 
     set_id = _market_set(as_account)
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=True, users=[])
+        PublishService().set_scope("practice_set", set_id, everyone=True)
 
 
-def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users, make_learners):
+def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
     from deeptutor.publishing.service import PublishService, ScopeError
 
     sara = _uid(teaching_users, "sara")
-    make_learners("tina", "sara")
     with as_account("tina"):
         created = PracticeSetService().create("Week 1")
         PracticeSetService().update(created["id"], questions=QUESTIONS)
-        with scopes.chosen_scope(scopes.Scope(users=[sara])):
-            PracticeSetService().publish(created["id"])  # stored: Sara by name
+    # Older data: stored with Sara by name.
+    scopes._store_scope("practice_set", created["id"], scopes.Scope(users=[sara]), actor_id=_uid(teaching_users, "tina"))
+    with as_account("tina"):
+        PracticeSetService().publish(created["id"])
     set_id = created["id"]
     _list(as_account, "practice_set", set_id)
     with as_account("adam"):
         _listings().take_down("practice_set", set_id, "Wrong.")
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=False, users=[])
+        PublishService().set_scope("practice_set", set_id, everyone=False)
     assert scopes._stored_scope("practice_set", set_id).users == [sara]  # untouched
 
 
@@ -187,27 +188,6 @@ def test_a_report_shows_only_what_happened_on_the_item(as_account, teaching_user
     assert set(row["overall"]) == {"last_activity", "period_answers", "period_tasks_done"}
 
 
-# ── direction §11.4: no deadline in the market ─────────────
-
-
-def test_practice_in_the_market_has_no_deadline(as_account):
-    import time
-
-    from deeptutor.catalog.listings import ListingError
-    from deeptutor.practice_sets.service import PracticeError, PracticeSetService
-
-    set_id = _market_set(as_account)
-    with as_account("tina"):
-        PracticeSetService().update(set_id, due_at=time.time() + 86400)
-        _listings().save("practice_set", set_id, **META)
-        with pytest.raises(ListingError, match="deadline"):
-            _listings().submit("practice_set", set_id)
-        PracticeSetService().update(set_id, due_at=None)
-        _listings().submit("practice_set", set_id)
-        with pytest.raises(PracticeError, match="deadline"):
-            PracticeSetService().update(set_id, due_at=time.time() + 86400)
-
-
 def test_administrators_name_entries_in_every_language():
     from deeptutor.catalog import taxonomy
 
@@ -246,7 +226,7 @@ def test_the_migration_check_finds_nothing_lost(as_account, teaching_users, deli
 # ── found in the browser check with a stand-in model ───────
 
 
-def test_a_set_sent_by_name_shows(as_account, teaching_users):
+def test_a_set_an_older_scope_named_one_for_shows(as_account, teaching_users):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
 
@@ -256,12 +236,15 @@ def test_a_set_sent_by_name_shows(as_account, teaching_users):
     week = _market_set(as_account)
     _list(as_account, "practice_set", week)
     with as_account("sara"):
-        join(get_current_user(), "practice_set", week)  # she learns from Tina: Tina may send her a set
+        join(get_current_user(), "practice_set", week)
     with as_account("tina"):
         remedial = PracticeSetService().create("Remedial: Week 1")
         PracticeSetService().update(remedial["id"], questions=QUESTIONS)
-        with scopes.chosen_scope(scopes.Scope(users=[_uid(teaching_users, "sara")])):
-            PracticeSetService().publish(remedial["id"])
+    # Older data: a remedial set sent to Sara by name (spec 2026-11-05 §2: still read).
+    scopes._store_scope(scopes.PRACTICE_SET, remedial["id"], scopes.Scope(users=[_uid(teaching_users, "sara")]),
+                        actor_id=_uid(teaching_users, "tina"))
+    with as_account("tina"):
+        PracticeSetService().publish(remedial["id"])
     with as_account("sara"):
         assert sorted(s["id"] for s in PracticeSetService().assigned()) == sorted([week, remedial["id"]])
     with as_account("sam"):
@@ -299,33 +282,20 @@ def test_a_path_learner_who_never_opened_it_counts_in_the_report(
 # ── second review and the requirements check ───────────────
 
 
-def test_market_practice_shows_answers_without_a_deadline(as_account):
+def test_an_older_deadline_does_not_keep_practice_out_of_the_market(as_account):
     import time
 
-    from deeptutor.catalog.listings import ListingError
     from deeptutor.practice_sets import store
-    from deeptutor.practice_sets.service import PracticeError, PracticeSetService
+    from deeptutor.practice_sets.service import PracticeSetService
 
     set_id = _market_set(as_account)
+    with store.write() as conn:  # older data: answers after a deadline that has not come
+        conn.execute("UPDATE practice_sets SET reveal = 'after_due', due_at = ? WHERE id = ?",
+                     (time.time() + 60, set_id))
     with as_account("tina"):
-        PracticeSetService().update(set_id, reveal="after_due", due_at=time.time() + 60)
-    with store.write() as conn:  # the deadline has passed: answers were shown
-        conn.execute("UPDATE practice_sets SET due_at = ? WHERE id = ?", (time.time() - 60, set_id))
-    with as_account("tina"):
-        with pytest.raises(Exception):
-            PracticeSetService().update(set_id, due_at=None)  # R10 alone still holds
-        # Clearing the deadline while showing answers right away is allowed (nothing gets hidden).
-        PracticeSetService().update(set_id, due_at=None, reveal="after_submit")
         _listings().save("practice_set", set_id, **META)
         _listings().submit("practice_set", set_id)
-        with pytest.raises(PracticeError):
-            PracticeSetService().update(set_id, reveal="after_due")
-    other = _market_set(as_account)
-    with as_account("tina"):
-        PracticeSetService().update(other, reveal="after_due")
-        _listings().save("practice_set", other, **META)
-        with pytest.raises(ListingError, match="right after"):
-            _listings().submit("practice_set", other)
+        assert PracticeSetService().get(set_id)["reveal"] == "after_submit"
 
 
 def test_reading_in_another_workspace_counts_as_started(teaching_users):
@@ -341,7 +311,7 @@ def test_reading_in_another_workspace_counts_as_started(teaching_users):
     assert migration._book_starters("bk_far", [sara]) == {sara}
 
 
-def test_a_migrated_set_with_a_deadline_waits_outside_the_market(as_account, teaching_users):
+def test_a_migrated_set_with_an_older_deadline_is_listed(as_account, teaching_users):
     import time
 
     from deeptutor.catalog import migration
@@ -349,9 +319,13 @@ def test_a_migrated_set_with_a_deadline_waits_outside_the_market(as_account, tea
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
 
+    from deeptutor.practice_sets import store
+
     with as_account("tina"):
         created = PracticeSetService().create("Dated")
-        PracticeSetService().update(created["id"], questions=QUESTIONS, due_at=time.time() + 86400)
+        PracticeSetService().update(created["id"], questions=QUESTIONS)
+    with store.write() as conn:  # a deadline from before (no longer read)
+        conn.execute("UPDATE practice_sets SET due_at = ? WHERE id = ?", (time.time() + 86400, created["id"]))
     # Content from before the market that reached everyone (it can no longer be chosen).
     scopes._store_scope(scopes.PRACTICE_SET, created["id"], scopes.Scope(everyone=True),
                         actor_id=_uid(teaching_users, "tina"))
@@ -365,23 +339,8 @@ def test_a_migrated_set_with_a_deadline_waits_outside_the_market(as_account, tea
     migration.run()
     with as_account("tina"):
         listing = _listings().get("practice_set", created["id"])
-    assert listing["status"] == "unlisted" and "deadline" in listing["reason"]
+    assert listing["status"] == "listed"
     assert ("practice_set", created["id"]) in joined_by(_uid(teaching_users, "sara"))  # she keeps it
-
-
-def test_learners_of_leave_out_what_was_taken_down(as_account, teaching_users):
-    from deeptutor.catalog.enrollment import join
-    from deeptutor.catalog.learners import learners_of
-    from deeptutor.multi_user.context import get_current_user
-
-    set_id = _market_set(as_account)
-    _list(as_account, "practice_set", set_id)
-    with as_account("sam"):
-        join(get_current_user(), "practice_set", set_id)
-    assert _uid(teaching_users, "sam") in learners_of(_uid(teaching_users, "tina"))
-    with as_account("adam"):
-        _listings().take_down("practice_set", set_id, "Wrong.")
-    assert _uid(teaching_users, "sam") not in learners_of(_uid(teaching_users, "tina"))
 
 
 def test_publishing_tells_learners_where_to_go(as_account, teaching_users, deliver):
@@ -474,32 +433,6 @@ def test_one_school_behind_one_address_is_not_locked_out(monkeypatch):
         rate_limit.login_failed("target", school)
     with pytest.raises(rate_limit.RateLimited):
         rate_limit.check_login("target", school)
-
-
-def test_a_teachers_calendar_has_their_tasks_and_the_courses_they_joined(as_account, teaching_users):
-    import asyncio
-    import time
-
-    from deeptutor.api.routers import tasks as tasks_router
-    from deeptutor.catalog.enrollment import join
-    from deeptutor.multi_user.context import get_current_user
-    from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.service import TaskService
-
-    soon = time.time() + 86400
-    for owner, title in (("tina", "Tina's"), ("tom", "Tom's")):
-        with as_account(owner):
-            task = TaskService().create("note", title)
-            TaskService().update(task["id"], due_at=soon)
-            course = CourseService().create(f"{title} course")
-            CourseService().update(course["id"], task_ids=[task["id"]])
-            CourseService().publish(course["id"])
-        if owner == "tom":
-            _list(as_account, "course", course["id"], owner="tom")
-    with as_account("tina"):
-        join(get_current_user(), "course", course["id"])  # Tina learns in Tom's course
-        events = asyncio.run(tasks_router.calendar())["events"]
-    assert {(e["title"], e["mine"]) for e in events} == {("Tina's", True), ("Tom's", False)}
 
 
 def test_content_is_checked_before_visibility(as_account, teaching_users, tmp_path):

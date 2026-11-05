@@ -446,68 +446,7 @@ def test_book_questions_use_only_the_chosen_chapters_and_readable_books(as_accou
     assert questions[0]["question"] == "Q?"
 
 
-# ── remedial practice (§3.1) ───────────────────────────────
-
-
-def test_remedial_from_a_set_copies_the_picked_questions_and_suggests_who_got_them_wrong(as_account, monkeypatch):
-    import asyncio
-
-    from deeptutor.practice_sets.remedial import RemedialPractice
-    from deeptutor.practice_sets.service import PracticeSetService
-
-    set_id = _published_set(as_account)
-    _answer(as_account, "sara", set_id, choice="A")  # wrong on Q1
-    _answer(as_account, "sara", set_id, choice="B")  # the retry does not clear the first attempt
-    _answer(as_account, "sam", set_id, choice="B")
-    asked = {}
-
-    async def generate(self, **kwargs):
-        asked.update(kwargs)
-        return [{"question_id": "x", "question": "4 - 2 = ?", "question_type": "short_answer", "options": {},
-                 "correct_answer": "2", "explanation": "", "points": 1}]
-
-    monkeypatch.setattr(PracticeSetService, "generate", generate)
-    with as_account("tina"):
-        q1 = PracticeSetService().report(set_id)["questions"][0]["question_id"]
-        made = asyncio.run(RemedialPractice().from_set(set_id, [q1], similar=2))
-    draft = made["set"]
-    assert draft["status"] == "draft" and draft["title"] == "Remedial: Week 3"
-    assert [q["question"] for q in draft["questions"]] == ["2 + 2 = ?", "4 - 2 = ?"]
-    assert draft["questions"][0]["question_id"] != q1  # a copy, not the original
-    assert asked["count"] == 2 and "2 + 2 = ?" in asked["topic"]
-    assert [p["username"] for p in made["suggested_students"]] == ["sara"]
-    with as_account("tom"), pytest.raises(Exception):  # only the set's author
-        asyncio.run(RemedialPractice().from_set(set_id, [q1]))
-
-
-def test_remedial_from_a_path_asks_for_the_picked_points(as_account, teacher_draft, publish_template, monkeypatch,
-                                                        teaching_users):
-    import asyncio
-
-    from deeptutor.practice_sets.remedial import RemedialPractice
-    from deeptutor.practice_sets.service import PracticeSetService
-    from deeptutor.teaching.store import TeachingStore
-
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
-    revision = TeachingStore().get_revision(template_id, 1)
-    kp = revision.outline.modules[0].knowledge_points[0]
-    asked = {}
-
-    async def generate(self, **kwargs):
-        asked.update(kwargs)
-        return [{"question_id": "", "question": "Why?", "question_type": "short_answer", "options": {},
-                 "correct_answer": "", "explanation": "", "points": 1}]
-
-    monkeypatch.setattr(PracticeSetService, "generate", generate)
-    outsider = teaching_users["uma"]["id"]
-    with as_account("tina"):
-        made = asyncio.run(RemedialPractice().from_path(template_id, [kp.id], [teaching_users["sara"]["id"], outsider]))
-    assert kp.name in asked["topic"] and made["set"]["questions"][0]["question"] == "Why?"
-    # Not someone who never joined Tina's content.
-    assert [p["username"] for p in made["suggested_students"]] == ["sara"]
-    with as_account("tom"), pytest.raises(Exception):
-        asyncio.run(RemedialPractice().from_path(template_id, [kp.id]))
+# ── remedial practice (§3.2; a teacher's remedial sets went, spec 2026-11-05) ──
 
 
 def test_a_student_gets_similar_questions_in_their_own_bank_not_as_mistakes(as_account, monkeypatch):
@@ -547,73 +486,10 @@ def remedial_run(module, ids, count):
     return asyncio.run(module.similar_questions(ids, count))
 
 
-# ── needs attention, workbench, reports (§5, §6.2, §6.3) ───
+# ── the workbench (§5.1) ───────────────────────────────────
 
 
-@pytest.fixture
-def fresh_attention():
-    from deeptutor.catalog import attention
-
-    attention.clear_cache()
-    yield attention
-    attention.clear_cache()
-
-
-def _flags(attention, teaching_users, name):
-    return {f["kind"]: f for f in attention.for_teacher(teaching_users["tina"]["id"])[teaching_users[name]["id"]]}
-
-
-def test_a_student_with_no_learning_for_a_week_is_inactive(as_account, teaching_users, fresh_attention, monkeypatch):
-    import time
-
-    set_id = _published_set(as_account)
-    _answer(as_account, "sara", set_id, choice="B")
-    assert "inactive" not in _flags(fresh_attention, teaching_users, "sara")
-    assert _flags(fresh_attention, teaching_users, "sam")["inactive"]["days"] is None  # never learned
-    later = time.time() + 8 * 86400
-    monkeypatch.setattr("deeptutor.catalog.attention._now", lambda: later)
-    fresh_attention.clear_cache()
-    assert _flags(fresh_attention, teaching_users, "sara")["inactive"]["days"] == 8
-
-
-def test_overdue_counts_only_this_teachers_tasks(as_account, teaching_users, fresh_attention, monkeypatch):
-    import time
-
-    from deeptutor.tasks.service import TaskService
-
-    for teacher in ("tina", "tom"):
-        with as_account(teacher):
-            task = TaskService().create("note", f"Read by {teacher}")
-            TaskService().update(task["id"], due_at=time.time() + 60)
-        _fixtures["in_course"](task["id"], owner=teacher)
-    monkeypatch.setattr("deeptutor.tasks.service._now", lambda: time.time() + 3600)
-    assert _flags(fresh_attention, teaching_users, "sara")["overdue"]["count"] == 1
-
-
-def test_mistakes_rising_needs_five_and_twice_the_week_before(as_account, teaching_users, fresh_attention):
-    import time
-
-    from deeptutor.practice_sets import store
-
-    set_id = _published_set(as_account)
-    for _ in range(3):
-        _answer(as_account, "sara", set_id, choice="A", truth="no")  # two wrong each time: 6 this week
-    assert _flags(fresh_attention, teaching_users, "sara")["mistakes_rising"] == {
-        "kind": "mistakes_rising", "recent": 6, "before": 0}
-    # The same number the week before: not rising.
-    with store.write() as conn:
-        rows = conn.execute("SELECT results_json FROM practice_submissions").fetchall()
-        for index, row in enumerate(rows):
-            conn.execute(
-                "INSERT INTO practice_submissions (id, set_id, revision, student_id, submitted_at, late, score, "
-                "max_score, results_json) VALUES (?, ?, 1, ?, ?, 0, 0, 7, ?)",
-                (f"old{index}", set_id, teaching_users["sara"]["id"], time.time() - 10 * 86400, row[0]),
-            )
-    fresh_attention.clear_cache()
-    assert "mistakes_rising" not in _flags(fresh_attention, teaching_users, "sara")
-
-
-def test_the_workbench_lists_learners_and_what_was_sent(as_account, teaching_users, fresh_attention):
+def test_the_workbench_lists_what_was_sent(as_account, teaching_users):
     from deeptutor.tasks.service import TaskService
     from deeptutor.teaching.workbench import workbench
 
@@ -627,33 +503,7 @@ def test_the_workbench_lists_learners_and_what_was_sent(as_account, teaching_use
     assert "classes" not in board
     kinds = {(i["kind"], i["id"]) for i in board["sent"]}
     assert {("task", task["id"]), ("practice_set", set_id), ("course", course_id)} <= kinds
-    sam = next(row for row in board["attention"] if row["username"] == "sam")
-    assert sam["item"]["kind"] in ("course", "practice_set") and sam["flags"][0]["kind"] == "inactive"
+    # No "learners who need attention" (spec 2026-11-05 remove-teacher-management §1.3).
+    assert set(board) == {"role", "sent"}
     with as_account("adam"):
         assert workbench() == {"role": "admin"}  # administrators see no students
-
-
-def test_a_point_answered_wrong_for_a_week_is_stuck(
-    sara_instance, as_account, teaching_users, fresh_attention,
-):
-    import time
-
-    from deeptutor.learning.models import QuizAttempt
-    from deeptutor.learning.storage import LearningStore
-
-    with as_account("sara"):
-        store = LearningStore()
-        progress = store.load(sara_instance.path_id)
-        kp = progress.modules[0].knowledge_points[0]
-        old = time.time() - 9 * 86400
-        progress.quiz_attempts.extend(
-            QuizAttempt(question_id=f"q{i}", knowledge_point_id=kp.id, is_correct=False, result="incorrect",
-                        timestamp=old + i * 3600)
-            for i in range(3)
-        )
-        store.save(progress)
-    flags = fresh_attention.for_teacher(teaching_users["tina"]["id"])[teaching_users["sara"]["id"]]
-    stuck = next(f for f in flags if f["kind"] == "stuck")
-    assert (stuck["kp_id"], stuck["days"], stuck["wrong"]) == (kp.id, 9, 3)
-    assert not any(f["kind"] == "stuck" for f in fresh_attention.for_teacher(teaching_users["tom"]["id"]).get(
-        teaching_users["sara"]["id"], []))  # Tom's report has no stake in Tina's path

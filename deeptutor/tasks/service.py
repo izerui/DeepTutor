@@ -5,9 +5,10 @@ Path, answer a practice set, read chapters of a book, or a plain
 instruction. The task reaches students through a publish scope (kind
 ``task``) and only ever names content its author published.
 
-On the student side a task is *open*, *overdue*, *completed* or *closed*.
-Completion is detected from what the student actually did and then kept
-(R24). *Closed* is never stored: it
+On the student side a task is *open*, *completed* or *closed*: tasks have
+no deadline or opening time (spec 2026-11-05 remove-teacher-management §1.4;
+the columns are kept and never read). Completion is detected from what the
+student actually did and then kept (R24). *Closed* is never stored: it
 is whether the task, its content and the student's place in its scope still
 hold right now, so coming back into scope restores it.
 
@@ -35,7 +36,6 @@ logger = logging.getLogger(__name__)
 KINDS = ("mastery_path", "practice_set", "book", "note")
 TITLE_MAX = 200
 TEXT_MAX = 20_000
-DUE_SOON_SECONDS = 24 * 3600
 
 
 class TaskError(Exception):
@@ -56,11 +56,6 @@ class TaskConflict(TaskError):
 
 def _now() -> float:
     return time.time()
-
-
-def _open_at(row) -> float | None:
-    """When a task opens; rows read before the column existed have none."""
-    return row["open_at"] if "open_at" in row.keys() else None
 
 
 def _role(user: CurrentUser) -> str:
@@ -204,7 +199,7 @@ def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> boo
 
 
 def _first_submission(set_id: str, student_id: str) -> float | None:
-    """When the student first submitted a practice set: the moment it was done, and whether late."""
+    """When the student first submitted a practice set: the moment it was done."""
     from deeptutor.practice_sets import store as practice_store
 
     with practice_store.read() as conn:
@@ -288,8 +283,6 @@ class TaskService:
             "target_id": row["target_id"],
             "target_title": _target_title(row["kind"], row["target_id"]) if row["target_id"] else "",
             "settings": settings,
-            "due_at": row["due_at"],
-            "open_at": _open_at(row),
             "status": row["status"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
@@ -403,22 +396,6 @@ class TaskService:
             sets["title"] = title
         if fields.get("description") is not None:
             sets["description"] = str(fields["description"])[:TEXT_MAX]
-        if "due_at" in fields:
-            due = fields["due_at"]
-            sets["due_at"] = float(due) if due else None
-        if "open_at" in fields:
-            opens = float(fields["open_at"]) if fields["open_at"] else None
-            before = _open_at(row)
-            # Open now: published with no opening time, or one already passed.
-            is_open = published and (before is None or before <= _now())
-            if is_open and opens is not None and opens > _now():
-                # §6: once open, it stays open — nobody who saw it loses it.
-                raise TaskConflict("This task is already open; its opening time can only move earlier.")
-            sets["open_at"] = opens
-        due_after = sets.get("due_at", row["due_at"])
-        open_after = sets.get("open_at", _open_at(row))
-        if due_after and open_after and open_after >= due_after:
-            raise TaskError("A task must open before its deadline.")
         if fields.get("target_id") is not None or fields.get("settings") is not None:
             if published:
                 raise TaskConflict("A published task keeps what it asks for; withdraw it and assign a new one.")
@@ -437,8 +414,6 @@ class TaskService:
         with db.write() as conn:
             self._owned(conn, task_id)
             conn.execute(f"UPDATE tasks SET {columns} WHERE id = ?", (*sets.values(), task_id))  # nosec B608
-        if published and "due_at" in sets and sets["due_at"] != row["due_at"]:
-            self._notify_open(row, "task_due_changed", {"due_at": sets["due_at"]})
         return self.get(task_id)
 
     def hand_over(self, task_id: str, teacher_id: str) -> dict[str, Any]:
@@ -457,8 +432,7 @@ class TaskService:
     def publish(self, task_id: str, *, quiet: bool = False) -> dict[str, Any]:
         """Check what it names, settle its receivers (§3.2), then publish and notify.
 
-        A task that opens later is announced when it opens (batch 2 §6); a
-        course announces its tasks once, as the course (*quiet*).
+        A course announces its tasks once, as the course (*quiet*).
         """
         from deeptutor.publishing import scope as scopes
 
@@ -495,13 +469,12 @@ class TaskService:
                 "WHERE id = ?",
                 (json.dumps(settings, ensure_ascii=False), now, now, task_id),
             )
-        opens = _open_at(row)
-        if not quiet and not (opens and opens > now):
+        if not quiet:
             from deeptutor.notifications.service import notify
 
             notify(
                 receivers, "task_published",
-                {"title": row["title"], "teacher": self.actor.username, "due_at": row["due_at"]},
+                {"title": row["title"], "teacher": self.actor.username},
                 link=f"/start?task={task_id}", dedupe_key=f"task_published:{task_id}",
             )
         return self.get(task_id)
@@ -583,26 +556,9 @@ class TaskService:
                 "in_scope": student_id in receivers,
                 "completed": bool(done),
                 "completed_at": done["completed_at"] if done else None,
-                "late": bool(done and done["late"]),
                 "self_reported": bool(done and done["self_reported"]),
             })
         return {**self._summary(row), "students": students}
-
-    def _notify_open(self, row, kind: str, params: dict[str, Any]) -> None:
-        """Tell the receivers who have not completed the task yet."""
-        from deeptutor.notifications.service import notify
-
-        receivers = self._receivers(row)
-        with db.read() as conn:
-            done = {
-                r[0] for r in conn.execute(
-                    "SELECT student_id FROM task_completions WHERE task_key = ?", (row["id"],)
-                )
-            } if conn else set()
-        notify(
-            receivers - done, kind, {"title": row["title"], **params},
-            link=f"/start?task={row['id']}", dedupe_key=f"{kind}:{row['id']}:{params.get('due_at')}",
-        )
 
 
 # ── the student's side ─────────────────────────────────────
@@ -626,7 +582,7 @@ class StudentTasks:
         """Published or withdrawn tasks that reach the student, or that they worked on."""
         from deeptutor.publishing import scope as scopes
 
-        # A task reaches who joined it (through its course) or was named; only those are read.
+        # A task reaches who joined it (through its course), or whom older data named; only those are read.
         from deeptutor.catalog.enrollment import joined_by
 
         wanted = [item_id for kind, item_id in joined_by(self.actor.id) if kind == scopes.TASK] + \
@@ -664,55 +620,34 @@ class StudentTasks:
                 "SELECT * FROM task_completions WHERE task_key = ? AND student_id = ?", (key, self.actor.id)
             ).fetchone() if conn else None
 
-    def _record_completion(
-        self, key: str, due_at: float | None, *, self_reported: bool = False, at: float | None = None,
-    ) -> None:
+    def _record_completion(self, key: str, *, self_reported: bool = False, at: float | None = None) -> None:
         # ``at``: when it was actually done, if known (a practice set's first submission);
-        # otherwise when it is noticed.
+        # otherwise when it is noticed. Nothing is late: tasks have no deadline.
         now = at or _now()
         with db.write() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO task_completions VALUES (?, ?, ?, ?, ?)",
-                (key, self.actor.id, now, int(bool(due_at and now > due_at)), int(self_reported)),
+                (key, self.actor.id, now, 0, int(self_reported)),
             )
 
     def _entry(self, *, key: str, kind: str, title: str, description: str, target_id: str,
-               settings: dict[str, Any], due_at: float | None, teacher_id: str, open_: bool,
-               task_row=None, open_at: float | None = None) -> dict[str, Any]:
+               settings: dict[str, Any], teacher_id: str, open_: bool, task_row=None) -> dict[str, Any]:
         from deeptutor.publishing.provenance import provenance
 
-        now = _now()
-        if open_ and open_at and now < open_at:
-            # §6: before it opens, only that it exists and when it opens.
-            return {
-                "key": key, "task_id": task_row["id"] if task_row is not None else "", "kind": kind,
-                "title": title, "description": "", "target_id": "", "target_title": "", "settings": {},
-                "due_at": due_at, "open_at": open_at, "state": "not_open", "completed_at": None, "late": False,
-                "provenance": provenance(teacher_id, self.actor), "teacher_id": teacher_id,
-            }
-        if open_ and open_at and task_row is not None and open_at > float(task_row["published_at"] or 0):
-            from deeptutor.notifications.service import notify
-
-            notify(
-                [self.actor.id], "task_opened", {"title": title, "due_at": due_at},
-                link=f"/start?task={key}", dedupe_key=f"task_opened:{key}",
-            )
         completion = self._completion(key)
         if completion is None and open_ and kind != "note":
             if _completed_now(kind, target_id, settings, self.actor):
                 self._record_completion(
-                    key, due_at, at=_first_submission(target_id, self.actor.id) if kind == "practice_set" else None,
+                    key, at=_first_submission(target_id, self.actor.id) if kind == "practice_set" else None,
                 )
                 completion = self._completion(key)
         if completion is not None:
             state = "completed"
         elif not open_:
             state = "closed"
-        elif due_at and now > due_at:
-            state = "overdue"
         else:
             state = "open"
-        entry = {
+        return {
             "key": key,
             "task_id": task_row["id"] if task_row is not None else "",
             "kind": kind,
@@ -721,51 +656,11 @@ class StudentTasks:
             "target_id": target_id,
             "target_title": _target_title(kind, target_id) if target_id else "",
             "settings": settings,
-            "due_at": due_at,
-            "open_at": open_at,
             "state": state,
             "completed_at": completion["completed_at"] if completion else None,
-            "late": bool(completion and completion["late"]),
             "provenance": provenance(teacher_id, self.actor),
-            # Who set it (batch 3 §5.3: a teacher's "overdue" counts only their own tasks).
             "teacher_id": teacher_id,
         }
-        if state != "completed" and state != "closed" and due_at and 0 < due_at - now <= DUE_SOON_SECONDS:
-            from deeptutor.notifications.service import notify
-
-            # Spec §5.1: no scheduler; whoever looks first triggers the reminder.
-            notify(
-                [self.actor.id], "task_due_soon", {"title": title, "due_at": due_at},
-                link=f"/start?task={key}", dedupe_key=f"task_due_soon:{key}:{due_at}",
-            )
-        return entry
-
-    def sweep(self) -> None:
-        """Time-based notifications without a scheduler (batch 2 §9).
-
-        Called when the student's bell asks for its unread count: a task that
-        opened, or one due within a day and not completed, is announced once.
-        Cheap on purpose — no completion detection, only stored completions.
-        """
-        if not self._is_student():
-            return
-        from deeptutor.notifications.service import notify
-
-        now = _now()
-        for row, reaches in self._task_rows():
-            if row["status"] != "published" or not reaches:
-                continue
-            opens, due = _open_at(row), row["due_at"]
-            if opens and now < opens:
-                continue
-            if opens and opens > float(row["published_at"] or 0):
-                # Only a task published before it opened is announced at opening;
-                # one published already open was announced by its publication.
-                notify([self.actor.id], "task_opened", {"title": row["title"], "due_at": due},
-                       link=f"/start?task={row['id']}", dedupe_key=f"task_opened:{row['id']}")
-            if due and 0 < due - now <= DUE_SOON_SECONDS and self._completion(row["id"]) is None:
-                notify([self.actor.id], "task_due_soon", {"title": row["title"], "due_at": due},
-                       link=f"/start?task={row['id']}", dedupe_key=f"task_due_soon:{row['id']}:{due}")
 
     def assigned(self) -> list[dict[str, Any]]:
         """Every task that reached the learner through the courses they joined (or by name)."""
@@ -780,12 +675,12 @@ class StudentTasks:
             )
             entry = self._entry(
                 key=row["id"], kind=row["kind"], title=row["title"], description=row["description"],
-                target_id=row["target_id"], settings=settings, due_at=row["due_at"],
-                teacher_id=row["owner_user_id"], open_=open_, task_row=row, open_at=_open_at(row),
+                target_id=row["target_id"], settings=settings,
+                teacher_id=row["owner_user_id"], open_=open_, task_row=row,
             )
             entries.append(entry)
-        order = {"overdue": 0, "open": 1, "not_open": 2, "completed": 3, "closed": 4}
-        entries.sort(key=lambda e: (order[e["state"]], e["due_at"] or float("inf"), e["title"]))
+        order = {"open": 0, "completed": 1, "closed": 2}
+        entries.sort(key=lambda e: (order[e["state"]], e["title"]))
         return entries
 
     @staticmethod
@@ -806,9 +701,9 @@ class StudentTasks:
         entry = self.get(task_id)
         if entry["kind"] != "note":
             raise TaskError("This task completes itself when you do what it asks.")
-        if entry["state"] in ("closed", "not_open"):
-            raise TaskConflict("This task is closed." if entry["state"] == "closed" else "This task is not open yet.")
-        self._record_completion(task_id, entry["due_at"], self_reported=True)
+        if entry["state"] == "closed":
+            raise TaskConflict("This task is closed.")
+        self._record_completion(task_id, self_reported=True)
         return self.get(task_id)
 
 # ── account events ─────────────────────────────────────────

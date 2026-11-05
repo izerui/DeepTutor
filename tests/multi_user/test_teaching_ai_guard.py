@@ -38,6 +38,7 @@ from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, MATERIALS_UNAVAIL
 from deeptutor.teaching.service import TeachingService
 from deeptutor.tools.builtin import RAGTool
 from deeptutor.tools.mastery_tool import MasteryLeaveTool, MasterySwitchTool
+from tests.multi_user.path_members import leave_path
 
 
 class _Stream:
@@ -115,7 +116,7 @@ async def test_a_revoked_teacher_path_closes_the_turn(
     seen: dict = {}
     _probe_loop(monkeypatch, seen)
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
     stream = _Stream()
 
     with as_account("sara"):
@@ -133,7 +134,7 @@ async def test_switching_into_a_revoked_teacher_path_is_refused(
     sara_instance, as_account, teaching_users
 ):
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
 
     with as_account("sara"):
         with pytest.raises(PathBindingError):
@@ -476,7 +477,7 @@ async def test_a_refused_switch_leaves_the_turn_where_it_was(
 
     async def body(context):
         with as_account("tina"):
-            TeachingService().revoke(courses.template_b, teaching_users["sara"]["id"])
+            leave_path(courses.template_b, teaching_users["sara"]["id"])
         seen["switched"] = await _switch(context, courses.b)
         seen["path"] = context.metadata["mastery_path_id"]
         seen["kbs"] = list(context.knowledge_bases)
@@ -756,7 +757,7 @@ async def test_a_chat_action_on_a_revoked_teacher_path_is_refused(
     courses, chat_runtime, as_account, teaching_users
 ):
     with as_account("tina"):
-        TeachingService().revoke(courses.template_a, teaching_users["sara"]["id"])
+        leave_path(courses.template_a, teaching_users["sara"]["id"])
 
     async def body(_context, out):
         out["ran"] = True
@@ -841,7 +842,7 @@ async def test_a_switch_inside_a_chat_action_re_runs_the_gate(
         out["kbs_p"] = list(context.knowledge_bases)
         out["history"] = await _rag(libraries.history.ref)
         with as_account("tina"):
-            TeachingService().revoke(courses.template_a, teaching_users["sara"]["id"])
+            leave_path(courses.template_a, teaching_users["sara"]["id"])
         out["to_revoked"] = await switch(context, courses.a)
         out["path"] = context.metadata["mastery_path_id"]
 

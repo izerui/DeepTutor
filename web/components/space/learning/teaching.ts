@@ -200,17 +200,11 @@ export function teachingErrorMessage(
         ? { key: "You can no longer manage this teacher path." }
         : { key: "Only the teacher who owns this path can publish it." };
     case 404:
-      return { key: "This teacher path or assignment no longer exists." };
+      return { key: "This teacher path no longer exists." };
     case 409:
       return {
         key: "This teacher path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.",
       };
-    case 422:
-      // A plain sentence is the service's student check; request validation
-      // (a list, e.g. too many ids) is not about student accounts.
-      return typeof error.detail === "string"
-        ? { key: "Only active student accounts can be assigned." }
-        : { key: "Update failed" };
     default:
       return { key: "Update failed" };
   }
@@ -220,17 +214,17 @@ export function teachingErrorMessage(
 export function unpublishableReason(template: TeacherTemplate): Message {
   if (!template.is_owner) {
     return {
-      key: "Only {{owner}} can edit and publish this path. You can still manage its students or archive it.",
+      key: "Only {{owner}} can edit and publish this path. You can still manage or archive it.",
       values: { owner: template.owner_name || "?" },
     };
   }
   if (!template.draft_path_id) {
     return {
-      key: "Its teacher's account was removed, so it has no editable draft and cannot be published again. You can still manage its students or archive it.",
+      key: "Its teacher's account was removed, so it has no editable draft and cannot be published again. You can still manage or archive it.",
     };
   }
   return {
-    key: "Its draft path is not in your library, so it cannot be published from here. You can still manage its students or archive it.",
+    key: "Its draft path is not in your library, so it cannot be published from here. You can still manage or archive it.",
   };
 }
 

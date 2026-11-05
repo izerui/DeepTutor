@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 
 import { usePendingReviews } from "@/components/catalog/AdminNav";
 import { MyListings } from "@/components/catalog/MyListings";
-import { flagText } from "@/components/catalog/attention-format";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getHome, type HomeData } from "@/lib/tasks-api";
 import { getWorkbench, type Workbench } from "@/lib/workbench-api";
@@ -77,7 +76,7 @@ export function TeacherWorkbench() {
       <header>
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {t("Who needs attention, what you sent out and listed, and your own learning.")}
+          {t("What you sent out and listed, and your own learning.")}
         </p>
       </header>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
@@ -87,44 +86,6 @@ export function TeacherWorkbench() {
         <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : (
         <>
-          {/* Platform batch 3 §2: learners of my courses and paths; each opens that item's report. */}
-          <section aria-labelledby="wb-attention" className="space-y-2">
-            <h2 id="wb-attention" className="text-[13px] font-semibold">
-              {t("Learners who need attention")}{" "}
-              <span className="text-[var(--muted-foreground)]">({board.attention_total ?? 0})</span>
-            </h2>
-            {(board.attention ?? []).length === 0 ? (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Everyone is on track.")}</p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
-                {(board.attention ?? []).map((row) => {
-                  const body = (
-                    <>
-                      <span className="font-medium">{row.username}</span>
-                      {row.item && <span className="text-[11.5px] text-[var(--muted-foreground)]">{row.item.title}</span>}
-                      <span className="text-[11.5px] text-amber-700 dark:text-amber-300">
-                        {row.flags.map((flag) => flagText(flag, t)).join(" · ")}
-                      </span>
-                    </>
-                  );
-                  const rowClass = "flex flex-wrap items-baseline gap-2 p-2.5 text-[12.5px]";
-                  return (
-                    <li key={`${row.student_id}:${row.item?.kind ?? ""}:${row.item?.id ?? ""}`}>
-                      {row.item ? (
-                        <Link href={`/reports?kind=${encodeURIComponent(row.item.kind)}&id=${encodeURIComponent(row.item.id)}`}
-                          className={`${rowClass} hover:bg-[var(--muted)]/40`}>
-                          {body}
-                        </Link>
-                      ) : (
-                        <div className={rowClass}>{body}</div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
           <section aria-labelledby="wb-sent" className="space-y-2">
             <h2 id="wb-sent" className="text-[13px] font-semibold">{t("What I sent out")}</h2>
             {(board.sent ?? []).length === 0 ? (

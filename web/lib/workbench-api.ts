@@ -1,21 +1,8 @@
 import { apiFetch, apiUrl } from "./api";
-import type { AttentionFlag } from "./report-types";
 
 /** The teacher's home (batch 3 §5.1); administrators get only ``role``. */
 export interface Workbench {
   role: string;
-  /**
-   * Platform batch 3 §2: learners of this teacher's content; ``item`` is one
-   * course or path they joined (its report), ``null`` on an older install.
-   */
-  attention?: {
-    student_id: string;
-    username: string;
-    class_id: string;
-    item?: { kind: "course" | "mastery_path"; id: string; title: string } | null;
-    flags: AttentionFlag[];
-  }[];
-  attention_total?: number;
   classes?: { id: string; name: string; student_count: number; active_this_week: number }[];
   sent?: {
     kind: "task" | "practice_set" | "course" | "mastery_path";

@@ -16,9 +16,6 @@ const POLL_MS = 60_000;
 
 type Translate = (key: string, values?: Record<string, unknown>) => string;
 
-const day = (value: unknown) =>
-  typeof value === "number" ? new Date(value * 1000).toLocaleString() : "";
-
 const TRANSFERRED: [string, string][] = [
   ["tasks", "{{count}} tasks"],
   ["courses", "{{count}} courses"],
@@ -47,19 +44,9 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return p.content === "mastery_path"
         ? t("{{teacher}} published the Mastery Path “{{title}}”", { teacher: p.teacher, title })
         : t("{{teacher}} published the practice set “{{title}}”", { teacher: p.teacher, title });
-    case "task_due_changed":
-      return p.due_at
-        ? t("The deadline of “{{title}}” is now {{date}}", { title, date: day(p.due_at) })
-        : t("“{{title}}” no longer has a deadline", { title });
-    case "task_due_soon":
-      return t("“{{title}}” is due {{date}}", { title, date: day(p.due_at) });
-    case "teacher_comment":
-      return t("{{teacher}} commented on “{{title}}”", { teacher: p.teacher, title });
     // Platform batch 3 §3: an announcement in a course or a Mastery Path one joined.
     case "content_announcement":
       return t("{{teacher}} posted an announcement in “{{title}}”", { teacher: p.teacher, title });
-    case "task_opened":
-      return t("“{{title}}” is open now", { title });
     case "course_published":
       return t("{{teacher}} published the course “{{title}}”", { teacher: p.teacher, title });
     case "practice_regraded":

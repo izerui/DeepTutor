@@ -7,9 +7,9 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any, TypeVar
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator, model_validator
 
 from deeptutor.publishing.service import PublishService, ScopeError, ScopeNeedsConfirmation
 
@@ -25,42 +25,48 @@ async def _call(function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-class ScopeChoice(BaseModel):
-    """The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1)."""
+class _NobodyNamed(BaseModel):
+    """Nobody is named any more (spec 2026-11-05 remove-teacher-management §1.2).
+
+    Older clients send ``users: []`` with every choice; that is still accepted.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_users(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("users"):
+            raise ValueError("Content reaches the people who join it; it cannot be sent to chosen accounts.")
+        return data
+
+
+class ScopeChoice(_NobodyNamed):
+    """Sent with a first publication (spec 2026-11-02 §4.1): nobody is named, people join."""
 
     everyone: bool = False
-    users: list[str] = Field(default_factory=list, max_length=1000)
     #: Accepted from older clients: publishing reaches only who joins anyway.
     join_only: bool = False
 
-    def to_scope(self):
-        from deeptutor.publishing.scope import Scope
-
-        return Scope(
-            everyone=self.everyone, users=list(self.users),
-        )
+    @field_validator("everyone")
+    @classmethod
+    def _not_everyone(cls, value: bool) -> bool:
+        if value:
+            raise ValueError("To reach everyone, put it in the learning market.")
+        return value
 
 
 @contextmanager
 def chosen(choice: ScopeChoice | None):
-    """``with chosen(body.scope):`` around a publication."""
-    from deeptutor.publishing.scope import chosen_scope, join_only
+    """``with chosen(body.scope):`` around a first publication (says whether it is for the market)."""
+    from deeptutor.publishing.scope import join_only
 
-    with join_only(bool(choice and choice.join_only)), chosen_scope(
-        choice.to_scope() if choice is not None else None
-    ):
+    with join_only(bool(choice and choice.join_only)):
         yield
 
 
-class ScopeUpdate(BaseModel):
+class ScopeUpdate(_NobodyNamed):
+    #: Only an older item reaches everyone; this may turn that off, never on.
     everyone: bool = False
-    users: list[str] = Field(default_factory=list, max_length=1000)
     confirm: bool = False
-
-
-@router.get("/people")
-async def search_people(q: str = Query(default="", max_length=100)):
-    return {"people": await _call(PublishService().search_people, q)}
 
 
 @router.get("/{kind}/{item_id}/scope")
@@ -73,7 +79,7 @@ async def set_scope(kind: str, item_id: str, body: ScopeUpdate):
     try:
         return await asyncio.to_thread(
             PublishService().set_scope, kind, item_id,
-            everyone=body.everyone, users=body.users, confirm=body.confirm,
+            everyone=body.everyone, confirm=body.confirm,
         )
     except ScopeNeedsConfirmation as exc:
         # Spec §7.2: say how many people lose access; nothing was written.

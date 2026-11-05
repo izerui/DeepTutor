@@ -18,6 +18,7 @@ from deeptutor.multi_user.retrieval_scope import turn_retrieval_scope
 from deeptutor.teaching import access
 from deeptutor.teaching.access import studying_template
 from deeptutor.teaching.service import TeachingService
+from tests.multi_user.path_members import leave_path
 
 
 @pytest.fixture
@@ -81,7 +82,7 @@ def test_reference_only_kb_is_readable_only_while_studying_the_path(
             assert registry.can_read(record, user) is False
 
     with as_account("tina"):
-        TeachingService().revoke(kb_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(kb_instance.template_id, teaching_users["sara"]["id"])
     with as_account("sara"):
         with studying_template(kb_instance.template_id):
             assert registry.can_read(record, get_current_user()) is False

@@ -7,8 +7,6 @@ import time
 
 import pytest
 
-from deeptutor.notifications import service as notifications
-
 
 @pytest.fixture(autouse=True)
 def _offline(monkeypatch):
@@ -39,75 +37,31 @@ def _in_course(*task_ids, **options):
 # ── tasks ──────────────────────────────────────────────────
 
 
-def test_a_task_that_is_open_cannot_be_closed_again_by_an_opening_time(as_account):
-    from deeptutor.tasks.service import TaskConflict, TaskService
-
-    with as_account("tina"):
-        task = TaskService().create("note", "Read")
-    _in_course(task["id"])  # open at once
-    with as_account("tina"):
-        with pytest.raises(TaskConflict):
-            TaskService().update(task["id"], open_at=time.time() + 3600)
-        TaskService().update(task["id"], open_at=None)  # clearing keeps it open: allowed
-
-
-def test_a_task_published_after_its_opening_is_announced_once(as_account, ids):
-    from deeptutor.tasks.service import StudentTasks, TaskService
-
-    with as_account("tina"):
-        task = TaskService().create("note", "Read")
-        TaskService().update(task["id"], open_at=time.time() - 60)
-    _in_course(task["id"])
-    with as_account("sara"):
-        StudentTasks().sweep()
-        StudentTasks().assigned()
-    kinds = [n["kind"] for n in notifications.list_for(ids["sara"])]
-    # Announced once, as its course.
-    assert kinds.count("course_published") == 1 and "task_opened" not in kinds
-
-
 def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_account, ids, monkeypatch):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.tasks.service import StudentTasks, TaskService
     from deeptutor.tasks.store import db
 
-    due = time.time() + 600
     with as_account("tina"):
         created = PracticeSetService().create("Week 5")
         PracticeSetService().update(created["id"], questions=[
             {"question": "1+1", "question_type": "choice", "options": {"A": "2", "B": "3"}, "correct_answer": "A"}])
         PracticeSetService().publish(created["id"])
         task = TaskService().create("practice_set", "Do week 5")
-        TaskService().update(task["id"], target_id=created["id"], due_at=due)
+        TaskService().update(task["id"], target_id=created["id"])
     _in_course(task["id"])  # the course hands out the set too
     with as_account("sara"):
         qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(created["id"], {qid: "A"}))
-    later = due + 3600  # she opens her tasks only after the deadline
+    submitted = time.time()
+    later = submitted + 3600  # she opens her tasks an hour later
     monkeypatch.setattr("deeptutor.tasks.service._now", lambda: later)
     with as_account("sara"):
-        assert StudentTasks().get(task["id"])["late"] is False
+        entry = StudentTasks().get(task["id"])
+    assert entry["state"] == "completed" and "late" not in entry and "due_at" not in entry
     with db.read() as conn:
         assert conn.execute("SELECT completed_at FROM task_completions WHERE task_key = ?",
-                            (task["id"],)).fetchone()[0] < due
-
-
-def test_needing_attention_reads_each_students_progress_as_that_student(
-    as_account, ids, monkeypatch, make_learners
-):
-    from deeptutor.catalog import attention
-    from deeptutor.multi_user.context import get_current_user
-    from deeptutor.tasks.service import StudentTasks
-
-    seen = []
-    monkeypatch.setattr(StudentTasks, "assigned", lambda self: seen.append(get_current_user().id) or [])
-    make_learners("tina", "sara", "sam")
-    attention.clear_cache()
-    with as_account("tina"):
-        attention.for_teacher(ids["tina"])
-        assert get_current_user().id == ids["tina"]  # restored afterwards
-    assert sorted(seen) == sorted([ids["sara"], ids["sam"]])
-    attention.clear_cache()
+                            (task["id"],)).fetchone()[0] <= submitted
 
 
 # ── courses ────────────────────────────────────────────────
@@ -165,18 +119,14 @@ def test_administrators_see_no_practice_answers(as_account, ids, deliver):
         PracticeReview().attempt(created["id"], result["submission_id"])
 
 
-def test_a_failed_first_publication_keeps_no_receivers(as_account, ids, make_learners):
+def test_a_failed_first_publication_keeps_no_receivers(as_account):
     from deeptutor.practice_sets.service import PracticeError, PracticeSetService
     from deeptutor.publishing import scope as scopes
 
-    make_learners("tina", "sam")
     with as_account("tina"):
         created = PracticeSetService().create("Week 7")
-        PracticeSetService().update(created["id"], questions=[
-            {"question": "1+1", "question_type": "choice", "options": {"A": "2", "B": "3"}, "correct_answer": "A"}],
-            reveal="after_due")
-        with scopes.chosen_scope(scopes.Scope(users=[ids["sam"]])), pytest.raises(PracticeError):
-            PracticeSetService().publish(created["id"])  # after the deadline, but no deadline
+        with pytest.raises(PracticeError):
+            PracticeSetService().publish(created["id"])  # no question yet
         assert scopes.get_scope(scopes.PRACTICE_SET, created["id"]) is None
 
 

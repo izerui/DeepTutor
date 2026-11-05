@@ -34,11 +34,6 @@ def loop_threads(monkeypatch):
     monkeypatch.setattr(service_module, "_accounts", spy("_accounts", service_module._accounts))
     monkeypatch.setattr(
         TeachingService,
-        "_validate_students",
-        spy("_validate_students", TeachingService._validate_students),
-    )
-    monkeypatch.setattr(
-        TeachingService,
         "_unavailable_materials",
         spy("_unavailable_materials", TeachingService._unavailable_materials),
     )
@@ -73,7 +68,7 @@ def test_preview_and_publish_keep_store_io_off_the_event_loop(
     assert result["revision"] == 2
     names = {name for name, _ in calls}
     assert {"get_template", "get_revision", "add_revision", "count_active"} <= names
-    assert {"_accounts", "_validate_students", "_unavailable_materials"} <= names
+    assert {"_accounts", "_unavailable_materials"} <= names
     assert [name for name, on_loop in calls if on_loop] == []
 
 

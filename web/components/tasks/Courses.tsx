@@ -31,7 +31,7 @@ import {
 } from "@/lib/tasks-api";
 
 import { HandOverPanel } from "./HandOver";
-import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
+import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
 const errorText = (err: unknown, t: (key: string) => string) => (err instanceof Error ? t(err.message) : String(err));
@@ -169,7 +169,7 @@ function CourseEditor({
       <div className="space-y-2">
         <h3 className="text-[13px] font-medium">{t("Tasks in order")}</h3>
         <p className="text-[11.5px] text-[var(--muted-foreground)]">
-          {t("The order is a suggestion; students can do the tasks in any order. Use opening times to release them one by one.")}
+          {t("The order is a suggestion; students can do the tasks in any order.")}
         </p>
         {course.tasks.length === 0 ? (
           <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No tasks yet.")}</p>
@@ -183,7 +183,6 @@ function CourseEditor({
                 </button>
                 <span className="text-[11px] text-[var(--muted-foreground)]">
                   {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
-                  {task.open_at ? ` · ${t("Opens {{date}}", { date: formatWhen(task.open_at) })}` : ""}
                 </span>
                 {editable && (
                   <>
@@ -328,11 +327,6 @@ export function StudentCourses({
                         <span className="w-5 text-right tabular-nums text-[var(--muted-foreground)]">{index + 1}.</span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONE[task.state]}`}>{t(STATE_LABEL[task.state])}</span>
                         <span className="font-medium">{task.title}</span>
-                        <span className="text-[11px] text-[var(--muted-foreground)]">
-                          {task.state === "not_open"
-                            ? t("Opens {{date}}", { date: formatWhen(task.open_at) })
-                            : task.due_at ? t("Due {{date}}", { date: formatWhen(task.due_at) }) : ""}
-                        </span>
                       </button>
                     </li>
                   ))}

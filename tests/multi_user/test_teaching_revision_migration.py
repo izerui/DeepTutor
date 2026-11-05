@@ -35,6 +35,7 @@ from deeptutor.teaching.instances import (
 from deeptutor.teaching.models import KpDecision
 from deeptutor.teaching.service import TeachingService
 from deeptutor.teaching.store import TeachingStore
+from tests.multi_user.path_members import leave_path
 
 
 def _practise_everything(as_account, path_id: str) -> None:
@@ -261,7 +262,7 @@ def test_a_revoked_or_archived_course_is_not_migrated(
 ):
     _publish_edit(edit_calculus_draft, publish_template)
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
     with as_account("sara"):
         store = LearningStore()
         assert apply_pending_revision(sara_instance.path_id, store, respect_lease=False) is None
@@ -626,7 +627,7 @@ def test_skipping_a_stuck_old_question_lets_the_update_apply(
 
     # A revoked assignment still closes the course, skip included.
     with as_account("tina"):
-        TeachingService().revoke(cited_course.template_id, teaching_users["sara"]["id"])
+        leave_path(cited_course.template_id, teaching_users["sara"]["id"])
     for method, url in (
         ("GET", f"/api/mastery-paths/topics/{path_id}"),
         ("POST", f"/api/mastery-paths/progress/{path_id}/skip-question"),

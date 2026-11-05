@@ -21,6 +21,7 @@ from deeptutor.api.routers import mastery_path
 from deeptutor.book import registry as book_registry
 from deeptutor.learning.models import TopicSource, TopicSourceKind
 from deeptutor.teaching.service import TeachingService
+from tests.multi_user.path_members import leave_path
 
 BOOK_ID = "bk_ref"
 OTHER_BOOK_ID = "bk_unlisted"
@@ -233,7 +234,7 @@ def test_closing_the_path_refuses_writes_and_keeps_the_students_data(
 
     with as_account("tina"):
         if close == "revoke":
-            TeachingService().revoke(ref_book.template_id, teaching_users["sara"]["id"])
+            leave_path(ref_book.template_id, teaching_users["sara"]["id"])
         else:
             TeachingService().archive(ref_book.template_id)
 
@@ -293,7 +294,7 @@ def test_page_chat_binding_is_refused_after_revoke(
     assert client.post("/api/books/page-chat-session", json=body, headers=ref_book.scoped).status_code == 200
     saved = (ref_book.overlay_dir / "page_chat_sessions.json").read_bytes()
     with as_account("tina"):
-        TeachingService().revoke(ref_book.template_id, teaching_users["sara"]["id"])
+        leave_path(ref_book.template_id, teaching_users["sara"]["id"])
     assert client.post(
         "/api/books/page-chat-session", json={**body, "session_id": "x"}, headers=ref_book.scoped
     ).status_code == 404

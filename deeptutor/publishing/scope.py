@@ -1,16 +1,16 @@
 """Publish scopes: who receives a published item (spec 2026-10-29 §7, learning platform).
 
 On the learning platform people reach content by joining it from the market
-(``members``, read from the market store with the scope). A scope may also
-name accounts — a remedial practice set goes to the learners it is for — and
-content from before the market may still say "everyone".
+(``members``, read from the market store with the scope). Content from before
+may still name accounts or say "everyone": both are read, never written anew
+(spec 2026-11-05 remove-teacher-management §2).
 
 * Books and knowledge bases stay governed by their ``visibility`` column:
   ``private`` reaches nobody but the owner. A public item without a scope row
   reaches everyone, as before; with one, only its audience.
 * A Mastery Path's audience is turned into assignments: :func:`reconcile_template`
   when its receivers change, :func:`reconcile_student` when a learner opens
-  their learning list. An unmanaged path keeps its hand-made assignments.
+  their learning list. An unmanaged path keeps its old hand-made assignments.
 * An item an administrator took down reaches nobody but its owner.
 
 Reading never creates the store. The store is a leaf: writers here never
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 import logging
 import time
@@ -69,6 +68,7 @@ class ScopeNeedsConfirmation(ScopeError):
 class Scope:
     #: Content from before the market only; new content reaches everyone through the market.
     everyone: bool = False
+    #: Accounts named by older content (e.g. a teacher's remedial set); read, never added.
     users: list[str] = field(default_factory=list)
     #: False when the item has never had a scope (the old rule applies).
     managed: bool = True
@@ -131,7 +131,7 @@ def _stored_scope(kind: str, item_id: str) -> Scope | None:
 
 
 def named_items(kind: str, user_id: str) -> list[str]:
-    """Items whose stored scope names this account (e.g. a remedial set sent to chosen learners)."""
+    """Items whose stored scope names this account (legacy: content once sent to chosen learners)."""
     with store.read() as conn:
         if conn is None:
             return []
@@ -211,25 +211,6 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
         )
 
 
-#: The receivers the publisher chose for this publication (see :func:`chosen_scope`).
-_chosen: ContextVar[Scope | None] = ContextVar("publish_chosen_scope", default=None)
-
-
-@contextmanager
-def chosen_scope(scope: Scope | None) -> Iterator[None]:
-    """Publish inside this block to the receivers the publisher chose (e.g. a remedial set's learners).
-
-    Set by the publish routes around the visibility change, so the scope is
-    written in the same step as the publication; materials made public along
-    with a book or a path get the same receivers.
-    """
-    token = _chosen.set(scope)
-    try:
-        yield
-    finally:
-        _chosen.reset(token)
-
-
 @contextmanager
 def join_only(enabled: bool = True) -> Iterator[None]:
     """Kept for callers that say so explicitly: publishing reaches only who joins anyway."""
@@ -237,7 +218,7 @@ def join_only(enabled: bool = True) -> Iterator[None]:
 
 
 def default_scope_on_publish(kind: str, item_id: str) -> None:
-    """A first publication stores its receivers: the ones chosen, or nobody (people join).
+    """A first publication stores an empty scope: nobody is named, people join.
 
     Runs where an item becomes public or published, inside that write, so an
     item is never readable by everyone in between. An item that already has a
@@ -248,13 +229,6 @@ def default_scope_on_publish(kind: str, item_id: str) -> None:
 
     user = get_current_user_or_none()
     if user is None or get_scope(kind, item_id) is not None:
-        return
-    chosen = _chosen.get()
-    if chosen is not None and not chosen.empty:
-        from deeptutor.publishing.service import PublishService
-
-        validated = PublishService(user)._validated(kind, chosen.everyone, chosen.users, Scope())
-        _store_scope(kind, item_id, validated, actor_id=user.id)
         return
     _store_scope(kind, item_id, Scope(), actor_id=user.id)
 
@@ -369,26 +343,6 @@ def reconcile_student_quietly(student_id: str) -> None:
         logger.exception("Could not update the Mastery Path assignments of %s", student_id)
 
 
-def path_added_students(template_id: str, student_ids: list[str], *, actor_id: str) -> None:
-    """Hand-picked learners join a scoped path's audience as named accounts."""
-    scope = _stored_scope(MASTERY_PATH, template_id)
-    if scope is None:
-        return
-    scope.users = list(dict.fromkeys([*scope.users, *student_ids]))
-    _store_scope(MASTERY_PATH, template_id, scope, actor_id=actor_id)
-
-
-def path_revoke_allowed(template_id: str, student_id: str, *, actor_id: str) -> None:
-    """Drop a named learner from a scoped path; refuse when "everyone" still reaches them."""
-    scope = _stored_scope(MASTERY_PATH, template_id)
-    if scope is None:
-        return
-    scope.users = [u for u in scope.users if u != student_id]
-    if scope.everyone:
-        raise ScopeError("This path reaches everyone; change who receives it instead.")
-    _store_scope(MASTERY_PATH, template_id, scope, actor_id=actor_id)
-
-
 __all__ = [
     "BOOK",
     "COURSE",
@@ -405,14 +359,11 @@ __all__ = [
     "ScopeNotFound",
     "allows",
     "audience",
-    "chosen_scope",
     "forget",
     "get_scope",
     "join_only",
     "managed_items",
     "named_items",
-    "path_added_students",
-    "path_revoke_allowed",
     "reconcile_student",
     "reconcile_student_quietly",
     "reconcile_template",

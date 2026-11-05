@@ -14,6 +14,7 @@ import pytest
 
 from deeptutor.knowledge import registry as kb_registry
 from deeptutor.learning.models import TopicSource, TopicSourceKind
+from tests.multi_user.path_members import leave_path
 
 CODE = "referenced_by_teacher_paths"
 
@@ -367,7 +368,7 @@ def test_confirmation_is_bound_to_the_counts_that_were_shown(
     from deeptutor.teaching.service import TeachingService
 
     with as_account("tina"):
-        TeachingService().revoke(cited_by_tinas_path, teaching_users["sam"]["id"])
+        leave_path(cited_by_tinas_path, teaching_users["sam"]["id"])
     stale = client.put(url, json={
         "visibility": "private", "confirm": True, "expected_paths": 1, "expected_students": 2,
     }, headers=_auth("tom"))

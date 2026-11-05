@@ -139,7 +139,7 @@ it("tells a visitor to ask an administrator while registration is closed, invite
 
 const task = (over: Partial<MyTask>): MyTask => ({
   id: "t", kind: "note", title: "T", description: "", target_id: "", target_title: "", settings: {},
-  due_at: null, open_at: null, status: "published", created_at: 1, updated_at: 1, published_at: 1,
+  status: "published", created_at: 1, updated_at: 1, published_at: 1,
   course_id: "", course_title: "", total: 0, completed: 0, target_available: true, ...over,
 });
 

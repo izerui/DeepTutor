@@ -1,4 +1,7 @@
-"""Teacher endpoints for mastery templates: publish, assign, revoke, archive.
+"""Teacher endpoints for mastery templates: publish, archive, delete.
+
+Nobody is handed a path or taken off it by hand: it reaches the people who
+join it (spec 2026-11-05 remove-teacher-management §1.2).
 
 Every route requires a teacher or an admin (``require_teacher_or_admin`` reads
 the live role). Ownership is enforced by :class:`TeachingService`.
@@ -179,10 +182,6 @@ class RegisterTemplateRequest(BaseModel):
     workspace_id: str = Field(default="", max_length=200)
 
 
-class AssignRequest(BaseModel):
-    student_ids: list[str] = Field(..., min_length=1, max_length=500)
-
-
 async def _run(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run a service call off the event loop and map its errors to HTTP."""
     try:
@@ -215,22 +214,6 @@ async def publish_template(template_id: str, body: PublishRequest):
     return await _run(TeachingService().publish, template_id, body)
 
 
-@router.get("/templates/{template_id}/assignments")
-async def list_assignments(template_id: str):
-    return {"assignments": await _run(TeachingService().assignments, template_id)}
-
-
-@router.post("/templates/{template_id}/assignments")
-async def assign_students(template_id: str, body: AssignRequest):
-    return {"assignments": await _run(TeachingService().assign, template_id, body.student_ids)}
-
-
-@router.delete("/templates/{template_id}/assignments/{student_id}")
-async def revoke_assignment(template_id: str, student_id: str):
-    await _run(TeachingService().revoke, template_id, student_id)
-    return {"ok": True}
-
-
 @router.post("/templates/{template_id}/archive")
 async def archive_template(template_id: str):
     service = TeachingService()
@@ -242,9 +225,3 @@ async def archive_template(template_id: str):
 async def delete_template(template_id: str):
     await _run(TeachingService().delete, template_id)
     return {"ok": True}
-
-
-@router.get("/students")
-async def list_students(q: str = ""):
-    """Who a teacher may assign: student accounts, id/username/avatar only (D5)."""
-    return {"students": await _run(TeachingService().list_students, q[:100])}

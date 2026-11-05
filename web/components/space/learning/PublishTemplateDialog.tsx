@@ -170,7 +170,6 @@ export function PublishTemplateDialog({
         kb_choices: kbChoices,
         book_choices: bookChoices,
         // Platform batch 1 §4.4: no receivers are chosen; people join from the market.
-        student_ids: [],
         join_only: true,
       });
       // Published, but something after the revision failed: say so and let

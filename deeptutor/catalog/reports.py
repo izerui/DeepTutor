@@ -136,7 +136,6 @@ class LearnerReportService(LearnerData):
         return out
 
     def report(self, kind: str, item_id: str, days: int | None = None) -> dict[str, Any]:
-        from deeptutor.catalog import attention
         from deeptutor.multi_user.accounts import accounts as _accounts
 
         info = self._require_author(kind, item_id)
@@ -146,7 +145,6 @@ class LearnerReportService(LearnerData):
         paths, sets, task_ids = self._scope_of(kind, item_id)
         practice = self._my_practice_results(learners)
         progress = self._task_progress(task_ids, learners)
-        flags = attention.for_teacher(self.actor.id, learners)
         import time
 
         since = time.time() - days * 86400 if days else 0.0
@@ -183,7 +181,6 @@ class LearnerReportService(LearnerData):
                 "paths": report["teacher_paths"],
                 "practice_sets": mine_sets,
                 "tasks": tasks,
-                "flags": flags.get(user_id, []),
             })
         return {
             "kind": kind, "id": item_id, "title": info.title, "period_days": days,
@@ -233,7 +230,7 @@ class LearnerReportService(LearnerData):
         writer = csv.writer(out)
         writer.writerow([
             "learner", "last_activity", "answers_in_period", "kp_mastered", "kp_total", "tasks_done", "tasks_total",
-            "practice_sets_done", "practice_score_ratio", "attention",
+            "practice_sets_done", "practice_score_ratio",
         ])
         for row in report["learners"]:
             overall = row["overall"]
@@ -247,7 +244,7 @@ class LearnerReportService(LearnerData):
             writer.writerow([
                 row["username"], _when(last), overall.get("period_answers", 0), kp_mastered, kp_total,
                 tasks.get("done", ""), tasks.get("total", ""), len(sets),
-                f"{ratio:.2f}" if ratio is not None else "", "; ".join(flag["kind"] for flag in row["flags"]),
+                f"{ratio:.2f}" if ratio is not None else "",
             ])
         return out.getvalue()
 

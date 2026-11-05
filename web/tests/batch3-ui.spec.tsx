@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-// Spec 2026-11-03 batch 3 §13: review and regrade, options, remedial, the
-// workbench, attention, navigation by role, AI left, similar questions.
+// Spec 2026-11-03 batch 3 §13: review and regrade, options, the workbench,
+// navigation by role, AI left, similar questions.
 const { practice, workbench, t } = vi.hoisted(() => ({
-  practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn(), remedialFromSet: vi.fn(), remedialFromPath: vi.fn() },
+  practice: { getAttempt: vi.fn(), regradeQuestion: vi.fn() },
   workbench: { getWorkbench: vi.fn(), getMyAiUsage: vi.fn(), similarQuestions: vi.fn(),
     getSchoolAiLimit: vi.fn(), setSchoolAiLimit: vi.fn(), AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }] },
   t: (key: string, values?: Record<string, unknown>) =>
@@ -17,12 +17,11 @@ vi.mock("@/lib/tasks-api", () => ({ getHome: vi.fn(() => Promise.resolve({ mine:
 vi.mock("@/lib/book-api", () => ({ bookApi: { list: vi.fn(() => Promise.resolve({ books: [] })), getSpine: vi.fn() } }));
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }));
-vi.mock("@/components/comments/Comments", () => ({ CommentEditor: () => null, MyComments: () => null }));
 
 import { AiUsageNote } from "@/components/home/AiUsage";
 import { TeacherWorkbench } from "@/components/home/Workbench";
 import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
-import { AttemptReview, OptionBars, RemedialFromSet, takeSuggested } from "@/components/practice-sets/SetReview";
+import { AttemptReview, OptionBars } from "@/components/practice-sets/SetReview";
 import { navVisibleForRole, PRIMARY_NAV } from "@/components/sidebar/nav-entries";
 
 beforeEach(() => {
@@ -32,7 +31,7 @@ beforeEach(() => {
 });
 
 const attempt = {
-  id: "sub_1", set_id: "ps_1", revision: 1, student_id: "u_sara", username: "sara", submitted_at: 1, late: false,
+  id: "sub_1", set_id: "ps_1", revision: 1, student_id: "u_sara", username: "sara", submitted_at: 1,
   score: 1, max_score: 5, regraded_at: null,
   questions: [
     { question_id: "q1", question: "Explain gravity.", question_type: "short_answer", options: {}, correct_answer: "Mass attracts.",
@@ -64,23 +63,9 @@ it("draws how many picked each option and marks the right one", () => {
   expect(within(list).getByText("B. 4").className).toContain("font-semibold");
 });
 
-it("makes a remedial draft and hands its suggested students to the editor", async () => {
-  practice.remedialFromSet.mockResolvedValue({
-    set: { id: "ps_new" }, suggested_students: [{ id: "u_sara", username: "sara" }],
-  });
-  const created = vi.fn();
-  render(<RemedialFromSet setId="ps_1" questionIds={["q1", "q2"]} onCreated={created} />);
-  fireEvent.click(screen.getByRole("button", { name: "Make remedial practice" }));
-  await waitFor(() => expect(practice.remedialFromSet).toHaveBeenCalledWith("ps_1", ["q1", "q2"], 1, "Remedial: "));
-  expect(created).toHaveBeenCalled();
-  expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
-});
-
-it("lays out the workbench: attention and what was sent, no classes, nothing to grade", async () => {
+it("lays out the workbench: what was sent, no classes, nothing to grade, nobody to watch", async () => {
   workbench.getWorkbench.mockResolvedValue({
     role: "teacher",
-    attention: [],
-    attention_total: 0,
     classes: [],
     sent: [{ kind: "practice_set", id: "ps_1", title: "Week 3", done: 1, total: 2, updated_at: 1 }],
   });
@@ -88,12 +73,11 @@ it("lays out the workbench: attention and what was sent, no classes, nothing to 
   expect(await screen.findByText("1 / 2 done")).toBeTruthy();
   expect(screen.queryByText("To grade")).toBeNull();
   expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
-  expect(screen.queryByRole("heading", { name: /Students who need attention/ })).toBeNull();
-  expect(screen.getByText("Everyone is on track.")).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: /need attention/ })).toBeNull();
 });
 
 it("shows each role its entries and students only the features allowed to them", () => {
-  // Traceability #1: students answer the practice sets they joined or were sent.
+  // Traceability #1: students answer the practice sets they joined.
   expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
   expect(navVisibleForRole("/practice-sets", "teacher", null)).toBe(true);
   expect(PRIMARY_NAV.some((entry) => entry.href === "/grading")).toBe(false);

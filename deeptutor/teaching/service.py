@@ -1,9 +1,8 @@
 """Teacher-side operations on mastery templates.
 
-Teachers manage their own templates; admins manage everyone's assignments,
-archives and deletes but never publish another teacher's template (D17): its
-draft lives in that teacher's workspace, so the owner is the only one who can
-read it. Preview and publication also refuse to plan sources under any
+Teachers manage their own templates; admins archive and delete anyone's but
+never publish another teacher's template (D17): its draft lives in that
+teacher's workspace, so the owner is the only one who can read it. Preview and publication also refuse to plan sources under any
 identity but the owner's own request, so a bare book id is never lazily
 registered under someone else's account.
 
@@ -19,8 +18,11 @@ Material protection follows applied revisions (preflight item 6): while an
 active student's instance is still on an older revision (for example with a
 pending old-revision question), the references that revision needs stay in
 place. :func:`sync_material_references` is the hook that releases them once
-that instance's migration commits (Task 10); revoke and archive release
-immediately.
+that instance's migration commits (Task 10); a learner leaving and archive
+release immediately.
+
+A path reaches the people who join it: nobody is handed a path or taken off
+it by hand (spec 2026-11-05 remove-teacher-management §1.2).
 """
 
 from __future__ import annotations
@@ -88,10 +90,6 @@ class TemplateConflict(TeachingError):
 
 
 class PublishBlocked(TeachingError):
-    status_code = 422
-
-
-class InvalidStudents(TeachingError):
     status_code = 422
 
 
@@ -342,7 +340,7 @@ class TeachingService:
             raise TemplateNotFound("Teacher path not found")
         if owner_only:
             raise TemplateForbidden(
-                "Only the teacher who owns this path can edit, publish and assign it (its "
+                "Only the teacher who owns this path can edit and publish it (its "
                 "draft lives in their workspace). Admins can archive or delete it."
             )
         return template
@@ -455,7 +453,7 @@ class TeachingService:
         if not template.draft_path_id:
             raise TemplateConflict(
                 "This teacher path has no editable draft any more (its teacher's "
-                "account was removed). It can still be assigned, revoked or archived."
+                "account was removed). Its learners keep it; it can still be archived."
             )
         with _scope(template.draft_workspace_id):
             store = LearningStore()
@@ -536,35 +534,22 @@ class TeachingService:
             "can_publish": not issues and not plan.issues,
             # Spec 2026-11-02 §4.6: other people's materials students cannot use.
             "material_warnings": await asyncio.to_thread(self._material_reach, template, plan),
-            # §4.1: no class to default to, so the publisher must pick students.
-            "needs_students": await asyncio.to_thread(self._needs_students, template),
         }
-
-    @staticmethod
-    def _needs_students(template: MasteryTemplate) -> bool:
-        from deeptutor.publishing import scope as scopes
-
-        # People join from the market: a first publication never needs students picked.
-        return False
 
     def _material_reach(self, template: MasteryTemplate, plan: SourcePlan) -> list[dict[str, Any]]:
         """Cited books and knowledge bases of someone else that some recipients cannot read.
 
-        Recipients are the path's current receivers and learners, or (first
-        publication) the teacher's learners. Only a warning: the teacher may
-        still publish, or replace the material with their own.
+        Recipients are the path's current learners (and those an older path
+        named); before a first publication nobody has joined yet. Only a
+        warning: the teacher may still publish, or replace the material with
+        their own.
         """
         from deeptutor.book import registry as book_registry
-        from deeptutor.catalog.learners import learners_of
         from deeptutor.knowledge import registry as kb_registry
         from deeptutor.publishing import scope as scopes
 
         owner = template.owner_user_id
-        current = scopes.get_scope(scopes.MASTERY_PATH, template.id)
-        recipients = (
-            scopes.audience(current, students_only=True, owner_id=owner)
-            if current is not None else set(learners_of(owner))
-        )
+        recipients = scopes.audience(scopes._template_scope(template.id), students_only=True, owner_id=owner)
         if not recipients:
             return []
         cited: list[tuple[str, str, str, str, str]] = []
@@ -670,12 +655,11 @@ class TeachingService:
         self,
         template: MasteryTemplate,
         revision: TemplateRevision,
-        students: list[str],
         user: Any,
         explicit_kbs: list[str],
         explicit_books: list[str],
     ) -> list[dict[str, str]]:
-        """References and assignments; each failure becomes a warning.
+        """References and the first publication's scope; each failure becomes a warning.
 
         The references are computed and written under the store's material
         lock, against the template state read inside it: an archive, a newer
@@ -699,30 +683,13 @@ class TeachingService:
         except Exception as exc:  # the lock itself (e.g. the store is unwritable)
             warn("knowledge_base_references", exc)
             warn("book_references", exc)
-        if students and archived:
-            warn("assignments", TemplateConflict("The path was archived while publishing."))
-            return warnings
         from deeptutor.publishing import scope as scopes
 
         first = revision.revision == 1 and not archived
         if first:
             try:
-                # The students picked in the publish dialog are its receivers; with
-                # none picked it reaches only the people who join it.
-                if students:
-                    if scopes.get_scope(scopes.MASTERY_PATH, template.id) is None:
-                        scopes._store_scope(
-                            scopes.MASTERY_PATH, template.id, scopes.Scope(users=list(students)),
-                            actor_id=user.id,
-                        )
-                else:
-                    scopes.default_scope_on_publish(scopes.MASTERY_PATH, template.id)
-            except Exception as exc:
-                warn("assignments", exc)
-        if students:
-            try:
-                scopes.path_added_students(template.id, students, actor_id=user.id)
-                self.store.assign(template.id, students, assigned_by=user.id)
+                # It reaches only the people who join it.
+                scopes.default_scope_on_publish(scopes.MASTERY_PATH, template.id)
             except Exception as exc:
                 warn("assignments", exc)
         if first:
@@ -806,11 +773,6 @@ class TeachingService:
         plan = await asyncio.to_thread(self._plan, template, topic)
         if issues or plan.issues:
             raise _blocked(issues, [asdict(issue) for issue in plan.issues])
-        students = await asyncio.to_thread(self._validate_students, request.student_ids)
-        from deeptutor.publishing import scope as scopes
-
-        # Materials made public with the path reach the same receivers.
-        chosen = scopes.Scope(users=list(students)) if students else None
         try:
             outline = snapshot_outline(progress, topic, template.kp_aliases)
         except SnapshotError as exc:
@@ -857,8 +819,7 @@ class TeachingService:
         done: list[str] = []
         steps = self._share_steps(plan, kb_choices, book_choices, explicit_kbs)
         try:
-            with scopes.chosen_scope(chosen):
-                await asyncio.to_thread(self._run_steps, template, steps, done)
+            await asyncio.to_thread(self._run_steps, template, steps, done)
         except _StepFailed as exc:
             raise _blocked(
                 [],
@@ -897,9 +858,9 @@ class TeachingService:
                 "was archived). Preview again."
             ) from exc
 
-        # 4. Side effects after the revision: references and assignments.
+        # 4. Side effects after the revision: references and who receives it.
         warnings = await asyncio.to_thread(
-            self._after_revision, template, revision, students, user, explicit_kbs, explicit_books
+            self._after_revision, template, revision, user, explicit_kbs, explicit_books
         )
         described, affected = await asyncio.to_thread(self._describe_with_count, updated)
         return {
@@ -923,94 +884,6 @@ class TeachingService:
 
     def _describe_with_count(self, template: MasteryTemplate) -> tuple[dict, int]:
         return self.describe(template), self.store.count_active(template.id)
-
-    # ---- assignments ------------------------------------------------------
-
-    def _validate_students(self, student_ids: list[str]) -> list[str]:
-        """Only active student accounts (R4); teachers trial their own draft."""
-        wanted = [sid for sid in dict.fromkeys(str(i).strip() for i in student_ids) if sid]
-        if not wanted:
-            return []
-        accounts = _accounts()
-        students = {
-            user_id
-            for user_id, row in accounts.items()
-            if row.get("role") == "student" and not row.get("disabled")
-        }
-        if any(student_id not in students for student_id in wanted):
-            raise InvalidStudents("Only active student accounts can be assigned.")
-        # A teacher hands a path only to their own learners (who joined their content).
-        reachable = self._reachable_students()
-        if reachable is not None and any(student_id not in reachable for student_id in wanted):
-            raise InvalidStudents("You can only assign learners of your own content.")
-        return wanted
-
-    def _reachable_students(self) -> set[str] | None:
-        """``None`` for administrators; a teacher's own learners otherwise."""
-        user_id, is_admin = self._actor()
-        if is_admin:
-            return None
-        from deeptutor.catalog.learners import learners_of
-
-        return learners_of(user_id)
-
-    def assignments(self, template_id: str) -> list[dict]:
-        template = self.get(template_id)
-        accounts = _accounts()
-        rows = []
-        for assignment in self.store.list_assignments(template.id):
-            account = accounts.get(assignment.student_user_id) or {}
-            rows.append(
-                {
-                    **assignment.model_dump(mode="json"),
-                    "username": str(account.get("username") or ""),
-                    "avatar": str(account.get("avatar") or ""),
-                }
-            )
-        return rows
-
-    def assign(self, template_id: str, student_ids: list[str]) -> list[dict]:
-        # Spec 2026-10-29 D10: who receives a path is its teacher's choice; an
-        # administrator withdraws (archives) or deletes it, never re-targets it.
-        template = self.get(template_id, owner_only=True)
-        self._ensure_not_archived(template)
-        if template.status != "published":
-            raise TemplateConflict("Publish this path before assigning students.")
-        students = self._validate_students(student_ids)
-        user_id, _ = self._actor()
-        from deeptutor.publishing.scope import path_added_students
-
-        # Spec 2026-10-29 §7: hand-picked students join a scoped path's audience.
-        path_added_students(template.id, students, actor_id=user_id)
-        self.store.assign(template.id, students, assigned_by=user_id)
-        try:
-            sync_material_references(template.id, store=self.store, restore=True)
-        except Exception:
-            # The assignment stands; its old-revision materials stay unavailable.
-            logger.exception(
-                "Could not restore old materials of teacher path %s for students %s",
-                template.id,
-                students,
-            )
-        return self.assignments(template.id)
-
-    def revoke(self, template_id: str, student_id: str) -> None:
-        """Deny at once; then release old-revision materials nobody else needs."""
-        template = self.get(template_id, owner_only=True)  # D10, as in :meth:`assign`
-        from deeptutor.publishing.scope import ScopeError, path_revoke_allowed
-
-        try:
-            path_revoke_allowed(template.id, student_id, actor_id=self._actor()[0])
-        except ScopeError as exc:
-            raise TemplateConflict(str(exc)) from exc
-        if self.store.revoke(template.id, student_id) is None:
-            raise TemplateNotFound("Assignment not found")
-        notify_instance_closed(template.id)
-        try:
-            sync_material_references(template.id, store=self.store)
-        except Exception:
-            # The revoked assignment already denies access; this only tidies.
-            logger.exception("Could not release old materials of teacher path %s", template.id)
 
     def _release_references(self, template: MasteryTemplate) -> None:
         for step, run in (
@@ -1045,18 +918,6 @@ class TeachingService:
 
         forget_listing("mastery_path", template.id)  # review L6
 
-    def list_students(self, query: str = "") -> list[dict]:
-        needle = query.strip().casefold()
-        reachable = self._reachable_students()
-        return [
-            {"id": user_id, "username": str(row["username"]), "avatar": str(row.get("avatar") or "")}
-            for user_id, row in _accounts().items()
-            if row.get("role") == "student"
-            and not row.get("disabled")
-            and (reachable is None or user_id in reachable)
-            and (not needle or needle in str(row["username"]).casefold())
-        ][:200]
-
 
 #: Hand-over stages of :func:`handle_account_deleted`, in the order they run.
 ACCOUNT_DELETION_STAGES: tuple[str, ...] = (
@@ -1078,8 +939,8 @@ def handle_account_deleted(
 
     A deleted teacher's paths move to the admin who deleted them, together
     with their active KB/book reference ownership, so assigned students keep
-    learning; the draft is detached, so the path can be assigned, revoked or
-    archived but never republished (D17). A deleted student's assignments are
+    learning; the draft is detached, so the path can be archived but never
+    republished (D17). A deleted student's assignments are
     revoked so the counts teachers see stay true, and the old-revision
     materials nobody needs any more are released.
 

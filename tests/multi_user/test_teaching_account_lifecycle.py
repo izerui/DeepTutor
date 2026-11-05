@@ -19,6 +19,7 @@ from deeptutor.teaching.access import studying_template
 from deeptutor.teaching.models import PublishRequest
 from deeptutor.teaching.service import TeachingService, TemplateConflict
 from deeptutor.teaching.store import TeachingStore
+from tests.multi_user.path_members import join_path
 
 TEMPLATE = "mastery_template"
 
@@ -43,15 +44,14 @@ def test_deleting_a_teacher_hands_their_paths_to_the_admin(
     assert topics[0]["origin"]["teacher_name"] == "adam"
 
 
-def test_the_admin_manages_a_transferred_path_but_cannot_republish_it(
+def test_the_admin_keeps_a_transferred_path_but_cannot_republish_it(
     sara_instance, teaching_users, as_account
 ):
     _delete_admin_user("tina", _as_admin(teaching_users))
+    join_path(sara_instance.template_id, teaching_users["sam"]["id"])  # learners still join it
 
     with as_account("adam"):
         service = TeachingService()
-        rows = service.assign(sara_instance.template_id, [teaching_users["sam"]["id"]])
-        assert sorted(r["username"] for r in rows) == ["sam", "sara"]
         with pytest.raises(TemplateConflict):
             asyncio.run(service.preview_publish(sara_instance.template_id))
         with pytest.raises(TemplateConflict):
@@ -60,12 +60,9 @@ def test_the_admin_manages_a_transferred_path_but_cannot_republish_it(
                     sara_instance.template_id, PublishRequest(draft_revision=1)
                 )
             )
-        service.revoke(sara_instance.template_id, teaching_users["sam"]["id"])
         assert service.archive(sara_instance.template_id).status == "archived"
     store = TeachingStore()
-    assert store.get_assignment(sara_instance.template_id, teaching_users["sam"]["id"]).status == (
-        "revoked"
-    )
+    assert store.get_assignment(sara_instance.template_id, teaching_users["sam"]["id"]).status == "active"
     assert store.get_template(sara_instance.template_id).current_revision == 1
 
 

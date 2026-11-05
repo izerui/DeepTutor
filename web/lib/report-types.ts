@@ -29,13 +29,6 @@ export interface TeacherPathReport {
   }[];
 }
 
-/** Why a student needs attention (spec 2026-11-03 batch 3 §5.3). */
-export type AttentionFlag =
-  | { kind: "inactive"; days: number | null }
-  | { kind: "overdue"; count: number }
-  | { kind: "mistakes_rising"; recent: number; before: number }
-  | { kind: "stuck"; kp_id: string; name: string; days: number; wrong: number; template_id: string };
-
 export interface OverallReport {
   path_count: number;
   self_study_path_count: number;
@@ -79,6 +72,5 @@ export interface PracticeSetResult {
   /** The maximum of the version the best score was on. */
   best_max_score: number;
   max_score: number;
-  late: boolean;
   last_submitted_at: number;
 }

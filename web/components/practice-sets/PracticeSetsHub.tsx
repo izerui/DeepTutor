@@ -21,11 +21,9 @@ import {
 import { SetEditor } from "./SetEditor";
 import { TakeSet } from "./TakeSet";
 
-import { formatDate } from "./practice-format";
-
 /**
  * Practice sets (spec 2026-10-29 §8): teachers and administrators write and
- * publish them; everyone answers the ones they joined or were sent by name.
+ * publish them; everyone answers the ones they joined.
  */
 export default function PracticeSetsHub() {
   const { t } = useTranslation();
@@ -42,7 +40,7 @@ export default function PracticeSetsHub() {
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
           {isAdmin || isTeacher
             ? t("Write question sets, publish them, then put them in the learning market, and see how learners did.")
-            : t("Practice sets you joined or were sent. Your answers go to your own question bank.")}
+            : t("Practice sets you joined. Your answers go to your own question bank.")}
         </p>
       </header>
       {isAdmin || isTeacher ? (
@@ -114,13 +112,8 @@ function AuthorView({ initialSet, courseParam }: { initialSet: string | null; co
   const { t } = useTranslation();
   const { isAdmin } = useAuthStatus();
   const [sets, setSets] = useState<PracticeSetSummary[] | null>(null);
-  // ``?set=`` of one's own set opens it (a remedial draft made from a report, batch 3 §3.1).
+  // ``?set=`` of one's own set opens it (e.g. from a course's report).
   const [selected, setSelected] = useState<string | null>(initialSet);
-  // Follow-ups §3: ``&course=`` (from a course's report) goes with that set and the
-  // remedial drafts made from it, so they can be added to the course once published.
-  const [courseLink, setCourseLink] = useState<{ course: string; sets: string[] } | null>(() =>
-    courseParam && initialSet ? { course: courseParam, sets: [initialSet] } : null,
-  );
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -195,12 +188,8 @@ function AuthorView({ initialSet, courseParam }: { initialSet: string | null; co
       <section className="min-w-0">
         {selected ? (
           <SetEditor key={selected} setId={selected} onChanged={refresh} onDeleted={() => { setSelected(null); refresh(); }}
-            courseId={courseLink?.sets.includes(selected) ? courseLink.course : null}
-            onOpenSet={(id) => {
-              setCourseLink((cur) => (cur && cur.sets.includes(selected) ? { ...cur, sets: [...cur.sets, id] } : cur));
-              setSelected(id);
-              refresh();
-            }} />
+            // Follow-ups §3: ``&course=`` (from a course's report) goes with that set, so it can be added to the course.
+            courseId={courseParam && selected === initialSet ? courseParam : null} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
             <ClipboardList size={16} className="mr-2" />
@@ -256,7 +245,7 @@ function WithdrawSection() {
   );
 }
 
-/** The sets one joined from the market or was sent by name (remedial), to answer. */
+/** The sets one joined from the market, to answer. */
 function StudentView({ initialSet }: { initialSet: string | null }) {
   const { t } = useTranslation();
   const [sets, setSets] = useState<AssignedSet[] | null>(null);
@@ -298,13 +287,12 @@ function StudentView({ initialSet }: { initialSet: string | null }) {
           <p className="text-[14px] font-medium text-[var(--foreground)]">{set.title}</p>
           <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]">
             <SourceBadge provenance={set.provenance ?? { kind: "teacher", name: set.teacher }} />
-            {set.due_at ? t("Due {{date}}", { date: formatDate(set.due_at) }) : ""}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
             {set.submissions === 0
               ? t("Not answered yet")
               : set.best_score === null
-                ? t("Submitted · results after the deadline")
+                ? t("Submitted")
                 : t("Best score {{score}} / {{max}}", { score: set.best_score, max: set.max_score })}
           </p>
           <button type="button" className={primaryClass} onClick={() => setSelected(set.id)}>

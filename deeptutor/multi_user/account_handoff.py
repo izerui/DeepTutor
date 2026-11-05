@@ -51,8 +51,6 @@ STAGES: tuple[str, ...] = (
     "tasks",
     "task_records",
     "notifications",
-    # Spec 2026-11-03 batch 2 §8: a deleted student's comments go.
-    "comments",
     # Batch 3 §11: the answers they handed in for review go too.
     "practice_answers",
     # Platform batch 1: listings follow their content; what the account joined goes.
@@ -75,12 +73,6 @@ class HandoffBlocked(RuntimeError):
 
 def _tasks():
     from deeptutor.tasks import service
-
-    return service
-
-
-def _comments():
-    from deeptutor.comments import service
 
     return service
 
@@ -190,7 +182,6 @@ def run_stages(
         ("tasks", lambda: _tasks().transfer_tasks(user_id, successor_id, counts=counts)),
         ("task_records", lambda: _tasks().forget_student(user_id)),
         ("notifications", lambda: _notifications().forget_user(user_id)),
-        ("comments", lambda: _comments().forget_student(user_id)),
         ("practice_answers", lambda: _practice_review().forget_student_answers(user_id)),
         ("catalog", lambda: _catalog_forget(user_id)),
     ):

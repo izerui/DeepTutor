@@ -1,7 +1,6 @@
 import { LEARNING_HUB } from '@/lib/learning-routes'
 import {
   Bot,
-  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   GraduationCap,
@@ -102,7 +101,6 @@ export const PRIMARY_NAV: NavEntry[] = [
   // Spec 2026-11-03 batch 1: tasks.
   { href: '/tasks', label: 'Tasks', icon: ClipboardCheck, tooltipKey: 'Tasks tooltip', surfaces: ['chat'] },
   // Spec 2026-11-03 batch 2 §7: openings and deadlines by month.
-  { href: '/calendar', label: 'Calendar', icon: CalendarDays, tooltipKey: 'Calendar tooltip', surfaces: ['chat'] },
   {
     href: '/kanban',
     label: 'Task Board',

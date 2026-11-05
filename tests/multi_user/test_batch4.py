@@ -90,11 +90,16 @@ def test_a_practice_average_needs_three_scores(as_account, third_student):
     assert _take(as_account, "sara", set_id)["class_average"] == round(2 * 2 / 3, 1)
 
 
-def test_no_average_before_the_answers_show(as_account, third_student):
-    set_id = _set(as_account, due_at=time.time() + 3600, reveal="after_due")
+def test_an_older_after_due_set_shows_the_average_once_submitted(as_account, third_student):
+    from deeptutor.practice_sets import store
+
+    set_id = _set(as_account)
+    with store.write() as conn:  # older data: answers after a deadline that has not come
+        conn.execute("UPDATE practice_sets SET reveal = 'after_due', due_at = ? WHERE id = ?",
+                     (time.time() + 3600, set_id))
     for name in ("sara", "sam", "sue"):
         _answer(as_account, name, set_id, "B")
-    assert _take(as_account, "sara", set_id)["class_average"] is None
+    assert _take(as_account, "sara", set_id)["class_average"] == 2.0
 
 
 # ── hand-over summaries (§3) ───────────────────────────────

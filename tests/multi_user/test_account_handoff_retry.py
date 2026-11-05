@@ -37,7 +37,6 @@ ALL_STAGES = (
     "tasks",
     "task_records",
     "notifications",
-    "comments",
     "practice_answers",
     "catalog",
 )

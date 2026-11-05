@@ -3,12 +3,9 @@ import { downloadAuthenticated } from "./authenticated-download";
 import type { ScopeUpdate } from "./publish-api";
 import type {
   AttemptTally,
-  AttentionFlag,
   PracticeSetResult,
   TeacherPathReport,
 } from "./report-types";
-
-export type { AttentionFlag } from "./report-types";
 
 /** The learning market is system-level: never workspace-scoped (platform batch 1 §8). */
 const BASE = "/api/catalog";
@@ -20,7 +17,7 @@ export type ListingStatus = "none" | "draft" | "pending" | "rejected" | "listed"
 export type SortOrder = "newest" | "popular" | "rating";
 
 /** Published for the market: nobody receives it until they join (platform batch 1 §4.4). */
-export const JOIN_ONLY_SCOPE: ScopeUpdate = { everyone: false, users: [], classes: [], groups: [], join_only: true };
+export const JOIN_ONLY_SCOPE: ScopeUpdate = { everyone: false, join_only: true };
 
 /** Chinese and English always; the built-in entries also in German, French, Polish and Ukrainian. */
 export interface TaxonomyName {
@@ -376,7 +373,6 @@ export interface LearnerRow {
   practice_sets: PracticeSetResult[];
   /** ``null`` for a Mastery Path (no tasks). */
   tasks: LearnerTasks | null;
-  flags: AttentionFlag[];
 }
 
 export interface LearnerReport {

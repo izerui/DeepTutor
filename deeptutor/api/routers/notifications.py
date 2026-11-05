@@ -28,21 +28,8 @@ async def list_notifications():
     return {"notifications": items, "unread": unread}
 
 
-def _sweep() -> None:
-    """Opening and due-soon reminders happen when someone looks (batch 2 §9)."""
-    from deeptutor.tasks.service import StudentTasks
-
-    try:
-        StudentTasks().sweep()
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("Could not check task reminders")
-
-
 @router.get("/unread")
 async def unread():
-    await asyncio.to_thread(_sweep)
     return {"unread": await asyncio.to_thread(service.unread_count, get_current_user().id)}
 
 

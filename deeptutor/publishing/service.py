@@ -1,9 +1,11 @@
-"""Who may name the receivers of an item, and whom (spec 2026-10-29 §7, learning platform).
+"""Who receives an item, as its publisher sees it (spec 2026-10-29 §7, learning platform).
 
-Only the publisher sets the receivers of their own item (D10: administrators
-withdraw or delete other people's content, they do not republish it). People
-reach content by joining it from the market; a publisher may also name
-learners of their own content (a remedial set). Narrowing that cuts anyone
+Only the publisher reads or changes the receivers of their own item (D10:
+administrators withdraw or delete other people's content, they do not
+republish it). People reach content by joining it from the market; nobody is
+named any more (spec 2026-11-05 remove-teacher-management §1.2). Accounts an
+older item named, and "everyone" from before the market, are kept as stored;
+the publisher may only stop reaching everyone. Narrowing that cuts anyone
 off needs ``confirm`` (§7.2).
 """
 
@@ -29,12 +31,6 @@ from deeptutor.publishing.scope import (
     ScopeNeedsConfirmation,
     ScopeNotFound,
 )
-
-
-def _clean_ids(values: Any) -> list[str]:
-    if not isinstance(values, (list, tuple)):
-        return []
-    return [v for v in dict.fromkeys(str(x).strip() for x in values) if v]
 
 
 class PublishService:
@@ -150,42 +146,8 @@ class PublishService:
             "audience_size": len(self._reached(kind, scope, info)),
         }
 
-    def _validated(self, kind: str, everyone: bool, users: Any, current: Scope) -> Scope:
-        """Check whom the publisher names; people already named may stay.
-
-        A teacher names their own learners (who joined their content); an
-        administrator anyone. "Everyone" is reached through the market only.
-        """
-        from deeptutor.catalog.learners import learners_of
-        from deeptutor.multi_user.accounts import accounts as _accounts
-
-        users = _clean_ids(users)
-        if everyone and not current.everyone:
-            raise ScopeError("To reach everyone, put it in the learning market.")
-        accounts = _accounts()
-        # Deleted accounts drop out silently; they can no longer receive anything.
-        users = [u for u in users if u in accounts and u != self.actor.id]
-        added_users = [u for u in users if u not in current.users]
-        reachable = None if self._role() == "admin" else learners_of(self.actor.id)
-        for user_id in added_users:
-            account = accounts[user_id]
-            if account["disabled"]:
-                raise ScopeError("Only active accounts can receive content.")
-            if account["role"] not in ("student", "teacher"):
-                raise ScopeError("Only students and teachers can be chosen.")
-            if kind in STUDENT_KINDS and account["role"] != "student":
-                raise ScopeError(
-                    "Only students receive Mastery Paths." if kind == MASTERY_PATH
-                    else "Only students receive tasks." if kind in (TASK, COURSE)
-                    else "Only students receive practice sets."
-                )
-            if reachable is not None and account["role"] == "student" and user_id not in reachable:
-                raise ScopeForbidden("You can only choose learners of your own content.")
-        return Scope(everyone=bool(everyone) and current.everyone, users=users)
-
-    def set_scope(
-        self, kind: str, item_id: str, *, everyone: bool, users: Any, confirm: bool = False,
-    ) -> dict[str, Any]:
+    def set_scope(self, kind: str, item_id: str, *, everyone: bool, confirm: bool = False) -> dict[str, Any]:
+        """Keep or drop the old "everyone"; the accounts an older item named stay as stored."""
         self._require_publisher()
         info = self._item(kind, item_id)
         if kind == MASTERY_PATH and not info["public"]:
@@ -195,7 +157,9 @@ class PublishService:
         if access_state(kind, item_id)[0]:
             raise ScopeError("An administrator took this down; it reaches nobody until approved again.")
         current = self._current(kind, item_id, info)
-        new = self._validated(kind, everyone, users, current)
+        if everyone and not current.everyone:
+            raise ScopeError("To reach everyone, put it in the learning market.")
+        new = Scope(everyone=bool(everyone), users=list(current.users))
         new.members = list(current.members)  # people who joined stay whatever the publisher picks
         before = self._reached(kind, current, info)
         cut = before - self._reached(kind, new, info)
@@ -205,24 +169,6 @@ class PublishService:
         if kind == MASTERY_PATH:
             scopes.reconcile_template(item_id)
         return self.describe(kind, item_id)
-
-    def search_people(self, query: str) -> list[dict[str, Any]]:
-        """A teacher's learners (an administrator: anyone) by username, for naming receivers."""
-        from deeptutor.catalog.learners import learners_of
-        from deeptutor.multi_user.accounts import accounts as _accounts
-
-        self._require_publisher()
-        needle = str(query or "").strip().casefold()
-        if not needle:
-            return []
-        reachable = None if self._role() == "admin" else learners_of(self.actor.id)
-        return [
-            {"id": user_id, "username": account["username"], "role": account["role"]}
-            for user_id, account in sorted(_accounts().items(), key=lambda item: item[1]["username"])
-            if account["role"] in ("student", "teacher") and not account["disabled"]
-            and user_id != self.actor.id and needle in account["username"].casefold()
-            and (reachable is None or user_id in reachable)
-        ][:50]
 
 
 __all__ = ["PublishService", "ScopeError", "ScopeNeedsConfirmation"]

@@ -1,14 +1,15 @@
-"""P4: publish scopes — specific people, and content from before the market that
-reached everyone (spec 2026-10-29 §7)."""
+"""P4: publish scopes — content from before the market that reached everyone
+or named people (spec 2026-10-29 §7; nobody is named any more, spec
+2026-11-05-remove-teacher-management)."""
 
 from __future__ import annotations
 
 import pytest
 
 from deeptutor.multi_user.context import get_current_user
-from deeptutor.publishing.scope import BOOK, MASTERY_PATH
+from deeptutor.publishing import scope as scopes
+from deeptutor.publishing.scope import BOOK, MASTERY_PATH, ScopeForbidden, ScopeNeedsConfirmation, ScopeNotFound
 from deeptutor.publishing.service import PublishService
-from deeptutor.publishing.scope import ScopeForbidden, ScopeNeedsConfirmation, ScopeNotFound
 
 
 def _reads_book(as_account, name, record) -> bool:
@@ -25,39 +26,23 @@ def _reads_kb(as_account, name, record) -> bool:
         return registry.can_read(registry.get_kb(record.kb_id), get_current_user())
 
 
-def test_narrowing_a_public_book_needs_confirmation_then_applies(
-    teaching_books, teaching_users, as_account, make_learners
-):
+def test_narrowing_a_public_book_needs_confirmation_then_applies(teaching_books, as_account):
     book = teaching_books.public
-    make_learners("tom", "sam")
     assert _reads_book(as_account, "sara", book)
-    sam = teaching_users["sam"]["id"]
     with as_account("tom"):
         with pytest.raises(ScopeNeedsConfirmation) as caught:
-            PublishService().set_scope(BOOK, book.book_id, everyone=False, users=[sam])
-        assert caught.value.affected == 4  # adam, tina, sara, uma
-        described = PublishService().set_scope(
-            BOOK, book.book_id, everyone=False, users=[sam], confirm=True
-        )
-    assert described["scope"]["users"] == [{"id": sam, "username": "sam"}]
-    assert _reads_book(as_account, "sam", book)
-    assert not _reads_book(as_account, "sara", book)
+            PublishService().set_scope(BOOK, book.book_id, everyone=False)
+        assert caught.value.affected == 5  # adam, tina, sara, sam, uma
+        described = PublishService().set_scope(BOOK, book.book_id, everyone=False, confirm=True)
+    assert described["scope"]["users"] == [] and described["scope"]["everyone"] is False
+    assert not _reads_book(as_account, "sara", book)  # only who joins it now
     assert _reads_book(as_account, "tom", book)  # the owner always reads
 
 
-def test_teachers_name_only_their_learners_and_only_on_their_own_items(
-    teaching_books, teaching_users, as_account, make_learners
-):
-    make_learners("tina", "sam")
+def test_only_the_publisher_sees_or_changes_who_receives_an_item(teaching_books, as_account):
     with as_account("adam"):
         with pytest.raises(ScopeNotFound):
-            PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=True, users=[])
-    with as_account("tom"):
-        # Sam joined Tina's content, not Tom's.
-        with pytest.raises(ScopeForbidden):
-            PublishService().set_scope(
-                BOOK, teaching_books.public.book_id, everyone=False, users=[teaching_users["sam"]["id"]]
-            )
+            PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=True)
     with as_account("sara"):
         with pytest.raises(ScopeForbidden):
             PublishService().describe(BOOK, teaching_books.public.book_id)
@@ -69,23 +54,24 @@ def _assigned(template_id: str) -> set[str]:
     return {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
 
 
-def test_narrowing_a_path_counts_the_students_who_lose_it(
+def test_narrowing_an_older_everyone_path_counts_the_students_who_lose_it(
     teacher_draft, publish_template, teaching_users, as_account
 ):
     teacher_draft()
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
-    sara = teaching_users["sara"]["id"]
+    template_id = publish_template()["template"]["id"]
+    # Older data: the path reached every student.
+    scopes._store_scope(MASTERY_PATH, template_id, scopes.Scope(everyone=True), actor_id=teaching_users["tina"]["id"])
+    scopes.reconcile_template(template_id)
+    students = {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
+    assert _assigned(template_id) == students
     with as_account("tina"):
         described = PublishService().describe(MASTERY_PATH, template_id)
-        # The students picked at publishing are its scope.
-        assert described["scope"]["managed"] is True and described["audience_size"] == 2
+        assert described["scope"]["everyone"] is True and described["audience_size"] == 2
         with pytest.raises(ScopeNeedsConfirmation) as caught:
-            PublishService().set_scope(MASTERY_PATH, template_id, everyone=False, users=[sara])
-        assert caught.value.affected == 1
-        PublishService().set_scope(
-            MASTERY_PATH, template_id, everyone=False, users=[sara], confirm=True
-        )
-    assert _assigned(template_id) == {sara}
+            PublishService().set_scope(MASTERY_PATH, template_id, everyone=False)
+        assert caught.value.affected == 2
+        PublishService().set_scope(MASTERY_PATH, template_id, everyone=False, confirm=True)
+    assert _assigned(template_id) == set()
 
 
 def test_an_admin_withdraws_a_published_kb_but_cannot_edit_it(teaching_users, as_account, tmp_path):

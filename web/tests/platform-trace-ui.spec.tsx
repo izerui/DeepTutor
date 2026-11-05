@@ -2,15 +2,14 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 
 // Requirements trace: dead ends and leftover wording (traceability #1, #3–#7, #9, #10).
-const { auth, catalog, practice, tasks, admin, comments, workbench, router, search, t } = vi.hoisted(() => ({
+const { auth, catalog, practice, tasks, admin, workbench, router, search, t } = vi.hoisted(() => ({
   auth: { value: { isAdmin: false, isTeacher: false, enabled: true, loading: false } },
   catalog: { listReviewQueue: vi.fn(), listReviewListed: vi.fn(), getReviewItem: vi.fn(), getLearnerReport: vi.fn(),
     getReportPoints: vi.fn(), getLearnerDetail: vi.fn() },
-  practice: { listMySets: vi.fn(), listAssigned: vi.fn(), listWithdrawable: vi.fn(), remedialFromPath: vi.fn() },
+  practice: { listMySets: vi.fn(), listAssigned: vi.fn(), listWithdrawable: vi.fn() },
   tasks: { getHome: vi.fn(), listMyTasks: vi.fn(), listAssignedTasks: vi.fn(), getAssignedTask: vi.fn(), listAssignedCourses: vi.fn(),
-    listMyCourses: vi.fn(), getCourse: vi.fn(), handOverCourse: vi.fn(), listCalendar: vi.fn() },
+    listMyCourses: vi.fn(), getCourse: vi.fn(), handOverCourse: vi.fn() },
   admin: { listUsers: vi.fn() },
-  comments: { writtenComments: vi.fn(), writeComment: vi.fn(), deleteComment: vi.fn(), myComments: vi.fn() },
   workbench: { getWorkbench: vi.fn() },
   router: { replace: vi.fn(), push: vi.fn() },
   search: { value: "" },
@@ -37,7 +36,6 @@ vi.mock("@/lib/tasks-api", async () => ({
   ...tasks,
 }));
 vi.mock("@/lib/admin-api", () => admin);
-vi.mock("@/lib/comments-api", () => comments);
 vi.mock("@/lib/workbench-api", () => ({
   ...workbench,
   getSchoolAiLimit: vi.fn(() => Promise.resolve(0)), setSchoolAiLimit: vi.fn(), getMyAiUsage: vi.fn(() => Promise.resolve(null)),
@@ -63,7 +61,6 @@ import PracticeSetsHub from "@/components/practice-sets/PracticeSetsHub";
 import { navVisibleForRole } from "@/components/sidebar/nav-entries";
 import { CourseAuthorView } from "@/components/tasks/Courses";
 import { activeTeachers, HandOverPanel } from "@/components/tasks/HandOver";
-import TaskCalendar from "@/components/tasks/TaskCalendar";
 import TasksHub from "@/components/tasks/TasksHub";
 import type { UserRecord } from "@/lib/admin-api";
 import type { CatalogEntry } from "@/lib/catalog-api";
@@ -76,7 +73,7 @@ const teacher = { ...student, isTeacher: true };
 const administrator = { ...student, isAdmin: true };
 
 beforeEach(() => {
-  for (const group of [catalog, practice, tasks, admin, comments, workbench]) {
+  for (const group of [catalog, practice, tasks, admin, workbench]) {
     for (const fn of Object.values(group)) (fn as ReturnType<typeof vi.fn>).mockReset();
   }
   router.replace.mockReset();
@@ -89,7 +86,7 @@ beforeEach(() => {
 });
 
 const assignedSet = (over: Partial<AssignedSet> = {}): AssignedSet => ({
-  id: "set_x", title: "Fractions", status: "published", current_revision: 1, due_at: null, teacher: "tina",
+  id: "set_x", title: "Fractions", status: "published", current_revision: 1, teacher: "tina",
   submissions: 0, best_score: null, max_score: 10, ...over,
 } as AssignedSet);
 
@@ -99,12 +96,12 @@ const home = (over: Partial<HomeData> = {}): HomeData => ({
 
 // ── #1 ──
 
-it("shows students the practice sets entry and lists what they joined or were sent", async () => {
+it("shows students the practice sets entry and lists what they joined", async () => {
   expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
   practice.listAssigned.mockResolvedValue([assignedSet()]);
   render(<PracticeSetsHub />);
   expect(await screen.findByText("Fractions")).toBeTruthy();
-  expect(screen.getByText("Practice sets you joined or were sent. Your answers go to your own question bank.")).toBeTruthy();
+  expect(screen.getByText("Practice sets you joined. Your answers go to your own question bank.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
   expect(screen.getByText("take set_x")).toBeTruthy();
 });
@@ -217,7 +214,7 @@ const joinedHome = home({
 
 it("shows a teacher what they joined and the announcements on the workbench", async () => {
   auth.value = teacher;
-  workbench.getWorkbench.mockResolvedValue({ attention: [], attention_total: 0, sent: [] });
+  workbench.getWorkbench.mockResolvedValue({ sent: [] });
   tasks.getHome.mockResolvedValue(joinedHome);
   render(<TeacherWorkbench />);
   const joined = await screen.findByTestId("home-joined");
@@ -274,45 +271,6 @@ it("opens the task of a joined course for a teacher from ?tab=joined&task=", asy
   expect(screen.getByRole("tab", { name: "Courses I joined" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByText("open Lab report")).toBeTruthy();
   expect(tasks.getAssignedTask).toHaveBeenCalledWith("t_other");
-});
-
-it("links a teacher's calendar by whose task it is", async () => {
-  auth.value = teacher;
-  const at = new Date().getTime() / 1000;
-  tasks.listCalendar.mockResolvedValue([
-    { key: "t_mine", title: "Mine", kind: "note", state: "published", type: "due", at },
-    { key: "t_other", title: "Theirs", kind: "note", state: "open", type: "due", at },
-  ]);
-  tasks.listMyTasks.mockResolvedValue([{ id: "t_mine" }]);
-  render(<TaskCalendar />);
-  await waitFor(() =>
-    expect(screen.getByRole("link", { name: /Theirs/ }).getAttribute("href")).toBe("/tasks?tab=joined&task=t_other"));
-  expect(screen.getByRole("link", { name: /Mine/ }).getAttribute("href")).toBe("/tasks?task=t_mine");
-});
-
-// ── #4 ──
-
-it("lets the author comment on a learner's not-mastered point in the report", async () => {
-  auth.value = teacher;
-  search.value = "kind=mastery_path&id=tpl_1";
-  catalog.getLearnerReport.mockResolvedValue({
-    kind: "mastery_path", id: "tpl_1", title: "Algebra", period_days: 7, paths: [], practice_sets: [],
-    learners: [{ id: "u_sara", username: "sara", overall: { last_activity: 1 }, paths: [], practice_sets: [], tasks: null, flags: [] }],
-  });
-  catalog.getLearnerDetail.mockResolvedValue({
-    username: "sara", tasks: null, practice_sets: [],
-    paths: [{ template_id: "tpl_1", title: "Algebra", attempts: { correct: 1, partial: 0, incorrect: 2 },
-      knowledge_points: [
-        { id: "kp_a", name: "Fractions", mastery: 0.3, mastered: false },
-        { id: "kp_b", name: "Integers", mastery: 1, mastered: true },
-      ] }],
-  });
-  comments.writtenComments.mockResolvedValue([]);
-  render(<LearnerReportPage />);
-  fireEvent.click(await screen.findByRole("button", { name: "sara" }));
-  const detail = await screen.findByTestId("learner-detail");
-  await waitFor(() => expect(within(detail).getAllByRole("button", { name: "Comment" })).toHaveLength(1));
-  expect(comments.writtenComments).toHaveBeenCalledWith("path_point", "tpl_1", "u_sara");
 });
 
 // ── #9 ──

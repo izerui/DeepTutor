@@ -3,7 +3,7 @@
 Spec 2026-10-29: the first administrator is fixed; sockets follow the same
 learning surfaces as REST; citing a knowledge base never widens its scope;
 administrators withdraw or delete others' content and never re-target it (D10);
-practice answers (and right/wrong) wait for the teacher's reveal time.
+practice answers (and right/wrong) wait until the student has submitted.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import time
 import pytest
 
 from deeptutor.practice_sets.service import PracticeSetService
-from deeptutor.publishing.scope import BOOK, MASTERY_PATH, PRACTICE_SET, ScopeError, get_scope
-from deeptutor.publishing.service import PublishService
+from deeptutor.publishing import scope as scopes
+from deeptutor.publishing.scope import BOOK, MASTERY_PATH, PRACTICE_SET, get_scope
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
@@ -103,8 +103,9 @@ def test_citing_a_scoped_kb_passes_nothing_on(teaching_users, as_account, tmp_pa
     )
     with as_account("tina"):
         registry.set_visibility(kb.kb_id, "public")
-        PublishService().set_scope(KNOWLEDGE_BASE, kb.kb_id, everyone=False,
-                                   users=[teaching_users["tom"]["id"]], confirm=True)
+    # An older scope names Tom.
+    scopes._store_scope(KNOWLEDGE_BASE, kb.kb_id, scopes.Scope(users=[teaching_users["tom"]["id"]]),
+                        actor_id=teaching_users["tina"]["id"])
     # Tom cites it in something every reader may open (a book everyone may read).
     registry.register_reference_reader("zz_everyone", lambda referrer_id, user_id: True)
     registry.add_reference(kb.kb_id, referrer_kind="zz_everyone", referrer_id="b1",
@@ -120,24 +121,14 @@ def test_citing_a_scoped_kb_passes_nothing_on(teaching_users, as_account, tmp_pa
         assert registry.can_read(registry.get_kb(kb.kb_id), get_current_user())
 
 
-def test_teachers_name_only_students_and_teachers(teaching_books, teaching_users, as_account):
-    with as_account("tom"):
-        for name in ("uma", "adam"):
-            with pytest.raises(ScopeError):
-                PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False,
-                                           users=[teaching_users[name]["id"]], confirm=True)
-
-
-def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_account, make_learners):
+def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_account):
     from deeptutor.book import registry as book_registry
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.publishing import store as scope_store
 
     book_id = teaching_books.public.book_id
-    make_learners("tom", "sam")
-    with as_account("tom"):
-        PublishService().set_scope(BOOK, book_id, everyone=False,
-                                   users=[teaching_users["sam"]["id"]], confirm=True)
+    scopes._store_scope(BOOK, book_id, scopes.Scope(users=[teaching_users["sam"]["id"]]),
+                        actor_id=teaching_users["tom"]["id"])
     scope_store.scopes_db_path().unlink()
     record = book_registry.get_book(book_id)
     with as_account("sara"):
@@ -150,21 +141,14 @@ def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_acco
 # ── mastery paths ──────────────────────────────────────────
 
 
-def test_admins_withdraw_teacher_paths_but_never_retarget_them(
-    teacher_draft, publish_template, teaching_users, as_account, seed_user
-):
-    from deeptutor.teaching.service import TeachingService, TemplateForbidden
+def test_admins_withdraw_teacher_paths(teacher_draft, publish_template, as_account):
+    from deeptutor.teaching.service import TeachingService
 
     teacher_draft()
     template_id = publish_template()["template"]["id"]
-    sue = seed_user("sue", role="student")["id"]
     with as_account("adam"):
-        with pytest.raises(TemplateForbidden):
-            TeachingService().assign(template_id, [sue])
-        with pytest.raises(TemplateForbidden):
-            TeachingService().revoke(template_id, teaching_users["sara"]["id"])
-        TeachingService().archive(template_id)
-    assert sue not in get_scope(MASTERY_PATH, template_id).users
+        assert TeachingService().archive(template_id).status == "archived"
+    assert get_scope(MASTERY_PATH, template_id).users == []
 
 
 # ── practice sets ──────────────────────────────────────────
@@ -172,11 +156,17 @@ def test_admins_withdraw_teacher_paths_but_never_retarget_them(
 
 @pytest.fixture
 def after_due_set(as_account, deliver):
+    """An older set: answers after a deadline still an hour away (both no longer read)."""
+    from deeptutor.practice_sets import store as practice_store
+
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Week 1")
-        service.update(created["id"], questions=QUESTIONS, reveal="after_due", due_at=time.time() + 3600)
+        service.update(created["id"], questions=QUESTIONS)
         service.publish(created["id"])
+    with practice_store.write() as conn:
+        conn.execute("UPDATE practice_sets SET reveal = 'after_due', due_at = ? WHERE id = ?",
+                     (time.time() + 3600, created["id"]))
     deliver(PRACTICE_SET, created["id"], "sara")
     return created["id"]
 
@@ -190,15 +180,15 @@ def _bank(as_account, set_id):
     return [r for r in rows if r.get("material_id") == set_id]
 
 
-def test_right_or_wrong_waits_for_the_deadline_too(after_due_set, as_account):
+def test_right_or_wrong_shows_once_submitted_even_for_an_older_after_due_set(after_due_set, as_account):
     set_id = after_due_set
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         result = asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}))
-        assert result["score"] is None and result["results"][0]["result"] == "pending"
+        assert result["score"] == 1 and result["results"][0]["result"] == "correct"
         taken = PracticeSetService().take(set_id)
-        assert taken["submissions"][0]["score"] is None
-        assert taken["latest_results"][0]["result"] == "pending"
+        assert taken["submissions"][0]["score"] == 1
+        assert taken["latest_results"][0]["result"] == "correct"
         assert "answer" not in taken["latest_results"][0]
         # Their own answer comes back from their own question bank (spec 2026-11-02 §9.3).
         restored = asyncio.run(PracticeSetService().with_my_answers(taken))
@@ -209,16 +199,7 @@ def test_right_or_wrong_waits_for_the_deadline_too(after_due_set, as_account):
         [stored] = conn.execute("SELECT results_json FROM practice_submissions").fetchall()
     assert "answer" not in stored["results_json"]
     with as_account("sara"):
-        assert PracticeSetService().assigned()[0]["best_score"] is None
-    [entry] = _bank(as_account, set_id)
-    assert entry["result"] == "ungraded" and entry["correct_answer"] == ""
-
-    with as_account("tina"):
-        PracticeSetService().update(set_id, due_at=time.time() - 1)
-    with as_account("sara"):
-        taken = PracticeSetService().take(set_id)
-        assert taken["submissions"][0]["score"] == 1 and taken["latest_results"][0]["result"] == "correct"
-        asyncio.run(PracticeSetService().reveal_in_bank(set_id))
+        assert PracticeSetService().assigned()[0]["best_score"] == 1
     [entry] = _bank(as_account, set_id)
     assert entry["result"] == "correct" and entry["correct_answer"] == "B"
 
@@ -229,7 +210,7 @@ def test_answers_of_an_older_version_are_completed_after_republishing(after_due_
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(set_id, {qid: "A"}))
     with as_account("tina"):
-        PracticeSetService().update(set_id, questions=QUESTIONS * 2, due_at=time.time() - 1)
+        PracticeSetService().update(set_id, questions=QUESTIONS * 2)
         PracticeSetService().publish(set_id)
     with as_account("sara"):
         asyncio.run(PracticeSetService().reveal_in_bank(set_id))

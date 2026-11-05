@@ -23,6 +23,7 @@ from deeptutor.multi_user.knowledge_access import resolve_kb
 from deeptutor.teaching.access import studying_template
 from deeptutor.teaching.instances import MATERIALS_UNAVAILABLE
 from deeptutor.teaching.service import TeachingService
+from tests.multi_user.path_members import join_path, leave_path
 
 
 def _auth(name: str) -> dict[str, str]:
@@ -95,7 +96,7 @@ def test_another_path_or_another_account_does_not_open_it(real_path, as_account)
 
 def test_revoking_closes_the_kb_immediately(real_path, as_account, teaching_users):
     with as_account("tina"):
-        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+        leave_path(real_path.template_id, teaching_users["sara"]["id"])
     with as_account("sara"):
         with studying_template(real_path.template_id):
             with pytest.raises(HTTPException):
@@ -409,7 +410,7 @@ async def test_an_old_revision_question_keeps_only_that_revisions_materials(
 
     # An explicit revoke still closes everything at once.
     with as_account("tina"):
-        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+        leave_path(real_path.template_id, teaching_users["sara"]["id"])
     stream = _Stream()
     ran.clear()
     with as_account("sara"):
@@ -628,7 +629,7 @@ def test_revoking_closes_the_originals(real_path, teaching_http, as_account, tea
     url = f"{_files_url(real_path.record.ref, 'doc.md')}?mastery_template={real_path.template_id}"
     assert teaching_http.client.get(url, headers=_auth("sara")).status_code == 200
     with as_account("tina"):
-        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+        leave_path(real_path.template_id, teaching_users["sara"]["id"])
     # After revocation the template param is ignored (B2-12): the private KB's
     # plain-route status (404) applies, not 403.
     plain_url = _files_url(real_path.record.ref, "doc.md")
@@ -983,7 +984,7 @@ def _park_on_v1_then_publish_v2(
     if before_revoke is not None:
         before_revoke()
     with as_account("tina"):
-        TeachingService().revoke(real_path.template_id, teaching_users["sara"]["id"])
+        leave_path(real_path.template_id, teaching_users["sara"]["id"])
     # Revoking released K1: no active student needs revision 1 any more.
     assert kb_registry.list_referenced("mastery_template", real_path.template_id) == [
         kb_registry.get_kb(k2.kb_id)
@@ -1004,7 +1005,7 @@ async def test_reassigning_restores_the_old_revisions_materials(
     )
     with as_account("tina"):
         await asyncio.to_thread(
-            TeachingService().assign, real_path.template_id, [teaching_users["sara"]["id"]]
+            join_path, real_path.template_id, teaching_users["sara"]["id"]
         )
     assert {
         record.kb_id
@@ -1040,7 +1041,7 @@ async def test_reassigning_does_not_restore_a_deleted_old_material(
     with as_account("tina"):
         kb_registry.unregister_kb(real_path.record.kb_id)
         rows = await asyncio.to_thread(
-            TeachingService().assign, real_path.template_id, [teaching_users["sara"]["id"]]
+            join_path, real_path.template_id, teaching_users["sara"]["id"]
         )
     assert [row["status"] for row in rows] == ["active"]
     assert {
@@ -1099,7 +1100,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_made_priva
         kb_registry.set_visibility(k1.kb_id, "private")
     with as_account("tina"):
         rows = await asyncio.to_thread(
-            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+            join_path, template_id, teaching_users["sara"]["id"]
         )
     assert [row["status"] for row in rows] == ["active"]
     assert {
@@ -1145,9 +1146,9 @@ def test_reassigning_restores_an_old_revisions_reference_only_book(
         }
 
     with as_account("tina"):
-        TeachingService().revoke(template_id, sara)
+        leave_path(template_id, sara)
         assert held() == {"bk_own"}
-        TeachingService().assign(template_id, [sara])
+        join_path(template_id, sara)
     assert held() == {"bk_own", "bk_two"}
 
 
@@ -1200,7 +1201,7 @@ async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
     monkeypatch.setattr(kb_access, "replace_template_references", private_first)
     with as_account("tina"):
         rows = await asyncio.to_thread(
-            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+            join_path, template_id, teaching_users["sara"]["id"]
         )
     assert [row["status"] for row in rows] == ["active"]
     assert kb_registry.get_kb(k1.kb_id).visibility == "private"
@@ -1262,7 +1263,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_withdrew_w
     )
     with as_account("tina"):
         rows = await asyncio.to_thread(
-            TeachingService().assign, template_id, [teaching_users["sara"]["id"]]
+            join_path, template_id, teaching_users["sara"]["id"]
         )
     assert [row["status"] for row in rows] == ["active"]
     assert {

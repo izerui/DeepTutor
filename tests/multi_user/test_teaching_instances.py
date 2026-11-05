@@ -12,6 +12,7 @@ from deeptutor.api.routers import mastery_path
 from deeptutor.learning.storage import LearningStore
 from deeptutor.teaching.service import TeachingService
 from deeptutor.teaching.store import TeachingStore
+from tests.multi_user.path_members import join_path, leave_path
 
 
 def _topics(as_account, name: str) -> list[dict]:
@@ -75,12 +76,12 @@ def test_the_teachers_own_listing_creates_nothing(sara_instance, as_account):
     assert topics[0]["origin"] is None
 
 
-def test_revoking_hides_the_path_and_reassigning_restores_progress(
+def test_leaving_hides_the_path_and_rejoining_restores_progress(
     sara_instance, as_account, teaching_users
 ):
     point = _set_mastery(as_account, "sara", sara_instance.path_id, 0.7)
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
 
     assert _topics(as_account, "sara") == []
     with as_account("sara"):
@@ -94,7 +95,7 @@ def test_revoking_hides_the_path_and_reassigning_restores_progress(
     assert denied.value.status_code == 403
 
     with as_account("tina"):
-        TeachingService().assign(sara_instance.template_id, [teaching_users["sara"]["id"]])
+        join_path(sara_instance.template_id, teaching_users["sara"]["id"])
 
     assert [t["path_id"] for t in _topics(as_account, "sara")] == [sara_instance.path_id]
     with as_account("sara"):
@@ -185,7 +186,7 @@ def test_legacy_progress_list_and_every_path_route_close_a_revoked_instance(
     assert client.get(f"/api/mastery-paths/topics/{path_id}", headers=_auth("sara")).status_code == 200
 
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
 
     listed = client.get("/api/mastery-paths/progress", headers=_auth("sara")).json()
     assert [row["book_id"] for row in listed["summaries"]] == ["topic_own"]
@@ -278,7 +279,7 @@ def test_websocket_subscription_refuses_a_closed_instance(
         assert socket.receive_json()["type"] == "subscribed"
 
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+        leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
 
     with client.websocket_connect("/ws/mastery-paths?token=sara") as socket:
         socket.send_json({"type": "subscribe", "path_id": sara_instance.path_id})
@@ -333,8 +334,8 @@ def test_applied_revision_survives_new_revisions_and_reassignment(
         assert LearningStore().load_origin(sara_instance.path_id).revision == 1
 
     with as_account("tina"):
-        TeachingService().revoke(sara_instance.template_id, sara_id)
-        TeachingService().assign(sara_instance.template_id, [sara_id])
+        leave_path(sara_instance.template_id, sara_id)
+        join_path(sara_instance.template_id, sara_id)
     _topics(as_account, "sara")
     assignment = teaching.get_assignment(sara_instance.template_id, sara_id)
     assert (assignment.status, assignment.applied_revision) == ("active", 1)

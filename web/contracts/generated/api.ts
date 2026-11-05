@@ -2001,77 +2001,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/comments": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    /** Write Comment */
-    readonly put: operations["write_comment_api_comments_put"];
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/comments/{comment_id}": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    readonly post?: never;
-    /** Delete Comment */
-    readonly delete: operations["delete_comment_api_comments__comment_id__delete"];
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/comments/mine": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /**
-     * My Comments
-     * @description The current student's comments on one practice set or Mastery Path.
-     */
-    readonly get: operations["my_comments_api_comments_mine_get"];
-    readonly put?: never;
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/comments/written": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /** Written */
-    readonly get: operations["written_api_comments_written_get"];
-    readonly put?: never;
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/courses": {
     readonly parameters: {
       readonly query?: never;
@@ -4687,26 +4616,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/mastery-paths/teaching/students": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /**
-     * List Students
-     * @description Who a teacher may assign: student accounts, id/username/avatar only (D5).
-     */
-    readonly get: operations["list_students_api_mastery_paths_teaching_students_get"];
-    readonly put?: never;
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/mastery-paths/teaching/templates": {
     readonly parameters: {
       readonly query?: never;
@@ -4754,41 +4663,6 @@ export interface paths {
     /** Archive Template */
     readonly post: operations["archive_template_api_mastery_paths_teaching_templates__template_id__archive_post"];
     readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/mastery-paths/teaching/templates/{template_id}/assignments": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /** List Assignments */
-    readonly get: operations["list_assignments_api_mastery_paths_teaching_templates__template_id__assignments_get"];
-    readonly put?: never;
-    /** Assign Students */
-    readonly post: operations["assign_students_api_mastery_paths_teaching_templates__template_id__assignments_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/mastery-paths/teaching/templates/{template_id}/assignments/{student_id}": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    readonly post?: never;
-    /** Revoke Assignment */
-    readonly delete: operations["revoke_assignment_api_mastery_paths_teaching_templates__template_id__assignments__student_id__delete"];
     readonly options?: never;
     readonly head?: never;
     readonly patch?: never;
@@ -7633,43 +7507,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/practice-sets/remedial/from-path": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    /** Remedial From Path */
-    readonly post: operations["remedial_from_path_api_practice_sets_remedial_from_path_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/practice-sets/remedial/from-set": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    /**
-     * Remedial From Set
-     * @description A draft practice set of the picked questions (batch 3 §3.1).
-     */
-    readonly post: operations["remedial_from_set_api_practice_sets_remedial_from_set_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/practice-sets/withdrawable": {
     readonly parameters: {
       readonly query?: never;
@@ -7701,23 +7538,6 @@ export interface paths {
     readonly get: operations["get_scope_api_publish__kind___item_id__scope_get"];
     /** Set Scope */
     readonly put: operations["set_scope_api_publish__kind___item_id__scope_put"];
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/publish/people": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /** Search People */
-    readonly get: operations["search_people_api_publish_people_get"];
-    readonly put?: never;
     readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
@@ -12023,26 +11843,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/tasks/calendar": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /**
-     * Calendar
-     * @description Opening times and deadlines: what reached a student, or what an author assigned.
-     */
-    readonly get: operations["calendar_api_tasks_calendar_get"];
-    readonly put?: never;
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/tasks/courses": {
     readonly parameters: {
       readonly query?: never;
@@ -12127,7 +11927,7 @@ export interface paths {
     readonly put?: never;
     /**
      * Add Course Practice Set
-     * @description Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task.
+     * @description Follow-ups §3: a published practice set becomes the course's next task.
      */
     readonly post: operations["add_course_practice_set_api_tasks_courses__course_id__practice_sets_post"];
     readonly delete?: never;
@@ -13269,11 +13069,6 @@ export interface components {
       /** Skills */
       readonly skills?: readonly string[];
     };
-    /** AssignRequest */
-    readonly AssignRequest: {
-      /** Student Ids */
-      readonly student_ids: readonly string[];
-    };
     /** AttachCourseResourceRequest */
     readonly AttachCourseResourceRequest: {
       /** Kind */
@@ -13937,20 +13732,6 @@ export interface components {
       readonly model: string;
       /** Reasoning Effort */
       readonly reasoning_effort?: string | null;
-    };
-    /** CommentWrite */
-    readonly CommentWrite: {
-      /**
-       * Kind
-       * @enum {string}
-       */
-      readonly kind: "practice_submission" | "path_point";
-      /** Ref */
-      readonly ref: string;
-      /** Student Id */
-      readonly student_id: string;
-      /** Text */
-      readonly text: string;
     };
     /** CommitRequest */
     readonly CommitRequest: {
@@ -17075,8 +16856,6 @@ export interface components {
       readonly kp_decisions?: {
         readonly [key: string]: components["schemas"]["KpDecision"];
       };
-      /** Student Ids */
-      readonly student_ids?: readonly string[];
     };
     /** QuestionBankMaterial */
     readonly QuestionBankMaterial: {
@@ -17486,37 +17265,6 @@ export interface components {
       /** Points */
       readonly points: number;
     };
-    /** RemedialFromPath */
-    readonly RemedialFromPath: {
-      /** Kp Ids */
-      readonly kp_ids: readonly string[];
-      /** Student Ids */
-      readonly student_ids?: readonly string[];
-      /** Template Id */
-      readonly template_id: string;
-      /**
-       * Title Prefix
-       * @default Remedial:
-       */
-      readonly title_prefix: string;
-    };
-    /** RemedialFromSet */
-    readonly RemedialFromSet: {
-      /** Question Ids */
-      readonly question_ids: readonly string[];
-      /** Set Id */
-      readonly set_id: string;
-      /**
-       * Similar
-       * @default 0
-       */
-      readonly similar: number;
-      /**
-       * Title Prefix
-       * @default Remedial:
-       */
-      readonly title_prefix: string;
-    };
     /**
      * RenamePathRequest
      * @description An empty name is a valid request: it restores the derived display name.
@@ -17690,7 +17438,7 @@ export interface components {
     };
     /**
      * ScopeChoice
-     * @description The receivers chosen when an item is published for the first time (spec 2026-11-02 §4.1).
+     * @description Sent with a first publication (spec 2026-11-02 §4.1): nobody is named, people join.
      */
     readonly ScopeChoice: {
       /**
@@ -17703,8 +17451,6 @@ export interface components {
        * @default false
        */
       readonly join_only: boolean;
-      /** Users */
-      readonly users?: readonly string[];
     };
     /** ScopeUpdate */
     readonly ScopeUpdate: {
@@ -17718,8 +17464,6 @@ export interface components {
        * @default false
        */
       readonly everyone: boolean;
-      /** Users */
-      readonly users?: readonly string[];
     };
     /**
      * ServerPayload
@@ -17960,15 +17704,8 @@ export interface components {
        * @default false
        */
       readonly clear_attempts_limit: boolean;
-      /**
-       * Clear Due
-       * @default false
-       */
-      readonly clear_due: boolean;
       /** Description */
       readonly description?: string | null;
-      /** Due At */
-      readonly due_at?: number | null;
       /** Questions */
       readonly questions?:
         | readonly {
@@ -17976,7 +17713,7 @@ export interface components {
           }[]
         | null;
       /** Reveal */
-      readonly reveal?: string | null;
+      readonly reveal?: "after_submit" | null;
       /** Score Mode */
       readonly score_mode?: string | null;
       /** Title */
@@ -18341,10 +18078,6 @@ export interface components {
     readonly TaskUpdate: {
       /** Description */
       readonly description?: string | null;
-      /** Due At */
-      readonly due_at?: number | null;
-      /** Open At */
-      readonly open_at?: number | null;
       /** Settings */
       readonly settings?: {
         readonly [key: string]: unknown;
@@ -19715,7 +19448,6 @@ export type SchemaApplyOpsRequest = components["schemas"]["ApplyOpsRequest"];
 export type SchemaApprovalRequest = components["schemas"]["ApprovalRequest"];
 export type SchemaAssetAddRequest = components["schemas"]["AssetAddRequest"];
 export type SchemaAssetSpec = components["schemas"]["AssetSpec"];
-export type SchemaAssignRequest = components["schemas"]["AssignRequest"];
 export type SchemaAttachCourseResourceRequest =
   components["schemas"]["AttachCourseResourceRequest"];
 export type SchemaAuditRequest = components["schemas"]["AuditRequest"];
@@ -19797,7 +19529,6 @@ export type SchemaCodexOAuthCallbackPayload =
   components["schemas"]["CodexOAuthCallbackPayload"];
 export type SchemaCodexReasoningEffortUpdate =
   components["schemas"]["CodexReasoningEffortUpdate"];
-export type SchemaCommentWrite = components["schemas"]["CommentWrite"];
 export type SchemaCommitRequest = components["schemas"]["CommitRequest"];
 export type SchemaCompilePageRequest =
   components["schemas"]["CompilePageRequest"];
@@ -20138,8 +19869,6 @@ export type SchemaRegistrationSettings =
 export type SchemaRegistryEditPayload =
   components["schemas"]["RegistryEditPayload"];
 export type SchemaRegradeRequest = components["schemas"]["RegradeRequest"];
-export type SchemaRemedialFromPath = components["schemas"]["RemedialFromPath"];
-export type SchemaRemedialFromSet = components["schemas"]["RemedialFromSet"];
 export type SchemaRenamePathRequest =
   components["schemas"]["RenamePathRequest"];
 export type SchemaRenameTagRequest = components["schemas"]["RenameTagRequest"];
@@ -24977,151 +24706,6 @@ export interface operations {
           readonly "application/json": {
             readonly [key: string]: unknown;
           };
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly write_comment_api_comments_put: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["CommentWrite"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly delete_comment_api_comments__comment_id__delete: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly comment_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly my_comments_api_comments_mine_get: {
-    readonly parameters: {
-      readonly query: {
-        readonly kind: "practice_submission" | "path_point";
-        readonly subject: string;
-      };
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly written_api_comments_written_get: {
-    readonly parameters: {
-      readonly query: {
-        readonly kind: "practice_submission" | "path_point";
-        readonly student_id: string;
-        readonly subject: string;
-      };
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -30475,41 +30059,6 @@ export interface operations {
       };
     };
   };
-  readonly list_students_api_mastery_paths_teaching_students_get: {
-    readonly parameters: {
-      readonly query?: {
-        readonly q?: string;
-      };
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   readonly list_templates_api_mastery_paths_teaching_templates_get: {
     readonly parameters: {
       readonly query?: never;
@@ -30622,116 +30171,6 @@ export interface operations {
         readonly Authorization?: string | null;
       };
       readonly path: {
-        readonly template_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly list_assignments_api_mastery_paths_teaching_templates__template_id__assignments_get: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly template_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly assign_students_api_mastery_paths_teaching_templates__template_id__assignments_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly template_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["AssignRequest"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly revoke_assignment_api_mastery_paths_teaching_templates__template_id__assignments__student_id__delete: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly student_id: string;
         readonly template_id: string;
       };
       readonly cookie?: {
@@ -37411,80 +36850,6 @@ export interface operations {
       };
     };
   };
-  readonly remedial_from_path_api_practice_sets_remedial_from_path_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["RemedialFromPath"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly remedial_from_set_api_practice_sets_remedial_from_set_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["RemedialFromSet"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   readonly withdrawable_sets_api_practice_sets_withdrawable_get: {
     readonly parameters: {
       readonly query?: never;
@@ -37573,41 +36938,6 @@ export interface operations {
         readonly "application/json": components["schemas"]["ScopeUpdate"];
       };
     };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly search_people_api_publish_people_get: {
-    readonly parameters: {
-      readonly query?: {
-        readonly q?: string;
-      };
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -47353,39 +46683,6 @@ export interface operations {
       readonly path: {
         readonly task_id: string;
       };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly calendar_api_tasks_calendar_get: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
       readonly cookie?: {
         readonly dt_token?: string | null;
       };

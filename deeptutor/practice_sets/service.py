@@ -8,7 +8,7 @@
   answer goes to the student's own question bank, tagged with the set, so a
   wrong answer becomes one of their mistakes.
 * The teacher sees, for the students in the scope only, completion, first
-  and best score, time taken and lateness, plus each question's error rate
+  and best score and time taken, plus each question's error rate
   (§8.4). Of the answers, only what the author reviews is kept for them —
   subjective answers' text and the option picked (batch 3 §2.1); the
   review itself is in ``review.py``.
@@ -29,7 +29,6 @@ from deeptutor.practice_sets import store
 logger = logging.getLogger(__name__)
 
 QUESTION_TYPES = ("choice", "multi_choice", "concept", "fill_in_blank", "short_answer", "written", "coding")
-REVEALS = ("after_submit", "after_due")
 SCORE_MODES = ("best", "first")
 #: Answers whose text the author reviews (batch 3 §2.1); choice answers keep the option only.
 SUBJECTIVE_TYPES = ("short_answer", "written", "coding")
@@ -256,8 +255,8 @@ PENDING = "pending"
 def _withheld(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-question rows with nothing that tells right from wrong.
 
-    With answers shown only after the deadline, right/wrong per question (or
-    a score) would let a student find the key by resubmitting variations.
+    Before a student has submitted the version they see, right/wrong per
+    question (or a score) would let them find the key by resubmitting variations.
     """
     return [
         {"question_id": r["question_id"], "result": PENDING, "points": None, "max_points": r["max_points"]}
@@ -317,8 +316,9 @@ class PracticeSetService:
             "description": row["description"],
             "status": row["status"],
             "current_revision": row["current_revision"],
-            "due_at": row["due_at"],
-            "reveal": row["reveal"],
+            # Sets have no deadline any more (spec 2026-11-05 remove-teacher-management §1.4):
+            # a stored ``due_at`` is never read and a stored ``after_due`` reads as this.
+            "reveal": "after_submit",
             "attempts_limit": _col(row, "attempts_limit"),
             "score_mode": _col(row, "score_mode", "best") or "best",
             "created_at": row["created_at"],
@@ -367,8 +367,7 @@ class PracticeSetService:
 
     def update(
         self, set_id: str, *, title: str | None = None, description: str | None = None,
-        questions: Any = None, due_at: float | None | str = "", reveal: str | None = None,
-        attempts_limit: int | None | str = "", score_mode: str | None = None,
+        questions: Any = None, attempts_limit: int | None | str = "", score_mode: str | None = None,
     ) -> dict[str, Any]:
         self._require_author()
         sets: list[str] = []
@@ -399,42 +398,13 @@ class PracticeSetService:
         if questions is not None:
             sets.append("draft_questions_json = ?")
             values.append(json.dumps(normalize_questions(questions), ensure_ascii=False))
-        if due_at not in ("", None) or reveal == "after_due":
-            from deeptutor.catalog.listings import status as listing_status
-
-            if listing_status("practice_set", set_id) in ("pending", "listed"):
-                # Direction §11.4: practice in the market is self-paced.
-                raise PracticeError(
-                    "A practice set in the market has no deadline. Set deadlines on course tasks instead."
-                )
-        if due_at != "":
-            sets.append("due_at = ?")
-            values.append(float(due_at) if due_at is not None else None)
-        if reveal is not None:
-            if reveal not in REVEALS:
-                raise PracticeError("Choose when answers are shown.")
-            sets.append("reveal = ?")
-            values.append(reveal)
         with store.write() as conn:
-            row = self._owned(conn, set_id)
-            new_due = (float(due_at) if due_at is not None else None) if due_at != "" else row["due_at"]
-            new_reveal = reveal if reveal is not None else row["reveal"]
-            if (
-                row["reveal"] == "after_due" and new_reveal == "after_due"
-                and row["due_at"] is not None and _now() >= row["due_at"]
-                and (new_due is None or new_due > row["due_at"])
-            ):
-                # Switching to answers right after submitting in the same change is fine:
-                # nothing shown is hidden again (needed to clear a deadline for the market).
-                # R10: the answers were shown at the deadline; a later one would hide nothing.
-                raise PracticeConflict("The answers were already shown; the deadline can no longer move later.")
+            self._owned(conn, set_id)
             if sets:
                 conn.execute(
                     f"UPDATE practice_sets SET {', '.join(sets)}, updated_at = ? WHERE id = ?",
                     (*values, _now(), set_id),
                 )
-        if due_at != "" and row["status"] == "published" and new_due != row["due_at"]:
-            self._notify_unsubmitted(set_id, row["title"], "task_due_changed", {"due_at": new_due})
         return self.get(set_id)
 
     def _notify_unsubmitted(self, set_id: str, title: str, kind: str, params: dict[str, Any]) -> None:
@@ -467,7 +437,7 @@ class PracticeSetService:
         from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
 
         # Spec 2026-11-02 §4.1: the receivers are settled before anything is
-        # published (chosen, or the author's classes); without them nothing is.
+        # published: nobody is named, people join.
         default_scope_on_publish(PRACTICE_SET, set_id)
         with store.write() as conn:
             row = self._owned(conn, set_id)
@@ -498,8 +468,6 @@ class PracticeSetService:
             raise PracticeConflict("This practice set is archived.")
         if not normalize_questions(json.loads(row["draft_questions_json"])):
             raise PracticeError("Add at least one question before publishing.")
-        if row["reveal"] == "after_due" and row["due_at"] is None:
-            raise PracticeError("Set a deadline, or show answers right after submitting.")
 
     def archive(self, set_id: str) -> dict[str, Any]:
         """Withdraw a set: its author, or an administrator for anyone's published set (D10)."""
@@ -615,7 +583,7 @@ class PracticeSetService:
         from deeptutor.catalog.enrollment import joined_by
         from deeptutor.publishing.scope import named_items
 
-        # What one joined, and what was sent to one by name (a remedial set): no walk over every set.
+        # What one joined, and what an older set named one for: no walk over every set.
         candidates = list(dict.fromkeys(
             [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
             + named_items(PRACTICE_SET, self.actor.id)
@@ -665,7 +633,7 @@ class PracticeSetService:
         with store.read() as conn:
             row, revision = self._published(conn, set_id)
             submissions = conn.execute(
-                "SELECT id, revision, submitted_at, late, score, max_score, results_json "
+                "SELECT id, revision, submitted_at, score, max_score, results_json "
                 "FROM practice_submissions WHERE set_id = ? AND student_id = ? ORDER BY submitted_at",
                 (set_id, self.actor.id),
             ).fetchall()
@@ -691,7 +659,7 @@ class PracticeSetService:
             "class_average": average,
             "questions": [_for_student(q, reveal=reveal) for q in questions],
             "submissions": [
-                {**{k: s[k] for k in ("id", "revision", "submitted_at", "late", "max_score")},
+                {**{k: s[k] for k in ("id", "revision", "submitted_at", "max_score")},
                  "score": s["score"] if graded else None}
                 for s in submissions
             ],
@@ -723,13 +691,11 @@ class PracticeSetService:
 
     @staticmethod
     def _reveal(row, submitted: bool) -> bool:
-        """Answers show only to a student who has submitted this version (§8.3);
-        with ``after_due`` also not before the deadline, so nobody copies them."""
-        if not submitted:
-            return False
-        if row["reveal"] == "after_due":
-            return row["due_at"] is not None and _now() >= row["due_at"]
-        return True
+        """Answers show only to a student who has submitted this version (§8.3).
+
+        A stored ``after_due`` behaves the same (spec 2026-11-05 remove-teacher-management §2).
+        """
+        return submitted
 
     async def submit(
         self, set_id: str, answers: dict[str, Any], *, started_at: float | None = None,
@@ -776,7 +742,6 @@ class PracticeSetService:
                     {"result": "ungraded", "feedback": "Automatic grading was unavailable; ask your teacher."},
                 )
         now = _now()
-        late = row["due_at"] is not None and now > row["due_at"]
         rows = [
             {"question_id": q["question_id"], "result": results[q["question_id"]]["result"],
              "points": _points(q, results[q["question_id"]]["result"]), "max_points": q["points"]}
@@ -801,10 +766,10 @@ class PracticeSetService:
                     raise PracticeConflict("You have used all your attempts at this practice set.")
                 conn.execute(
                     "INSERT INTO practice_submissions (id, set_id, revision, student_id, started_at, "
-                    "submitted_at, late, score, max_score, results_json, answers_json) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "submitted_at, score, max_score, results_json, answers_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (submission_id, set_id, revision["revision"], self.actor.id, started, now,
-                     int(late), score, max_score, json.dumps(rows), json.dumps(kept, ensure_ascii=False)),
+                     score, max_score, json.dumps(rows), json.dumps(kept, ensure_ascii=False)),
                 )
 
         await asyncio.to_thread(save)
@@ -815,7 +780,6 @@ class PracticeSetService:
             "revision": revision["revision"],
             "score": score if reveal else None,
             "max_score": max_score,
-            "late": late,
             "answers_revealed": reveal,
             "results": [
                 # AI feedback can quote the key, so it waits for the answers too.
@@ -989,7 +953,7 @@ class PracticeSetService:
                 "completed": bool(mine),
                 "attempts": len(mine),
                 "first_score": first["score"] if first else None,
-                # What a comment attaches to (batch 2 §3): their latest attempt.
+                # Their latest attempt, which the author opens to review.
                 "latest_submission_id": mine[-1]["id"] if mine else None,
                 # Each score with its own version's maximum (versions may differ).
                 "best_score": best["score"] if best else None,
@@ -1004,7 +968,6 @@ class PracticeSetService:
                 "max_score": first["max_score"] if first else None,
                 "minutes": round((first["submitted_at"] - first["started_at"]) / 60, 1)
                 if first and first["started_at"] else None,
-                "late": bool(first["late"]) if first else False,
                 "submitted_at": first["submitted_at"] if first else None,
             })
         # Error rate per question of the current version, over each student's
@@ -1028,7 +991,6 @@ class PracticeSetService:
         return {
             "set_id": set_id,
             "title": row["title"],
-            "due_at": row["due_at"],
             "score_mode": _col(row, "score_mode", "best") or "best",
             "attempts_limit": _col(row, "attempts_limit"),
             "students": students,

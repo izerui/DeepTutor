@@ -201,7 +201,7 @@ class LearnerData:
             if conn is None:
                 return {}
             rows = conn.execute(
-                f"SELECT p.id, p.title, s.student_id, s.score, s.max_score, s.late, s.submitted_at "
+                f"SELECT p.id, p.title, s.student_id, s.score, s.max_score, s.submitted_at "
                 f"FROM practice_submissions s JOIN practice_sets p ON p.id = s.set_id "
                 f"WHERE p.owner_user_id = ? AND s.student_id IN ({marks}) "
                 f"ORDER BY s.submitted_at",
@@ -225,7 +225,6 @@ class LearnerData:
                 # Each score with its own version's maximum (versions may differ).
                 "best_score": best["score"],
                 "best_max_score": best["max_score"],
-                "late": bool(first["late"]),
                 "last_submitted_at": mine[-1]["submitted_at"],
             })
         return results

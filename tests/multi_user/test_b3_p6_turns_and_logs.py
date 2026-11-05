@@ -29,6 +29,7 @@ from deeptutor.learning.models import KnowledgePoint, KnowledgeType
 from deeptutor.teaching import changes
 from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE
 from deeptutor.teaching.service import TeachingService
+from tests.multi_user.path_members import leave_path
 
 # The real turn runtime and courses of the AI-guard suite.
 from tests.multi_user.test_teaching_ai_guard import (  # noqa: F401
@@ -50,7 +51,7 @@ async def test_a_refused_teacher_path_turn_logs_one_info_line_without_a_stack(
     courses, chat_runtime, as_account, teaching_users, caplog
 ):
     with as_account("tina"):
-        TeachingService().revoke(courses.template_a, teaching_users["sara"]["id"])
+        leave_path(courses.template_a, teaching_users["sara"]["id"])
 
     async def body(_context, out):
         out["ran"] = True

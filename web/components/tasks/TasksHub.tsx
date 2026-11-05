@@ -28,12 +28,9 @@ import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
 import { CourseAuthorView, StudentCourses } from "./Courses";
 import { HandOverPanel } from "./HandOver";
 import { StudentTaskDetail } from "./StudentTaskDetail";
-import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
+import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
-const toLocalInput = (ts: number | null) =>
-  ts ? new Date(ts * 1000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
-const fromLocalInput = (value: string) => (value ? new Date(value).getTime() / 1000 : null);
 
 /**
  * Tasks (spec 2026-11-03 batch 1): teachers and administrators assign them and
@@ -334,29 +331,6 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
         onChange={(e) => setTask({ ...task, description: e.target.value })}
         onBlur={() => save({ description: task.description })}
       />
-      <label className="flex flex-wrap items-center gap-2 text-[12.5px]">
-        {t("Deadline (optional)")}
-        <input
-          type="datetime-local"
-          className={`${inputClass} w-auto`}
-          value={toLocalInput(task.due_at)}
-          onChange={(e) => save({ due_at: fromLocalInput(e.target.value) })}
-        />
-      </label>
-      <label className="flex flex-wrap items-center gap-2 text-[12.5px]">
-        {t("Opens at (optional)")}
-        <input
-          type="datetime-local"
-          className={`${inputClass} w-auto`}
-          value={toLocalInput(task.open_at)}
-          onChange={(e) => save({ open_at: fromLocalInput(e.target.value) })}
-        />
-      </label>
-      {task.open_at && (task.kind === "practice_set" || task.kind === "mastery_path") && (
-        <p className="text-[11.5px] text-[var(--muted-foreground)]">
-          {t("Students who already received this practice set or path on its own can still open it before this time.")}
-        </p>
-      )}
       {draft ? (
         <TargetPicker task={task} onChange={(fields) => save(fields)} />
       ) : task.target_title ? (
@@ -416,7 +390,6 @@ function StudentsTable({ task }: { task: TaskDetail }) {
                 {student.completed
                   ? student.self_reported ? t("Done (self-reported)") : t("Done")
                   : t("Not done")}
-                {student.late && ` · ${t("Late")}`}
               </span>
             </li>
           ))}
@@ -467,7 +440,7 @@ function StudentView() {
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONE[task.state]}`}>{t(STATE_LABEL[task.state])}</span>
                 <span className="font-medium">{task.title}</span>
                 <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                  {t(KIND_LABEL[task.kind])}{task.due_at ? ` · ${t("Due {{date}}", { date: formatWhen(task.due_at) })}` : ""}
+                  {t(KIND_LABEL[task.kind])}
                 </span>
               </button>
             </li>

@@ -14,9 +14,9 @@ import pytest
 
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.practice_sets.service import PracticeSetService
+from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import BOOK, KNOWLEDGE_BASE, PRACTICE_SET, get_scope
 from deeptutor.publishing.service import PublishService
-from deeptutor.publishing.scope import ScopeForbidden
 
 
 def _leave(teaching_users, name: str, kind: str, item_id: str) -> None:
@@ -87,7 +87,12 @@ def test_a_promoted_student_leaves_their_assignments(
     from deeptutor.teaching.store import TeachingStore
 
     teacher_draft()
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
+    template_id = publish_template()["template"]["id"]
+    # Older data: the path named Sara and Sam; named receivers are students only.
+    scopes._store_scope(scopes.MASTERY_PATH, template_id,
+                        scopes.Scope(users=[teaching_users["sara"]["id"], teaching_users["sam"]["id"]]),
+                        actor_id=teaching_users["tina"]["id"])
+    scopes.reconcile_template(template_id)
     _set_role(teaching_users, "sam", "teacher")
     active = {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
     assert active == {teaching_users["sara"]["id"]}
@@ -161,25 +166,15 @@ def test_a_first_publication_reaches_nobody_until_they_join_and_admins_still_see
             assert registry.can_read(current, get_current_user()) is expected, name
 
 
-def test_teachers_pick_only_their_learners_but_keep_existing_targets(
-    teaching_books, teaching_users, as_account, seed_user, make_learners
-):
-    stan = seed_user("stan", role="student")["id"]  # joined nothing of Tom's
+def test_a_scope_change_keeps_the_accounts_an_older_scope_named(teaching_books, teaching_users, as_account):
     sara = teaching_users["sara"]["id"]
-    course_id = make_learners("tom", "sara")
+    book_id = teaching_books.public.book_id
+    # Older data: Tom's public book named Sara (spec 2026-11-05 remove-teacher-management §2).
+    scopes._store_scope(BOOK, book_id, scopes.Scope(users=[sara]), actor_id=teaching_users["tom"]["id"])
     with as_account("tom"):
-        assert [p["username"] for p in PublishService().search_people("stan")] == []
-        with pytest.raises(ScopeForbidden):
-            PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[stan],
-                                       confirm=True)
-        PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[sara],
-                                   confirm=True)
-    # Sara leaves everything of Tom's; the stale target must not block another change.
-    _leave(teaching_users, "sara", "course", course_id)
-    with as_account("tom"):
-        PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=False, users=[sara],
-                                   confirm=True)
-    assert get_scope(BOOK, teaching_books.public.book_id).users == [sara]
+        described = PublishService().set_scope(BOOK, book_id, everyone=False, confirm=True)
+    assert described["scope"]["users"] == [{"id": sara, "username": "sara"}]
+    assert get_scope(BOOK, book_id).users == [sara]
 
 
 # ── practice sets ──────────────────────────────────────────
@@ -192,11 +187,17 @@ QUESTIONS = [
 
 @pytest.fixture
 def practice_set(as_account, deliver):
+    """An older set: answers after a deadline still an hour away (both no longer read)."""
+    from deeptutor.practice_sets import store as practice_store
+
     with as_account("tina"):
         service = PracticeSetService()
         created = service.create("Week 1")
-        service.update(created["id"], questions=QUESTIONS, reveal="after_due", due_at=time.time() + 3600)
+        service.update(created["id"], questions=QUESTIONS)
         service.publish(created["id"])
+    with practice_store.write() as conn:
+        conn.execute("UPDATE practice_sets SET reveal = 'after_due', due_at = ? WHERE id = ?",
+                     (time.time() + 3600, created["id"]))
     deliver(PRACTICE_SET, created["id"], "sara", "sam")
     return created["id"], None
 
@@ -218,27 +219,26 @@ def test_a_first_published_set_names_nobody_and_reaches_who_joined(practice_set,
     assert set(scope.members) == {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
 
 
-def test_answers_stay_out_of_the_bank_until_the_deadline(practice_set, as_account):
+def test_an_older_after_due_set_shows_answers_right_after_submitting(practice_set, as_account):
     set_id, _ = practice_set
     with as_account("sara"):
+        assert not PracticeSetService().take(set_id)["answers_revealed"]
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         result = asyncio.run(PracticeSetService().submit(set_id, {qid: "A"}))
-        assert not result["answers_revealed"] and result["results"][0]["result"] == "pending"
-    assert _bank_entry(as_account, "sara", set_id)["correct_answer"] == ""
-
-    with as_account("tina"):
-        PracticeSetService().update(set_id, due_at=time.time() - 1)
-    with as_account("sara"):
-        assert PracticeSetService().take(set_id)["answers_revealed"]
-        asyncio.run(PracticeSetService().reveal_in_bank(set_id))
+        assert result["answers_revealed"] and result["results"][0]["result"] == "incorrect"
+        assert "late" not in result
+        taken = PracticeSetService().take(set_id)
+        assert taken["answers_revealed"] and taken["reveal"] == "after_submit" and "due_at" not in taken
     entry = _bank_entry(as_account, "sara", set_id)
     assert entry["correct_answer"] == "B" and entry["user_answer"] == "A"
 
 
-def test_no_answers_before_submitting_even_after_the_deadline(practice_set, as_account):
+def test_no_answers_before_submitting_even_after_an_older_deadline(practice_set, as_account):
+    from deeptutor.practice_sets import store as practice_store
+
     set_id, _ = practice_set
-    with as_account("tina"):
-        PracticeSetService().update(set_id, due_at=time.time() - 1)
+    with practice_store.write() as conn:
+        conn.execute("UPDATE practice_sets SET due_at = ? WHERE id = ?", (time.time() - 1, set_id))
     with as_account("sam"):
         taken = PracticeSetService().take(set_id)
     assert not taken["answers_revealed"] and "correct_answer" not in taken["questions"][0]
@@ -280,17 +280,6 @@ def test_answers_are_graded_against_the_version_the_student_opened(practice_set,
             "SELECT revision, score FROM practice_submissions WHERE set_id = ?", (set_id,)
         ).fetchall()
     assert (saved["revision"], saved["score"]) == (1, 1)
-
-
-def test_after_due_needs_a_deadline(as_account):
-    from deeptutor.practice_sets.service import PracticeError
-
-    with as_account("tina"):
-        service = PracticeSetService()
-        created = service.create("No deadline")
-        service.update(created["id"], questions=QUESTIONS, reveal="after_due")
-        with pytest.raises(PracticeError):
-            service.publish(created["id"])
 
 
 # ── registration ───────────────────────────────────────────

@@ -6,8 +6,8 @@ import type { ScopeUpdate } from "./publish-api";
 const BASE = "/api/tasks";
 
 export type TaskKind = "mastery_path" | "practice_set" | "book" | "note";
-/** ``not_open``: published, but its opening time has not come (spec 2026-11-03 batch 2 §6). */
-export type TaskState = "not_open" | "open" | "overdue" | "completed" | "closed";
+/** Tasks have no deadline or opening time (spec 2026-11-05 §1.4). */
+export type TaskState = "open" | "completed" | "closed";
 
 export interface TaskSettings {
   ratio?: number;
@@ -24,8 +24,6 @@ export interface TaskSummary {
   target_id: string;
   target_title: string;
   settings: TaskSettings;
-  due_at: number | null;
-  open_at: number | null;
   status: "draft" | "published" | "archived";
   created_at: number;
   updated_at: number;
@@ -49,7 +47,6 @@ export interface TaskDetail extends TaskSummary {
     in_scope: boolean;
     completed: boolean;
     completed_at: number | null;
-    late: boolean;
     self_reported: boolean;
   }[];
 }
@@ -64,11 +61,8 @@ export interface AssignedTask {
   target_id: string;
   target_title: string;
   settings: TaskSettings;
-  due_at: number | null;
-  open_at?: number | null;
   state: TaskState;
   completed_at: number | null;
-  late: boolean;
   provenance: Provenance;
 }
 
@@ -104,7 +98,7 @@ export const createTask = (kind: TaskKind, title: string) =>
 export const getTask = (taskId: string) => call<{ task: TaskDetail }>(id(taskId)).then((r) => r.task);
 export const updateTask = (
   taskId: string,
-  fields: Partial<Pick<TaskSummary, "title" | "description" | "target_id" | "settings" | "due_at" | "open_at">>,
+  fields: Partial<Pick<TaskSummary, "title" | "description" | "target_id" | "settings">>,
 ) => call<{ task: TaskSummary }>(id(taskId), send("PUT", fields)).then((r) => r.task);
 /** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
 export const publishTask = (taskId: string, scope?: ScopeUpdate) =>
@@ -186,7 +180,7 @@ export const updateCourse = (courseId: string, fields: { title?: string; descrip
   call<{ course: CourseDetail }>(`/courses${id(courseId)}`, send("PUT", fields)).then((r) => r.course);
 export const addCourseTask = (courseId: string, kind: TaskKind, title: string) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/tasks`, send("POST", { kind, title })).then((r) => r.course);
-/** Follow-ups §3: one's published practice set (e.g. remedial) becomes the course's next task. */
+/** Follow-ups §3: one's published practice set becomes the course's next task. */
 export const addCoursePracticeSet = (courseId: string, setId: string) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/practice-sets`, send("POST", { set_id: setId })).then((r) => r.course);
 export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
@@ -200,13 +194,3 @@ export const handOverCourse = (courseId: string, teacherId: string) =>
 export const handOverTask = (taskId: string, teacherId: string) =>
   call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: teacherId }));
 
-// The calendar (spec 2026-11-03 batch 2 §7).
-export interface CalendarEvent {
-  key: string;
-  title: string;
-  kind: TaskKind;
-  state: string;
-  type: "open" | "due";
-  at: number;
-}
-export const listCalendar = () => call<{ events: CalendarEvent[] }>("/calendar").then((r) => r.events);

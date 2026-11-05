@@ -232,8 +232,8 @@ def _legacy_first_publish(request, monkeypatch):
     every account. The tests about other rules of books and knowledge bases
     (reading, references, withdrawal, health, listings) were written then
     and keep that outcome: such a publication stores no scope. Everything
-    else — named receivers (``chosen_scope``), market publications
-    (``join_only``) and every other kind — follows the real rule, and tests
+    else — market publications (``join_only``) and every other kind —
+    follows the real rule, and tests
     marked ``first_publish_rule`` get the real rule for books and knowledge
     bases too.
     """
@@ -256,9 +256,7 @@ def _legacy_first_publish(request, monkeypatch):
             market.reset(token)
 
     def legacy(kind: str, item_id: str) -> None:
-        chosen = scope._chosen.get()
-        nothing_chosen = chosen is None or chosen.empty
-        if kind in (scope.BOOK, scope.KNOWLEDGE_BASE) and not market.get() and nothing_chosen:
+        if kind in (scope.BOOK, scope.KNOWLEDGE_BASE) and not market.get():
             return
         real(kind, item_id)
 

@@ -1,19 +1,15 @@
 "use client";
 
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { primaryClass } from "@/components/common/form-styles";
 import { bookApi } from "@/lib/book-api";
-import { browserStorage } from "@/shared/storage";
 import type { Book, Chapter } from "@/lib/book-types";
 import {
   getAttempt,
   regradeQuestion,
-  remedialFromSet,
   type PracticeReport,
-  type RemedialDraft,
   type ReviewAttempt,
 } from "@/lib/practice-sets-api";
 
@@ -26,24 +22,6 @@ const RESULT_LABEL: Record<string, string> = {
   ungraded: "Not graded",
   pending: "Pending",
 };
-
-/** Where remedial drafts hand their suggested receivers to the editor that opens next. */
-export const SUGGESTED_KEY = (setId: string) => `practice-remedial-suggest:${setId}`;
-
-export function rememberSuggested(draft: RemedialDraft) {
-  // Unavailable storage just means the teacher picks receivers by hand.
-  browserStorage.writeRaw("session", SUGGESTED_KEY(draft.set.id), JSON.stringify(draft.suggested_students));
-}
-
-export function takeSuggested(setId: string): { id: string; username: string }[] {
-  const raw = browserStorage.readRaw("session", SUGGESTED_KEY(setId));
-  try {
-    const value: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(value) ? (value as { id: string; username: string }[]) : [];
-  } catch {
-    return [];
-  }
-}
 
 /** How many picked each option, the right one marked (spec 2026-11-03 batch 3 §6.1). */
 export function OptionBars({ question }: { question: PracticeReport["questions"][number] }) {
@@ -153,47 +131,6 @@ export function AttemptReview({
       </ol>
       {saveError && <p role="alert" className="text-[12px] text-red-600">{saveError}</p>}
       <p className="text-[11px] text-[var(--muted-foreground)]">{t("The student is told when you change a score.")}</p>
-    </div>
-  );
-}
-
-/** Practise again what many got wrong (§3.1): the picked questions, plus AI look-alikes. */
-export function RemedialFromSet({
-  setId,
-  questionIds,
-  onCreated,
-}: {
-  setId: string;
-  questionIds: string[];
-  onCreated: (draft: RemedialDraft) => void;
-}) {
-  const { t } = useTranslation();
-  const [similar, setSimilar] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--muted)]/40 p-2 text-[12px]" data-testid="remedial-from-set">
-      <span>{t("{{count}} questions picked", { count: questionIds.length })}</span>
-      <label className="flex items-center gap-1">
-        {t("Similar questions per question")}
-        <select className="h-7 rounded border border-[var(--border)] bg-[var(--background)] px-1" value={similar}
-          onChange={(e) => setSimilar(Number(e.target.value))}>
-          {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </label>
-      <button type="button" className={primaryClass} disabled={busy || questionIds.length === 0}
-        onClick={() => {
-          setBusy(true);
-          setError("");
-          remedialFromSet(setId, questionIds, similar, t("Remedial: "))
-            .then((draft) => { rememberSuggested(draft); onCreated(draft); })
-            .catch((err) => setError(errorText(err, t)))
-            .finally(() => setBusy(false));
-        }}>
-        <Sparkles size={13} />
-        {busy ? t("Generating…") : t("Make remedial practice")}
-      </button>
-      {error && <span role="alert" className="text-red-600">{error}</span>}
     </div>
   );
 }

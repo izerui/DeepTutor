@@ -1,16 +1,13 @@
 "use client";
 
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, primaryClass } from "@/components/common/form-styles";
-import { flagText } from "@/components/catalog/attention-format";
 import { DownloadButton } from "@/components/common/DownloadButton";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
-import { rememberSuggested } from "@/components/practice-sets/SetReview";
 import {
   getLearnerDetail,
   getLearnerReport,
@@ -23,9 +20,6 @@ import {
   type ReportKind,
   type ReportPoints,
 } from "@/lib/catalog-api";
-import { CommentEditor } from "@/components/comments/Comments";
-import { writtenComments, type TeacherComment } from "@/lib/comments-api";
-import { remedialFromPath } from "@/lib/practice-sets-api";
 
 import { catalogError, itemHref, kindLabel } from "./catalog-format";
 
@@ -41,19 +35,10 @@ const backHref = (kind: ReportKind, id: string) => (kind === "course" ? "/tasks?
 
 /**
  * A practice set opened from a report; from a course's report it carries the
- * course (follow-ups §3), so remedial practice made there can be added to it.
+ * course (follow-ups §3).
  */
 export const practiceSetHref = (setId: string, kind: ReportKind, itemId: string) =>
   `/practice-sets?set=${encodeURIComponent(setId)}${kind === "course" ? `&course=${encodeURIComponent(itemId)}` : ""}`;
-
-/** A remedial draft opens in the practice-set editor with its suggested receivers handed over. */
-function useOpenRemedial(kind: ReportKind, itemId: string) {
-  const router = useRouter();
-  return (draft: Awaited<ReturnType<typeof remedialFromPath>>) => {
-    rememberSuggested(draft);
-    router.push(practiceSetHref(draft.set.id, kind, itemId));
-  };
-}
 
 /** Mastered of total over the paths of this item. */
 function mastered(row: Pick<LearnerRow, "paths">): { mastered: number; total: number } {
@@ -93,7 +78,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   const [error, setError] = useState("");
   // Counted on this item only (a learner's study elsewhere stays theirs); 7 / 30 days or all time.
   const [days, setDays] = useState<number | null>(7);
-  const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
@@ -123,7 +107,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   if (!report) return <div className="space-y-4">{back}<div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" /></div>;
 
   const isCourse = report.kind === "course";
-  const rows = onlyFlagged ? report.learners.filter((row) => row.flags.length > 0) : report.learners;
   const setTitles = new Map<string, string>();
   for (const row of report.learners) for (const set of row.practice_sets) setTitles.set(set.set_id, set.title);
 
@@ -148,10 +131,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
             <option value="">{t("All time")}</option>
           </select>
         </label>
-        <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
-          {t("Only learners who need attention")}
-        </label>
         <DownloadButton download={() => downloadReport(kind, itemId, days)} label={t("Export CSV")} />
       </div>
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
@@ -164,7 +143,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
             <thead className="text-[11.5px] text-[var(--muted-foreground)]">
               <tr>
                 <th className={cell}>{t("Learner")}</th>
-                <th className={cell}>{t("Needs attention")}</th>
                 <th className={cell}>{t("Last studied")}</th>
                 <th className={cell}>{t("Answers in period")}</th>
                 {isCourse && <th className={cell}>{t("Tasks done in period")}</th>}
@@ -174,7 +152,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {report.learners.map((row) => {
                 const points = mastered(row);
                 const score = practiceScore(row);
                 const open = selected === row.id;
@@ -185,13 +163,6 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                         onClick={() => setSelected(open ? null : row.id)}>
                         {row.username}
                       </button>
-                    </td>
-                    <td className={cell}>
-                      <ul className="space-y-0.5">
-                        {row.flags.map((flag, index) => (
-                          <li key={index} className="text-[11.5px] text-amber-700 dark:text-amber-300">{flagText(flag, t)}</li>
-                        ))}
-                      </ul>
                     </td>
                     <td className={cell}>{when(row.overall.last_activity, t("Never"))}</td>
                     <td className={cell}>{row.overall.period_answers ?? 0}</td>
@@ -227,7 +198,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
         <section aria-labelledby="report-sets" className="space-y-2 rounded-xl border border-[var(--border)] p-3">
           <h2 id="report-sets" className="text-[13px] font-semibold">{t("Practice sets in this course")}</h2>
           <p className="text-[11.5px] text-[var(--muted-foreground)]">
-            {t("Open a practice set's results to see the questions most got wrong and make remedial practice from them.")}
+            {t("Open a practice set's results to see the questions most got wrong.")}
           </p>
           <ul className="space-y-1 text-[12.5px]">
             {report.practice_sets.map((setId) => (
@@ -244,12 +215,10 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   );
 }
 
-/** One path of the item: who has mastered each point; remedial for the rest (§1, §4). */
+/** One path of the item: who has mastered each point (§1). */
 function PathPoints({ kind, itemId, templateId, title }: { kind: ReportKind; itemId: string; templateId: string; title: string }) {
   const { t } = useTranslation();
-  const openRemedial = useOpenRemedial(kind, itemId);
   const [data, setData] = useState<ReportPoints | null>(null);
-  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -283,25 +252,6 @@ function PathPoints({ kind, itemId, templateId, title }: { kind: ReportKind; ite
               <span className="tabular-nums text-[var(--muted-foreground)]">
                 {t("{{mastered}} / {{total}} mastered", { mastered: point.mastered, total: point.students })}
               </span>
-              {point.not_mastered.length > 0 && (
-                <button type="button" className={actionClass} disabled={busy !== ""}
-                  aria-label={t("Remedial practice on {{name}} for the {{count}} who have not mastered it", {
-                    name: point.name, count: point.not_mastered.length,
-                  })}
-                  onClick={() => {
-                    setBusy(point.id);
-                    setError("");
-                    remedialFromPath(data.template_id, [point.id], point.not_mastered, t("Remedial: "))
-                      .then(openRemedial)
-                      .catch((err) => setError(catalogError(err, t)))
-                      .finally(() => setBusy(""));
-                  }}>
-                  <Sparkles size={13} aria-hidden />
-                  {busy === point.id
-                    ? t("Generating…")
-                    : t("Remedial practice for the {{count}} who have not mastered it", { count: point.not_mastered.length })}
-                </button>
-              )}
             </li>
           ))}
         </ul>
@@ -313,27 +263,13 @@ function PathPoints({ kind, itemId, templateId, title }: { kind: ReportKind; ite
 /** One learner on this item: each point's mastery, practice results, tasks. */
 function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId: string; userId: string }) {
   const { t } = useTranslation();
-  const openRemedial = useOpenRemedial(kind, itemId);
   const [detail, setDetail] = useState<LearnerDetail | null>(null);
   const [error, setError] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [picked, setPicked] = useState<Record<string, string[]>>({});
-  const [busy, setBusy] = useState(false);
-  // Traceability #4: what the author already wrote to this learner, per path, read once.
-  const [comments, setComments] = useState<Record<string, TeacherComment[]>>({});
 
   useEffect(() => {
     let alive = true;
     getLearnerDetail(kind, itemId, userId)
-      .then((next) => {
-        if (!alive) return;
-        setDetail(next);
-        for (const path of next.paths) {
-          writtenComments("path_point", path.template_id, userId)
-            .then((rows) => alive && setComments((cur) => ({ ...cur, [path.template_id]: rows })))
-            .catch(() => alive && setComments((cur) => ({ ...cur, [path.template_id]: [] })));
-        }
-      })
+      .then((next) => alive && setDetail(next))
       .catch((err) => alive && setError(catalogError(err, t)));
     return () => {
       alive = false;
@@ -346,7 +282,6 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
     <section aria-label={t("Details of {{name}}", { name: detail.username })}
       className="space-y-3 rounded-xl border border-[var(--border)] p-3" data-testid="learner-detail">
       <h2 className="text-[13px] font-semibold text-[var(--foreground)]">{detail.username}</h2>
-      {actionError && <p role="alert" className="text-[12px] text-red-600">{actionError}</p>}
       {detail.tasks && (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">
           {t("{{done}} / {{total}} tasks done", { done: detail.tasks.done, total: detail.tasks.total })}
@@ -362,7 +297,6 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
                   first: set.first_score, max: set.max_score, best: set.best_score,
                   bestMax: set.best_max_score, count: set.attempts,
                 })}
-                {set.late && ` · ${t("Late")}`}
               </span>
             </li>
           ))}
@@ -371,65 +305,36 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
       {detail.paths.length === 0 && detail.practice_sets.length === 0 && (
         <p className="text-[12px] text-[var(--muted-foreground)]">{t("Nothing learned here yet.")}</p>
       )}
-      {detail.paths.map((path) => {
-        const chosen = picked[path.template_id] ?? [];
-        return (
-          <div key={path.template_id} className="space-y-1.5">
-            <p className="text-[12.5px] font-medium text-[var(--foreground)]">
-              {path.title}
-              <span className="ml-2 text-[11.5px] font-normal text-[var(--muted-foreground)]">
-                {t("{{correct}} correct · {{partial}} partial · {{incorrect}} wrong", { ...path.attempts })}
-              </span>
-            </p>
-            <ul className="grid gap-1 sm:grid-cols-2">
-              {(path.knowledge_points ?? []).map((kp, index) => (
-                <li key={kp.id || index} className="space-y-0.5 text-[12px]">
-                  <div className="flex items-center gap-2">
-                    {!kp.mastered && kp.id && (
-                      <input type="checkbox" aria-label={t("Pick {{name}}", { name: kp.name })} checked={chosen.includes(kp.id)}
-                        onChange={() => setPicked({
-                          ...picked,
-                          [path.template_id]: chosen.includes(kp.id) ? chosen.filter((k) => k !== kp.id) : [...chosen, kp.id],
-                        })} />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-[var(--foreground)]">{kp.name}</span>
-                    <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--muted)]">
-                      <span className={`block h-full ${kp.mastered ? "bg-emerald-500" : "bg-[var(--primary)]"}`}
-                        style={{ width: `${Math.round(kp.mastery * 100)}%` }} />
-                    </span>
-                    <span className="w-9 text-right tabular-nums text-[var(--muted-foreground)]">{Math.round(kp.mastery * 100)}%</span>
-                  </div>
-                  {(kp.answers ?? 0) > 0 && (
-                    <p className="text-[11px] text-[var(--muted-foreground)]">
-                      {t("{{answers}} answers, {{wrong}} wrong", { answers: kp.answers, wrong: kp.wrong ?? 0 })}
-                      {kp.stuck_days != null && ` · ${t("stuck for {{days}} days", { days: kp.stuck_days })}`}
-                    </p>
-                  )}
-                  {/* Traceability #4: a word to the learner on a point not mastered yet or stuck. */}
-                  {kp.id && (!kp.mastered || kp.stuck_days != null) && (
-                    <CommentEditor kind="path_point" subject={path.template_id} target={kp.id} studentId={userId}
-                      preloaded={comments[path.template_id] ?? null} />
-                  )}
-                </li>
-              ))}
-            </ul>
-            {chosen.length > 0 && (
-              <button type="button" className={primaryClass} disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  setActionError("");
-                  remedialFromPath(path.template_id, chosen, [userId], t("Remedial: "))
-                    .then(openRemedial)
-                    .catch((err) => setActionError(catalogError(err, t)))
-                    .finally(() => setBusy(false));
-                }}>
-                <Sparkles size={13} aria-hidden />
-                {busy ? t("Generating…") : t("Make remedial practice")}
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {detail.paths.map((path) => (
+        <div key={path.template_id} className="space-y-1.5">
+          <p className="text-[12.5px] font-medium text-[var(--foreground)]">
+            {path.title}
+            <span className="ml-2 text-[11.5px] font-normal text-[var(--muted-foreground)]">
+              {t("{{correct}} correct · {{partial}} partial · {{incorrect}} wrong", { ...path.attempts })}
+            </span>
+          </p>
+          <ul className="grid gap-1 sm:grid-cols-2">
+            {(path.knowledge_points ?? []).map((kp, index) => (
+              <li key={kp.id || index} className="space-y-0.5 text-[12px]">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[var(--foreground)]">{kp.name}</span>
+                  <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--muted)]">
+                    <span className={`block h-full ${kp.mastered ? "bg-emerald-500" : "bg-[var(--primary)]"}`}
+                      style={{ width: `${Math.round(kp.mastery * 100)}%` }} />
+                  </span>
+                  <span className="w-9 text-right tabular-nums text-[var(--muted-foreground)]">{Math.round(kp.mastery * 100)}%</span>
+                </div>
+                {(kp.answers ?? 0) > 0 && (
+                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                    {t("{{answers}} answers, {{wrong}} wrong", { answers: kp.answers, wrong: kp.wrong ?? 0 })}
+                    {kp.stuck_days != null && ` · ${t("stuck for {{days}} days", { days: kp.stuck_days })}`}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </section>
   );
 }

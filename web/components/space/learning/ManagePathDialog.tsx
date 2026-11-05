@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { Archive, Loader2, Trash2, UserMinus, X } from "lucide-react";
+import { useRef, useState, type RefObject } from "react";
+import { Archive, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 
@@ -10,10 +10,7 @@ import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   archiveTemplate,
   deleteTemplate,
-  listAssignments,
-  revokeAssignment,
   type TeacherTemplate,
-  type TemplateAssignment,
 } from "@/lib/teaching-api";
 
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
@@ -24,7 +21,12 @@ import { teachingErrorMessage, type Message } from "./teaching";
 
 type Confirming = "archive" | "delete" | null;
 
-export function TemplateAssignmentsDialog({
+/**
+ * One teacher path's management: its market listing, learning report,
+ * announcements, and archiving or deleting it. Who studies it is whoever
+ * joined it (spec 2026-11-05 §1.2): nobody is added or removed by hand.
+ */
+export function ManagePathDialog({
   template,
   returnFocusRef,
   onClose,
@@ -37,30 +39,13 @@ export function TemplateAssignmentsDialog({
 }) {
   const { t } = useTranslation();
   const { isAdmin } = useAuthStatus();
-  const [rows, setRows] = useState<TemplateAssignment[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message | null>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
-  const [reload, setReload] = useState(0);
   const confirmTriggerRef = useRef<HTMLButtonElement | null>(null);
   // While a confirmation is open, Escape belongs to it.
   const dialogRef = useModalDialog(onClose, busy || confirming !== null, returnFocusRef);
   const templateId = template.id;
-
-  useEffect(() => {
-    // Only the newest list for this template may be shown.
-    let alive = true;
-    listAssignments(templateId)
-      .then((next) => {
-        if (alive) setRows(next);
-      })
-      .catch((reason) => {
-        if (alive) setError(teachingErrorMessage(reason, "manage"));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [templateId, reload]);
 
   const run = async (action: () => Promise<unknown>, after?: () => void) => {
     setBusy(true);
@@ -68,8 +53,7 @@ export function TemplateAssignmentsDialog({
     try {
       await action();
       onChanged();
-      if (after) after();
-      else setReload((value) => value + 1);
+      after?.();
     } catch (reason) {
       setError(teachingErrorMessage(reason, "manage"));
     } finally {
@@ -77,11 +61,11 @@ export function TemplateAssignmentsDialog({
     }
   };
 
-  // The server refuses to delete anything published or ever assigned.
-  const deletable = template.current_revision === 0 && rows !== null && rows.length === 0;
-  // Spec 2026-10-29 D10: who receives a path is its teacher's choice; an
+  // The server refuses to delete anything published or ever joined.
+  const deletable = template.current_revision === 0 && template.assigned_count === 0;
+  // Spec 2026-10-29 D10: listing a path is its teacher's choice; an
   // administrator looking at someone else's path archives or deletes it.
-  const canAssign = template.status === "published" && template.is_owner;
+  const canList = template.status === "published" && template.is_owner;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--overlay)] p-3 backdrop-blur-[2px] sm:p-5">
@@ -89,14 +73,14 @@ export function TemplateAssignmentsDialog({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="template-assignments-title"
-        aria-busy={busy || rows === null}
+        aria-labelledby="manage-path-title"
+        aria-busy={busy}
         tabIndex={-1}
         className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-2xl outline-none sm:max-h-[85vh]"
       >
         <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4 sm:p-5">
           <div className="min-w-0">
-            <h2 id="template-assignments-title" className="text-base font-semibold">
+            <h2 id="manage-path-title" className="text-base font-semibold">
               {t("Manage path")}
             </h2>
             <p className="mt-1 truncate text-sm text-[var(--muted-foreground)]">
@@ -117,59 +101,8 @@ export function TemplateAssignmentsDialog({
         </header>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 text-sm sm:p-5">
-          {rows === null ? (
-            !error && (
-              <div role="status" className="flex justify-center py-6 text-[var(--muted-foreground)]">
-                <Loader2 aria-hidden className="h-5 w-5 animate-spin" />
-                <span className="sr-only">{t("Loading…")}</span>
-              </div>
-            )
-          ) : rows.length === 0 ? (
-            <p className="text-xs text-[var(--muted-foreground)]">{t("Nobody has joined yet")}</p>
-          ) : (
-            <ul
-              aria-label={t("Students")}
-              className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]"
-            >
-              {rows.map((row) => (
-                <li
-                  key={row.student_user_id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs"
-                >
-                  <span className="min-w-0 flex-1 truncate font-medium">
-                    {row.username || row.student_user_id}
-                  </span>
-                  <span className="text-[var(--muted-foreground)]">
-                    {row.status === "active" ? t("Assignment active") : t("Access removed")}
-                  </span>
-                  <span className="text-[var(--muted-foreground)]">
-                    {row.applied_revision > 0
-                      ? t("Using v{{revision}}", { revision: row.applied_revision })
-                      : t("Not started")}
-                  </span>
-                  {row.status === "active" && template.is_owner && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(() => revokeAssignment(templateId, row.student_user_id))
-                      }
-                      aria-label={t("Remove access for {{name}}", {
-                        name: row.username || row.student_user_id,
-                      })}
-                      className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-red-600 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
-                    >
-                      <UserMinus aria-hidden className="h-3.5 w-3.5" />
-                      {t("Remove access")}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* Platform batch 1 §4.4: no more picking students; the path is listed in the market. */}
-          {canAssign ? (
+          {/* Platform batch 1 §4.4: the path is listed in the market; learners join it there. */}
+          {canList ? (
             <>
               <ListingPanel kind="mastery_path" itemId={templateId} onChanged={onChanged} />
               {/* Platform batch 3 §1, §3: its learners' report, and announcements to them. */}
@@ -212,7 +145,7 @@ export function TemplateAssignmentsDialog({
               <Trash2 aria-hidden className="h-4 w-4" />
               {t("Delete teacher path")}
             </button>
-          ) : template.status !== "archived" && rows !== null ? (
+          ) : template.status !== "archived" ? (
             <button
               type="button"
               disabled={busy}

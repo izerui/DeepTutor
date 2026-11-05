@@ -5,11 +5,10 @@ import { useTranslation } from "react-i18next";
 import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide-react";
 
 import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
-import { CommentEditor } from "@/components/comments/Comments";
 import { DownloadButton } from "@/components/common/DownloadButton";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE, type ListingStatus } from "@/lib/catalog-api";
+import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import { listKnowledgeBases } from "@/features/knowledge/api/catalog";
 import {
   archiveSet,
@@ -25,12 +24,11 @@ import {
   type PracticeQuestionType,
   type PracticeReport,
   type PracticeSetDraft,
-  type Reveal,
   type ScoreMode,
 } from "@/lib/practice-sets-api";
 import { addCoursePracticeSet, getCourse } from "@/lib/tasks-api";
 import { formatDate } from "./practice-format";
-import { AttemptReview, BookSource, OptionBars, RemedialFromSet, takeSuggested } from "./SetReview";
+import { AttemptReview, BookSource, OptionBars } from "./SetReview";
 
 const sectionClass = "space-y-3 rounded-xl border border-[var(--border)] p-4";
 const titleClass = "text-[13.5px] font-medium text-[var(--foreground)]";
@@ -56,26 +54,16 @@ const blankQuestion = (): PracticeQuestion => ({
   points: 1,
 });
 
-/** dd/mm inputs speak local time; the API speaks seconds since the epoch. */
-const toLocalInput = (seconds: number | null) => {
-  if (!seconds) return "";
-  const date = new Date(seconds * 1000);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-};
-
 /** A teacher's practice set: draft, publish, scope and report (spec 2026-10-29 §8). */
 export function SetEditor({
   setId,
   onChanged,
   onDeleted,
-  onOpenSet,
   courseId,
 }: {
   setId: string;
   onChanged: () => void;
   onDeleted: () => void;
-  /** Opens another set, e.g. a remedial draft made from this one (batch 3 §3.1). */
-  onOpenSet?: (setId: string) => void;
   /** Follow-ups §3: opened from this course's report; once published it can be added to the course. */
   courseId?: string | null;
 }) {
@@ -86,12 +74,6 @@ export function SetEditor({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [picking, setPicking] = useState(false);
-  // Platform batch 1 §4.4: a first publication goes to nobody until people join from the market;
-  // a remedial set (batch 3 §3.1) still goes to the students who got the questions wrong.
-  const [remedial] = useState(() => takeSuggested(setId));
-  // Practice in the market has no deadline (deadlines belong to course tasks).
-  const [listingStatus, setListingStatus] = useState<ListingStatus | null>(null);
-  const inMarket = listingStatus === "pending" || listingStatus === "listed";
 
   useEffect(() => {
     let alive = true;
@@ -139,8 +121,6 @@ export function SetEditor({
       title: draft.title,
       description: draft.description,
       questions: draft.questions,
-      reveal: draft.reveal,
-      due_at: draft.due_at,
       attempts_limit: draft.attempts_limit ?? null,
       score_mode: draft.score_mode ?? "best",
     });
@@ -173,10 +153,8 @@ export function SetEditor({
             onClick={() =>
               void run(async () => {
                 await save();
-                const scope = remedial.length
-                  ? { everyone: false, users: remedial.map((p) => p.id), classes: [] }
-                  : JOIN_ONLY_SCOPE;
-                return publishSet(setId, saved.current_revision === 0 ? scope : undefined);
+                // Platform batch 1 §4.4: a first publication goes to nobody until people join from the market.
+                return publishSet(setId, saved.current_revision === 0 ? JOIN_ONLY_SCOPE : undefined);
               }, t("Published."))
             }
           >
@@ -192,9 +170,7 @@ export function SetEditor({
       </p>
       {saved.current_revision === 0 && (
         <p className={hintClass}>
-          {remedial.length
-            ? t("Publishing sends it to the {{count}} students who got these questions wrong.", { count: remedial.length })
-            : t("Nobody receives it until they join from the learning market. List it below once it is published.")}
+          {t("Nobody receives it until they join from the learning market. List it below once it is published.")}
         </p>
       )}
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
@@ -212,36 +188,6 @@ export function SetEditor({
           value={draft.description}
           onChange={(e) => patch({ description: e.target.value })}
         />
-        <div className="flex flex-wrap gap-4 text-[12.5px]">
-          <label className="flex items-center gap-2">
-            {t("Deadline (optional)")}
-            <input
-              type="datetime-local"
-              className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 disabled:opacity-50"
-              // A deadline set before listing can still be cleared.
-              disabled={inMarket && !draft.due_at}
-              value={toLocalInput(draft.due_at)}
-              onChange={(e) => patch({ due_at: e.target.value ? new Date(e.target.value).getTime() / 1000 : null })}
-            />
-          </label>
-          <label className="flex items-center gap-2">
-            {t("Show answers")}
-            <select
-              className="h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2"
-              value={draft.reveal}
-              onChange={(e) => patch({ reveal: e.target.value as Reveal })}
-            >
-              <option value="after_submit">{t("Right after submitting")}</option>
-              {/* Without a deadline, "after the deadline" would never come. */}
-              <option value="after_due" disabled={!draft.due_at || inMarket}>{t("After the deadline")}</option>
-            </select>
-          </label>
-        </div>
-        {inMarket && (
-          <p className={hintClass} data-testid="market-no-deadline">
-            {t("Practice in the market has no deadline. Set deadlines on course tasks.")}
-          </p>
-        )}
         <div className="flex flex-wrap gap-4 text-[12.5px]">
           <label className="flex items-center gap-2">
             {t("Attempts allowed")}
@@ -267,7 +213,6 @@ export function SetEditor({
             </select>
           </label>
         </div>
-        <p className={hintClass}>{t("Late submissions are still accepted and marked late.")}</p>
       </section>
 
       <section className={sectionClass}>
@@ -300,12 +245,11 @@ export function SetEditor({
 
       {saved.current_revision > 0 && (
         <section className={sectionClass}>
-          <ListingPanel kind="practice_set" itemId={setId} onChanged={onChanged} onStatus={setListingStatus}
-            reloadKey={String(saved.due_at ?? "")} />
+          <ListingPanel kind="practice_set" itemId={setId} onChanged={onChanged} />
         </section>
       )}
 
-      {saved.current_revision > 0 && <ReportSection setId={setId} onOpenSet={onOpenSet} />}
+      {saved.current_revision > 0 && <ReportSection setId={setId} />}
 
       <div className="flex flex-wrap gap-2">
         {saved.current_revision === 0 ? (
@@ -581,7 +525,7 @@ function GeneratePanel({
 }
 
 /**
- * Follow-ups §3: remedial practice made from a course's report goes back into the
+ * Follow-ups §3: a practice set opened from a course's report goes into the
  * course as its next "do this practice set" task (published at once with a
  * published course, otherwise with the course).
  */
@@ -594,7 +538,7 @@ function AddToCourse({ courseId, setId }: { courseId: string; setId: string }) {
   useEffect(() => {
     let alive = true;
     getCourse(courseId)
-      // Already one of the course's tasks (e.g. the set the remedial practice was made from): nothing to add.
+      // Already one of the course's tasks: nothing to add.
       .then((course) => alive && setTitle((course.tasks ?? []).some((task) => task.target_id === setId) ? null : course.title))
       .catch(() => alive && setTitle(null));
     return () => {
@@ -628,25 +572,19 @@ function AddToCourse({ courseId, setId }: { courseId: string; setId: string }) {
   );
 }
 
-function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId: string) => void }) {
+function ReportSection({ setId }: { setId: string }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<PracticeReport | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [reloads, setReloads] = useState(0);
   const [reviewing, setReviewing] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
     getReport(setId)
-      .then((next) => {
-        if (!alive) return;
-        setReport(next);
-        // Batch 3 §3.1: questions half the class got wrong are picked for remedial practice.
-        setPicked((current) => current.length ? current : next.questions.filter((q) => (q.error_rate ?? 0) >= 0.5).map((q) => q.question_id));
-      })
+      .then((next) => alive && setReport(next))
       .catch((err) => alive && setError(err instanceof Error ? t(err.message) : String(err)));
     return () => {
       alive = false;
@@ -684,7 +622,6 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
                   <th className="px-2 py-1.5">{t("Minutes")}</th>
                   <th className="px-2 py-1.5">{t("Submitted")}</th>
                   <th className="px-2 py-1.5">{t("Review")}</th>
-                  <th className="px-2 py-1.5">{t("Comment")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -697,7 +634,6 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
                     <td className="px-2 py-1.5">{student.minutes ?? "—"}</td>
                     <td className="px-2 py-1.5">
                       {formatDate(student.submitted_at) || "—"}
-                      {student.late && <span className="ml-1 text-amber-600">{t("Late")}</span>}
                     </td>
                     <td className="px-2 py-1.5">
                       {student.latest_submission_id && (
@@ -710,12 +646,6 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
                         <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
                           {t("{{count}} to grade", { count: student.ungraded })}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {student.latest_submission_id && (
-                        <CommentEditor kind="practice_submission" subject={setId}
-                          target={student.latest_submission_id} studentId={student.id} />
                       )}
                     </td>
                   </tr>
@@ -733,10 +663,6 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
               {report.questions.map((question, index) => (
                 <li key={question.question_id}>
                   <div className="flex gap-2">
-                    <input type="checkbox" aria-label={t("Pick question {{n}} for remedial practice", { n: index + 1 })}
-                      checked={picked.includes(question.question_id)}
-                      onChange={() => setPicked(picked.includes(question.question_id)
-                        ? picked.filter((id) => id !== question.question_id) : [...picked, question.question_id])} />
                     <span className="w-12 shrink-0 tabular-nums">
                       {question.error_rate === null ? "—" : `${Math.round(question.error_rate * 100)}%`}
                     </span>
@@ -748,9 +674,6 @@ function ReportSection({ setId, onOpenSet }: { setId: string; onOpenSet?: (setId
                 </li>
               ))}
             </ol>
-            {picked.length > 0 && (
-              <RemedialFromSet setId={setId} questionIds={picked} onCreated={(draft) => onOpenSet?.(draft.set.id)} />
-            )}
           </div>
           <p className={hintClass}>{t("Answers to short-answer questions and the options picked are shown to you only.")}</p>
         </div>

@@ -18,7 +18,7 @@ function TemplateStatus({ template }: { template: TeacherTemplate }) {
       {template.current_revision > 0 && (
         <span className="text-[var(--muted-foreground)]">
           {t('Published v{{revision}}', { revision: template.current_revision })} ·{' '}
-          {t('{{count}} students assigned', { count: template.assigned_count })}
+          {t('{{count}} learners', { count: template.assigned_count })}
         </span>
       )}
       {template.materials_unavailable.length > 0 && (

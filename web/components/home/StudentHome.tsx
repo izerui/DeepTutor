@@ -30,7 +30,6 @@ function TaskCard({ task, onOpen, selected }: { task: AssignedTask; onOpen: () =
       <span className="mt-1 block truncate text-[14px] font-medium text-[var(--foreground)]">{task.title}</span>
       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted-foreground)]">
         <SourceBadge provenance={task.provenance} />
-        {task.due_at ? t("Due {{date}}", { date: formatWhen(task.due_at) }) : ""}
       </span>
     </button>
   );

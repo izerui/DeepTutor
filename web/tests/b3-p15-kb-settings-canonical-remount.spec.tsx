@@ -69,7 +69,6 @@ vi.mock("@/components/knowledge/KbLinkedFoldersSection", () => ({ default: () =>
 vi.mock("@/components/knowledge/KbWebSourcesSection", () => ({ default: () => null }));
 vi.mock("@/components/knowledge/KbMarginNoteDevicesSection", () => ({ default: () => null }));
 // The publish-scope panel has its own fetches and its own spec.
-vi.mock("@/components/publishing/PublishScopeEditor", () => ({ PublishScopeEditor: () => null }));
 vi.mock("@/components/knowledge/KbKiwixArticlesSection", () => ({ default: () => null }));
 vi.mock("@/components/knowledge/LightRagEmbeddingWarning", () => ({ default: () => null }));
 

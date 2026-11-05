@@ -87,7 +87,6 @@ class PracticeReview:
             "student_id": submission["student_id"],
             "username": account.get("username", ""),
             "submitted_at": submission["submitted_at"],
-            "late": bool(submission["late"]),
             "score": submission["score"],
             "max_score": submission["max_score"],
             "regraded_at": _col(submission, "regraded_at"),
@@ -164,7 +163,7 @@ class PracticeReview:
         # Each score with the maximum of the version it was on (R15).
         writer.writerow([
             "student", "in_scope", "attempts", "first_score", "first_max", "best_score", "best_max",
-            "counted_score", "counted_max", "minutes", "late", "submitted_at",
+            "counted_score", "counted_max", "minutes", "submitted_at",
             *[f"Q{i + 1}" for i in range(len(questions))],
         ])
         for student in report["students"]:
@@ -174,7 +173,7 @@ class PracticeReview:
                 _number(student["first_score"]), _number(student["max_score"]),
                 _number(student["best_score"]), _number(student["best_max_score"]),
                 _number(student["score"]), _number(student["score_max"]),
-                _number(student["minutes"]), "yes" if student["late"] else "no",
+                _number(student["minutes"]),
                 time.strftime("%Y-%m-%d %H:%M", time.localtime(student["submitted_at"])) if student["submitted_at"] else "",
                 *[results.get(q["question_id"], "") for q in questions],
             ])

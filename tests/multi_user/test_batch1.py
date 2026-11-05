@@ -7,13 +7,12 @@ docs/superpowers/specs/2026-11-05-remove-homework.md)
 from __future__ import annotations
 
 import asyncio
-import time
 from types import SimpleNamespace
 
 import pytest
 
 from deeptutor.notifications import service as notifications
-from deeptutor.practice_sets.service import PracticeConflict, PracticeSetService
+from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import Scope
 from deeptutor.tasks.service import StudentTasks, TaskError, TaskForbidden, TaskNotFound, TaskService
@@ -83,34 +82,34 @@ def test_a_task_never_goes_to_everyone_nor_on_its_own(as_account):
             TaskService().publish(task["id"])
     course_id = _in_course(task["id"], to=(), publish=False)
     with as_account("tina"):
-        with scopes.chosen_scope(Scope(everyone=True)), pytest.raises(scopes.ScopeError):
-            CourseService().publish(course_id)
-        assert scopes.get_scope(scopes.TASK, task["id"]) is None
-        assert scopes.get_scope(scopes.COURSE, course_id) is None
-        assert TaskService().get(task["id"])["status"] == "draft"
+        CourseService().publish(course_id)
+    # Nobody is named and nothing reaches everyone: only who joins the course.
+    for kind, item_id in ((scopes.TASK, task["id"]), (scopes.COURSE, course_id)):
+        scope = scopes.get_scope(kind, item_id)
+        assert (scope.everyone, scope.users) == (False, [])
 
 
-def test_a_task_must_not_reach_students_its_content_does_not(as_account, make_learners):
+def test_a_task_must_not_reach_students_its_content_does_not(as_account):
     from deeptutor.tasks.courses import CourseService
 
-    make_learners("tina", "sara", "sam")
     with as_account("tina"):
         practice = PracticeSetService()
         created = practice.create("Week 1")
         practice.update(created["id"], questions=QUESTIONS)
-        with scopes.chosen_scope(Scope(users=[_uid("sara")])):
-            practice.publish(created["id"])
+        practice.publish(created["id"])
         task = TaskService().create("practice_set", "Do week 1")
         TaskService().update(task["id"], target_id=created["id"])
+    # Older data: a draft task whose stored scope names Sara and Sam; the set reaches Sara only.
+    scopes._store_scope(scopes.TASK, task["id"], Scope(users=[_uid("sara"), _uid("sam")]), actor_id=_uid("tina"))
+    _fixtures["deliver"]("practice_set", created["id"], "sara")
     course_id = _in_course(task["id"], to=(), publish=False)
+    with as_account("tina"), pytest.raises(TaskError, match="Some of these students"):
+        CourseService().publish(course_id)  # the set does not reach Sam
+    _fixtures["deliver"]("practice_set", created["id"], "sam")
     with as_account("tina"):
-        with scopes.chosen_scope(Scope(users=[_uid("sara"), _uid("sam")])):
-            with pytest.raises(TaskError, match="Some of these students"):
-                CourseService().publish(course_id)  # the set does not reach Sam
-        assert scopes.get_scope(scopes.TASK, task["id"]) is None
-        with scopes.chosen_scope(Scope(users=[_uid("sara")])):
-            CourseService().publish(course_id)
-    assert _entry(as_account, "sara", task["id"])["state"] == "open"
+        CourseService().publish(course_id)
+    # The named students of the older scope still receive it.
+    assert _entry(as_account, "sam", task["id"])["state"] == "open"
 
 
 # ── what students see, and when a task counts as done ──────
@@ -129,7 +128,7 @@ def test_a_practice_set_task_completes_and_completion_stays(as_account):
         assert StudentTasks().assigned() == []  # a practice set is not a task by itself
     with as_account("tina"):
         task = TaskService().create("practice_set", "Do week 1")
-        TaskService().update(task["id"], target_id=created["id"], due_at=time.time() + 3600)
+        TaskService().update(task["id"], target_id=created["id"])
     _in_course(task["id"])
     with as_account("sara"):
         keys = [e["key"] for e in StudentTasks().assigned()]
@@ -196,38 +195,6 @@ def test_book_tasks_complete_when_every_chosen_page_was_opened(as_account, teach
     assert _entry(as_account, "sara", task["id"])["state"] == "open"
     visited.append("p2")
     assert _entry(as_account, "sara", task["id"])["state"] == "completed"
-
-
-# ── deadlines ──────────────────────────────────────────────
-
-
-def test_deadlines_mark_overdue_remind_once_and_announce_changes(as_account):
-    with as_account("tina"):
-        task_id = TaskService().create("note", "Revise")["id"]
-        TaskService().update(task_id, due_at=time.time() + 3600)
-    _in_course(task_id)
-    for _ in range(2):
-        assert _entry(as_account, "sara", task_id)["state"] == "open"
-    assert _kinds(as_account, "sara").count("task_due_soon") == 1
-    with as_account("tina"):
-        TaskService().update(task_id, due_at=time.time() - 60)
-    assert _entry(as_account, "sara", task_id)["state"] == "overdue"
-    assert "task_due_changed" in _kinds(as_account, "sara")
-    with as_account("sara"):
-        done = StudentTasks().mark_done(task_id)
-    assert done["state"] == "completed" and done["late"]
-
-
-def test_answers_shown_after_the_deadline_pin_it(as_account):
-    with as_account("tina"):
-        practice = PracticeSetService()
-        created = practice.create("Quiz")
-        practice.update(created["id"], questions=QUESTIONS, reveal="after_due", due_at=time.time() + 60)
-        practice.publish(created["id"])
-        practice.update(created["id"], due_at=time.time() - 1)
-        with pytest.raises(PracticeConflict):  # R10
-            practice.update(created["id"], due_at=time.time() + 3600)
-        practice.update(created["id"], due_at=time.time() - 120)  # earlier is fine
 
 
 # ── account events ─────────────────────────────────────────

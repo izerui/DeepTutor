@@ -98,7 +98,7 @@ async def home() -> dict[str, Any]:
     def build() -> dict[str, Any]:
         tasks = StudentTasks().assigned()
         sections: dict[str, Any] = {
-            "assigned": [t for t in tasks if t["state"] in ("open", "overdue")],
+            "assigned": [t for t in tasks if t["state"] == "open"],
             "history_count": sum(1 for t in tasks if t["state"] in ("completed", "closed")),
         }
         for name, loader in (

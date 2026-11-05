@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
@@ -42,13 +42,15 @@ class SetCreate(BaseModel):
 
 
 class SetUpdate(BaseModel):
+    # No deadline any more (spec 2026-11-05 remove-teacher-management §1.4): ``due_at`` /
+    # ``clear_due`` are refused, not dropped; answers show right after submitting.
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=4000)
     questions: list[dict[str, Any]] | None = Field(default=None, max_length=200)
-    #: Seconds since the epoch; ``null`` removes the deadline; absent keeps it.
-    due_at: float | None = None
-    clear_due: bool = False
-    reveal: str | None = None
+    #: Accepted from older clients: answers are always shown after submitting.
+    reveal: Literal["after_submit"] | None = None
     #: Batch 3 §6.1: at most this many attempts; ``clear_attempts_limit`` lifts it.
     attempts_limit: int | None = Field(default=None, ge=1, le=100)
     clear_attempts_limit: bool = False
@@ -66,23 +68,6 @@ class GenerateRequest(BaseModel):
     #: Batch 3 §4: questions from a book (``book:<id>``), whole or some chapters.
     book_ref: str | None = Field(default=None, max_length=300)
     chapter_ids: list[str] = Field(default_factory=list, max_length=200)
-
-
-class RemedialFromSet(BaseModel):
-    set_id: str = Field(min_length=1, max_length=100)
-    question_ids: list[str] = Field(min_length=1, max_length=200)
-    #: AI look-alikes per picked question (batch 3 §3.1).
-    similar: int = Field(default=0, ge=0, le=3)
-    #: The draft's title starts with this, in the teacher's language.
-    title_prefix: str = Field(default="Remedial: ", max_length=40)
-
-
-class RemedialFromPath(BaseModel):
-    template_id: str = Field(min_length=1, max_length=100)
-    kp_ids: list[str] = Field(min_length=1, max_length=100)
-    #: The students to suggest as receivers (those who have not mastered the points).
-    student_ids: list[str] = Field(default_factory=list, max_length=500)
-    title_prefix: str = Field(default="Remedial: ", max_length=40)
 
 
 class RegradeRequest(BaseModel):
@@ -131,21 +116,20 @@ async def get_set(set_id: str):
 
 @router.put("/{set_id}")
 async def update_set(set_id: str, body: SetUpdate):
-    due: Any = None if body.clear_due else body.due_at if body.due_at is not None else ""
     attempts: Any = None if body.clear_attempts_limit else (
         body.attempts_limit if body.attempts_limit is not None else ""
     )
     return {
         "set": await _call(
             PracticeSetService().update, set_id, title=body.title, description=body.description,
-            questions=body.questions, due_at=due, reveal=body.reveal,
+            questions=body.questions,
             attempts_limit=attempts, score_mode=body.score_mode,
         )
     }
 
 
 class PublishBody(BaseModel):
-    #: First publication: who receives it (spec 2026-11-02 §4.1).
+    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
     scope: ScopeChoice | None = None
 
 
@@ -175,23 +159,6 @@ async def generate_questions(body: GenerateRequest):
             book_ref=body.book_ref, chapter_ids=body.chapter_ids,
         ))
     }
-
-
-@router.post("/remedial/from-set")
-async def remedial_from_set(body: RemedialFromSet):
-    """A draft practice set of the picked questions (batch 3 §3.1)."""
-    from deeptutor.practice_sets.remedial import RemedialPractice
-
-    return await _await(RemedialPractice().from_set(
-        body.set_id, body.question_ids, body.similar, body.title_prefix))
-
-
-@router.post("/remedial/from-path")
-async def remedial_from_path(body: RemedialFromPath):
-    from deeptutor.practice_sets.remedial import RemedialPractice
-
-    return await _await(RemedialPractice().from_path(
-        body.template_id, body.kp_ids, body.student_ids, body.title_prefix))
 
 
 @router.post("/from-bank")

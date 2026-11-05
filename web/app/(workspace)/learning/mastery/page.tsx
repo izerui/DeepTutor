@@ -18,7 +18,7 @@ import {
 } from "@/components/courses/CourseScope";
 import { CreateTopicWizard } from "@/components/space/learning/CreateTopicWizard";
 import { PublishTemplateDialog } from "@/components/space/learning/PublishTemplateDialog";
-import { TemplateAssignmentsDialog } from "@/components/space/learning/TemplateAssignmentsDialog";
+import { ManagePathDialog } from "@/components/space/learning/ManagePathDialog";
 import { unlistedTemplates } from "@/components/space/learning/teaching";
 import type { Translate } from "@/components/space/learning/format";
 import { topicDisplayName } from "@/components/space/learning/format";
@@ -61,7 +61,7 @@ function MasteryPathRoute() {
 
   const loadTemplates = useCallback(async () => {
     if (!isTeacher) return;
-    // Overlapping reloads (after each assignment change) settle on the newest.
+    // Overlapping reloads (after each change) settle on the newest.
     const request = ++templatesRequest.current;
     try {
       const next = await listTeacherTemplates();
@@ -107,8 +107,8 @@ function MasteryPathRoute() {
   }, [scope, topics]);
 
   // Publishing is offered on the owner's own cards only: an admin sees other
-  // teachers' paths in a separate list, where the server lets them manage
-  // students and archive but never publish (D17).
+  // teachers' paths in a separate list, where the server lets them archive
+  // but never publish (D17).
   const ownTemplates = useMemo(
     () => templates.filter((template) => template.is_owner),
     [templates],
@@ -195,7 +195,7 @@ function MasteryPathRoute() {
         />
       )}
       {managing && (
-        <TemplateAssignmentsDialog
+        <ManagePathDialog
           template={currentTemplate(templates, managing)}
           returnFocusRef={teacherTriggerRef}
           onClose={() => setManaging(null)}

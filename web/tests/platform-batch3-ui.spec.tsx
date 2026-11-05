@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-// Platform batch 3: learning reports, announcements and "needs attention" for
-// courses and Mastery Paths.
-const { catalog, practice, workbench, tasks, push, search, t } = vi.hoisted(() => ({
+// Platform batch 3: learning reports and announcements for courses and Mastery
+// Paths ("needs attention" and teacher remedial practice are gone, spec 2026-11-05).
+const { catalog, workbench, tasks, push, search, t } = vi.hoisted(() => ({
   catalog: {
     getLearnerReport: vi.fn(),
     getReportPoints: vi.fn(),
@@ -14,7 +14,6 @@ const { catalog, practice, workbench, tasks, push, search, t } = vi.hoisted(() =
     deleteItemAnnouncement: vi.fn(),
     downloadReport: vi.fn(),
   },
-  practice: { remedialFromPath: vi.fn() },
   workbench: { getWorkbench: vi.fn() },
   tasks: { getHome: vi.fn() },
   push: vi.fn(),
@@ -32,7 +31,6 @@ vi.mock("@/lib/catalog-api", async () => ({
   ...(await vi.importActual<typeof import("@/lib/catalog-api")>("@/lib/catalog-api")),
   ...catalog,
 }));
-vi.mock("@/lib/practice-sets-api", () => practice);
 vi.mock("@/lib/workbench-api", () => ({
   ...workbench,
   getSchoolAiLimit: vi.fn(() => Promise.resolve(0)), setSchoolAiLimit: vi.fn(), getMyAiUsage: vi.fn(() => Promise.resolve(null)),
@@ -50,12 +48,11 @@ import LearnerReportPage from "@/components/catalog/LearnerReport";
 import StudentHome from "@/components/home/StudentHome";
 import { TeacherWorkbench } from "@/components/home/Workbench";
 import { notificationText } from "@/components/notifications/NotificationBell";
-import { takeSuggested } from "@/components/practice-sets/SetReview";
 import type { ContentAnnouncement, LearnerReport, LearnerRow } from "@/lib/catalog-api";
 import type { AppNotification } from "@/lib/notifications-api";
 
 beforeEach(() => {
-  [catalog, practice, workbench, tasks].forEach((group) =>
+  [catalog, workbench, tasks].forEach((group) =>
     Object.values(group).forEach((fn) => (fn as ReturnType<typeof vi.fn>).mockReset()));
   push.mockReset();
   search.value = "";
@@ -67,7 +64,7 @@ const row = (over: Partial<LearnerRow> = {}): LearnerRow => ({
   id: "u_sara", username: "sara", overall,
   paths: [{ template_id: "tpl_1", title: "Algebra", revision: 1, kp_total: 4, kp_mastered: 1,
     attempts: { correct: 3, partial: 0, incorrect: 2 }, last_activity: 1 }],
-  practice_sets: [], tasks: null, flags: [], ...over,
+  practice_sets: [], tasks: null, ...over,
 });
 const courseReport: LearnerReport = {
   kind: "course", id: "crs_1", title: "Physics", period_days: 7,
@@ -76,10 +73,9 @@ const courseReport: LearnerReport = {
     row({
       tasks: { done: 2, total: 5 },
       practice_sets: [{ set_id: "ps_1", title: "Week 1 quiz", attempts: 2, first_score: 3, best_score: 4, best_max_score: 5,
-        max_score: 5, late: false, last_submitted_at: 1 }],
-      flags: [{ kind: "overdue", count: 2 }],
+        max_score: 5, last_submitted_at: 1 }],
     }),
-    row({ id: "u_tom", username: "tom", flags: [] }),
+    row({ id: "u_tom", username: "tom" }),
   ],
 };
 const points = {
@@ -90,7 +86,7 @@ const points = {
   ],
 };
 
-it("reports a course: tasks, practice score, flags and an export link, no homework column", async () => {
+it("reports a course: tasks, practice score and an export link, no homework or attention column", async () => {
   search.value = "kind=course&id=crs_1";
   catalog.getLearnerReport.mockResolvedValue(courseReport);
   catalog.getReportPoints.mockResolvedValue(points);
@@ -103,7 +99,8 @@ it("reports a course: tasks, practice score, flags and an export link, no homewo
   expect(screen.queryByText(/Homework/)).toBeNull();
   expect(within(sara).getByText("4 / 5")).toBeTruthy();
   expect(within(sara).getByText("1 / 4")).toBeTruthy();
-  expect(within(sara).getByText("2 tasks overdue")).toBeTruthy();
+  expect(screen.queryByText("Needs attention")).toBeNull();
+  expect(screen.queryByLabelText("Only learners who need attention")).toBeNull();
   // Answers and tasks done in the period, on this course only.
   expect(screen.getByText("Answers in period")).toBeTruthy();
   expect(screen.getByText("Tasks done in period")).toBeTruthy();
@@ -116,9 +113,6 @@ it("reports a course: tasks, practice score, flags and an export link, no homewo
   await waitFor(() => expect(catalog.downloadReport).toHaveBeenCalledWith("course", "crs_1", 7));
   // Follow-ups §3: a practice set opened from a course's report carries the course.
   expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href")).toBe("/practice-sets?set=ps_1&course=crs_1");
-
-  fireEvent.click(screen.getByLabelText("Only learners who need attention"));
-  expect(screen.queryByRole("button", { name: "tom" })).toBeNull();
 
   // The report keeps to this item: no study time from elsewhere.
   expect(screen.queryByText("Study time in period")).toBeNull();
@@ -160,23 +154,22 @@ it("reports a path without the course columns, and shows a learner's detail", as
   expect(catalog.getLearnerDetail).toHaveBeenCalledWith("mastery_path", "tpl_1", "u_sara");
   expect(within(detail).getByText("30%")).toBeTruthy();
   expect(within(detail).getByText("5 answers, 3 wrong")).toBeTruthy();
+  // Nothing to pick, comment on or send to the learner (spec 2026-11-05 §1.1, §1.2).
+  expect(within(detail).queryByRole("checkbox")).toBeNull();
+  expect(within(detail).queryByRole("button")).toBeNull();
 });
 
-it("makes remedial practice on one point for those who have not mastered it, and opens the draft", async () => {
+it("shows who has mastered each point and offers nothing to send", async () => {
   search.value = "kind=mastery_path&id=tpl_1";
   catalog.getLearnerReport.mockResolvedValue({ ...courseReport, kind: "mastery_path", id: "tpl_1", practice_sets: [] });
   catalog.getReportPoints.mockResolvedValue(points);
-  practice.remedialFromPath.mockResolvedValue({ set: { id: "ps_new" }, suggested_students: [{ id: "u_sara", username: "sara" }] });
   render(<LearnerReportPage />);
   const view = await screen.findByRole("region", { name: "Knowledge points of Algebra" });
   await within(view).findByText("Fractions");
   expect(catalog.getReportPoints).toHaveBeenCalledWith("mastery_path", "tpl_1", "tpl_1");
-  // A point everyone has mastered offers nothing.
-  expect(within(view).getAllByRole("button")).toHaveLength(1);
-  fireEvent.click(within(view).getByRole("button", { name: "Remedial practice on Fractions for the 2 who have not mastered it" }));
-  await waitFor(() => expect(practice.remedialFromPath).toHaveBeenCalledWith("tpl_1", ["kp_1"], ["u_sara", "u_tom"], "Remedial: "));
-  await waitFor(() => expect(push).toHaveBeenCalledWith("/practice-sets?set=ps_new"));
-  expect(takeSuggested("ps_new")).toEqual([{ id: "u_sara", username: "sara" }]);
+  expect(within(view).getByText("0 / 2 mastered")).toBeTruthy();
+  expect(within(view).queryByRole("button")).toBeNull();
+  expect(push).not.toHaveBeenCalled();
 });
 
 it("shows the server's refusal when the viewer is not the item's teacher", async () => {
@@ -248,23 +241,12 @@ it("shows the newest announcements on the home, each linking to its course or pa
   expect(within(block).getByRole("link", { name: "Algebra" }).getAttribute("href")).toBe("/market/item?kind=mastery_path&id=tpl_1");
 });
 
-it("lists learners who need attention on the workbench, linked to the item's report", async () => {
-  workbench.getWorkbench.mockResolvedValue({
-    role: "teacher", sent: [], classes: [], attention_total: 2,
-    attention: [
-      { student_id: "u_sara", username: "sara", class_id: "", item: { kind: "course", id: "crs_1", title: "Physics" },
-        flags: [{ kind: "inactive", days: 9 }] },
-      { student_id: "u_tom", username: "tom", class_id: "", item: null, flags: [{ kind: "overdue", count: 1 }] },
-    ],
-  });
+it("has no learners-who-need-attention list on the workbench", async () => {
+  workbench.getWorkbench.mockResolvedValue({ role: "teacher", sent: [], classes: [] });
   tasks.getHome.mockResolvedValue({ mine: [] });
   render(<TeacherWorkbench />);
-  const section = (await screen.findByRole("heading", { name: /Learners who need attention/ })).closest("section")!;
-  const link = within(section).getByRole("link", { name: /sara/ });
-  expect(link.getAttribute("href")).toBe("/reports?kind=course&id=crs_1");
-  expect(within(link).getByText("Physics")).toBeTruthy();
-  expect(within(link).getByText("No learning for 9 days")).toBeTruthy();
-  expect(within(section).getByText("tom").closest("a")).toBeNull();
+  expect(await screen.findByRole("heading", { name: "What I sent out" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: /need attention/ })).toBeNull();
 });
 
 it("words a content announcement notification", () => {

@@ -3976,7 +3976,7 @@ class KbVisibilityRequest(BaseModel):
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
-    #: First publication: who receives it (spec 2026-11-02 §4.1).
+    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
     scope: ScopeChoice | None = None
 
 

@@ -20,6 +20,7 @@ from deeptutor.learning.event_hub import publish_topic_signal
 from deeptutor.learning.storage import LearningStore
 from deeptutor.teaching.service import TeachingService
 from deeptutor.teaching.store import TeachingStore
+from tests.multi_user.path_members import leave_path
 
 #: Longest a test waits for the server before a fallback wake-up is sent; the
 #: fallback is a screen-only signal that a broken server would forward, so a
@@ -97,7 +98,7 @@ def test_closing_the_path_ends_a_live_subscription(
 
         with as_account("tina"):
             if close == "revoke":
-                TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+                leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
             else:
                 TeachingService().archive(sara_instance.template_id)
         _emit(as_account, "sara", path_id)
@@ -118,7 +119,7 @@ def test_closing_the_path_wakes_an_idle_subscription(
         assert _subscribe(socket, path_id)["type"] == "subscribed"
         with as_account("tina"):
             if close == "revoke":
-                TeachingService().revoke(sara_instance.template_id, teaching_users["sara"]["id"])
+                leave_path(sara_instance.template_id, teaching_users["sara"]["id"])
             else:
                 TeachingService().archive(sara_instance.template_id)
         timer = _fallback(scope, path_id)
@@ -164,7 +165,7 @@ def test_revoking_one_student_leaves_another_students_subscription_live(
         subscribed = _subscribe(socket, path_id)
         assert subscribed["type"] == "subscribed"
         with as_account("tina"):
-            TeachingService().revoke(template_id, teaching_users["sara"]["id"])
+            leave_path(template_id, teaching_users["sara"]["id"])
         _emit(as_account, "sam", path_id)
         message = socket.receive_json()
         assert message["type"] == "topic_event"

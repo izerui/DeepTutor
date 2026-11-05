@@ -1631,7 +1631,7 @@ export async function setKnowledgeBaseVisibility(
     force?: boolean;
     confirmed?: WithdrawalImpact | null;
     /** First publication: who receives it (spec 2026-11-02 §4.1). */
-    scope?: { everyone: boolean; users: string[]; classes: string[] };
+    scope?: import("@/lib/publish-api").ScopeUpdate;
   },
 ): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {

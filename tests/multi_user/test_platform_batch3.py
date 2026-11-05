@@ -8,7 +8,6 @@ Everything here is reached by joining.
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 
@@ -174,20 +173,6 @@ def test_path_report_and_its_points(as_account, teaching_users, teacher_draft, q
     assert all(p["not_mastered"] == [_uid(teaching_users, "sara")] for p in points["points"])
 
 
-# ── needing attention (§2) ─────────────────────────────────
-
-
-def test_workbench_names_learners_with_their_course(as_account, teaching_users, course):
-    from deeptutor.teaching.workbench import workbench
-
-    _join(as_account, "sara", "course", course.id)
-    with as_account("tina"):
-        board = workbench()
-    [row] = board["attention"]  # never studied: inactive
-    assert row["username"] == "sara" and row["item"] == {"kind": "course", "id": course.id, "title": "Arithmetic course"}
-    assert any(flag["kind"] == "inactive" for flag in row["flags"])
-
-
 # ── announcements (§3) ─────────────────────────────────────
 
 
@@ -237,29 +222,6 @@ def test_announcements_hide_when_taken_down(as_account, course):
         ListingService().take_down("course", course.id, "Wrong.")
     with as_account("sara"):
         assert _announcements().list_for("course", course.id) == [] and _announcements().mine() == []
-
-
-# ── remedial (§4) ──────────────────────────────────────────
-
-
-def test_remedial_goes_to_learners_only(as_account, teaching_users, course):
-    from deeptutor.practice_sets.remedial import RemedialPractice
-
-    _join(as_account, "sara", "course", course.id)
-    _answer(as_account, "sara", course.set_id, choice="A")  # wrong
-    with as_account("tina"):
-        qid = json.loads(_set_questions(course.set_id))[0]["question_id"]
-        draft = asyncio.run(RemedialPractice().from_set(course.set_id, [qid]))
-    assert [p["username"] for p in draft["suggested_students"]] == ["sara"]
-
-
-def _set_questions(set_id):
-    from deeptutor.practice_sets import store
-
-    with store.read() as conn:
-        return conn.execute(
-            "SELECT questions_json FROM practice_set_revisions WHERE set_id = ? ORDER BY revision DESC", (set_id,)
-        ).fetchone()[0]
 
 
 # ── material going away (§6) ───────────────────────────────

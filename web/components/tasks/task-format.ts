@@ -9,17 +9,13 @@ export const KIND_LABEL: Record<TaskKind, string> = {
 };
 
 export const STATE_LABEL: Record<TaskState, string> = {
-  not_open: "Not open yet",
   open: "To do",
-  overdue: "Overdue",
   completed: "Done",
   closed: "Closed",
 };
 
 export const STATE_TONE: Record<TaskState, string> = {
-  not_open: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
   open: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  overdue: "bg-red-500/10 text-red-700 dark:text-red-300",
   completed: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   closed: "bg-[var(--muted)] text-[var(--muted-foreground)]",
 };

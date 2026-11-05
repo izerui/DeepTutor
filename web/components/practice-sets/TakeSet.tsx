@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { primaryClass } from "@/components/common/form-styles";
-import { MyComments } from "@/components/comments/Comments";
 import { submitSet, takeSet, type ResultValue, type SubmitResult, type TakeView } from "@/lib/practice-sets-api";
-import { formatDate } from "./practice-format";
 import { QuestionAnswer } from "./QuestionAnswer";
 
 const RESULT_LABEL: Record<ResultValue, string> = {
@@ -36,7 +34,6 @@ function restored(view: TakeView): SubmitResult | null {
     revision: latest.revision,
     score: latest.score,
     max_score: latest.max_score,
-    late: Boolean(latest.late),
     // Answers of this version show only when the attempt was on this version.
     answers_revealed: view.answers_revealed && latest.revision === view.current_revision,
     results: view.latest_results.map((row) => {
@@ -107,14 +104,11 @@ export function TakeSet({ setId }: { setId: string }) {
         <h2 className="text-[18px] font-semibold text-[var(--foreground)]">{view.title}</h2>
         <p className="text-[12.5px] text-[var(--muted-foreground)]">
           {view.teacher}
-          {view.due_at ? ` · ${t("Due {{date}}", { date: formatDate(view.due_at) })}` : ""}
           {view.submissions.length > 0 &&
             ` · ${t("Submitted {{count}} times", { count: view.submissions.length })}`}
         </p>
         {view.description && <p className="whitespace-pre-line text-[13px]">{view.description}</p>}
       </header>
-
-      <MyComments kind="practice_submission" subject={setId} />
 
       {result && (
         <div role="status" className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-4 text-[13px]">
@@ -122,18 +116,15 @@ export function TakeSet({ setId }: { setId: string }) {
             {result.score === null
               ? t("Submitted")
               : t("Score {{score}} / {{max}}", { score: result.score, max: result.max_score })}
-            {result.late && <span className="ml-2 text-[12px] text-amber-600">{t("Late")}</span>}
             {result.score !== null && view.class_average != null && (
               <span className="ml-2 text-[12px] font-normal text-[var(--muted-foreground)]">
                 {t("Learners' average {{score}} / {{max}}", { score: view.class_average, max: result.max_score })}
               </span>
             )}
           </p>
-          <p className="text-[12px] text-[var(--muted-foreground)]">
-            {result.answers_revealed
-              ? t("Wrong answers were added to your mistakes.")
-              : t("Answers and explanations appear after the deadline.")}
-          </p>
+          {result.answers_revealed && (
+            <p className="text-[12px] text-[var(--muted-foreground)]">{t("Wrong answers were added to your mistakes.")}</p>
+          )}
         </div>
       )}
 

@@ -1,11 +1,10 @@
 """Teacher courses (spec 2026-11-03 batch 2 §5).
 
 A course is tasks in an order, with a name and a description. Everything a
-student does happens in its tasks — completion, deadlines, opening times —
-so a course adds no rules of its own: it is how a teacher lays
+student does happens in its tasks — completion — so a course adds no rules of its own: it is how a teacher lays
 out a term. It reaches students through a publish scope (kind ``course``).
 
-Publishing a course publishes its draft tasks to the course's receivers; an
+Publishing a course publishes its draft tasks to the people who join it; an
 already published task must already reach all of them. Withdrawing a course
 only hides the course: its tasks stay as they are. The order is a
 suggestion, never a lock.
@@ -60,7 +59,7 @@ class CourseService:
                 # editable here.
                 with db.read() as conn:
                     other = conn.execute(
-                        "SELECT id, kind, title, status, due_at, open_at FROM tasks WHERE id = ?", (task_id,)
+                        "SELECT id, kind, title, status FROM tasks WHERE id = ?", (task_id,)
                     ).fetchone() if conn else None
                 if other is not None:
                     tasks.append({**dict(other), "owned": False})
@@ -214,7 +213,6 @@ class CourseService:
     def _publish_drafts(self, course_id: str) -> None:
         from deeptutor.publishing import scope as scopes
 
-        scope = scopes.get_scope(scopes.COURSE, course_id)
         with db.read() as conn:
             items = self._items(conn, course_id)
             drafts = [r[0] for r in conn.execute(
@@ -222,11 +220,10 @@ class CourseService:
                 items,
             )] if items else []
         done: list[str] = []
-        # Its tasks reach whom the course reaches: its learners, and anyone it names.
+        # Its tasks reach whom the course reaches: the people who joined it.
         try:
             for task_id in drafts:
-                with scopes.chosen_scope(scopes.Scope(users=list(scope.users)) if scope else None):
-                    self.tasks.publish(task_id, quiet=True)
+                self.tasks.publish(task_id, quiet=True)
                 done.append(task_id)
         except Exception:
             # All or nothing: tasks published before the failure go back to drafts,

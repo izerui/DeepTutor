@@ -46,19 +46,7 @@ def _assigned_sets(as_account, name):
         return [s["id"] for s in PracticeSetService().assigned()]
 
 
-# ── learners (§2.3) ────────────────────────────────────────
-
-
-def test_teachers_learners_are_who_joined_their_content(as_account, teaching_users, deliver):
-    from deeptutor.catalog.learners import learners_of
-
-    set_id = _published_set(as_account)
-    assert learners_of(teaching_users["tina"]["id"]) == set()
-    deliver("practice_set", set_id, "sara", "sam")
-    assert learners_of(teaching_users["tina"]["id"]) == {
-        teaching_users["sara"]["id"], teaching_users["sam"]["id"],
-    }
-    assert learners_of(teaching_users["tom"]["id"]) == set()
+# ── publishing (§2.3) ──────────────────────────────────────
 
 
 def test_publishing_with_nobody_chosen_reaches_nobody(as_account):
@@ -69,7 +57,7 @@ def test_publishing_with_nobody_chosen_reaches_nobody(as_account):
     assert scopes._stored_scope(scopes.PRACTICE_SET, set_id).empty
     assert _assigned_sets(as_account, "sara") == []
     with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=True, users=[])
+        PublishService().set_scope("practice_set", set_id, everyone=True)
 
 
 # ── registration (§4) ──────────────────────────────────────

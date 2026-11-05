@@ -1,4 +1,4 @@
-"""Teacher-side operations: register, preview, publish, assign, archive, delete."""
+"""Teacher-side operations: register, preview, publish, archive, delete."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from deeptutor.learning.storage import LearningStore
 from deeptutor.teaching import service as service_module
 from deeptutor.teaching.models import KpDecision, PublishRequest
 from deeptutor.teaching.service import (
-    InvalidStudents,
     PublishBlocked,
     TeachingService,
     TemplateConflict,
@@ -25,6 +24,7 @@ from deeptutor.teaching.service import (
     TemplateNotFound,
 )
 from deeptutor.teaching.store import TeachingStore
+from tests.multi_user.path_members import leave_path
 
 
 def _kb_source(index: int, ref: str, label: str) -> TopicSource:
@@ -288,19 +288,6 @@ def test_a_stale_preview_cannot_be_published(as_account, teacher_draft, quiet_ch
             )
 
 
-def test_only_active_student_accounts_can_be_assigned(
-    as_account, teacher_draft, publish_template, teaching_users, make_learners
-):
-    teacher_draft()
-    template_id = publish_template()["template"]["id"]
-    make_learners("tina", "sam")
-    with as_account("tina"):
-        with pytest.raises(InvalidStudents):
-            TeachingService().assign(template_id, [teaching_users["uma"]["id"]])
-        rows = TeachingService().assign(template_id, [teaching_users["sam"]["id"]])
-    assert "sam" in [row["username"] for row in rows]
-
-
 def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
     teacher_draft()
     template_id = publish_template(students=("sara", "sam"))["template"]["id"]
@@ -313,8 +300,8 @@ def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
 
     with as_account("adam"):
         service = TeachingService()
-        assert [t["id"] for t in service.list_for_actor()] == [template_id]
-        assert {row["username"] for row in service.assignments(template_id)} == {"sara", "sam"}
+        [listed] = service.list_for_actor()
+        assert listed["id"] == template_id and listed["assigned_count"] == 2
         with pytest.raises(TemplateForbidden):
             asyncio.run(service.preview_publish(template_id))
 
@@ -375,16 +362,6 @@ def test_republishing_records_the_confirmed_changes(
         ids.renamed: ids.derivatives
     }
     assert result["affected_students"] == 1
-
-
-def test_student_picker_returns_only_public_fields(as_account, teaching_users, make_learners):
-    make_learners("tina", "sara", "sam")  # the picker offers Tina's learners
-    with as_account("tina"):
-        students = TeachingService().list_students()
-        filtered = TeachingService().list_students("sa")
-    assert sorted(s["username"] for s in students) == ["sam", "sara"]
-    assert set(students[0]) == {"id", "username", "avatar"}
-    assert sorted(s["username"] for s in filtered) == ["sam", "sara"]
 
 
 # ---- identity before planning (C3 deferred finding, D17) -------------------
@@ -478,7 +455,8 @@ def test_post_version_failures_are_warnings_not_false_success(
     if step == "book_references":
         monkeypatch.setattr(book_registry, "replace_book_references", broken)
     else:
-        monkeypatch.setattr(TeachingStore, "assign", broken)
+        # Who receives it (nobody named, people join) is stored after the revision.
+        monkeypatch.setattr("deeptutor.publishing.scope.default_scope_on_publish", broken)
 
     result = publish_template(students=("sara",))
 
@@ -600,7 +578,7 @@ def test_without_an_instance_on_the_old_revision_its_materials_are_released(
     assert _referenced(two_libraries, template_id) == ["kb_b"]
 
 
-def test_revoking_the_last_student_on_an_old_revision_releases_it_immediately(
+def test_the_last_student_on_an_old_revision_leaving_releases_it_immediately(
     as_account, teacher_draft, publish_template, teaching_users, two_libraries
 ):
     sara = teaching_users["sara"]["id"]
@@ -613,8 +591,7 @@ def test_revoking_the_last_student_on_an_old_revision_releases_it_immediately(
     publish_template()
     assert _referenced(two_libraries, template_id) == ["kb_a", "kb_b"]
 
-    with as_account("tina"):
-        TeachingService().revoke(template_id, sara)
+    leave_path(template_id, sara)
 
     assert _referenced(two_libraries, template_id) == ["kb_b"]
 
@@ -797,7 +774,6 @@ def test_a_publish_that_finds_its_path_archived_shares_nothing(
     assert [w["step"] for w in result["warnings"]] == [
         "knowledge_base_references",
         "book_references",
-        "assignments",
     ]
     assert fake_kb_registry.references == {}
     assert TeachingStore().list_assignments(result["template"]["id"]) == []

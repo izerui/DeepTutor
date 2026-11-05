@@ -768,7 +768,6 @@ def _learning_surface_for_path(
         ("/api/tasks", "chat"),
         ("/api/notifications", "chat"),
         ("/api/home", "chat"),
-        ("/api/comments", "chat"),
         ("/api/ai-usage", "chat"),
     ):
         if normalized == root or normalized.startswith(f"{root}/"):

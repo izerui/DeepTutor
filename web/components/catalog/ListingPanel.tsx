@@ -93,17 +93,11 @@ export function ListingPanel({
   kind,
   itemId,
   onChanged,
-  onStatus,
-  reloadKey,
   makePublic,
 }: {
   kind: CatalogKind;
   itemId: string;
   onChanged?: () => void;
-  /** Told the listing's state whenever it is read or changed (e.g. a practice set locks its deadline). */
-  onStatus?: (status: ListingStatus) => void;
-  /** Read the listing again when this changes (the item was saved, so ``not_ready`` may have changed). */
-  reloadKey?: string;
   /**
    * Traceability #8: makes a private book or knowledge base public (for those who
    * join only). Given, a private item is made public and submitted in one step.
@@ -120,11 +114,6 @@ export function ListingPanel({
   const [notice, setNotice] = useState("");
   const allowed = !enabled || isTeacher || isAdmin;
   const { taxonomy, error: taxonomyError } = useTaxonomy(!loading && allowed && !hidden);
-  const status = listing?.status;
-
-  useEffect(() => {
-    if (status) onStatus?.(status);
-  }, [status, onStatus]);
 
   useEffect(() => {
     if (loading || !allowed) return;
@@ -144,7 +133,7 @@ export function ListingPanel({
     return () => {
       alive = false;
     };
-  }, [kind, itemId, loading, allowed, reloadKey, t]);
+  }, [kind, itemId, loading, allowed, t]);
 
   if (loading || !allowed || hidden) return null;
   if (!listing || !fields) {

@@ -8,7 +8,7 @@ import logging
 from typing import Any, Literal, TypeVar
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
@@ -34,18 +34,18 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    # Tasks have no deadline or opening time (spec 2026-11-05 remove-teacher-management §1.4):
+    # ``due_at`` / ``open_at`` are refused, not dropped.
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=20_000)
     target_id: str | None = Field(default=None, max_length=200)
     settings: dict[str, Any] | None = None
-    #: ``None`` clears the deadline; leave the key out to keep it.
-    due_at: float | None = None
-    #: Before it, students see only when it opens (spec 2026-11-03 batch 2 §6).
-    open_at: float | None = None
 
 
 class TaskPublish(BaseModel):
-    #: First publication: who receives it (spec 2026-11-02 §4.1).
+    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
     scope: ScopeChoice | None = None
 
 
@@ -123,7 +123,7 @@ async def hand_over_task(task_id: str, body: HandOver):
 
 @router.post("/courses/{course_id}/practice-sets")
 async def add_course_practice_set(course_id: str, body: CoursePracticeSet):
-    """Follow-ups §3: a published practice set (e.g. remedial) becomes the course's next task."""
+    """Follow-ups §3: a published practice set becomes the course's next task."""
     return {"course": await _call(lambda: _courses().add_practice_set(course_id, body.set_id))}
 
 
@@ -142,41 +142,6 @@ async def archive_course(course_id: str):
 async def delete_course(course_id: str):
     await _call(lambda: _courses().delete(course_id))
     return {"ok": True}
-
-
-# ── calendar (spec 2026-11-03 batch 2 §7) ──────────────────
-
-
-@router.get("/calendar")
-async def calendar():
-    """Opening times and deadlines: what reached a student, or what an author assigned."""
-
-    def build() -> list[dict[str, Any]]:
-        from deeptutor.multi_user.accounts import live_role as _role
-
-        student = StudentTasks()
-        items = []
-        if student._is_student():
-            # What reached one: a student's, or a teacher's or administrator's joined courses.
-            entries = [e for e in student.assigned() if e["state"] != "closed"]
-            items += [(e["key"], e["title"], e["kind"], e["state"], e.get("open_at"), e["due_at"], False)
-                      for e in entries]
-        if _role(student.actor) != "student":
-            items += [
-                (t["id"], t["title"], t["kind"], t["status"], t["open_at"], t["due_at"], True)
-                for t in TaskService().list_mine() if t["status"] == "published"
-            ]
-        events = []
-        for key, title, kind, state, opens, due, mine in items:
-            if opens:
-                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "open", "at": opens,
-                               "mine": mine})
-            if due:
-                events.append({"key": key, "title": title, "kind": kind, "state": state, "type": "due", "at": due,
-                               "mine": mine})
-        return sorted(events, key=lambda e: e["at"])
-
-    return {"events": await _call(build)}
 
 
 # ── authoring ──────────────────────────────────────────────

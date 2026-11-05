@@ -109,11 +109,11 @@ test("other failures are localized by status", () => {
     teachingErrorMessage(new TeachingApiError("English", 403, "English")).key,
     "Only the teacher who owns this path can publish it.",
   );
+  // Nobody is assigned by hand any more (spec 2026-11-05 §1.2): a 422 is just a failed update.
   assert.equal(
     teachingErrorMessage(new TeachingApiError("English", 422, "English")).key,
-    "Only active student accounts can be assigned.",
+    "Update failed",
   );
-  // Request validation (a list detail) is not the student-account check.
   assert.equal(
     teachingErrorMessage(new TeachingApiError("x", 422, { detail: [] } as Record<string, unknown>)).key,
     "Update failed",
@@ -171,7 +171,6 @@ test("teacher count strings use plural keys in every locale", () => {
     uk: ["one", "few", "many", "other"],
   };
   for (const key of [
-    "{{count}} students assigned",
     "{{count}} students will get this update the next time they study",
   ]) {
     for (const [locale, needed] of Object.entries(forms)) {
@@ -182,5 +181,8 @@ test("teacher count strings use plural keys in every locale", () => {
       }
     }
   }
-  assert.equal(catalog("en")["{{count}} students assigned_one"], "{{count}} student assigned");
+  assert.equal(
+    catalog("en")["{{count}} students will get this update the next time they study_one"],
+    "{{count}} student will get this update the next time they study",
+  );
 });

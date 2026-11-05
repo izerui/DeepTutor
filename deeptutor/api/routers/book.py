@@ -1135,7 +1135,7 @@ class BookVisibilityRequest(BaseModel):
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
     kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
-    #: First publication: who receives it (and the knowledge bases made public with it).
+    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
     scope: ScopeChoice | None = None
 
 

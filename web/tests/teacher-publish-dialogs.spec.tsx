@@ -9,12 +9,8 @@ const api = vi.hoisted(() => ({
   registerTeacherTemplate: vi.fn(),
   previewPublish: vi.fn(),
   publishTemplate: vi.fn(),
-  listAssignments: vi.fn(),
-  assignStudents: vi.fn(),
-  revokeAssignment: vi.fn(),
   archiveTemplate: vi.fn(),
   deleteTemplate: vi.fn(),
-  searchStudents: vi.fn(),
 }));
 
 // Platform batch 1: the market listing has its own fetches and its own spec.
@@ -35,7 +31,7 @@ vi.mock("@/lib/teaching-api", async (original) => ({
 
 import { TeachingApiError } from "@/lib/teaching-api";
 import { PublishTemplateDialog } from "@/components/space/learning/PublishTemplateDialog";
-import { TemplateAssignmentsDialog } from "@/components/space/learning/TemplateAssignmentsDialog";
+import { ManagePathDialog } from "@/components/space/learning/ManagePathDialog";
 import {
   TeacherCardActions,
   UnlistedTeacherTemplates,
@@ -96,8 +92,6 @@ function preview(overrides: Partial<PublishPreview> = {}): PublishPreview {
 beforeEach(() => {
   for (const mock of Object.values(api)) mock.mockReset();
   api.registerTeacherTemplate.mockResolvedValue(template());
-  api.listAssignments.mockResolvedValue([]);
-  api.searchStudents.mockResolvedValue([{ id: "u_sara", username: "sara", avatar: "" }]);
 });
 
 it("registers a first publish, defaults private materials to public and sends the choices", async () => {
@@ -132,7 +126,6 @@ it("registers a first publish, defaults private materials to public and sends th
     kp_decisions: {},
     kb_choices: { kb_1: "reference_only" },
     book_choices: { bk_1: "make_public" },
-    student_ids: [],
     join_only: true,
   });
 });
@@ -196,10 +189,6 @@ it("shows an update's change list with per-point decisions and the affected stud
       },
     }),
   );
-  api.listAssignments.mockResolvedValue([
-    { student_user_id: "u_sara", status: "active" },
-    { student_user_id: "u_sam", status: "revoked" },
-  ]);
   api.publishTemplate.mockResolvedValue({
     template: template({ current_revision: 2 }),
     revision: 2,
@@ -216,8 +205,7 @@ it("shows an update's change list with per-point decisions and the affected stud
       onPublished={published}
     />,
   );
-  // Flush the multi-step async chain: registerTeacherTemplate → Promise.all(
-  // previewPublish, listAssignments) → setState, then searchStudents → setState.
+  // Flush the multi-step async chain: registerTeacherTemplate → previewPublish → setState.
   // Two act flushes drain the sequential microtask chains so the dialog exits
   // its loading state without relying on polling under jsdom concurrency.
   await act(async () => {});
@@ -270,30 +258,23 @@ it("reports a publish that stopped at a step, localized, with what already compl
   expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
 });
 
-it("manages assignments: revoke, list in the market and archive behind a confirmation", async () => {
-  api.listAssignments.mockResolvedValue([
-    { student_user_id: "u_sara", username: "sara", status: "active", applied_revision: 1 },
-  ]);
-  api.searchStudents.mockResolvedValue([
-    { id: "u_sara", username: "sara", avatar: "" },
-    { id: "u_sam", username: "sam", avatar: "" },
-  ]);
-  api.revokeAssignment.mockResolvedValue({ ok: true });
-  api.assignStudents.mockResolvedValue([]);
+it("manages a path: no learner list, list in the market and archive behind a confirmation", async () => {
   api.archiveTemplate.mockResolvedValue(template({ status: "archived" }));
   const changed = vi.fn();
   const close = vi.fn();
   render(
-    <TemplateAssignmentsDialog
-      template={template({ status: "published", current_revision: 1, is_owner: true })}
+    <ManagePathDialog
+      template={template({ status: "published", current_revision: 1, is_owner: true, assigned_count: 1 })}
       returnFocusRef={createRef()}
       onClose={close}
       onChanged={changed}
     />,
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Remove access for sara" }));
-  await waitFor(() => expect(api.revokeAssignment).toHaveBeenCalledWith("tpl_1", "u_sara"));
-  // Platform batch 1 §4.4: no more picking students; the listing takes their place.
+  // The account's role is read once; let it settle.
+  await act(async () => {});
+  // Spec 2026-11-05 §1.2: nobody is added or removed by hand; the listing is the way in.
+  expect(screen.queryByRole("list", { name: "Students" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Remove access/ })).toBeNull();
   expect(screen.queryByRole("button", { name: "Assign students" })).toBeNull();
   expect(screen.getByTestId("listing-panel").textContent).toBe("mastery_path:tpl_1");
   fireEvent.click(screen.getByRole("button", { name: "Archive" }));
@@ -302,24 +283,21 @@ it("manages assignments: revoke, list in the market and archive behind a confirm
   fireEvent.click(within(confirm).getByRole("button", { name: "Archive" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(api.archiveTemplate).toHaveBeenCalledWith("tpl_1");
-  expect(changed).toHaveBeenCalledTimes(2);
+  expect(changed).toHaveBeenCalledTimes(1);
 });
 
-it("lets an administrator withdraw another teacher's path but not change who receives it", async () => {
-  api.listAssignments.mockResolvedValue([
-    { student_user_id: "u_sara", username: "sara", status: "active", applied_revision: 1 },
-  ]);
+it("lets an administrator withdraw another teacher's path but not list it", async () => {
   render(
-    <TemplateAssignmentsDialog
+    <ManagePathDialog
       template={template({ status: "published", current_revision: 1, is_owner: false })}
       returnFocusRef={createRef()}
       onClose={vi.fn()}
       onChanged={vi.fn()}
     />,
   );
-  expect(await screen.findByText("sara")).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Remove access for sara" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Assign students" })).toBeNull();
+  await act(async () => {});
+  expect(screen.queryByTestId("listing-panel")).toBeNull();
+  expect(screen.queryByRole("button", { name: /Remove access/ })).toBeNull();
   expect(screen.getByRole("button", { name: "Archive" })).toBeVisible();
 });
 

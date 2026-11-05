@@ -589,7 +589,6 @@ from deeptutor.api.routers import (
     tasks,
     notifications,
     home,
-    comments,
     ai_usage,
     catalog,
     remedial,
@@ -692,8 +691,6 @@ app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["pra
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"], dependencies=_auth)
 app.include_router(home.router, prefix="/api/home", tags=["home"], dependencies=_auth)
-# Spec 2026-11-03 batch 2: teacher comments.
-app.include_router(comments.router, prefix="/api/comments", tags=["comments"], dependencies=_auth)
 # Spec 2026-11-03 batch 3 §8: students' daily AI limit.
 app.include_router(ai_usage.router, prefix="/api/ai-usage", tags=["ai-usage"], dependencies=_auth)
 # Batch 3 §3.2: a student's remedial questions from their mistakes (in the question bank).
