@@ -1329,6 +1329,7 @@ def _launch_detached(
     env[DEEPTUTOR_HOME_ENV] = str(runtime_home.resolve())
     env[DETACHED_WORKER_ENV] = "1"
     env[DETACHED_TOKEN_ENV] = token
+    env["PYTHONSAFEPATH"] = "1"
     kwargs: dict[str, Any] = {
         "cwd": str(runtime_home),
         "env": env,
