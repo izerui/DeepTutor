@@ -75,8 +75,8 @@ def test_get_profile_returns_own_record(profile_client):
     client, users = profile_client
     body = client.get("/api/auth/profile", headers=_auth("user-token")).json()
     assert body["username"] == "bob"
-    # The startup role migration made the legacy "user" a student (spec 2026-10-29 D1).
-    assert body["role"] == "student"
+    # A stored legacy "user" is shown as a learner (spec 2026-11-05).
+    assert body["role"] == "learner"
     assert body["id"] == users["bob"]["id"]
     assert body["avatar"] == ""
 

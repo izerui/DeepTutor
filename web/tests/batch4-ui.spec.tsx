@@ -9,11 +9,15 @@ const { tasks, t } = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
 vi.mock("@/lib/tasks-api", () => tasks);
-vi.mock("@/lib/workbench-api", () => ({ getMyAiUsage: vi.fn(() => Promise.resolve({ limit: 0, used: 0, remaining_percent: null })) }));
-vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, isTeacher: false, loading: false }) }));
+vi.mock("@/lib/workbench-api", () => ({
+  getMyAiUsage: vi.fn(() => Promise.resolve({ limit: 0, used: 0, remaining_percent: null })),
+  getWorkbench: vi.fn(() => Promise.resolve({ role: "learner", sent: [] })),
+}));
+vi.mock("@/components/catalog/MyListings", () => ({ MyListings: () => null }));
+vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, loading: false }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
-import StudentHome from "@/components/home/StudentHome";
+import LearnerHome from "@/components/home/LearnerHome";
 import { notificationText } from "@/components/notifications/NotificationBell";
 import type { AppNotification } from "@/lib/notifications-api";
 
@@ -29,9 +33,9 @@ it("words the hand-over summary and the withdrawn-material notice", () => {
 
 it("lists one's own courses among what one is learning", async () => {
   tasks.getHome.mockResolvedValue({
-    assigned: [], history_count: 0, can_create_path: true, market: [], mine: [],
+    assigned: [], history_count: 0, market: [], mine: [],
     mine_courses: [{ id: "crs_1", name: "Algebra", color: "#000", updated_at: 1 }],
   });
-  render(<StudentHome />);
+  render(<LearnerHome />);
   expect((await screen.findByRole("link", { name: /Algebra/ })).getAttribute("href")).toBe("/courses/crs_1");
 });

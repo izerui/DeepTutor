@@ -13,10 +13,10 @@ export const TEACHER_MATERIALS_UNAVAILABLE_CODE = 'teacher_materials_unavailable
 export const OBJECTIVE_REDEFINED_REASON = 'objective_redefined'
 
 export const COURSE_UNAVAILABLE_KEY =
-  'This course is no longer available to you. Ask your teacher if you think this is a mistake.'
+  'This course is no longer available to you. Ask its author if you think this is a mistake.'
 export const MATERIALS_UNAVAILABLE_KEY = 'Course materials are temporarily unavailable'
 export const MATERIALS_UNAVAILABLE_DETAIL_KEY =
-  'Ask your teacher to restore them. The tutor will not continue without them.'
+  'Ask its author to restore them. The tutor will not continue without them.'
 
 /** A catalog key plus its interpolation values; callers render `t(key, values)`. */
 export interface TeacherPathMessage {
@@ -52,11 +52,11 @@ export function teacherTurnErrorMessage(
     const names = materialNames(metadata?.materials)
     return names.length
       ? {
-          key: 'Course materials are temporarily unavailable: {{materials}}. Ask your teacher to restore them. The tutor will not continue without them.',
+          key: 'Course materials are temporarily unavailable: {{materials}}. Ask its author to restore them. The tutor will not continue without them.',
           values: { materials: names.join(' · ') },
         }
       : {
-          key: 'Course materials are temporarily unavailable. Ask your teacher to restore them. The tutor will not continue without them.',
+          key: 'Course materials are temporarily unavailable. Ask its author to restore them. The tutor will not continue without them.',
         }
   }
   return null

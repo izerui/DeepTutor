@@ -1,8 +1,8 @@
 """Learning reports of a course or a Mastery Path (platform batch 3 §1).
 
 The class report's numbers, for the people who joined the item instead of a
-class's students. Only the item's author, a teacher, reads it: administrators
-do not read learning data (D2).
+class's students. The item's author reads it, and so do administrators
+(spec 2026-11-05 §2); both only read — nothing here changes a learner's data.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import io
 from typing import Any
 
 from deeptutor.catalog import enrollment, items
-from deeptutor.catalog.listings import ListingForbidden, ListingNotFound
+from deeptutor.catalog.listings import ListingNotFound
 from deeptutor.catalog.learner_data import PERIODS, LearnerData, _snapshots
 from deeptutor.publishing import scope as scopes
 
@@ -23,30 +23,34 @@ CHUNK = 400
 
 class LearnerReportService(LearnerData):
     def _require_author(self, kind: str, item_id: str) -> items.ItemInfo:
+        """The item, for its author or an administrator; the numbers are then the author's."""
         from deeptutor.multi_user.accounts import live_role as _role
         from deeptutor.multi_user.ownership import owns
 
         if kind not in KINDS:
             raise ListingNotFound("Not found.")
         info = items.info(kind, item_id)
-        if info is None or not owns(info.owner, self.actor):
+        if info is None:
             raise ListingNotFound("Not found.")
-        if self.actor.is_admin or _role(self.actor) != "teacher":
-            raise ListingForbidden("Only the teacher who made it sees its learning report.")
+        if not owns(info.owner, self.actor):
+            if _role(self.actor) != "admin":
+                raise ListingNotFound("Not found.")
+            # An administrator reads what its author reads.
+            self.author_id = info.owner
         return info
 
     def _learners(self, kind: str, item_id: str, owner: str) -> list[str]:
         from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
-        found = enrollment.members(kind, item_id) - {owner, self.actor.id}
+        found = enrollment.members(kind, item_id) - {owner, self.author_id}
         return sorted(
             (u for u in found if u in accounts and not accounts[u]["disabled"]),
             key=lambda u: accounts[u]["username"],
         )
 
     def _scope_of(self, kind: str, item_id: str) -> tuple[dict[str, str], set[str], list[str]]:
-        """(this teacher's paths in it, its practice sets, its task ids)."""
+        """(the author's paths in it, its practice sets, its task ids)."""
         mine = self._my_template_ids()
         if kind == scopes.MASTERY_PATH:
             return ({item_id: mine[item_id]} if item_id in mine else {}), set(), []

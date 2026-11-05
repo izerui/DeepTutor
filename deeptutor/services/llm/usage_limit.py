@@ -1,9 +1,9 @@
-"""Students' daily AI limit (spec 2026-11-03 batch 3 §8).
+"""Learners' daily AI limit (spec 2026-11-03 batch 3 §8, 2026-11-05 §2).
 
 Counted in tokens from the account's own usage ledger (``usage_ledger``),
-from local midnight. Only students are limited. Calls made on a teacher's
-behalf — grading a practice set's answers — run under :func:`exempt` and
-are recorded but not counted.
+from local midnight. Every learner is limited; administrators are not. Calls
+made on an author's behalf — grading a practice set's answers — run under
+:func:`exempt` and are recorded but not counted.
 
 A turn that was admitted runs to its end: only its first call is checked.
 """
@@ -117,7 +117,11 @@ def used_today(path: Path) -> int:
 
 
 def _student() -> str | None:
-    """The acting student's id, or ``None`` for anyone who is not limited."""
+    """The acting learner's id, or ``None`` for anyone who is not limited.
+
+    Spec 2026-11-05 §2: every learner is limited, whatever their stored role;
+    administrators are not.
+    """
     from deeptutor.multi_user.context import get_current_user_or_none
 
     user = get_current_user_or_none()
@@ -126,7 +130,7 @@ def _student() -> str | None:
     from deeptutor.multi_user.roles import current_role
 
     try:
-        return user.id if current_role() == "student" else None
+        return user.id if current_role() != "admin" else None
     except Exception:
         return None
 

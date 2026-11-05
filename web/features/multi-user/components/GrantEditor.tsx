@@ -16,9 +16,7 @@ import type {
   GrantPayload,
   LearningPolicy,
   MultiUserResources,
-  StudentPolicy,
 } from "../types";
-import { STUDENT_POLICY_DEFAULTS } from "../types";
 import { AiLimitPicker } from "@/components/home/AiUsage";
 
 /** Age band and persona (for young learners) are kept but not offered for now (batch 3 §7.2). */
@@ -38,7 +36,7 @@ function emptyGrant(userId: string): GrantPayload {
     mcp_tools: null,
     exec_enabled: null,
     learning_policy: null,
-    student_policy: null,
+    ai_daily_tokens: null,
   };
 }
 
@@ -168,11 +166,9 @@ function ModeSwitch({
 export function GrantEditor({
   userId,
   lockLearningPolicy = false,
-  isStudent = false,
 }: {
   userId: string;
   lockLearningPolicy?: boolean;
-  isStudent?: boolean;
 }) {
   const { t } = useTranslation();
   const [resources, setResources] = useState<MultiUserResources | null>(null);
@@ -745,68 +741,20 @@ export function GrantEditor({
                 />
               </div>
             </section>
-            {isStudent && (
-              <section className="min-w-0">
-                <SectionTitle>{t("Student permissions")}</SectionTitle>
-                <div className="space-y-1.5 text-xs">
-                  <p className="text-[11px] text-[var(--muted-foreground)]">
-                    {t("Default follows the system default.")}
-                  </p>
-                  {(
-                    [
-                      ["allow_personal_mastery", t("Create their own Mastery Paths")],
-                      ["allow_personal_book", t("Create their own books")],
-                      ["allow_private_kb", t("Create their own knowledge bases")],
-                      ["allow_personal_course", t("Create their own courses")],
-                      ["allow_personal_task_card", t("Add their own task cards")],
-                      ["allow_partners", t("Use Partners")],
-                      ["allow_agents", t("Use agents")],
-                      ["allow_co_writer", t("Use Co-Writer")],
-                    ] as Array<[keyof typeof STUDENT_POLICY_DEFAULTS, string]>
-                  ).map(([key, label]) => {
-                    const policy = grant.student_policy ?? {};
-                    return (
-                      <label key={key} className="flex items-center justify-between gap-2">
-                        <span>{label}</span>
-                        <select
-                          aria-label={label}
-                          disabled={controlsDisabled}
-                          value={policy[key] === undefined ? "" : policy[key] ? "allow" : "deny"}
-                          onChange={(event) =>
-                            setGrant((current) => {
-                              const next: StudentPolicy = { ...(current.student_policy ?? {}) };
-                              if (event.target.value === "") delete next[key];
-                              else next[key] = event.target.value === "allow";
-                              return { ...current, student_policy: next };
-                            })
-                          }
-                          className="h-7 rounded-md border border-[var(--border)] bg-[var(--background)] px-1.5"
-                        >
-                          <option value="">{t("Default")}</option>
-                          <option value="allow">{t("Allow")}</option>
-                          <option value="deny">{t("Do not allow")}</option>
-                        </select>
-                      </label>
-                    );
-                  })}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span>{t("Daily AI limit")}</span>
-                    <AiLimitPicker
-                      value={grant.student_policy?.ai_daily_tokens}
-                      inheritLabel={t("Default")}
-                      onChange={(value) =>
-                        setGrant((current) => {
-                          const next: StudentPolicy = { ...(current.student_policy ?? {}) };
-                          if (value === undefined) delete next.ai_daily_tokens;
-                          else next.ai_daily_tokens = value;
-                          return { ...current, student_policy: next };
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
+            <section className="min-w-0">
+              <SectionTitle>{t("Daily AI limit")}</SectionTitle>
+              {/* Spec 2026-11-05: the one per-person setting left; no feature switches. */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span>{t("Default follows the system default.")}</span>
+                <AiLimitPicker
+                  value={grant.ai_daily_tokens ?? undefined}
+                  inheritLabel={t("Default")}
+                  onChange={(value) =>
+                    setGrant((current) => ({ ...current, ai_daily_tokens: value ?? null }))
+                  }
+                />
+              </div>
+            </section>
           </div>
         </div>
 

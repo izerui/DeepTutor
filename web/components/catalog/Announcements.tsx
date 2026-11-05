@@ -131,7 +131,7 @@ export function AnnouncementsPanel({
                 </p>
               )}
               <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
-                {item.author || t("Former teacher")} · {when(item.created_at)}
+                {item.author || t("Former author")} · {when(item.created_at)}
                 {item.updated_at > item.created_at && ` · ${t("Edited")}`}
                 {item.can_edit && editing?.id !== item.id && (
                   <>

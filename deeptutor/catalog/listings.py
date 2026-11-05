@@ -2,11 +2,11 @@
 
 States: ``draft`` → ``pending`` → ``listed`` (or ``rejected``, with a
 reason); ``listed`` ⇄ ``unlisted`` by the author; ``taken_down`` by an
-administrator, with a reason. A teacher's first listing is reviewed; an
+administrator, with a reason. A learner's first listing is reviewed; an
 administrator's is not, and once approved an author relists without review.
 After an administrator took an item down, it is reviewed again.
 
-Only teachers and administrators put content forward, and only their own.
+Anyone puts their own content forward, and only their own (spec 2026-11-05).
 Taking down is the only thing an administrator does to someone else's
 listing, besides reviewing it.
 """
@@ -189,10 +189,6 @@ class ListingService:
 
         return _role(self.actor)
 
-    def _require_publisher(self) -> None:
-        if self._role() not in ("teacher", "admin"):
-            raise ListingForbidden("Only teachers and administrators put content in the market.")
-
     def _require_admin(self) -> None:
         if self._role() != "admin":
             raise ListingForbidden("Only administrators review the market.")
@@ -200,7 +196,6 @@ class ListingService:
     def _own_item(self, kind: str, item_id: str) -> items.ItemInfo:
         from deeptutor.multi_user.ownership import owns
 
-        self._require_publisher()
         if kind not in items.KINDS:
             raise ListingNotFound("Not found.")
         info = items.info(kind, item_id)
@@ -361,7 +356,6 @@ class ListingService:
         """The author's listings, with what each needs."""
         from deeptutor.multi_user.ownership import owner_ids
 
-        self._require_publisher()
         mine = owner_ids(self.actor)
         with db.read() as conn:
             rows = conn.execute("SELECT * FROM listings ORDER BY updated_at DESC").fetchall() if conn else []
@@ -521,7 +515,7 @@ def author_name(owner_id: str, accounts: dict[str, dict[str, Any]] | None = None
 
 
 def author_role(owner_id: str, accounts: dict[str, dict[str, Any]] | None = None) -> str:
-    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID, role_label
 
     if owner_id == LOCAL_ADMIN_ID:
         return "admin"
@@ -529,7 +523,9 @@ def author_role(owner_id: str, accounts: dict[str, dict[str, Any]] | None = None
         from deeptutor.multi_user.accounts import accounts as _accounts
 
         accounts = _accounts()
-    return str((accounts.get(owner_id) or {}).get("role") or "")
+    account = accounts.get(owner_id)
+    # Spec 2026-11-05: shown as ``admin`` or ``learner``.
+    return role_label(account["role"]) if account else ""
 
 
 def _with_author(entry: dict[str, Any]) -> dict[str, Any]:

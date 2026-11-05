@@ -185,13 +185,16 @@ def _point_stats(progress, kp) -> dict[str, Any]:
 
 
 class LearnerData:
-    """Reads, for a teacher, numbers about learners: never their text."""
+    """Reads, for an author, numbers about learners: never their text."""
 
     def __init__(self, actor: CurrentUser | None = None) -> None:
         self.actor = actor or get_current_user()
+        #: Whose content the numbers are about: the actor, or the author an
+        #: administrator reads the report of (spec 2026-11-05 §2).
+        self.author_id = self.actor.id
 
     def _my_practice_results(self, student_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """D17: each student's results on this teacher's practice sets (scores only)."""
+        """D17: each learner's results on the author's practice sets (scores only)."""
         from deeptutor.practice_sets import store as practice_store
 
         if not student_ids:
@@ -205,7 +208,7 @@ class LearnerData:
                 f"FROM practice_submissions s JOIN practice_sets p ON p.id = s.set_id "
                 f"WHERE p.owner_user_id = ? AND s.student_id IN ({marks}) "
                 f"ORDER BY s.submitted_at",
-                (self.actor.id, *student_ids),
+                (self.author_id, *student_ids),
             ).fetchall()
         grouped: dict[tuple[str, str], list] = {}
         for row in rows:
@@ -234,7 +237,7 @@ class LearnerData:
 
         return {
             template.id: template.title
-            for template in TeachingStore().list_templates(owner_user_id=self.actor.id)
+            for template in TeachingStore().list_templates(owner_user_id=self.author_id)
         }
 
     def _student_report(

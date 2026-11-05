@@ -9,9 +9,11 @@ def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
 
-def test_students_and_plain_users_cannot_reach_teacher_routes(teaching_http):
+def test_every_learner_reaches_the_author_routes(teaching_http):
+    """Spec 2026-11-05: learners stored as student or user author paths too."""
     for name in ("sara", "uma"):
-        assert teaching_http.client.get(f"{BASE}/templates", headers=_auth(name)).status_code == 403
+        listed = teaching_http.client.get(f"{BASE}/templates", headers=_auth(name))
+        assert listed.status_code == 200 and listed.json() == {"templates": []}
 
 
 def test_teacher_publishes_and_learners_join(teaching_http, teacher_draft, quiet_change_model):
@@ -88,7 +90,7 @@ def test_other_teachers_get_404_and_admins_do_not_publish(teaching_http, teacher
     assert client.post(f"{BASE}/templates/{template_id}/archive", headers=_auth("tom")).status_code == 404
     denied = client.post(f"{BASE}/templates/{template_id}/publish/preview", headers=_auth("adam"))
     assert denied.status_code == 403
-    assert "owns" in denied.json()["detail"]
+    assert "Only the author of this path" in denied.json()["detail"]
 
 
 def test_blocked_publish_reports_issues(teaching_http, teacher_draft, quiet_change_model):

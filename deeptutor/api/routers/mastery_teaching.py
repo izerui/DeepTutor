@@ -1,10 +1,10 @@
-"""Teacher endpoints for mastery templates: publish, archive, delete.
+"""Author endpoints for mastery templates: publish, archive, delete.
 
 Nobody is handed a path or taken off it by hand: it reaches the people who
 join it (spec 2026-11-05 remove-teacher-management §1.2).
 
-Every route requires a teacher or an admin (``require_teacher_or_admin`` reads
-the live role). Ownership is enforced by :class:`TeachingService`.
+Every signed-in account may author paths (spec 2026-11-05); ownership is
+enforced by :class:`TeachingService`.
 """
 
 from __future__ import annotations
@@ -14,10 +14,9 @@ from collections.abc import Callable
 import inspect
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from deeptutor.api.routers.auth import require_teacher_or_admin
 import deeptutor.teaching.access  # noqa: F401  (registers the "mastery_template" reader)
 from deeptutor.teaching.models import PublishRequest
 from deeptutor.teaching.service import TeachingError, TeachingService
@@ -174,7 +173,7 @@ async def _body_book_id(request: Request) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-router = APIRouter(dependencies=[Depends(require_teacher_or_admin)])
+router = APIRouter()
 
 
 class RegisterTemplateRequest(BaseModel):

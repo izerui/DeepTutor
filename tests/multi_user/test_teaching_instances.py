@@ -141,7 +141,6 @@ def test_personal_paths_never_open_the_teaching_store(
     from deeptutor.learning.service import LearningService
 
     _personal_path(teacher_draft, "sara", "topic_own")
-    _personal_path(teacher_draft, "uma", "topic_uma")
 
     def _refuse(*_args, **_kwargs):
         raise AssertionError("TeachingStore was opened for a path without an origin")
@@ -168,8 +167,6 @@ def test_personal_paths_never_open_the_teaching_store(
         ]
         assert [card["path_id"] for card in navigation.topic_cards()["topics"]] == ["topic_own"]
         assert navigation.find_topic("topic_own")["path_id"] == "topic_own"
-    # Not a student: listing never looks for assignments either.
-    assert [t["path_id"] for t in _topics(as_account, "uma")] == ["topic_uma"]
 
 
 def test_legacy_progress_list_and_every_path_route_close_a_revoked_instance(

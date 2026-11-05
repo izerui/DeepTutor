@@ -22,12 +22,12 @@ import { SetEditor } from "./SetEditor";
 import { TakeSet } from "./TakeSet";
 
 /**
- * Practice sets (spec 2026-10-29 §8): teachers and administrators write and
- * publish them; everyone answers the ones they joined.
+ * Practice sets (spec 2026-10-29 §8; spec 2026-11-05): everyone writes and
+ * publishes them, and answers the ones they joined.
  */
 export default function PracticeSetsHub() {
   const { t } = useTranslation();
-  const { isAdmin, isTeacher, loading } = useAuthStatus();
+  const { isAdmin, loading } = useAuthStatus();
   // ``?set=`` opens one directly (a notification, the market's "Go study", a report).
   const params = useSearchParams();
   const setParam = params?.get("set") ?? null;
@@ -38,29 +38,28 @@ export default function PracticeSetsHub() {
       <header>
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Practice sets")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {isAdmin || isTeacher
-            ? t("Write question sets, publish them, then put them in the learning market, and see how learners did.")
-            : t("Practice sets you joined. Your answers go to your own question bank.")}
+          {t("Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.")}
         </p>
       </header>
-      {isAdmin || isTeacher ? (
-        <AuthorTabs key={setParam ?? ""} setParam={setParam} tabParam={params?.get("tab") ?? null}
-          courseParam={params?.get("course") ?? null} />
-      ) : (
-        <StudentView key={setParam ?? ""} initialSet={setParam} />
-      )}
+      <AuthorTabs key={setParam ?? ""} setParam={setParam} tabParam={params?.get("tab") ?? null}
+        courseParam={params?.get("course") ?? null} isAdmin={isAdmin} />
     </div>
   );
 }
 
 /**
- * Teachers and administrators write sets, and also learn from the ones they
- * joined (traceability #3). ``?set=`` of a set they do not own opens it to answer.
+ * The sets one joined, to answer, and one's own sets (traceability #3).
+ * ``?set=`` of a set one does not own opens it to answer.
  */
-function AuthorTabs({ setParam, tabParam, courseParam }: { setParam: string | null; tabParam: string | null; courseParam: string | null }) {
+function AuthorTabs({ setParam, tabParam, courseParam, isAdmin }: {
+  setParam: string | null;
+  tabParam: string | null;
+  courseParam: string | null;
+  isAdmin: boolean;
+}) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"mine" | "joined" | null>(() =>
-    setParam ? null : tabParam === "joined" ? "joined" : "mine",
+    setParam ? null : tabParam === "joined" ? "joined" : tabParam === "mine" || isAdmin ? "mine" : "joined",
   );
   // The set named in the address opens once, in the tab it belongs to.
   const [openSet, setOpenSet] = useState<string | null>(setParam);
@@ -86,17 +85,17 @@ function AuthorTabs({ setParam, tabParam, courseParam }: { setParam: string | nu
   return (
     <div className="space-y-4">
       <div role="tablist" className="flex gap-1">
-        <button type="button" role="tab" aria-selected={tab === "mine"} className={tabClass(tab === "mine")} onClick={() => choose("mine")}>
-          {t("My practice sets")}
-        </button>
         <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => choose("joined")}>
           {t("Practice sets I joined")}
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "mine"} className={tabClass(tab === "mine")} onClick={() => choose("mine")}>
+          {t("My practice sets")}
         </button>
       </div>
       {tab === "mine" ? (
         <AuthorView initialSet={openSet} courseParam={openSet ? courseParam : null} />
       ) : (
-        <StudentView initialSet={openSet} />
+        <JoinedView initialSet={openSet} />
       )}
     </div>
   );
@@ -230,7 +229,7 @@ function WithdrawSection() {
               type="button"
               className={actionClass}
               onClick={() => {
-                if (!window.confirm(t("Withdraw this practice set? Students will no longer see it."))) return;
+                if (!window.confirm(t("Withdraw this practice set? Learners will no longer see it."))) return;
                 archiveSet(set.id)
                   .then(refresh)
                   .catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
@@ -246,7 +245,7 @@ function WithdrawSection() {
 }
 
 /** The sets one joined from the market, to answer. */
-function StudentView({ initialSet }: { initialSet: string | null }) {
+function JoinedView({ initialSet }: { initialSet: string | null }) {
   const { t } = useTranslation();
   const [sets, setSets] = useState<AssignedSet[] | null>(null);
   // ``?set=`` opens one directly (a notification, or the market's "Go study").
@@ -286,7 +285,7 @@ function StudentView({ initialSet }: { initialSet: string | null }) {
         <li key={set.id} className="space-y-1.5 rounded-xl border border-[var(--border)] p-4">
           <p className="text-[14px] font-medium text-[var(--foreground)]">{set.title}</p>
           <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]">
-            <SourceBadge provenance={set.provenance ?? { kind: "teacher", name: set.teacher }} />
+            <SourceBadge provenance={set.provenance ?? { kind: "shared", name: set.teacher }} />
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
             {set.submissions === 0

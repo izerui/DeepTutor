@@ -1,7 +1,8 @@
 """The author's review of a practice set (spec 2026-11-03 batch 3 §6.1).
 
 * one attempt question by question, with the subjective answers' text and
-  the option picked — kept for the author only (§2.1);
+  the option picked — for the author and administrators only (§2.1,
+  spec 2026-11-05 §2);
 * how many picked each option;
 * the results as CSV.
 """
@@ -41,22 +42,14 @@ def option_counts(question: dict[str, Any], submissions) -> dict[str, int] | Non
 
 
 class PracticeReview:
-    """The set's author, a teacher (administrators see no answers, R21)."""
+    """The set's author; administrators read it too, read-only (spec 2026-11-05 §2)."""
 
     def __init__(self, actor=None) -> None:
         self.service = PracticeSetService(actor)
         self.actor = self.service.actor
 
     def _submission(self, conn, set_id: str, submission_id: str):
-        from deeptutor.practice_sets.service import PracticeForbidden, _role
-
-        self.service._require_author()
-        row = self.service._owned(conn, set_id)
-        if _role(self.actor) == "admin" and _col(row, "created_by") != self.actor.id:
-            # Batch 3 §2.1, R21: answers go to the teacher who wrote the set — not to an
-            # administrator it was handed to when its teacher left (follow-ups §4: an
-            # administrator who wrote it reads them like a teacher).
-            raise PracticeForbidden("Students' answers are shown to teachers only.")
+        row = self.service._reportable(conn, set_id)
         submission = conn.execute(
             "SELECT * FROM practice_submissions WHERE id = ? AND set_id = ?", (submission_id, set_id)
         ).fetchone()
@@ -126,7 +119,7 @@ class PracticeReview:
         questions = report["questions"]
         # Each score with the maximum of the version it was on (R15).
         writer.writerow([
-            "student", "in_scope", "attempts", "first_score", "first_max", "best_score", "best_max",
+            "learner", "in_scope", "attempts", "first_score", "first_max", "best_score", "best_max",
             "counted_score", "counted_max", "minutes", "submitted_at",
             *[f"Q{i + 1}" for i in range(len(questions))],
         ])

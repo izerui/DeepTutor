@@ -219,7 +219,8 @@ def test_who_may_list_and_review(as_account):
     from deeptutor.catalog.listings import ListingError, ListingForbidden, ListingNotFound
 
     set_id = _market_set(as_account)
-    with as_account("sara"), pytest.raises(ListingForbidden):
+    # Spec 2026-11-05: any learner lists their own content, nobody another's.
+    with as_account("sara"), pytest.raises(ListingNotFound):
         _listings().save("practice_set", set_id, **META)
     with as_account("tom"), pytest.raises(ListingNotFound):
         _listings().save("practice_set", set_id, **META)
@@ -588,7 +589,7 @@ def test_routes_from_listing_to_joining(as_account, catalog_http):
     set_id = _market_set(as_account)
     base = f"/api/catalog/listings/practice_set/{set_id}"
     assert catalog_http("GET", "tina", base).json()["status"] == "none"
-    assert catalog_http("PUT", "sara", base, json=META).status_code == 403
+    assert catalog_http("PUT", "sara", base, json=META).status_code == 404  # not hers
     assert catalog_http("PUT", "tina", base, json=META).status_code == 200
     assert catalog_http("POST", "tina", f"{base}/submit").json()["status"] == "pending"
     assert catalog_http("GET", "tina", "/api/catalog/review").status_code == 403

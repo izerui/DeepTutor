@@ -87,7 +87,7 @@ const fieldsOf = (listing: AuthorListing): ListingFields => ({
 /**
  * The author's listing (platform batch 1 §5.2): its state, the latest reason
  * it was turned down, the market information, the buttons for this state
- * and how many have joined. Only teachers and administrators list content.
+ * and how many have joined. Every author may list their content (spec 2026-11-05).
  */
 export function ListingPanel({
   kind,
@@ -105,18 +105,17 @@ export function ListingPanel({
   makePublic?: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
-  const { isAdmin, isTeacher, enabled, loading } = useAuthStatus();
+  const { isAdmin, loading } = useAuthStatus();
   const [listing, setListing] = useState<AuthorListing | null>(null);
   const [fields, setFields] = useState<ListingFields | null>(null);
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const allowed = !enabled || isTeacher || isAdmin;
-  const { taxonomy, error: taxonomyError } = useTaxonomy(!loading && allowed && !hidden);
+  const { taxonomy, error: taxonomyError } = useTaxonomy(!loading && !hidden);
 
   useEffect(() => {
-    if (loading || !allowed) return;
+    if (loading) return;
     let alive = true;
     setHidden(false);
     getListing(kind, itemId)
@@ -133,9 +132,9 @@ export function ListingPanel({
     return () => {
       alive = false;
     };
-  }, [kind, itemId, loading, allowed, t]);
+  }, [kind, itemId, loading, t]);
 
-  if (loading || !allowed || hidden) return null;
+  if (loading || hidden) return null;
   if (!listing || !fields) {
     return error ? (
       <p role="alert" className="text-[12px] text-red-600">{error}</p>

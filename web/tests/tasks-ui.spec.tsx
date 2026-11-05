@@ -9,11 +9,16 @@ const { api, notes, t } = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t }) }));
 vi.mock("@/lib/tasks-api", () => api);
+vi.mock("@/lib/workbench-api", () => ({
+  getMyAiUsage: vi.fn(() => Promise.resolve(null)),
+  getWorkbench: vi.fn(() => Promise.resolve({ role: "learner", sent: [] })),
+}));
+vi.mock("@/components/catalog/MyListings", () => ({ MyListings: () => null }));
 vi.mock("@/lib/notifications-api", () => notes);
-vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, isTeacher: false, loading: false }) }));
+vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, loading: false }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
-import StudentHome from "@/components/home/StudentHome";
+import LearnerHome from "@/components/home/LearnerHome";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import type { AssignedTask } from "@/lib/tasks-api";
@@ -21,7 +26,7 @@ import type { AssignedTask } from "@/lib/tasks-api";
 const note: AssignedTask = {
   key: "task_1", task_id: "task_1", kind: "note", title: "Essay", description: "Write about waves.",
   target_id: "", target_title: "", settings: {}, state: "open",
-  completed_at: null, provenance: { kind: "teacher", name: "tina" },
+  completed_at: null, provenance: { kind: "shared", name: "tina" },
 };
 
 beforeEach(() => {
@@ -59,11 +64,11 @@ it("words notifications and marks them all read", async () => {
 
 it("keeps what teachers assigned apart from the student's own learning", async () => {
   api.getHome.mockResolvedValue({
-    assigned: [note], history_count: 0, can_create_path: true,
+    assigned: [note], history_count: 0,
     market: [{ kind: "book", id: "b1", title: "School handbook", author: "", author_role: "admin" }],
     mine: [{ path_id: "topic_1", name: "My algebra", mastered: 2, total: 5, updated_at: 1 }],
   });
-  render(<StudentHome />);
+  render(<LearnerHome />);
   expect(await screen.findByRole("heading", { name: "From my courses" })).toBeTruthy();
   expect(screen.getByText("Essay")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "New in the market" })).toBeTruthy();

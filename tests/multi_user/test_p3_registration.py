@@ -23,13 +23,13 @@ def auth_client(seed_user, monkeypatch):
     return TestClient(app), tina
 
 
-def test_anyone_signs_up_as_a_student_while_registration_is_open(auth_client):
+def test_anyone_signs_up_as_a_learner_while_registration_is_open(auth_client):
     client, _ = auth_client
     assert client.get("/api/auth/registration").json() == {"open": True}
     response = client.post("/api/auth/register", json={"username": "newbie", "password": "password-123"})
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["role"] == "student" and body["is_admin"] is False
+    assert body["role"] == "learner" and body["is_admin"] is False
     assert "joined_class" not in body and "invite_error" not in body
 
 

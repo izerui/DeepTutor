@@ -38,8 +38,8 @@ PRACTICE_SET = "practice_set"
 TASK = "task"
 COURSE = "course"
 KINDS = (BOOK, KNOWLEDGE_BASE, MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
-#: Kinds whose named receivers are students only (they study or answer them).
-STUDENT_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
+#: Kinds whose named receivers are learners only (they study or answer them).
+LEARNER_KINDS = (MASTERY_PATH, PRACTICE_SET, TASK, COURSE)
 
 
 class ScopeError(Exception):
@@ -48,10 +48,6 @@ class ScopeError(Exception):
 
 class ScopeNotFound(ScopeError):
     status_code = 404
-
-
-class ScopeForbidden(ScopeError):
-    status_code = 403
 
 
 class ScopeNeedsConfirmation(ScopeError):
@@ -178,14 +174,14 @@ def _accounts() -> dict[str, dict[str, Any]]:
     return accounts()
 
 
-def audience(scope: Scope, *, students_only: bool = False, owner_id: str = "") -> set[str]:
+def audience(scope: Scope, *, learners_only: bool = False, owner_id: str = "") -> set[str]:
     """Active accounts the scope reaches, the owner excluded.
 
-    *students_only* narrows the receivers a publisher named; people who joined
-    count whatever their role.
+    *learners_only* leaves administrators out of the receivers a publisher
+    named; people who joined count whatever their role.
     """
     active = {user_id: row for user_id, row in _accounts().items() if not row["disabled"]}
-    named = {user_id for user_id, row in active.items() if not students_only or row["role"] == "student"}
+    named = {user_id for user_id, row in active.items() if not learners_only or row["role"] != "admin"}
     reached = set(named) if scope.everyone else set(scope.users) & named
     reached |= set(scope.members) & set(active)
     reached.discard(owner_id)
@@ -290,7 +286,7 @@ def reconcile_template(template_id: str) -> None:
     template = teaching.get_template(template_id)
     if scope is None or template is None or template.status != "published":
         return
-    wanted = audience(scope, students_only=True, owner_id=template.owner_user_id)
+    wanted = audience(scope, learners_only=True, owner_id=template.owner_user_id)
     active = {a.student_user_id for a in teaching.list_assignments(template_id) if a.status == "active"}
     _apply_assignments(template, wanted - active, active - wanted)
 
@@ -304,7 +300,7 @@ def reconcile_student(student_id: str) -> None:
         return
     account = _accounts().get(student_id)
     active = bool(account) and not account["disabled"]
-    is_student = active and account["role"] == "student"
+    is_student = active and account["role"] != "admin"
     teaching = TeachingStore()
     assigned = {
         a.template_id for a in teaching.assignments_for_student(student_id) if a.status == "active"
@@ -350,11 +346,10 @@ __all__ = [
     "KNOWLEDGE_BASE",
     "MASTERY_PATH",
     "PRACTICE_SET",
-    "STUDENT_KINDS",
+    "LEARNER_KINDS",
     "TASK",
     "Scope",
     "ScopeError",
-    "ScopeForbidden",
     "ScopeNeedsConfirmation",
     "ScopeNotFound",
     "allows",

@@ -132,13 +132,19 @@ def test_course_report_shows_its_learners(as_account, teaching_users, course):
     assert detail["tasks"]["done"] == 2
 
 
-def test_only_the_author_reads_the_report(as_account, teaching_users, course):
+def test_only_the_author_and_administrators_read_the_report(as_account, teaching_users, course):
     from deeptutor.catalog.listings import ListingNotFound
 
+    _join(as_account, "sara", "course", course.id)
     with as_account("tom"), pytest.raises(ListingNotFound):
         _reports().report("course", course.id)
-    with as_account("adam"), pytest.raises(ListingNotFound):
+    with as_account("sara"), pytest.raises(ListingNotFound):  # a learner who joined it
         _reports().report("course", course.id)
+    # Spec 2026-11-05 §2: administrators read it as its author does.
+    with as_account("tina"):
+        theirs = _reports().report("course", course.id)
+    with as_account("adam"):
+        assert _reports().report("course", course.id) == theirs
     with as_account("tina"), pytest.raises(ListingNotFound):
         _reports().learner("course", course.id, _uid(teaching_users, "sam"))  # never joined
 

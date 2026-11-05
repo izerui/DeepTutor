@@ -134,7 +134,7 @@ describe('TopicAtlas for students', () => {
         onRetry={() => {}}
       />
     )
-    const assigned = screen.getByRole('region', { name: 'Published by teachers' })
+    const assigned = screen.getByRole('region', { name: 'From other authors' })
     const link = within(assigned).getByRole('link', { name: /C15 Waves/ })
     expect(link.getAttribute('href')).toBe('/learning/mastery/assigned_tpl1/sessions')
     expect(within(assigned).getByText('Published by tina')).toBeInTheDocument()
@@ -156,7 +156,7 @@ describe('TopicAtlas for students', () => {
         onCreate={onCreate}
       />
     )
-    expect(screen.queryByRole('region', { name: 'Published by teachers' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'From other authors' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'My topics' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /New topic/ }))
     expect(onCreate).toHaveBeenCalledTimes(1)
@@ -195,9 +195,9 @@ describe('TeacherPathBanner', () => {
       />
     )
     expect(screen.getByText('Published by tina')).toBeInTheDocument()
-    expect(screen.getByText('The outline is set by your teacher')).toBeInTheDocument()
+    expect(screen.getByText('The outline is set by its author')).toBeInTheDocument()
     const notice = screen.getByRole('status')
-    expect(notice).toHaveTextContent('Your teacher updated this course')
+    expect(notice).toHaveTextContent('The author updated this course')
     expect(notice).toHaveTextContent('1 knowledge points added · 2 knowledge points to re-check')
     expect(notice).not.toHaveTextContent('removed')
     fireEvent.click(within(notice).getByRole('button', { name: /Got it/ }))
@@ -451,7 +451,7 @@ describe('teacher path refusals are localized by code', () => {
         materials: ['C15 Notes', 'Waves book'],
       })
     ).toEqual({
-      key: 'Course materials are temporarily unavailable: {{materials}}. Ask your teacher to restore them. The tutor will not continue without them.',
+      key: 'Course materials are temporarily unavailable: {{materials}}. Ask its author to restore them. The tutor will not continue without them.',
       values: { materials: 'C15 Notes · Waves book' },
     })
     expect(teacherTurnErrorMessage({ error_code: 'internal_error' })).toBeNull()

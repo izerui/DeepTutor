@@ -64,7 +64,7 @@ test("source issues are localized by code, never by the server's English text", 
     sourceIssueMessage(issue("not_shareable", "b1"), { b1: "book" }).key,
     sourceIssueMessage(issue("not_shareable", "k1"), { k1: "knowledge_base" }).key,
   );
-  assert.equal(sourceIssueMessage(issue("something_new")).key, "{{label}} cannot be shared with students.");
+  assert.equal(sourceIssueMessage(issue("something_new")).key, "{{label}} cannot be shared with learners.");
   assert.equal(
     sourceIssueMessage(issue("publish_step_failed")).key,
     "Publishing stopped; no new version was published.",
@@ -79,11 +79,11 @@ test("publish steps name the material they acted on", () => {
   assert.deepEqual(publishStepMessage("share:book:bk_1", {}).values, { name: "bk_1" });
   assert.equal(publishStepMessage("make_public:book:bk_1").key, "Making the book {{name}} public");
   assert.equal(publishStepMessage("documents").key, "Registering the cited documents");
-  assert.equal(publishStepMessage("assignments").key, "Student assignments");
-  assert.equal(publishStepMessage("book_references").key, "Book access for students");
+  assert.equal(publishStepMessage("assignments").key, "Learner assignments");
+  assert.equal(publishStepMessage("book_references").key, "Book access for learners");
   assert.equal(
     publishStepMessage("knowledge_base_references").key,
-    "Knowledge base access for students",
+    "Knowledge base access for learners",
   );
   assert.deepEqual(publishStepMessage("later_step"), {
     key: "Step {{step}}",
@@ -107,7 +107,7 @@ test("only a structured 422 is read as a blocked publish", () => {
 test("other failures are localized by status", () => {
   assert.equal(
     teachingErrorMessage(new TeachingApiError("English", 403, "English")).key,
-    "Only the teacher who owns this path can publish it.",
+    "Only the author of this path can publish it.",
   );
   // Nobody is assigned by hand any more (spec 2026-11-05 §1.2): a 422 is just a failed update.
   assert.equal(
@@ -120,7 +120,7 @@ test("other failures are localized by status", () => {
   );
   assert.equal(
     teachingErrorMessage(new TeachingApiError("x", 403, "x"), "manage").key,
-    "You can no longer manage this teacher path.",
+    "You can no longer manage this published path.",
   );
   assert.doesNotMatch(
     teachingErrorMessage(new TeachingApiError("x", 409, "x")).key,
@@ -161,7 +161,7 @@ function catalog(locale: string): Record<string, string> {
   throw new Error(`could not locate locales/${locale}/app.json`);
 }
 
-test("teacher count strings use plural keys in every locale", () => {
+test("learner count strings use plural keys in every locale", () => {
   const forms: Record<string, string[]> = {
     en: ["one", "other"],
     zh: ["one", "other"],
@@ -171,7 +171,7 @@ test("teacher count strings use plural keys in every locale", () => {
     uk: ["one", "few", "many", "other"],
   };
   for (const key of [
-    "{{count}} students will get this update the next time they study",
+    "{{count}} learners will get this update the next time they study",
   ]) {
     for (const [locale, needed] of Object.entries(forms)) {
       const rows = catalog(locale);
@@ -182,7 +182,7 @@ test("teacher count strings use plural keys in every locale", () => {
     }
   }
   assert.equal(
-    catalog("en")["{{count}} students will get this update the next time they study_one"],
-    "{{count}} student will get this update the next time they study",
+    catalog("en")["{{count}} learners will get this update the next time they study_one"],
+    "{{count}} learner will get this update the next time they study",
   );
 });

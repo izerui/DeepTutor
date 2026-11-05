@@ -58,7 +58,7 @@ function useKindNames(): Record<CourseResourceKind, string> {
     reading_workspace: t("Reading"),
     partner: t("Partner"),
     partner_group: t("Partner group"),
-    teacher_course: t("Teacher's course"),
+    teacher_course: t("Joined course"),
   };
 }
 
@@ -227,7 +227,7 @@ export default function CourseResources({
                   {!resource.available ? (
                     <Tooltip
                       label={resource.kind === "teacher_course"
-                        ? t("Your teacher withdrew this course, or it no longer reaches you. You can remove it.")
+                        ? t("Its author withdrew this course, or it no longer reaches you. You can remove it.")
                         : resource.unavailable_reason === "made_private"
                         ? resource.kind === "book"
                           ? t("Its owner made this book private — remove the reference, or attach another resource.")

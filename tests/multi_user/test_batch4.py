@@ -106,12 +106,14 @@ def test_an_older_after_due_set_shows_the_average_once_submitted(as_account, thi
 
 
 def test_whoever_takes_over_gets_one_summary(as_account, teaching_users):
-    from deeptutor.multi_user.content_lifecycle import hand_over_published
+    from deeptutor.multi_user.account_handoff import hand_over_deleted_account
+    from deeptutor.practice_sets.service import PracticeSetService
 
     ids = {name: row["id"] for name, row in teaching_users.items()}
-    _set(as_account)
-    moved = hand_over_published(ids["tina"], ids["adam"])
-    assert moved["practice_sets"] == 1
+    set_id = _set(as_account)
+    hand_over_deleted_account(ids["tina"], ids["adam"], username="tina")
+    with as_account("adam"):
+        assert PracticeSetService().get(set_id)["status"] == "published"
     [notice] = [n for n in notifications.list_for(ids["adam"]) if n["kind"] == "content_transferred"]
     assert notice["params"]["from"] == "tina" and notice["params"]["practice_sets"] == 1
     assert "tasks_transferred" not in _kinds(ids["adam"])  # not a second notice for the same hand-over

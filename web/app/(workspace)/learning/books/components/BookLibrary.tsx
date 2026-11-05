@@ -5,7 +5,6 @@ import { useLibraryFilter, WorkspaceLabel } from '@/components/learning/LibraryW
 import { libraryItemKey } from '@/lib/learning-library'
 import { bookRequestRef } from '@/lib/book-sharing'
 import { SourceBadge } from '@/components/common/SourceBadge'
-import { useAuthStatus } from '@/hooks/useAuthStatus'
 import { groupByProvenance, provenanceGroupTitle } from '@/lib/provenance'
 import { LearningCardContent } from '@/components/learning/LearningCard'
 
@@ -126,13 +125,12 @@ export default function BookLibrary({
   }, [books])
 
   // Spec 2026-11-02 §3.1: one grouping by where each book comes from.
-  const { isAdmin, isTeacher } = useAuthStatus()
   const sections = groupByProvenance(
     filtered,
     book => book.provenance ?? { kind: book.group === 'public' ? 'shared' : 'own', name: '' },
   ).map(group => ({
     key: group.kind,
-    label: provenanceGroupTitle(group.kind, t, !(isAdmin || isTeacher)),
+    label: provenanceGroupTitle(group.kind, t),
     books: group.items,
   }))
 

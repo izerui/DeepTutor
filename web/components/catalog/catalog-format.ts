@@ -52,7 +52,7 @@ export const STATUS_TONE: Record<string, string> = {
   taken_down: "bg-red-500/10 text-red-700 dark:text-red-300",
 };
 
-/** Who published it: the platform (an administrator), or a teacher by name. */
+/** Who published it: the platform (an administrator), or its author by name. */
 export function authorLabel(entry: Pick<CatalogEntry, "author" | "author_role">, t: Translate): string {
   if (entry.author_role === "admin") return t("Published by the platform");
   return entry.author || t("Platform");

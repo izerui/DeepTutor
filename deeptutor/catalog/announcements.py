@@ -55,7 +55,7 @@ class AnnouncementService:
     def _authors(self, info: items.ItemInfo) -> bool:
         from deeptutor.multi_user.ownership import owns
 
-        return owns(info.owner, self.actor) and self._role() in ("teacher", "admin")
+        return owns(info.owner, self.actor)
 
     def _view(self, row, info: items.ItemInfo | None = None) -> dict[str, Any]:
         from deeptutor.multi_user.ownership import owns

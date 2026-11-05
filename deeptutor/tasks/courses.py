@@ -72,7 +72,6 @@ class CourseService:
     # authoring
 
     def create(self, title: str) -> dict[str, Any]:
-        self.tasks._require_author()
         title = str(title or "").strip()
         if not title or len(title) > TITLE_MAX:
             raise TaskError(f"A title must contain 1 to {TITLE_MAX} characters.")
@@ -86,14 +85,12 @@ class CourseService:
         return self.get(course_id)
 
     def get(self, course_id: str) -> dict[str, Any]:
-        self.tasks._require_author()
         with db.read() as conn:
             row = self._owned(conn, course_id)
             items = self._items(conn, course_id)
         return self._view(row, items)
 
     def list_mine(self) -> list[dict[str, Any]]:
-        self.tasks._require_author()
         with db.read() as conn:
             if conn is None:
                 return []
@@ -111,7 +108,6 @@ class CourseService:
     def update(self, course_id: str, *, title: str | None = None, description: str | None = None,
                task_ids: list[str] | None = None) -> dict[str, Any]:
         """Rename, describe, or set the tasks and their order (§5.1)."""
-        self.tasks._require_author()
         with db.read() as conn:
             row = self._owned(conn, course_id)
         if row["status"] == "archived":
@@ -189,7 +185,7 @@ class CourseService:
         return self.get(course_id)
 
     def hand_over(self, course_id: str, teacher_id: str) -> dict[str, Any]:
-        """An administrator gives a course they hold, with its tasks, to a teacher (traceability #5)."""
+        """An administrator gives a course they hold, with its tasks, to a learner (traceability #5)."""
         from deeptutor.tasks.service import _hand_tasks_to
 
         if _role(self.actor) != "admin":
@@ -241,7 +237,6 @@ class CourseService:
         """Settle receivers, check published tasks reach them, publish drafts, then the course."""
         from deeptutor.publishing import scope as scopes
 
-        self.tasks._require_author()
         with db.read() as conn:
             row = self._owned(conn, course_id)
             items = self._items(conn, course_id)
@@ -253,7 +248,7 @@ class CourseService:
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)
         try:
-            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
+            receivers = scopes.audience(scope, learners_only=True, owner_id=self.actor.id) if scope else set()
             self._publish_drafts(course_id)
         except Exception:
             if not had_scope:
@@ -273,7 +268,6 @@ class CourseService:
 
     def archive(self, course_id: str) -> dict[str, Any]:
         """Hide the course; its tasks stay as they are (§5.1). Administrators may withdraw any (D10)."""
-        self.tasks._require_author()
         with db.write() as conn:
             row = conn.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()
             if row is None or not (
@@ -288,7 +282,6 @@ class CourseService:
         return {"id": course_id, "status": "archived"}
 
     def delete(self, course_id: str) -> None:
-        self.tasks._require_author()
         with db.write() as conn:
             row = self._owned(conn, course_id)
             if row["status"] != "draft":
@@ -310,7 +303,7 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     from deeptutor.publishing.provenance import provenance
 
     actor = actor or get_current_user()
-    student = _role(actor) == "student"
+    student = _role(actor) != "admin"
     with db.read() as conn:
         if conn is None:
             return []

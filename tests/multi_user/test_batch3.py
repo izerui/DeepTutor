@@ -140,29 +140,21 @@ def _remember(deliver, in_course):
     _fixtures.update(deliver=deliver, in_course=in_course)
 
 
-def _own_policy(teaching_users, name: str, policy: dict) -> None:
-    from deeptutor.multi_user.grants import load_grant, save_grant
+def test_every_feature_is_open_to_every_learner_without_a_grant(features_http, teaching_users):
+    """Spec 2026-11-05 §2: no feature switches; a stored old switch is not read."""
+    from deeptutor.multi_user.grants import grant_path
 
-    user_id = teaching_users[name]["id"]
-    save_grant(user_id, {**load_grant(user_id), "student_policy": policy})
+    import json
 
-
-def test_partners_agents_and_co_writer_are_off_for_students_by_default(features_http):
-    for path in ("/api/partners", "/api/subagents/connections", "/api/documents/history"):
-        assert features_http("sara", "GET", path) == 403
-        assert features_http("tina", "GET", path) == 200
-    assert features_http("sara", "GET", "/api/courses") == 200  # reading one's courses is not creating
-    assert features_http("sara", "POST", "/api/courses") == 200  # own courses default to allowed
-    assert features_http("sara", "POST", "/api/task-board/cards") == 200
-
-
-def test_a_personal_setting_turns_features_on_or_off_item_by_item(features_http, teaching_users):
-    _own_policy(teaching_users, "sara", {"allow_partners": True, "allow_personal_course": False})
-    assert features_http("sara", "GET", "/api/partners") == 200
-    assert features_http("sara", "POST", "/api/courses") == 403
-    _own_policy(teaching_users, "sam", {"allow_partners": False})
-    assert features_http("sam", "GET", "/api/partners") == 403
-    assert features_http("sam", "POST", "/api/courses") == 200  # unset personally: the default decides
+    grant_path(teaching_users["sam"]["id"]).write_text(json.dumps({"student_policy": {
+        "allow_partners": False, "allow_agents": False, "allow_co_writer": False,
+        "allow_personal_course": False, "allow_personal_task_card": False,
+    }}), encoding="utf-8")
+    for name in ("sara", "sam", "tina"):
+        for path in ("/api/partners", "/api/subagents/connections", "/api/documents/history", "/api/courses"):
+            assert features_http(name, "GET", path) == 200
+        assert features_http(name, "POST", "/api/courses") == 200
+        assert features_http(name, "POST", "/api/task-board/cards") == 200
 
 
 # ── the daily AI limit (§8) ────────────────────────────────
@@ -183,10 +175,10 @@ def _limit_sara(tokens: int) -> None:
     from deeptutor.multi_user.identity import get_user
 
     sara = get_user("sara")["id"]
-    save_grant(sara, {**load_grant(sara), "student_policy": {"ai_daily_tokens": tokens}})
+    save_grant(sara, {**load_grant(sara), "ai_daily_tokens": tokens})
 
 
-def test_a_student_over_todays_tokens_is_refused_and_teachers_never_are(as_account):
+def test_a_learner_over_todays_tokens_is_refused_and_administrators_never_are(as_account):
     from deeptutor.services.llm.usage_limit import AiLimitReached, admit_call, status_for_current_user
 
     _limit_sara(1000)
@@ -199,7 +191,7 @@ def test_a_student_over_todays_tokens_is_refused_and_teachers_never_are(as_accou
         _spend(400)
         with pytest.raises(AiLimitReached):
             admit_call(None)
-    with as_account("tina"):
+    with as_account("adam"):
         _spend(10_000)
         admit_call(None)
         assert status_for_current_user()["limit"] == 0
@@ -245,9 +237,25 @@ def test_the_limit_is_personal_then_the_school_default(as_account, teaching_user
     _limit_sara(0)
     assert effective_ai_daily_tokens(sara) == 0  # her own "no limit" wins
     grant = load_grant(sara)
-    grant["student_policy"] = {"ai_daily_tokens": 200}
+    grant["ai_daily_tokens"] = 200
     save_grant(sara, grant)
     assert effective_ai_daily_tokens(sara) == 200
+
+
+def test_a_personal_limit_stored_by_the_old_student_policy_still_counts(teaching_users):
+    """Spec 2026-11-05 §3: the old switches are not read, the personal AI limit is."""
+    import json
+
+    from deeptutor.multi_user.grants import grant_path, load_grant
+    from deeptutor.multi_user.roles import effective_ai_daily_tokens
+
+    sara = teaching_users["sara"]["id"]
+    grant_path(sara).write_text(
+        json.dumps({"student_policy": {"allow_partners": False, "ai_daily_tokens": 700}}), encoding="utf-8",
+    )
+    assert effective_ai_daily_tokens(sara) == 700
+    assert load_grant(sara)["ai_daily_tokens"] == 700
+    assert "student_policy" not in load_grant(sara)
 
 
 # ── practice sets: review, options, export, attempts (§6.1) ──
@@ -307,10 +315,10 @@ def test_the_author_sees_subjective_text_and_picked_options_but_not_blanks(as_ac
         attempt = PracticeReview().attempt(set_id, result["submission_id"])
     answers = {q["question_id"]: q["answer"] for q in attempt["questions"]}
     assert answers == {ids[0]: "B", ids[1]: "TRUE", ids[2]: "Things fall.", ids[3]: None}
-    with as_account("tom"), pytest.raises(Exception):  # another teacher sees nothing
+    with as_account("tom"), pytest.raises(Exception):  # another learner sees nothing
         PracticeReview().attempt(set_id, result["submission_id"])
-    with as_account("adam"), pytest.raises(Exception):
-        PracticeReview().attempt(set_id, result["submission_id"])
+    with as_account("adam"):  # an administrator reads it (spec 2026-11-05 §2)
+        assert PracticeReview().attempt(set_id, result["submission_id"])["questions"] == attempt["questions"]
 
 
 def test_option_counts_use_each_students_first_attempt(as_account):
@@ -354,7 +362,7 @@ def test_the_results_export_as_csv(as_account):
     _answer(as_account, "sara", set_id, choice="B")
     with as_account("tina"):
         rows = list(csv.reader(io.StringIO(PracticeReview().export_csv(set_id))))
-    assert rows[0][:3] == ["student", "in_scope", "attempts"] and rows[0][-4:] == ["Q1", "Q2", "Q3", "Q4"]
+    assert rows[0][:3] == ["learner", "in_scope", "attempts"] and rows[0][-4:] == ["Q1", "Q2", "Q3", "Q4"]
     sara = next(r for r in rows if r[0] == "sara")
     assert sara[1:3] == ["yes", "1"] and sara[-4:] == ["correct", "correct", "ungraded", "ungraded"]
     sam = next(r for r in rows if r[0] == "sam")

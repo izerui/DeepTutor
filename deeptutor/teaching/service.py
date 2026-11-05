@@ -336,11 +336,11 @@ class TeachingService:
         if template.owner_user_id == user_id:
             return template
         if not is_admin:
-            # Another teacher's template is not theirs to know about.
+            # Another author's template is not theirs to know about.
             raise TemplateNotFound("Teacher path not found")
         if owner_only:
             raise TemplateForbidden(
-                "Only the teacher who owns this path can edit and publish it (its "
+                "Only the author of this path can edit and publish it (its "
                 "draft lives in their workspace). Admins can archive or delete it."
             )
         return template
@@ -471,7 +471,7 @@ class TeachingService:
         """
         user = get_current_user()
         if user.id != template.owner_user_id:
-            raise TemplateForbidden("Only the teacher who owns this path can publish it.")
+            raise TemplateForbidden("Only the author of this path can publish it.")
         with _scope(template.draft_workspace_id):
             return plan_sources(topic.sources, user, previous=self._current_sources(template))
 
@@ -549,7 +549,7 @@ class TeachingService:
         from deeptutor.publishing import scope as scopes
 
         owner = template.owner_user_id
-        recipients = scopes.audience(scopes._template_scope(template.id), students_only=True, owner_id=owner)
+        recipients = scopes.audience(scopes._template_scope(template.id), learners_only=True, owner_id=owner)
         if not recipients:
             return []
         cited: list[tuple[str, str, str, str, str]] = []
@@ -569,7 +569,7 @@ class TeachingService:
             if visibility == "public" and scope is None:
                 continue  # an unscoped public item reaches everyone
             readers = (
-                scopes.audience(scope, students_only=True) if visibility == "public" and scope else set()
+                scopes.audience(scope, learners_only=True) if visibility == "public" and scope else set()
             )
             missing = recipients - readers
             if missing:

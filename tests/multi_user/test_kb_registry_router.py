@@ -616,7 +616,7 @@ async def test_create_registers_and_replaces_stale_record(knowledge, as_user, ma
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("visibility", "status"), [("public", 403), ("shared", 400)])
+@pytest.mark.parametrize(("visibility", "status"), [("shared", 400)])
 async def test_create_rejects_before_creating(
     knowledge, as_user, make_kb, monkeypatch, visibility, status
 ):
@@ -944,12 +944,12 @@ async def test_owner_references_allow_private_and_delete_revokes_them(
 
 
 @pytest.mark.asyncio
-async def test_plain_users_and_connectors_cannot_publish(knowledge, as_user, make_kb, monkeypatch):
-    with as_user("u1"):
+async def test_every_learner_publishes_but_connectors_cannot(knowledge, as_user, make_kb, monkeypatch):
+    with as_user("u1"):  # spec 2026-11-05: a plain learner publishes their own knowledge base
         await _create(knowledge, monkeypatch, make_kb)
-        with pytest.raises(HTTPException) as error:
-            await knowledge.set_kb_visibility("physics", knowledge.KbVisibilityRequest(visibility="public"))
-        assert error.value.status_code == 403
+        await knowledge.set_kb_visibility("physics", knowledge.KbVisibilityRequest(visibility="public"))
+        created = await _create(knowledge, monkeypatch, make_kb, name="drafts", visibility="public")
+    assert registry.get_kb(created["kb_id"]).visibility == "public"
     with as_user("t1", role="teacher"):
         make_kb(current_kb_manager(), "vault", {"type": "obsidian"})
         with pytest.raises(HTTPException) as error:

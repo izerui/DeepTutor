@@ -34,7 +34,7 @@ const { catalog, tasks, auth, authStatus, search, t } = vi.hoisted(() => ({
     fetchAuthStatus: vi.fn(),
     fetchRegistrationOpen: vi.fn(),
   },
-  authStatus: { isAdmin: false, isTeacher: true, loading: false },
+  authStatus: { isAdmin: false, loading: false },
   search: { value: "" },
   t: (key: string, values?: Record<string, unknown>) =>
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
@@ -99,14 +99,14 @@ beforeEach(() => {
   [catalog, tasks, auth].forEach((group) => Object.values(group).forEach((fn) => fn.mockReset()));
   replace.mockReset();
   search.value = "";
-  Object.assign(authStatus, { isAdmin: false, isTeacher: true, loading: false });
+  Object.assign(authStatus, { isAdmin: false, loading: false });
   resetTaxonomyCache();
   catalog.getTaxonomy.mockResolvedValue(publicTaxonomy);
   catalog.listReviewQueue.mockResolvedValue([]);
   tasks.listAssignedTasks.mockResolvedValue([]);
   tasks.listAssignedCourses.mockResolvedValue([]);
   tasks.listMyCourses.mockResolvedValue([]);
-  tasks.getHome.mockResolvedValue({ mine: [], assigned: [], history_count: 0, can_create_path: true });
+  tasks.getHome.mockResolvedValue({ mine: [], assigned: [], history_count: 0 });
   catalog.listMyListings.mockResolvedValue([]);
 });
 
@@ -149,6 +149,8 @@ it("groups the author's tasks by course, offers no new-task form and points to t
     task({ id: "t2", title: "Old quiz" }),
     task({ id: "t3", title: "Lab", course_id: "c1", course_title: "Waves" }),
   ]);
+  // Spec 2026-11-05: learners land on what they joined; ?tab=tasks opens their own tasks.
+  search.value = "tab=tasks";
   render(<TasksHub />);
   const waves = await screen.findByRole("region", { name: "Waves" });
   expect(within(waves).getByText("Essay")).toBeTruthy();

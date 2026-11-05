@@ -30,9 +30,9 @@ import { isTeacherInstance, splitAssignedTopics, templateForTopic } from './teac
 import { SourceBadge } from '@/components/common/SourceBadge'
 import { groupByProvenance, provenanceGroupTitle, type Provenance } from '@/lib/provenance'
 
-/** A teacher path's copy comes from its teacher, or the school once handed over (§3.1). */
+/** A published path's copy comes from its author, or the school once handed over (§3.1). */
 const topicProvenance = (topic: MasteryTopic): Provenance =>
-  topic.origin?.provenance ?? { kind: 'teacher', name: topic.origin?.teacher_name ?? '' }
+  topic.origin?.provenance ?? { kind: 'shared', name: topic.origin?.teacher_name ?? '' }
 import { TopicMapCard } from './TopicMapCard'
 
 export function TopicAtlas({
@@ -169,7 +169,7 @@ export function TopicAtlas({
                 id={`mastery-${group.kind}-heading`}
                 className="text-[12px] font-semibold text-[var(--foreground)]"
               >
-                {provenanceGroupTitle(group.kind, t, true)}
+                {provenanceGroupTitle(group.kind, t)}
               </h2>
               <div className={`mt-3 ${pageGridClass(3)}`}>
                 {group.items.map(topic => (

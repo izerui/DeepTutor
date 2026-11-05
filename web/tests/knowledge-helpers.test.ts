@@ -7,7 +7,6 @@ import {
   knowledgeBaseMatches,
   knowledgeBaseRef,
   knowledgeBaseSelectionRefs,
-  canCreateKnowledgeBases,
   isMarginNoteKb,
   kbCanReindex,
   kbDetailSections,
@@ -56,9 +55,6 @@ test("knowledge groups and student policy retain public reads without write sect
   assert.deepEqual(groups.publicKbs.map((kb) => kb.name), ["public"]);
   assert.deepEqual(groups.privateKbs.map((kb) => kb.name), ["private", "legacy"]);
   assert.deepEqual(groups.connectors.map((kb) => kb.name), ["connector"]);
-  assert.equal(canCreateKnowledgeBases(null), true);
-  assert.equal(canCreateKnowledgeBases({ allow_private_kb: false }), false);
-  assert.equal(canCreateKnowledgeBases({ allow_private_kb: true }), true);
   assert.deepEqual(kbDetailSections({ name: "owned", owned: true, read_only: true }), ["files", "versions", "settings"]);
 });
 

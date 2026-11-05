@@ -15,10 +15,19 @@ ScopeKind = Literal["admin", "user"]
 #: least-privilege — only "admin" elevates.
 VALID_ROLES: frozenset[str] = frozenset({"admin", "teacher", "student", "user"})
 
-#: The roles an account can be given (spec 2026-10-29 D1). ``user`` stays in
-#: ``VALID_ROLES`` only so stored legacy records still load until the one-time
-#: role migration turns them into students.
-ASSIGNABLE_ROLES: frozenset[str] = frozenset({"admin", "teacher", "student"})
+#: The roles an account can be given (spec 2026-11-05): administrator or
+#: learner, a learner stored as ``student``. Stored ``teacher`` and ``user``
+#: records stay as they are and read as learners.
+ASSIGNABLE_ROLES: frozenset[str] = frozenset({"admin", "student"})
+
+#: Spec 2026-11-05: everyone who is not an administrator is a learner. This is
+#: the role the API shows for them, whatever value their record stores.
+LEARNER = "learner"
+
+
+def role_label(role: str) -> str:
+    """``admin`` or ``learner``: the role as the API shows it (spec 2026-11-05)."""
+    return "admin" if role == "admin" else LEARNER
 
 
 def normalize_role(value: str, default: str = "student") -> str:

@@ -1223,11 +1223,12 @@ async def test_workspace_default_is_local_and_persistence_failure_is_not_success
         assert get_kb_config_service().get_default_kb_id() == account_id
 
 
-@pytest.mark.parametrize("allow_private_kb", [None, False, True])
+@pytest.mark.parametrize("old_switch", [None, False, True])
 @pytest.mark.parametrize("library", [False, True])
-def test_default_capability_matches_student_http_policy(
-    as_user, make_kb, seed_user, allow_private_kb, library,
+def test_every_learner_may_set_a_default_knowledge_base(
+    as_user, make_kb, seed_user, old_switch, library,
 ):
+    """Spec 2026-11-05: private knowledge bases are open to every learner; an old switch is not read."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -1248,11 +1249,10 @@ def test_default_capability_matches_student_http_policy(
             name: registry.find_by_location(manager.base_dir, name)
             for name in ("physics", "algebra")
         }
-        # Simulate a default selected before the account policy was restricted.
         manager.set_default("physics")
-        if allow_private_kb is not None:
+        if old_switch is not None:
             save_grant(student["id"], {
-                "student_policy": {"allow_private_kb": allow_private_kb},
+                "student_policy": {"allow_private_kb": old_switch},
             })
         token = library_request.set(library)
         try:
@@ -1265,7 +1265,7 @@ def test_default_capability_matches_student_http_policy(
                         detail = client.get(f"/api/knowledge-bases/{record.ref}")
                         assert detail.status_code == 200
                         for item in (rows[name], detail.json()):
-                            assert item["can_set_default"] is (allow_private_kb is True)
+                            assert item["can_set_default"] is True
                             assert item["is_default"] is (name == selected)
                     default = client.get("/api/knowledge-bases/default")
                     assert default.status_code == 200
@@ -1275,8 +1275,8 @@ def test_default_capability_matches_student_http_policy(
 
                 check("physics")
                 response = client.put(f"/api/knowledge-bases/default/{records['algebra'].ref}")
-                assert response.status_code == (200 if allow_private_kb else 403)
-                check("algebra" if allow_private_kb else "physics")
+                assert response.status_code == 200
+                check("algebra")
         finally:
             library_request.reset(token)
 

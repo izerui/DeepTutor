@@ -16,7 +16,7 @@ const { api, auth, router, search, t } = vi.hoisted(() => ({
     takeDownListing: vi.fn(),
     approveListing: vi.fn(),
   },
-  auth: { isAdmin: false, isTeacher: true, enabled: true, loading: false },
+  auth: { isAdmin: false, enabled: true, loading: false },
   router: { replace: vi.fn(), push: vi.fn() },
   search: { value: "" },
   t: (key: string, values?: Record<string, unknown>) =>
@@ -70,7 +70,7 @@ beforeEach(() => {
   router.replace.mockReset();
   resetTaxonomyCache();
   api.getTaxonomy.mockResolvedValue(taxonomy);
-  Object.assign(auth, { isAdmin: false, isTeacher: true, enabled: true, loading: false });
+  Object.assign(auth, { isAdmin: false, enabled: true, loading: false });
   search.value = "";
 });
 
@@ -112,11 +112,12 @@ it("shows why it was turned down, blocks submitting what is not ready, and lets 
   expect(api.saveListing).toHaveBeenCalledWith("practice_set", "set_1", expect.objectContaining({ title: "Waves" }));
 });
 
-it("is not offered to students", () => {
-  Object.assign(auth, { isAdmin: false, isTeacher: false });
-  const { container } = render(<ListingPanel kind="book" itemId="b1" />);
-  expect(container.innerHTML).toBe("");
-  expect(api.getListing).not.toHaveBeenCalled();
+it("is offered to every learner who authors something", async () => {
+  // Spec 2026-11-05: listing is not reserved to a role any more.
+  api.getListing.mockResolvedValue(listing({ kind: "book", id: "b1" }));
+  render(<ListingPanel kind="book" itemId="b1" />);
+  expect(await screen.findByTestId("listing-status")).toBeTruthy();
+  expect(api.getListing).toHaveBeenCalledWith("book", "b1");
 });
 
 it("keeps the market's conditions in the address", () => {

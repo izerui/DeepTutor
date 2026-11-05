@@ -373,7 +373,7 @@ def test_home_lists_what_one_joined(as_account, teaching_users):
     assert joined[0]["study"] == {"kind": "practice_set", "id": set_id}
 
 
-def test_an_administrator_hands_a_course_with_its_tasks_to_a_teacher(as_account, teaching_users):
+def test_an_administrator_hands_a_course_with_its_tasks_to_a_learner(as_account, teaching_users):
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskError, TaskService
     from deeptutor.tasks.store import db as task_db
@@ -390,7 +390,7 @@ def test_an_administrator_hands_a_course_with_its_tasks_to_a_teacher(as_account,
         CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))  # administrators only
     with as_account("adam"):
         with pytest.raises(TaskError):
-            CourseService().hand_over(course["id"], _uid(teaching_users, "sara"))  # only to a teacher
+            CourseService().hand_over(course["id"], _uid(teaching_users, "adam"))  # only to a learner
         CourseService().hand_over(course["id"], _uid(teaching_users, "tom"))
     with task_db.read() as conn:
         owners = {r[0] for r in conn.execute(

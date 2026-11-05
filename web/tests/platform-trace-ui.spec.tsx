@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // Requirements trace: dead ends and leftover wording (traceability #1, #3–#7, #9, #10).
 const { auth, catalog, practice, tasks, admin, workbench, router, search, t } = vi.hoisted(() => ({
-  auth: { value: { isAdmin: false, isTeacher: false, enabled: true, loading: false } },
+  auth: { value: { isAdmin: false, enabled: true, loading: false } },
   catalog: { listReviewQueue: vi.fn(), listReviewListed: vi.fn(), getReviewItem: vi.fn(), getLearnerReport: vi.fn(),
     getReportPoints: vi.fn(), getLearnerDetail: vi.fn() },
   practice: { listMySets: vi.fn(), listAssigned: vi.fn(), listWithdrawable: vi.fn() },
@@ -53,14 +53,13 @@ vi.mock("@/components/catalog/CatalogPreview", () => ({ CatalogPreview: () => nu
 import ReviewDesk from "@/components/catalog/ReviewDesk";
 import LearnerReportPage from "@/components/catalog/LearnerReport";
 import HomeRoute from "@/components/home/HomeRoute";
-import StudentHome from "@/components/home/StudentHome";
+import LearnerHome from "@/components/home/LearnerHome";
 import { authorTaskHref } from "@/components/home/task-links";
-import { AdminHome, TeacherWorkbench } from "@/components/home/Workbench";
+import { AdminHome } from "@/components/home/Workbench";
 import { notificationText } from "@/components/notifications/NotificationBell";
 import PracticeSetsHub from "@/components/practice-sets/PracticeSetsHub";
-import { navVisibleForRole } from "@/components/sidebar/nav-entries";
 import { CourseAuthorView } from "@/components/tasks/Courses";
-import { activeTeachers, HandOverPanel } from "@/components/tasks/HandOver";
+import { activeLearners, HandOverPanel } from "@/components/tasks/HandOver";
 import TasksHub from "@/components/tasks/TasksHub";
 import type { UserRecord } from "@/lib/admin-api";
 import type { CatalogEntry } from "@/lib/catalog-api";
@@ -68,9 +67,9 @@ import type { AppNotification } from "@/lib/notifications-api";
 import type { AssignedSet } from "@/lib/practice-sets-api";
 import type { AssignedTask, HomeData } from "@/lib/tasks-api";
 
-const student = { isAdmin: false, isTeacher: false, enabled: true, loading: false };
-const teacher = { ...student, isTeacher: true };
-const administrator = { ...student, isAdmin: true };
+// Spec 2026-11-05: one learner role; every learner also authors.
+const learner = { isAdmin: false, enabled: true, loading: false };
+const administrator = { ...learner, isAdmin: true };
 
 beforeEach(() => {
   for (const group of [catalog, practice, tasks, admin, workbench]) {
@@ -79,8 +78,10 @@ beforeEach(() => {
   router.replace.mockReset();
   router.push.mockReset();
   search.value = "";
-  auth.value = student;
+  auth.value = learner;
   practice.listWithdrawable.mockResolvedValue([]);
+  practice.listMySets.mockResolvedValue([]);
+  workbench.getWorkbench.mockResolvedValue({ role: "learner", sent: [] });
   tasks.listAssignedCourses.mockResolvedValue([]);
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
@@ -91,22 +92,22 @@ const assignedSet = (over: Partial<AssignedSet> = {}): AssignedSet => ({
 } as AssignedSet);
 
 const home = (over: Partial<HomeData> = {}): HomeData => ({
-  assigned: [], history_count: 0, mine: [], can_create_path: false, market: [], announcements: [], joined: [], ...over,
+  assigned: [], history_count: 0, mine: [], market: [], announcements: [], joined: [], ...over,
 });
 
 // ── #1 ──
 
-it("shows students the practice sets entry and lists what they joined", async () => {
-  expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
+it("opens practice sets on what a learner joined, next to their own sets", async () => {
   practice.listAssigned.mockResolvedValue([assignedSet()]);
   render(<PracticeSetsHub />);
   expect(await screen.findByText("Fractions")).toBeTruthy();
-  expect(screen.getByText("Practice sets you joined. Your answers go to your own question bank.")).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "Practice sets I joined" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("tab", { name: "My practice sets" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
   expect(screen.getByText("take set_x")).toBeTruthy();
 });
 
-it("opens a sent set from its link for a student", async () => {
+it("opens a sent set from its link for a learner", async () => {
   search.value = "set=set_r";
   practice.listAssigned.mockResolvedValue([]);
   render(<PracticeSetsHub />);
@@ -115,8 +116,7 @@ it("opens a sent set from its link for a student", async () => {
 
 // ── #3 ──
 
-it("opens someone else's set for a teacher in the Joined tab to answer, and their own in the editor", async () => {
-  auth.value = teacher;
+it("opens someone else's set in the Joined tab to answer, and one's own in the editor", async () => {
   search.value = "set=set_other";
   practice.listMySets.mockResolvedValue([{ id: "set_own", title: "Mine", status: "published", current_revision: 1 }]);
   practice.listAssigned.mockResolvedValue([]);
@@ -132,8 +132,7 @@ it("opens someone else's set for a teacher in the Joined tab to answer, and thei
   expect(screen.getByRole("tab", { name: "My practice sets" }).getAttribute("aria-selected")).toBe("true");
 });
 
-it("lists a teacher's joined sets under their own tab", async () => {
-  auth.value = teacher;
+it("lists the sets one joined under their own tab", async () => {
   practice.listMySets.mockResolvedValue([]);
   practice.listAssigned.mockResolvedValue([assignedSet({ id: "set_j", title: "Joined quiz" })]);
   render(<PracticeSetsHub />);
@@ -143,21 +142,21 @@ it("lists a teacher's joined sets under their own tab", async () => {
 
 // ── #5 ──
 
-const user = (over: Partial<UserRecord>): UserRecord => ({ id: "u", username: "u", role: "student", created_at: "", ...over });
+const user = (over: Partial<UserRecord>): UserRecord => ({ id: "u", username: "u", role: "learner", created_at: "", ...over });
 
-it("hands over only to active teachers, after confirming", async () => {
+it("hands over only to active learners, after confirming", async () => {
   const users = [
-    user({ id: "u_zoe", username: "zoe", role: "teacher" }),
-    user({ id: "u_gone", username: "gone", role: "teacher", disabled: true }),
-    user({ id: "u_sam", username: "sam", role: "student" }),
-    user({ id: "u_amy", username: "amy", role: "teacher" }),
+    user({ id: "u_zoe", username: "zoe" }),
+    user({ id: "u_gone", username: "gone", disabled: true }),
+    user({ id: "u_sam", username: "sam", role: "admin" }),
+    user({ id: "u_amy", username: "amy" }),
   ];
-  expect(activeTeachers(users).map((u) => u.username)).toEqual(["amy", "zoe"]);
+  expect(activeLearners(users).map((u) => u.username)).toEqual(["amy", "zoe"]);
   admin.listUsers.mockResolvedValue(users);
   const handOver = vi.fn(() => Promise.resolve());
   const onDone = vi.fn();
   render(<HandOverPanel handOver={handOver} onDone={onDone} />);
-  const select = await screen.findByRole("combobox", { name: "Teacher" });
+  const select = await screen.findByRole("combobox", { name: "Learner" });
   expect(within(select).queryByRole("option", { name: "gone" })).toBeNull();
   expect(within(select).queryByRole("option", { name: "sam" })).toBeNull();
   const button = screen.getByRole("button", { name: "Hand over" }) as HTMLButtonElement;
@@ -171,15 +170,15 @@ it("hands over only to active teachers, after confirming", async () => {
 
 it("offers administrators to hand a course over and shows the server's reason", async () => {
   auth.value = administrator;
-  admin.listUsers.mockResolvedValue([user({ id: "u_zoe", username: "zoe", role: "teacher" })]);
+  admin.listUsers.mockResolvedValue([user({ id: "u_zoe", username: "zoe" })]);
   tasks.listMyCourses.mockResolvedValue([{ id: "crs_1", title: "Physics", status: "published", task_count: 0, updated_at: 1 }]);
   tasks.listMyTasks.mockResolvedValue([]);
   tasks.getCourse.mockResolvedValue({ id: "crs_1", title: "Physics", description: "", status: "published", published_at: 1, tasks: [] });
-  tasks.handOverCourse.mockRejectedValueOnce(new Error("Choose an active teacher."));
+  tasks.handOverCourse.mockRejectedValueOnce(new Error("Choose an active learner."));
   render(<CourseAuthorView isAdmin onOpenTask={() => undefined} />);
   fireEvent.click(await screen.findByRole("button", { name: /Physics/ }));
   const panel = await screen.findByTestId("hand-over");
-  fireEvent.change(await within(panel).findByRole("combobox", { name: "Teacher" }), { target: { value: "u_zoe" } });
+  fireEvent.change(await within(panel).findByRole("combobox", { name: "Learner" }), { target: { value: "u_zoe" } });
   fireEvent.click(within(panel).getByRole("button", { name: "Hand over" }));
   expect(await within(panel).findByRole("alert")).toBeTruthy();
   expect(tasks.handOverCourse).toHaveBeenCalledWith("crs_1", "u_zoe");
@@ -190,8 +189,7 @@ it("offers administrators to hand a course over and shows the server's reason", 
   await waitFor(() => expect(screen.queryByTestId("course-editor")).toBeNull());
 });
 
-it("offers no hand-over to teachers", async () => {
-  auth.value = teacher;
+it("offers no hand-over to learners", async () => {
   tasks.listMyCourses.mockResolvedValue([{ id: "crs_1", title: "Physics", status: "draft", task_count: 0, updated_at: 1 }]);
   tasks.listMyTasks.mockResolvedValue([]);
   tasks.getCourse.mockResolvedValue({ id: "crs_1", title: "Physics", description: "", status: "draft", published_at: null, tasks: [] });
@@ -212,11 +210,9 @@ const joinedHome = home({
   announcements: [{ id: "a1", author: "tina", text: "Exam on Friday", pinned: false, created_at: 1, kind: "course", item_id: "crs_9", item_title: "Mechanics" }],
 });
 
-it("shows a teacher what they joined and the announcements on the workbench", async () => {
-  auth.value = teacher;
-  workbench.getWorkbench.mockResolvedValue({ sent: [] });
+it("shows a learner what they joined and the announcements on the home", async () => {
   tasks.getHome.mockResolvedValue(joinedHome);
-  render(<TeacherWorkbench />);
+  render(<LearnerHome />);
   const joined = await screen.findByTestId("home-joined");
   expect(within(joined).getByRole("link", { name: /Optics drill/ }).getAttribute("href")).toBe("/practice-sets?set=set_9");
   expect(within(joined).getByRole("link", { name: /Mechanics/ }).getAttribute("href")).toBe("/tasks?course=crs_9");
@@ -230,12 +226,12 @@ it("shows an administrator what they joined, the announcements and the hand-over
   expect(await screen.findByTestId("home-joined")).toBeTruthy();
   expect(screen.getByText("Exam on Friday")).toBeTruthy();
   expect(screen.getByTestId("admin-hand-over-hint").textContent).toContain(
-    "Courses and tasks you hold can be handed to a teacher.");
+    "Courses and tasks you hold can be handed to a learner.");
 });
 
-it("shows a student what they joined, under neutral wording", async () => {
+it("shows a learner what they joined, under neutral wording", async () => {
   tasks.getHome.mockResolvedValue(joinedHome);
-  render(<StudentHome />);
+  render(<LearnerHome />);
   expect(await screen.findByTestId("home-joined")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "From my courses" })).toBeTruthy();
   expect(screen.getByText("Tasks from your courses, what is new in the market, and what you are learning yourself.")).toBeTruthy();
@@ -243,27 +239,37 @@ it("shows a student what they joined, under neutral wording", async () => {
 
 // ── #7 ──
 
-it("sends a teacher's /start?task= to their own task or to the courses they joined", async () => {
+it("sends /start?task= to one's own task or to the courses one joined", async () => {
   expect(authorTaskHref("t_1", true)).toBe("/tasks?task=t_1");
   expect(authorTaskHref("t_1", false)).toBe("/tasks?tab=joined&task=t_1");
   expect(authorTaskHref("practice_set:set_1", false)).toBe("/practice-sets?set=set_1");
   expect(authorTaskHref("mastery_path:tpl_1", false)).toContain("assigned_tpl_1");
 
-  auth.value = teacher;
+  // A learner: a task of a joined course opens on the home; their own task in its editor.
   search.value = "task=t_other";
+  tasks.getHome.mockResolvedValue(home());
+  tasks.getAssignedTask.mockResolvedValue({ key: "t_other", title: "Lab report" } as AssignedTask);
   tasks.listMyTasks.mockResolvedValue([{ id: "t_mine" }]);
-  const { unmount } = render(<HomeRoute />);
-  await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/tasks?tab=joined&task=t_other"));
-  unmount();
+  const first = render(<HomeRoute />);
+  expect(await screen.findByText("open Lab report")).toBeTruthy();
+  expect(router.replace).not.toHaveBeenCalled();
+  first.unmount();
 
-  router.replace.mockReset();
   search.value = "task=t_mine";
-  render(<HomeRoute />);
+  tasks.getAssignedTask.mockRejectedValue(new Error("Not found"));
+  const second = render(<HomeRoute />);
   await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/tasks?task=t_mine"));
+  second.unmount();
+
+  // An administrator is sent on directly.
+  auth.value = administrator;
+  router.replace.mockReset();
+  search.value = "task=t_other";
+  render(<HomeRoute />);
+  await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/tasks?tab=joined&task=t_other"));
 });
 
-it("opens the task of a joined course for a teacher from ?tab=joined&task=", async () => {
-  auth.value = teacher;
+it("opens the task of a joined course from ?tab=joined&task=", async () => {
   search.value = "tab=joined&task=t_other";
   tasks.listAssignedTasks.mockResolvedValue([]);
   tasks.getAssignedTask.mockResolvedValue({ key: "t_other", title: "Lab report" } as AssignedTask);
@@ -278,7 +284,7 @@ it("opens the task of a joined course for a teacher from ?tab=joined&task=", asy
 const listed = (over: Partial<CatalogEntry>): CatalogEntry => ({
   kind: "course", id: "c", owner_id: "u_t", status: "listed", title: "", summary: "", stages: [], subjects: [], grades: [],
   difficulty: "", tags: [], approved_once: true, migrated: false, reason: "", submitted_at: null, listed_at: 1, updated_at: 1,
-  needs_classification: false, learners: 0, author: "tina", author_role: "teacher", ...over,
+  needs_classification: false, learners: 0, author: "tina", author_role: "learner", ...over,
 });
 
 it("marks listings that need classification in the market tab and filters to them", async () => {

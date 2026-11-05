@@ -86,7 +86,7 @@ it("loads a legacy guardian relationship and public count without requesting mat
 
 it("hides the old permission and authorizes only the remaining permissions", async () => {
   render(<GuardianRelationshipsEditor learnerId="learner" learnerUsername="Learner" users={[
-    { id: "new-guardian", username: "New guardian", role: "user", preset: "standard" } as UserRecord,
+    { id: "new-guardian", username: "New guardian", role: "learner", preset: "standard", created_at: "" } as UserRecord,
   ]} />);
   await screen.findByText("Existing guardian");
   expect(screen.getByText("2 public books · 1 enabled resources")).toBeVisible();

@@ -10,7 +10,7 @@ import { catalogError, itemHref, kindLabel, STATUS_TONE, statusLabel } from "./c
 
 const manageHref = (entry: CatalogEntry) => `${itemHref(entry.kind, entry.id)}&manage=1`;
 
-/** "My listings" on the teacher workbench and the administrator's home (§5.2). */
+/** "My listings" on every learner's home and the administrator's home (§5.2; spec 2026-11-05). */
 export function MyListings() {
   const { t } = useTranslation();
   const [rows, setRows] = useState<CatalogEntry[] | null>(null);

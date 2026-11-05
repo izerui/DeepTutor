@@ -32,7 +32,6 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
-    Request,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -128,34 +127,13 @@ config = load_config_with_main("main.yaml", PROJECT_ROOT)
 log_dir = config.get("paths", {}).get("user_log_dir") or config.get("logging", {}).get("log_dir")
 logger = logging.getLogger(__name__)
 
-_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-
-
-async def deny_student_kb_writes(request: Request) -> None:
-    """Students may only browse knowledge bases unless an admin allows more.
-
-    Runs after the include-time ``require_auth`` dependency, so the current
-    user is already installed. Reads always pass; the full list of write
-    routes (create, upload, connect, sync, delete, engine config) is covered
-    by gating on the method instead of naming each route.
-    """
-    if request.method.upper() in _READ_METHODS:
-        return
-    from deeptutor.multi_user.roles import can_write_private_kb
-
-    if not can_write_private_kb():
-        raise HTTPException(
-            status_code=403,
-            detail="Students cannot create or modify knowledge bases on this account.",
-        )
-
 
 from deeptutor.api.routers.publishing import ScopeChoice
 from deeptutor.publishing.scope import ScopeError
 from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
 
 router = APIRouter(
-    dependencies=[Depends(deny_student_kb_writes), Depends(enter_mastery_template_scope)]
+    dependencies=[Depends(enter_mastery_template_scope)]
 )
 ws_router = APIRouter()
 
@@ -229,9 +207,7 @@ def _in_default_scope(base_dir: Path) -> bool:
 
 
 def _can_set_default(base_dir: Path, *, read_only: bool = False) -> bool:
-    from deeptutor.multi_user.roles import can_write_private_kb
-
-    return not read_only and _in_default_scope(base_dir) and can_write_private_kb()
+    return not read_only and _in_default_scope(base_dir)
 
 
 class KnowledgeBaseInfo(BaseModel):
@@ -3995,17 +3971,12 @@ def _registered_record(kb_name: str):
 @retiring_route(lambda kwargs: kwargs["payload"].visibility == "private")
 async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
     from deeptutor.knowledge import registry
-    from deeptutor.multi_user.roles import is_teacher_or_admin
 
     user = get_current_user()
     record = _registered_record(kb_name)
     if not registry.can_write(record, user):
         raise HTTPException(status_code=403, detail="Only the owner can change visibility.")
     resolve_kb(kb_name, require_write=True)
-    if payload.visibility == "public" and not is_teacher_or_admin():
-        raise HTTPException(
-            status_code=403, detail="Only teachers and admins can make a knowledge base public."
-        )
     if payload.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
     from deeptutor.api.routers.publishing import chosen
@@ -4187,13 +4158,6 @@ def _requested_visibility(value: object) -> str:
     visibility = visibility or "private"
     if visibility not in {"public", "private"}:
         raise HTTPException(status_code=400, detail="visibility must be 'public' or 'private'")
-    if visibility == "public":
-        from deeptutor.multi_user.roles import is_teacher_or_admin
-
-        if not is_teacher_or_admin():
-            raise HTTPException(
-                status_code=403, detail="Only teachers and admins can make a knowledge base public."
-            )
     return visibility
 
 

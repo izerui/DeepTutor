@@ -74,10 +74,6 @@ async def test_sharing_denials_and_roles(owned, as_user):
         with pytest.raises(HTTPException) as hidden:
             await router.get_book_sharing("bk_one")
         assert hidden.value.status_code == 404
-    with as_user("owner"):
-        with pytest.raises(HTTPException) as denied:
-            await router.set_book_visibility("bk_one", router.BookVisibilityRequest(visibility="public"))
-        assert denied.value.status_code == 403
     with as_user("owner", role="teacher"):
         with pytest.raises(HTTPException) as denied:
             await router.set_book_visibility(

@@ -1,17 +1,17 @@
-"""Teacher practice sets (spec 2026-10-29 §8).
+"""Practice sets (spec 2026-10-29 §8; every learner authors them, spec 2026-11-05).
 
-* A teacher (or administrator) writes a draft from AI-generated questions,
+* An author writes a draft from AI-generated questions,
   questions picked from their own bank, or questions typed by hand (§8.2),
   then publishes it as a frozen revision (§8.5) to a publish scope (§7).
-* A student in the scope answers it, as often as they like. Objective
+* A learner in the scope answers it, as often as they like. Objective
   questions are checked exactly; the rest are judged by AI (§8.3). Every
-  answer goes to the student's own question bank, tagged with the set, so a
+  answer goes to the learner's own question bank, tagged with the set, so a
   wrong answer becomes one of their mistakes.
-* The teacher sees, for the students in the scope only, completion, first
-  and best score and time taken, plus each question's error rate
-  (§8.4). Of the answers, only what the author reviews is kept for them —
-  subjective answers' text and the option picked (batch 3 §2.1); the
-  review itself is in ``review.py``.
+* The author — and, read-only, an administrator — sees, for the learners in
+  the scope only, completion, first and best score and time taken, plus each
+  question's error rate (§8.4). Of the answers, only what the author reviews
+  is kept for them — subjective answers' text and the option picked (batch 3
+  §2.1); the review itself is in ``review.py``.
 """
 
 from __future__ import annotations
@@ -48,10 +48,6 @@ class PracticeError(Exception):
 
 class PracticeNotFound(PracticeError):
     status = 404
-
-
-class PracticeForbidden(PracticeError):
-    status = 403
 
 
 class PracticeConflict(PracticeError):
@@ -278,10 +274,6 @@ class PracticeSetService:
 
     # authorization
 
-    def _require_author(self) -> None:
-        if _role(self.actor) not in ("teacher", "admin"):
-            raise PracticeForbidden("Only teachers and administrators create practice sets.")
-
     def _owned(self, conn, set_id: str):
         row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
         if row is None or row["owner_user_id"] != self.actor.id:
@@ -303,9 +295,9 @@ class PracticeSetService:
         from deeptutor.publishing.scope import PRACTICE_SET, _reaches, get_scope
 
         scope = get_scope(PRACTICE_SET, set_id)
-        # Students, and anyone who joined it (platform batch 2 §6).
+        # Learners, and anyone who joined it (platform batch 2 §6).
         return scope is not None and (
-            (_role(self.actor) == "student" and _reaches(scope, self.actor.id)) or self.actor.id in scope.members
+            (_role(self.actor) != "admin" and _reaches(scope, self.actor.id)) or self.actor.id in scope.members
         )
 
     @staticmethod
@@ -328,7 +320,6 @@ class PracticeSetService:
     # authoring
 
     def create(self, title: str) -> dict[str, Any]:
-        self._require_author()
         title = str(title or "").strip()
         if not title or len(title) > TITLE_MAX:
             raise PracticeError(f"A title must contain 1 to {TITLE_MAX} characters.")
@@ -343,7 +334,6 @@ class PracticeSetService:
         return self.get(set_id)
 
     def list_mine(self) -> list[dict[str, Any]]:
-        self._require_author()
         with store.read() as conn:
             if conn is None:
                 return []
@@ -360,7 +350,6 @@ class PracticeSetService:
 
     def get(self, set_id: str) -> dict[str, Any]:
         """The author's view: draft questions with answers."""
-        self._require_author()
         with store.read() as conn:
             row = self._owned(conn, set_id)
         return {**self._summary(row), "questions": json.loads(row["draft_questions_json"])}
@@ -369,7 +358,6 @@ class PracticeSetService:
         self, set_id: str, *, title: str | None = None, description: str | None = None,
         questions: Any = None, attempts_limit: int | None | str = "", score_mode: str | None = None,
     ) -> dict[str, Any]:
-        self._require_author()
         sets: list[str] = []
         values: list[Any] = []
         if attempts_limit != "":
@@ -413,7 +401,7 @@ class PracticeSetService:
         from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
         scope = get_scope(PRACTICE_SET, set_id)
-        reached = audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
+        reached = audience(scope, learners_only=True, owner_id=self.actor.id) if scope else set()
         with store.read() as conn:
             done = {
                 r[0] for r in conn.execute(
@@ -428,7 +416,6 @@ class PracticeSetService:
 
     def publish(self, set_id: str) -> dict[str, Any]:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
-        self._require_author()
         with store.read() as conn:
             draft = self._owned(conn, set_id)
         # Checked before receivers are stored: a failed first publication must not
@@ -471,7 +458,6 @@ class PracticeSetService:
 
     def archive(self, set_id: str) -> dict[str, Any]:
         """Withdraw a set: its author, or an administrator for anyone's published set (D10)."""
-        self._require_author()
         with store.write() as conn:
             row = self._withdrawable(conn, set_id)
             conn.execute(
@@ -501,7 +487,6 @@ class PracticeSetService:
         return [{**self._summary(r), "owner": names.get(r["owner_user_id"], "")} for r in rows]
 
     def delete(self, set_id: str) -> None:
-        self._require_author()
         with store.read() as conn:
             row = self._withdrawable(conn, set_id)
         if row["owner_user_id"] != self.actor.id:
@@ -523,7 +508,6 @@ class PracticeSetService:
         """Questions from the author's own bank: question, answer and explanation only (§8.2)."""
         from deeptutor.services.session.sqlite_store import get_sqlite_session_store
 
-        self._require_author()
         bank = get_sqlite_session_store()
         picked = []
         for entry_id in list(dict.fromkeys(entry_ids))[:MAX_QUESTIONS]:
@@ -549,7 +533,6 @@ class PracticeSetService:
     ) -> list[dict[str, Any]]:
         """AI questions from a knowledge base the author can read (§8.2), or
         from a book they can read, whole or some chapters (batch 3 §4)."""
-        self._require_author()
         topic = str(topic or "").strip()
         material = ""
         if book_ref:
@@ -673,7 +656,7 @@ class PracticeSetService:
         from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
         scope = get_scope(PRACTICE_SET, row["id"])
-        reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
+        reached = audience(scope, learners_only=True, owner_id=row["owner_user_id"]) if scope else set()
         with store.read() as conn:
             rows = conn.execute(
                 "SELECT student_id, score, max_score FROM practice_submissions WHERE set_id = ? ORDER BY submitted_at",
@@ -739,7 +722,7 @@ class PracticeSetService:
             for question, _ in pending:
                 results[question["question_id"]] = judged.get(
                     question["question_id"],
-                    {"result": "ungraded", "feedback": "Automatic grading was unavailable; ask your teacher."},
+                    {"result": "ungraded", "feedback": "Automatic grading was unavailable; ask its author."},
                 )
         now = _now()
         rows = [
@@ -908,15 +891,23 @@ class PracticeSetService:
         if items:
             await bank.upsert_notebook_entries(None, items)
 
-    # the teacher's report (§8.4)
+    # the author's report (§8.4)
+
+    def _reportable(self, conn, set_id: str):
+        """The author's own set; any set for an administrator, read-only (spec 2026-11-05 §2)."""
+        if _role(self.actor) != "admin":
+            return self._owned(conn, set_id)
+        row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
+        if row is None:
+            raise PracticeNotFound("Practice set not found.")
+        return row
 
     def report(self, set_id: str) -> dict[str, Any]:
-        """Results of the students the set reaches, plus anyone who submitted and left it (§8.4)."""
+        """Results of the learners the set reaches, plus anyone who submitted and left it (§8.4)."""
         from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
-        self._require_author()
         with store.read() as conn:
-            row = self._owned(conn, set_id)
+            row = self._reportable(conn, set_id)
             submissions = conn.execute(
                 "SELECT * FROM practice_submissions WHERE set_id = ? ORDER BY submitted_at", (set_id,)
             ).fetchall()
@@ -925,7 +916,7 @@ class PracticeSetService:
                 (set_id, row["current_revision"]),
             ).fetchone()
         scope = get_scope(PRACTICE_SET, set_id)
-        reached = audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
+        reached = audience(scope, learners_only=True, owner_id=row["owner_user_id"]) if scope else set()
         from deeptutor.multi_user.accounts import accounts as _accounts
 
         visible = None
@@ -933,11 +924,11 @@ class PracticeSetService:
         names = {user_id: account["username"] for user_id, account in accounts.items()}
         by_student: dict[str, list] = {}
         for submission in submissions:
-            # A deleted account or one that is no longer a student is not reported.
+            # A deleted account or one that became an administrator is not reported.
             if visible is not None and submission["student_id"] not in visible:
                 continue
-            if (accounts.get(submission["student_id"]) or {}).get("role") == "student" \
-                    or submission["student_id"] in reached:
+            account = accounts.get(submission["student_id"])
+            if (account is not None and account["role"] != "admin") or submission["student_id"] in reached:
                 by_student.setdefault(submission["student_id"], []).append(submission)
         students = []
         for student_id in sorted(reached | set(by_student), key=lambda s: names.get(s, s)):
@@ -1111,7 +1102,6 @@ def _usernames() -> dict[str, str]:
 __all__ = [
     "PracticeConflict",
     "PracticeError",
-    "PracticeForbidden",
     "PracticeNotFound",
     "PracticeSetService",
     "exact_result",

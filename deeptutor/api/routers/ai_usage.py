@@ -1,4 +1,4 @@
-"""Students' daily AI limit (spec 2026-11-03 batch 3 §8)."""
+"""Learners' daily AI limit (spec 2026-11-03 batch 3 §8, 2026-11-05 §2)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 class DefaultLimit(BaseModel):
-    #: Tokens per student per day; ``0`` is no limit.
+    #: Tokens per learner per day; ``0`` is no limit.
     daily_tokens: int = Field(ge=0, le=100_000_000)
 
 

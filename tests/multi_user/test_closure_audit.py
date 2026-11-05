@@ -81,19 +81,19 @@ def test_a_token_from_the_same_second_as_a_password_reset_also_ends(teaching_use
 # ── role changes ───────────────────────────────────────────
 
 
-def test_a_promoted_student_leaves_their_assignments(
+def test_a_learner_made_administrator_leaves_their_assignments(
     teacher_draft, publish_template, teaching_users, as_account
 ):
     from deeptutor.teaching.store import TeachingStore
 
     teacher_draft()
     template_id = publish_template()["template"]["id"]
-    # Older data: the path named Sara and Sam; named receivers are students only.
+    # Older data: the path named Sara and Sam; named receivers are learners only.
     scopes._store_scope(scopes.MASTERY_PATH, template_id,
                         scopes.Scope(users=[teaching_users["sara"]["id"], teaching_users["sam"]["id"]]),
                         actor_id=teaching_users["tina"]["id"])
     scopes.reconcile_template(template_id)
-    _set_role(teaching_users, "sam", "teacher")
+    _set_role(teaching_users, "sam", "admin")
     active = {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
     assert active == {teaching_users["sara"]["id"]}
 
@@ -107,7 +107,7 @@ def test_the_first_administrators_role_is_fixed(teaching_users, as_account, monk
     assert primary_admin_id() == teaching_users["adam"]["id"]
     with pytest.raises(HTTPException) as refused:
         asyncio.run(auth_router.update_user_role(
-            "adam", auth_router.SetRoleRequest(role="teacher"),
+            "adam", auth_router.SetRoleRequest(role="learner"),
             current=auth_router.TokenPayload(username="other", role="admin", user_id="x"),
         ))
     assert refused.value.status_code == 400

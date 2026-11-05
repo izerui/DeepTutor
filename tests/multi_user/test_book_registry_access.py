@@ -108,7 +108,7 @@ async def test_public_private_reference_and_admin_access(as_user):
 
 
 def test_student_owner_can_withdraw_admin_published_book(as_user):
-    """Student owner of an admin-published book can set it private (B2-11)."""
+    """Student owner of an admin-published book can set it private (B2-11), and publish it again."""
     # Student creates book, admin makes it public.
     with as_user("student", role="student"):
         _write()
@@ -120,13 +120,14 @@ def test_student_owner_can_withdraw_admin_published_book(as_user):
     with as_user("student", role="student"):
         caps = book_access.resolve_book("bk_one").capabilities()
         assert caps["can_set_visibility"], "student owner of a public book should be allowed to withdraw"
-        assert not caps["can_make_public"], "student should not be able to make books public"
+        # Spec 2026-11-05: every learner may publish what they manage.
+        assert caps["can_make_public"]
     # After withdrawing, the flag becomes false (no further visibility actions).
     with as_user("root", role="admin"):
         registry.set_book_visibility("bk_one", "private")
     with as_user("student", role="student"):
         caps = book_access.resolve_book("bk_one").capabilities()
-        assert not caps["can_set_visibility"], "student owner of a private book has no visibility actions"
+        assert caps["can_set_visibility"] and caps["can_make_public"]
 
 
 def test_library_only_adds_foreign_books_in_general_and_lists_transfers(as_user):

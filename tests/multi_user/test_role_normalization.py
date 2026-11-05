@@ -52,9 +52,10 @@ def test_set_role_accepts_legal_roles_and_readback_preserves_them(seed_user):
     seed_user("bob", "password1234")
     assert set_role("alice", "admin") is True
     assert set_role("bob", "student") is True
-    # "user" is no longer assignable (spec 2026-10-29 D1).
-    with pytest.raises(ValueError):
-        set_role("bob", "user")
+    # Only administrator or learner (stored "student") is assignable (spec 2026-11-05).
+    for retired in ("user", "teacher"):
+        with pytest.raises(ValueError):
+            set_role("bob", retired)
     # Re-read through the canonicalization path: legal roles must survive it.
     roles = {username: record["role"] for username, record in load_users().items()}
     assert roles["alice"] == "admin"
@@ -70,16 +71,13 @@ def test_set_role_rejects_unknown_roles(mu_isolated_root):
     assert load_users() == {}
 
 
-@pytest.mark.parametrize("role", ["teacher", "student"])
-def test_set_role_accepts_new_roles_and_round_trips(seed_user, role):
+def test_a_stored_teacher_record_still_loads_unchanged(seed_user):
     from deeptutor.multi_user.identity import load_users
-    from deeptutor.services.auth import set_role
 
-    seed_user("carol", "password1234")
-    assert set_role("carol", role) is True
-    # Round-trip through the canonicalization path: the new values persist.
-    roles = {username: record["role"] for username, record in load_users().items()}
-    assert roles["carol"] == role
+    seed_user("boss", role="admin")
+    seed_user("carol", "password1234", role="teacher")
+    # Spec 2026-11-05 §3: stored roles are not rewritten; they read as learners.
+    assert load_users()["carol"]["role"] == "teacher"
 
 
 def test_corrupted_stored_role_degrades_to_student_on_load(mu_isolated_root):
@@ -129,12 +127,13 @@ def test_new_roles_do_not_elevate(role):
 # ------------------------------------------------------- API validator
 
 
-def test_set_role_request_accepts_legal_roles():
-    assert SetRoleRequest(role="admin").role == "admin"
-    assert SetRoleRequest(role="teacher").role == "teacher"
-    assert SetRoleRequest(role="student").role == "student"
-    with pytest.raises(ValidationError):
-        SetRoleRequest(role="user")
+def test_set_role_request_accepts_admin_or_learner_only():
+    assert SetRoleRequest(role="admin").stored_role() == "admin"
+    # Spec 2026-11-05: a learner is stored as "student".
+    assert SetRoleRequest(role="learner").stored_role() == "student"
+    for retired in ("teacher", "student", "user"):
+        with pytest.raises(ValidationError):
+            SetRoleRequest(role=retired)
 
 
 def test_set_role_request_rejects_unknown_roles():

@@ -201,7 +201,7 @@ export function PublishTemplateDialog({
         <header className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-4 sm:p-5">
           <div className="min-w-0">
             <h2 id="publish-template-title" className="text-base font-semibold">
-              {firstPublish ? t("Publish to students") : t("Publish update")}
+              {firstPublish ? t("Publish to learners") : t("Publish update")}
             </h2>
             <p className="mt-1 truncate text-sm text-[var(--muted-foreground)]">
               {topicDisplayName(topic, t as Translate)}
@@ -236,11 +236,11 @@ export function PublishTemplateDialog({
             <p className="text-xs text-[var(--muted-foreground)]">
               {preview.changes.previous_pass_standard &&
               preview.changes.previous_pass_standard !== preview.changes.pass_standard
-                ? t("Pass standard for students: {{from}} → {{to}}", {
+                ? t("Pass standard for learners: {{from}} → {{to}}", {
                     from: t(PASS_STANDARD_LABELS[preview.changes.previous_pass_standard]),
                     to: t(PASS_STANDARD_LABELS[preview.changes.pass_standard]),
                   })
-                : t("Pass standard for students: {{standard}}", {
+                : t("Pass standard for learners: {{standard}}", {
                     standard: t(PASS_STANDARD_LABELS[preview.changes.pass_standard]),
                   })}
             </p>
@@ -390,7 +390,7 @@ export function PublishTemplateDialog({
             <section>
               <h3 className="font-medium">{t("What changed")}</h3>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                {t("{{count}} students will get this update the next time they study", {
+                {t("{{count}} learners will get this update the next time they study", {
                   count: preview.affected_students,
                 })}
               </p>
@@ -470,11 +470,11 @@ export function PublishTemplateDialog({
 
           {preview && !published && (preview.material_warnings ?? []).length > 0 && (
             <section role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
-              <h3 className="font-medium">{t("Some students cannot read these materials")}</h3>
+              <h3 className="font-medium">{t("Some learners cannot read these materials")}</h3>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {(preview.material_warnings ?? []).map((item) => (
                   <li key={`${item.kind}:${item.id}`}>
-                    {t("{{name}}: {{count}} students cannot read it", { name: item.name, count: item.missing })}
+                    {t("{{name}}: {{count}} learners cannot read it", { name: item.name, count: item.missing })}
                   </li>
                 ))}
               </ul>

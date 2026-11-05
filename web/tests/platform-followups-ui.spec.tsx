@@ -23,7 +23,7 @@ const { api, tasks, practice, router, search, t } = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
 vi.mock("@/hooks/useAuthStatus", () => ({
-  useAuthStatus: () => ({ isAdmin: false, isTeacher: true, enabled: true, loading: false }),
+  useAuthStatus: () => ({ isAdmin: false, enabled: true, loading: false }),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
@@ -249,9 +249,9 @@ it("names a subject with its stage outside one stage, and picks the interface la
   expect(within(subjects()).getByRole("checkbox", { name: /Mathematics/ })).toBeTruthy();
 });
 
-it("labels a teacher's content as published by them", () => {
-  expect(provenanceLabel({ kind: "teacher", name: "tina" }, t, true)).toBe("Published by tina");
-  expect(provenanceLabel({ kind: "school", name: "" }, t, true)).toBe("Published by the platform");
+it("labels an author's content as published by them", () => {
+  expect(provenanceLabel({ kind: "shared", name: "tina" }, t)).toBe("Published by tina");
+  expect(provenanceLabel({ kind: "school", name: "" }, t)).toBe("Published by the platform");
 });
 
 // ── a practice set into the course ──

@@ -1,9 +1,8 @@
 import { apiFetch, apiUrl } from "./api";
 
-/** The teacher's home (batch 3 §5.1); administrators get only ``role``. */
+/** What a learner sent out (batch 3 §5.1; spec 2026-11-05); administrators get only ``role``. */
 export interface Workbench {
   role: string;
-  classes?: { id: string; name: string; student_count: number; active_this_week: number }[];
   sent?: {
     kind: "task" | "practice_set" | "course" | "mastery_path";
     id: string;
@@ -41,7 +40,7 @@ export const setSchoolAiLimit = (dailyTokens: number) =>
   call<{ daily_tokens: number }>("/api/ai-usage/default", {
     method: "PUT", body: JSON.stringify({ daily_tokens: dailyTokens }),
   }).then((r) => r.daily_tokens);
-/** A student's remedial questions from their mistakes (batch 3 §3.2). */
+/** A learner's remedial questions from their mistakes (batch 3 §3.2). */
 export const similarQuestions = (entryIds: number[], count: number, language: string) =>
   call<{ entry_ids: number[]; title: string }>("/api/question-notebook/remedial/similar", {
     method: "POST", body: JSON.stringify({ entry_ids: entryIds, count, language }),

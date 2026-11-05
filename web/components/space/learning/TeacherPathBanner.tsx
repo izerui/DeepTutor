@@ -81,10 +81,10 @@ export function TeacherPathBanner({
           <span>
             {origin.provenance?.kind === 'school'
               ? t('Published by the platform')
-              : t('Published by {{name}}', { name: origin.teacher_name || t('Teacher') })}
+              : t('Published by {{name}}', { name: origin.teacher_name || t('Author') })}
           </span>
           <span aria-hidden="true">·</span>
-          <span>{t('The outline is set by your teacher')}</span>
+          <span>{t('The outline is set by its author')}</span>
         </p>
       )}
       {books.length > 0 && (
@@ -111,7 +111,7 @@ export function TeacherPathBanner({
         >
           <Megaphone aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">{t('Your teacher updated this course')}</div>
+            <div className="font-medium">{t('The author updated this course')}</div>
             {changes.length > 0 && (
               <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">{changes.join(' · ')}</p>
             )}

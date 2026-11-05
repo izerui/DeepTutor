@@ -10,10 +10,15 @@ const { tasks, t } = vi.hoisted(() => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
 vi.mock("@/lib/tasks-api", () => tasks);
-vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, isTeacher: false, loading: false }) }));
+vi.mock("@/lib/workbench-api", () => ({
+  getMyAiUsage: vi.fn(() => Promise.resolve(null)),
+  getWorkbench: vi.fn(() => Promise.resolve({ role: "learner", sent: [] })),
+}));
+vi.mock("@/components/catalog/MyListings", () => ({ MyListings: () => null }));
+vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false, loading: false }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
-import StudentHome from "@/components/home/StudentHome";
+import LearnerHome from "@/components/home/LearnerHome";
 import { StudentCourses } from "@/components/tasks/Courses";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import type { AssignedTask } from "@/lib/tasks-api";
@@ -21,7 +26,7 @@ import type { AssignedTask } from "@/lib/tasks-api";
 const note: AssignedTask = {
   key: "task_2", task_id: "task_2", kind: "note", title: "Revise", description: "", target_id: "",
   target_title: "", settings: {}, state: "open", completed_at: null,
-  provenance: { kind: "teacher", name: "tina" },
+  provenance: { kind: "shared", name: "tina" },
 };
 
 beforeEach(() => {
@@ -30,10 +35,10 @@ beforeEach(() => {
 
 it("still shows an older class announcement on the home, by its class name (platform batch 3 §3)", async () => {
   tasks.getHome.mockResolvedValue({
-    assigned: [], history_count: 0, can_create_path: false, market: [], mine: [],
+    assigned: [], history_count: 0, market: [], mine: [],
     announcements: [{ id: "a1", class_id: "cls_1", class_name: "Physics 1", author: "", text: "Bring a calculator.", pinned: true, created_at: 1, updated_at: 1, can_edit: false }],
   });
-  render(<StudentHome />);
+  render(<LearnerHome />);
   expect(await screen.findByRole("heading", { name: "From my courses" })).toBeTruthy();
   expect(screen.queryByRole("region", { name: "Class announcements" })).toBeNull();
   const block = screen.getByRole("region", { name: "Announcements" });
@@ -50,7 +55,7 @@ it("shows a task with no deadline or opening, ready to do", () => {
 
 it("lists a teacher's course with its tasks in order and opens the one from the link", async () => {
   tasks.listAssignedCourses.mockResolvedValue([{
-    id: "crs_1", title: "Waves, term 1", description: "Read in order.", provenance: { kind: "teacher", name: "tina" }, published_at: 1,
+    id: "crs_1", title: "Waves, term 1", description: "Read in order.", provenance: { kind: "shared", name: "tina" }, published_at: 1,
     tasks: [{ ...note, key: "task_1", task_id: "task_1", title: "Intro", state: "completed" }, note],
   }]);
   const open = vi.fn();

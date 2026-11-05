@@ -497,7 +497,7 @@ export interface MasteryReviewSettings {
   scope: "path";
 }
 
-/** "Your teacher updated this course", until the learner acknowledges it. */
+/** "The author updated this course", until the learner acknowledges it. */
 export interface TeacherUpdateNoticeData {
   from_revision: number;
   to_revision: number;

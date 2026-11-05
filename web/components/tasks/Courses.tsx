@@ -36,7 +36,7 @@ import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
 const errorText = (err: unknown, t: (key: string) => string) => (err instanceof Error ? t(err.message) : String(err));
 
-/** A teacher's courses: tasks in an order (spec 2026-11-03 batch 2 §5). */
+/** One's own courses: tasks in an order (spec 2026-11-03 batch 2 §5). */
 export function CourseAuthorView({ isAdmin, onOpenTask }: { isAdmin: boolean; onOpenTask: (taskId: string) => void }) {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<CourseSummary[] | null>(null);
@@ -169,7 +169,7 @@ function CourseEditor({
       <div className="space-y-2">
         <h3 className="text-[13px] font-medium">{t("Tasks in order")}</h3>
         <p className="text-[11.5px] text-[var(--muted-foreground)]">
-          {t("The order is a suggestion; students can do the tasks in any order.")}
+          {t("The order is a suggestion; learners can do the tasks in any order.")}
         </p>
         {course.tasks.length === 0 ? (
           <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No tasks yet.")}</p>
@@ -242,12 +242,9 @@ function CourseEditor({
       {course.status === "published" && (
         <>
           {/* Platform batch 3 §1, §3: how its learners are doing, and announcements to them. */}
-          {/* Administrators do not read learning data (D2). */}
-          {!isAdmin && (
-            <Link href={`/reports?kind=course&id=${encodeURIComponent(course.id)}`} className={actionClass}>
-              {t("Learning report")}
-            </Link>
-          )}
+          <Link href={`/reports?kind=course&id=${encodeURIComponent(course.id)}`} className={actionClass}>
+            {t("Learning report")}
+          </Link>
           <AnnouncementsPanel kind="course" itemId={course.id} canPost />
         </>
       )}
@@ -260,7 +257,7 @@ function CourseEditor({
         )}
         {course.status === "published" && (
           <button type="button" className={actionClass}
-            onClick={() => window.confirm(t("Withdraw this course? Its tasks stay with the students.")) && void run(() => archiveCourse(course.id))}>
+            onClick={() => window.confirm(t("Withdraw this course? Its tasks stay with the learners.")) && void run(() => archiveCourse(course.id))}>
             {t("Withdraw")}
           </button>
         )}
@@ -272,14 +269,14 @@ function CourseEditor({
           </button>
         )}
       </div>
-      {/* Traceability #5: what an administrator holds goes to a teacher. */}
-      {isAdmin && <HandOverPanel handOver={(teacherId) => handOverCourse(course.id, teacherId)} onDone={onDeleted} />}
+      {/* Traceability #5: what an administrator holds goes to a learner. */}
+      {isAdmin && <HandOverPanel handOver={(learnerId) => handOverCourse(course.id, learnerId)} onDone={onDeleted} />}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
     </fieldset>
   );
 }
 
-/** The courses a student's teachers published, each with its tasks in order. */
+/** The courses one joined, each with its tasks in order. */
 export function StudentCourses({
   courseId,
   onOpenTask,

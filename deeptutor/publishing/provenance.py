@@ -1,13 +1,13 @@
 """Where an item a user sees comes from (spec 2026-11-02 §3.1).
 
 One rule for every list: books, knowledge bases, Mastery Paths, practice
-sets. The publisher's live role decides the label, so a teacher who becomes
-an administrator turns "teacher" into "school" without touching the item.
+sets. The publisher's live role decides the label, so a learner who becomes
+an administrator turns "shared" into "school" without touching the item.
 
 * ``own``     — the viewer's own item ("我自己的");
 * ``school``  — published by an administrator ("学校发布");
-* ``teacher`` — published by a teacher ("老师布置 · name"; "name 分享" between teachers);
-* ``shared``  — anyone else; only older data, when students could still publish.
+* ``shared``  — published by another learner, its author ("name 分享";
+  spec 2026-11-05: no teacher label any more).
 """
 
 from __future__ import annotations
@@ -33,10 +33,7 @@ def provenance(owner_id: str, viewer: CurrentUser, *, accounts: dict[str, dict[s
     role = account.get("role")
     if role == "admin":
         return {"kind": "school", "name": ""}
-    name = str(account.get("username") or "")
-    if role == "teacher":
-        return {"kind": "teacher", "name": name}
-    return {"kind": "shared", "name": name}
+    return {"kind": "shared", "name": str(account.get("username") or "")}
 
 
 __all__ = ["provenance"]

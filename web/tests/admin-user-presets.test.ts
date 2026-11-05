@@ -22,16 +22,15 @@ const zh = JSON.parse(
   readFileSync(path.resolve(process.cwd(), "locales/zh/app.json"), "utf8"),
 ) as Record<string, string>;
 
-test("admin user creation sends a role and optional learning restrictions", () => {
-  // Spec 2026-10-29 P2: accounts are teachers or students; "learner" is only a
-  // student's starting learning restrictions.
+test("admin user creation makes a learner with optional learning restrictions", () => {
+  // Spec 2026-11-05: an administrator creates learners only; the "learner"
+  // preset is just a learner's starting learning restrictions.
   assert.match(
     adminApi,
-    /body: JSON\.stringify\(\{ username, password, role, preset \}\)/,
+    /body: JSON\.stringify\(\{ username, password, role: "learner", preset \}\)/,
   );
   assert.match(adminApi, /const preset: AccountPreset = restricted \? "learner" : "standard";/);
-  assert.match(usersPage, /\["student", "teacher"\] as const/);
-  assert.match(usersPage, /aria-pressed=\{createRole === role\}/);
+  assert.doesNotMatch(usersPage, /"teacher"|"student"/);
   assert.match(usersPage, /setCreateRestricted\(event\.target\.checked\)/);
 });
 

@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { DownloadButton } from "@/components/common/DownloadButton";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
   getLearnerDetail,
   getLearnerReport,
@@ -30,8 +31,12 @@ function when(seconds: number | null | undefined, never: string): string {
   return seconds ? new Date(seconds * 1000).toLocaleDateString() : never;
 }
 
-/** Where the author manages it: the course editor, or the path's intro page. */
-const backHref = (kind: ReportKind, id: string) => (kind === "course" ? "/tasks?tab=courses" : itemHref(kind, id));
+/**
+ * Where the author manages it: the course editor, or the path's intro page.
+ * An administrator, who only reads the report, goes back to the intro page.
+ */
+const backHref = (kind: ReportKind, id: string, admin: boolean) =>
+  kind === "course" && !admin ? "/tasks?tab=courses" : itemHref(kind, id);
 
 /**
  * A practice set opened from a report; from a course's report it carries the
@@ -59,7 +64,8 @@ function practiceScore(row: Pick<LearnerRow, "practice_sets">): { score: number;
 
 /**
  * The learning report of a course or a Mastery Path (platform batch 3 §1):
- * ``/reports?kind=&id=``, for its author (a teacher). Numbers only.
+ * ``/reports?kind=&id=``, for its author and, read-only, for administrators
+ * (spec 2026-11-05). Numbers only.
  */
 export default function LearnerReportPage() {
   const params = useSearchParams();
@@ -74,6 +80,7 @@ export default function LearnerReportPage() {
 
 export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: string }) {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   // Counted on this item only (a learner's study elsewhere stays theirs); 7 / 30 days or all time.
@@ -95,10 +102,10 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
   }, [kind, itemId, days, t]);
 
   const back = (
-    <Link href={backHref(kind, itemId)}
+    <Link href={backHref(kind, itemId, isAdmin)}
       className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
       <ArrowLeft size={14} aria-hidden />
-      {kind === "course" ? t("Courses") : t("Learning market")}
+      {kind === "course" && !isAdmin ? t("Courses") : t("Learning market")}
     </Link>
   );
   if (error && !report) {
@@ -203,9 +210,14 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
           <ul className="space-y-1 text-[12.5px]">
             {report.practice_sets.map((setId) => (
               <li key={setId}>
-                <Link href={practiceSetHref(setId, kind, itemId)} className="text-[var(--primary)] hover:underline">
-                  {setTitles.get(setId) || t("Practice set")}
-                </Link>
+                {/* The results live in the author's set editor; administrators read the titles only. */}
+                {isAdmin ? (
+                  setTitles.get(setId) || t("Practice set")
+                ) : (
+                  <Link href={practiceSetHref(setId, kind, itemId)} className="text-[var(--primary)] hover:underline">
+                    {setTitles.get(setId) || t("Practice set")}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

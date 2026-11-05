@@ -38,7 +38,7 @@ it("parses only the counts-only teacher-path confirmation code", () => {
 
 it("describes the impact with counts only", () => {
   expect(describeWithdrawalImpact({ affectedPaths: 1, affectedStudents: 2 }, t)).toBe(
-    "1 published teacher paths use this material\n2 students assigned\n"
+    "1 published paths use this material\n2 learners assigned\n"
       + "Those paths will show this material as unavailable. Continue?",
   );
   expect(describeOtherReferences({ total: 0, by_kind: {} }, t)).toBe("");

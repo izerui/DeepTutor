@@ -58,7 +58,7 @@ export function TeacherCardActions({
           className={BUTTON}
         >
           <Send aria-hidden className="h-3 w-3" />
-          {published ? t('Publish update') : t('Publish to students')}
+          {published ? t('Publish update') : t('Publish to learners')}
         </button>
         {template && (
           <button
@@ -92,7 +92,7 @@ export function UnlistedTeacherTemplates({
   return (
     <section aria-labelledby="unlisted-teacher-paths" className="mt-10">
       <h2 id="unlisted-teacher-paths" className="text-sm font-semibold">
-        {t('Other teacher paths')}
+        {t("Other authors' paths")}
       </h2>
       <ul className="mt-3 divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--card)]">
         {templates.map(template => {

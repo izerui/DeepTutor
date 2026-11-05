@@ -195,8 +195,6 @@ class ResolvedBook:
         return admin_may_retire(self.record, get_current_user())
 
     def capabilities(self) -> dict[str, Any]:
-        from .roles import is_teacher_or_admin
-
         record = self.record
         user = get_current_user()
         owned = self.source == "own" or (
@@ -216,10 +214,9 @@ class ResolvedBook:
             "visibility": record.visibility if record else "private",
             "owner_id": record.created_by if record else "",
             "group": "mine" if owned else "public",
-            "can_set_visibility": (manageable and (
-                is_teacher_or_admin() or (owned and record.visibility == "public")
-            )) or (self.admin_may_unpublish() and _may_retire(record, user)),
-            "can_make_public": manageable and is_teacher_or_admin(),
+            # Spec 2026-11-05: every learner may publish what they manage.
+            "can_set_visibility": manageable or (self.admin_may_unpublish() and _may_retire(record, user)),
+            "can_make_public": manageable,
         }
 
     def load_progress(self, book_id: str) -> Progress:
@@ -248,10 +245,7 @@ class ResolvedBook:
 def can_create_book() -> bool:
     if not _auth_enabled() or get_current_user().is_admin:
         return True
-    from .roles import can_create_personal_book
-
-    # Spec 2026-10-29 §6: students build their own books only where allowed.
-    return permission_for_user(get_current_user()).create and can_create_personal_book()
+    return permission_for_user(get_current_user()).create
 
 
 def resolve_book(book_id: str) -> ResolvedBook | None:

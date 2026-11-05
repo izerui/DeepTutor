@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { actionClass } from "@/components/common/form-styles";
 import { PAGE_TITLE_CLASS } from "@/components/layout/FeaturePage";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
   CATALOG_KINDS,
   getCatalogItem,
@@ -29,6 +30,7 @@ import { useTaxonomy } from "./useTaxonomy";
 /** An item's introduction (§5.1): ``/market/item?kind=…&id=…`` (``&manage=1`` opens the author's listing). */
 export default function ItemIntro() {
   const { t } = useTranslation();
+  const { isAdmin } = useAuthStatus();
   const params = useSearchParams();
   const kind = params?.get("kind") ?? "";
   const id = params?.get("id") ?? "";
@@ -103,7 +105,8 @@ export default function ItemIntro() {
             {t("Manage listing")}
           </button>
         )}
-        {item.mine && hasLearners && (
+        {/* Spec 2026-11-05: administrators read every report too (read-only). */}
+        {(item.mine || isAdmin) && hasLearners && (
           <Link href={`/reports?kind=${encodeURIComponent(item.kind)}&id=${encodeURIComponent(item.id)}`} className={actionClass}>
             {t("Learning report")}
           </Link>

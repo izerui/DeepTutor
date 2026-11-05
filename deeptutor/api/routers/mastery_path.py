@@ -90,20 +90,6 @@ router = APIRouter(dependencies=[Depends(require_instance_access)])
 ws_router = APIRouter()
 
 
-def require_personal_mastery_creation() -> None:
-    """Students create their own paths only when their policy allows it."""
-    from deeptutor.multi_user.roles import can_create_personal_mastery
-
-    if not can_create_personal_mastery():
-        raise HTTPException(
-            status_code=403,
-            detail="Your account cannot create personal mastery paths.",
-        )
-
-
-_PERSONAL_PATH_CREATION = [Depends(require_personal_mastery_creation)]
-
-
 async def require_outline_mutable(request: Request) -> None:
     """Refuse every outline change on a path whose outline is a teacher's."""
     path_id = str(request.path_params.get("path_id") or request.path_params.get("book_id") or "")
@@ -604,7 +590,7 @@ async def list_reading_learning_records() -> ReadingLearningRecords:
     return await asyncio.to_thread(store.list_reading_records)
 
 
-@router.post("/topics/draft", dependencies=_PERSONAL_PATH_CREATION)
+@router.post("/topics/draft")
 async def generate_topic_route(body: GenerateTopicDraftRequest):
     from deeptutor.learning.topic_generation import TopicGenerationError, generate_topic_draft
 
@@ -641,7 +627,7 @@ def _provisional_name(goal: str) -> str:
     return head[:_PROVISIONAL_NAME_CHARS].rstrip() + "…"
 
 
-@router.post("/topics", dependencies=_PERSONAL_PATH_CREATION)
+@router.post("/topics")
 async def create_topic(body: ConfirmTopicRequest):
     from deeptutor.learning.topic_generation import (
         TopicGenerationError,
@@ -1309,7 +1295,7 @@ async def get_progress_sessions(book_id: str):
 
 @router.post(
     "/progress/{book_id}/init-modules",
-    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+    dependencies=_OUTLINE_WRITE,
 )
 async def init_modules(book_id: str, body: InitModulesRequest):
     _validate_book_id(book_id)
@@ -1327,7 +1313,7 @@ async def init_modules(book_id: str, body: InitModulesRequest):
 
 @router.post(
     "/progress/{book_id}/import-from-book",
-    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+    dependencies=_OUTLINE_WRITE,
 )
 async def import_from_book(book_id: str, body: ImportFromBookRequest):
     _validate_book_id(book_id)
@@ -1442,7 +1428,7 @@ class GenerateFromReadingRequest(BaseModel):
 
 @router.post(
     "/progress/{book_id}/generate-from-notebook",
-    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+    dependencies=_OUTLINE_WRITE,
 )
 async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest):
     _validate_book_id(book_id)
@@ -1522,7 +1508,7 @@ async def generate_from_notebook(book_id: str, body: GenerateFromNotebookRequest
 
 @router.post(
     "/progress/{book_id}/generate-from-reading",
-    dependencies=[*_PERSONAL_PATH_CREATION, *_OUTLINE_WRITE],
+    dependencies=_OUTLINE_WRITE,
 )
 async def generate_from_reading(book_id: str, body: GenerateFromReadingRequest):
     """Create a mastery curriculum from a private reading workspace."""

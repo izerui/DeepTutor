@@ -92,7 +92,6 @@ def _mine_courses() -> list[dict[str, Any]]:
 
 @router.get("")
 async def home() -> dict[str, Any]:
-    from deeptutor.multi_user.roles import can_create_personal_mastery
     from deeptutor.tasks.service import StudentTasks
 
     def build() -> dict[str, Any]:
@@ -111,10 +110,6 @@ async def home() -> dict[str, Any]:
             except Exception:
                 logger.exception("Could not build the %s block of the home page", name)
                 sections[name] = []
-        try:
-            sections["can_create_path"] = bool(can_create_personal_mastery())
-        except Exception:
-            sections["can_create_path"] = False
         return sections
 
     return await asyncio.to_thread(build)
@@ -122,7 +117,7 @@ async def home() -> dict[str, Any]:
 
 @router.get("/workbench")
 async def teacher_workbench() -> dict[str, Any]:
-    """The teacher's home (spec 2026-11-03 batch 3 §5.1); administrators get only their role."""
+    """A learner's workbench (spec 2026-11-03 batch 3 §5.1, 2026-11-05 §2); administrators get only their role."""
     from deeptutor.teaching.workbench import workbench
 
     return await asyncio.to_thread(workbench)

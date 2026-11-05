@@ -123,7 +123,6 @@ export interface HomeData {
   mine: { path_id: string; name: string; mastered: number; total: number; updated_at: number }[];
   /** Batch 4 §4: one's own courses still in play. */
   mine_courses?: { id: string; name: string; color: string; updated_at: number }[];
-  can_create_path: boolean;
   /** Traceability #6: what one joined from the market, newest first (every role). */
   joined?: JoinedItem[];
 }

@@ -8,7 +8,7 @@ import pytest
 
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.publishing import scope as scopes
-from deeptutor.publishing.scope import BOOK, MASTERY_PATH, ScopeForbidden, ScopeNeedsConfirmation, ScopeNotFound
+from deeptutor.publishing.scope import BOOK, MASTERY_PATH, ScopeNeedsConfirmation, ScopeNotFound
 from deeptutor.publishing.service import PublishService
 
 
@@ -44,7 +44,7 @@ def test_only_the_publisher_sees_or_changes_who_receives_an_item(teaching_books,
         with pytest.raises(ScopeNotFound):
             PublishService().set_scope(BOOK, teaching_books.public.book_id, everyone=True)
     with as_account("sara"):
-        with pytest.raises(ScopeForbidden):
+        with pytest.raises(ScopeNotFound):
             PublishService().describe(BOOK, teaching_books.public.book_id)
 
 
@@ -54,22 +54,22 @@ def _assigned(template_id: str) -> set[str]:
     return {a.student_user_id for a in TeachingStore().list_assignments(template_id) if a.status == "active"}
 
 
-def test_narrowing_an_older_everyone_path_counts_the_students_who_lose_it(
+def test_narrowing_an_older_everyone_path_counts_the_learners_who_lose_it(
     teacher_draft, publish_template, teaching_users, as_account
 ):
     teacher_draft()
     template_id = publish_template()["template"]["id"]
-    # Older data: the path reached every student.
+    # Older data: the path reached everyone; that is every learner but its author (spec 2026-11-05).
     scopes._store_scope(MASTERY_PATH, template_id, scopes.Scope(everyone=True), actor_id=teaching_users["tina"]["id"])
     scopes.reconcile_template(template_id)
-    students = {teaching_users["sara"]["id"], teaching_users["sam"]["id"]}
-    assert _assigned(template_id) == students
+    learners = {teaching_users[name]["id"] for name in ("tom", "sara", "sam", "uma")}
+    assert _assigned(template_id) == learners
     with as_account("tina"):
         described = PublishService().describe(MASTERY_PATH, template_id)
-        assert described["scope"]["everyone"] is True and described["audience_size"] == 2
+        assert described["scope"]["everyone"] is True and described["audience_size"] == 4
         with pytest.raises(ScopeNeedsConfirmation) as caught:
             PublishService().set_scope(MASTERY_PATH, template_id, everyone=False)
-        assert caught.value.affected == 2
+        assert caught.value.affected == 4
         PublishService().set_scope(MASTERY_PATH, template_id, everyone=False, confirm=True)
     assert _assigned(template_id) == set()
 

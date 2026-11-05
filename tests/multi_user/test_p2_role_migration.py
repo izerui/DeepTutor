@@ -1,24 +1,25 @@
-"""P2: three roles; ``user`` accounts become students without losing abilities."""
+"""P2 / spec 2026-11-05: two roles; stored roles are never rewritten, learner presets move into grants."""
 
 from __future__ import annotations
 
-import json
-
 from deeptutor.multi_user import identity, role_migration
-from deeptutor.multi_user.grants import load_grant, save_grant
-from deeptutor.multi_user.models import ASSIGNABLE_ROLES, normalize_role
+from deeptutor.multi_user.grants import load_grant
+from deeptutor.multi_user.models import ASSIGNABLE_ROLES, normalize_role, role_label
 
 
 def _record(username):
     return identity.load_users()[username]
 
 
-def test_only_three_roles_are_assignable():
-    assert ASSIGNABLE_ROLES == frozenset({"admin", "teacher", "student"})
+def test_only_admin_and_learner_are_assignable():
+    assert ASSIGNABLE_ROLES == frozenset({"admin", "student"})
     assert normalize_role("bogus") == "student"
+    assert [role_label(r) for r in ("admin", "teacher", "student", "user")] == [
+        "admin", "learner", "learner", "learner",
+    ]
 
 
-def test_new_accounts_default_to_student(seed_user):
+def test_new_accounts_default_to_learner(seed_user):
     seed_user("boss", role="admin")
     from deeptutor.services.auth import add_user
 
@@ -26,15 +27,14 @@ def test_new_accounts_default_to_student(seed_user):
     assert _record("sam")["role"] == "student"
 
 
-def test_user_accounts_become_students_and_keep_their_abilities(seed_user):
+def test_stored_roles_are_not_rewritten(seed_user):
     seed_user("boss", role="admin")
     seed_user("una", role="user")
+    seed_user("tina", role="teacher")
     report = role_migration.run_role_migration()
-    record = _record("una")
-    assert record["role"] == "student"
-    assert report["students"] == ["una"]
-    policy = load_grant(record["id"])["student_policy"]
-    assert policy == {"allow_personal_mastery": True, "allow_private_kb": True}
+    assert _record("una")["role"] == "user"
+    assert _record("tina")["role"] == "teacher"
+    assert report == {"learner_policies": []}
 
 
 def test_learner_preset_restrictions_are_written_into_the_grant(seed_user):
@@ -45,33 +45,9 @@ def test_learner_preset_restrictions_are_written_into_the_grant(seed_user):
     identity._write_users(users)
     lia_id = _record("lia")["id"]
     assert load_grant(lia_id).get("learning_policy") is None
-    role_migration.run_role_migration()
+    report = role_migration.run_role_migration()
+    assert report["learner_policies"] == ["lia"]
     policy = load_grant(lia_id)["learning_policy"]
     assert policy["allowed_surfaces"] == ["chat", "reading"]
     assert policy["locked_persona"] == "teacher"
-
-
-def test_a_stored_learning_policy_and_student_policy_are_kept(seed_user):
-    seed_user("boss", role="admin")
-    seed_user("kim", role="user")
-    kim_id = _record("kim")["id"]
-    grant = load_grant(kim_id)
-    grant["student_policy"] = {"allow_personal_mastery": False, "allow_private_kb": False}
-    save_grant(kim_id, grant)
-    role_migration.run_role_migration()
-    assert load_grant(kim_id)["student_policy"] == {
-        "allow_personal_mastery": False, "allow_private_kb": False,
-    }
-
-
-def test_migration_is_idempotent_and_backs_up_once(seed_user, mu_isolated_root):
-    from deeptutor.multi_user import paths
-
-    seed_user("boss", role="admin")
-    seed_user("una", role="user")
-    first = role_migration.run_role_migration()
-    second = role_migration.run_role_migration()
-    assert first["students"] == ["una"] and second["students"] == []
-    backups = list((paths.SYSTEM_ROOT / "auth" / "backups").glob("users-*.json"))
-    assert len(backups) == 1
-    assert json.loads(backups[0].read_text())["una"]["role"] == "user"
+    assert role_migration.run_role_migration() == {"learner_policies": []}

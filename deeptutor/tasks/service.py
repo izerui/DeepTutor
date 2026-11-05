@@ -46,10 +46,6 @@ class TaskNotFound(TaskError):
     status = 404
 
 
-class TaskForbidden(TaskError):
-    status = 403
-
-
 class TaskConflict(TaskError):
     status = 409
 
@@ -74,10 +70,10 @@ def _accounts() -> dict[str, dict[str, Any]]:
 
 
 def _hand_tasks_to(conn, admin_id: str, teacher_id: str, task_ids: list[str]) -> int:
-    """Inside a write: the administrator's tasks among *task_ids* go to an active teacher."""
-    account = _accounts().get(teacher_id) or {}
-    if account.get("role") != "teacher" or account.get("disabled"):
-        raise TaskError("Choose an active teacher.")
+    """Inside a write: the administrator's tasks among *task_ids* go to an active learner (spec 2026-11-05 §4)."""
+    account = _accounts().get(teacher_id)
+    if account is None or account["role"] == "admin" or account["disabled"]:
+        raise TaskError("Choose an active learner.")
     if not task_ids:
         return 0
     marks = ",".join("?" for _ in task_ids)
@@ -128,11 +124,11 @@ def _target_audience(kind: str, target_id: str) -> set[str] | None:
 
     if kind == "practice_set":
         scope = scopes.get_scope(scopes.PRACTICE_SET, target_id)
-        return scopes.audience(scope, students_only=True) if scope else set()
+        return scopes.audience(scope, learners_only=True) if scope else set()
     if kind == "mastery_path":
         scope = scopes.get_scope(scopes.MASTERY_PATH, target_id)
         if scope is not None:
-            return scopes.audience(scope, students_only=True)
+            return scopes.audience(scope, learners_only=True)
         from deeptutor.teaching.store import TeachingStore
 
         return {
@@ -145,7 +141,7 @@ def _target_audience(kind: str, target_id: str) -> set[str] | None:
         if record is None or record.visibility != "public":
             return set()
         scope = scopes.get_scope(scopes.BOOK, target_id)
-        return None if scope is None else scopes.audience(scope, students_only=True)
+        return None if scope is None else scopes.audience(scope, learners_only=True)
     return None
 
 
@@ -260,12 +256,6 @@ class TaskService:
 
     # authorship
 
-    def _require_author(self) -> str:
-        role = _role(self.actor)
-        if role not in ("teacher", "admin"):
-            raise TaskForbidden("Only teachers and administrators assign tasks.")
-        return role
-
     def _owned(self, conn, task_id: str):
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone() if conn else None
         if row is None or row["owner_user_id"] != self.actor.id:
@@ -336,7 +326,6 @@ class TaskService:
         return {}
 
     def create(self, kind: str, title: str) -> dict[str, Any]:
-        self._require_author()
         if kind not in KINDS:
             raise TaskError("Unknown kind of task.")
         title = str(title or "").strip()
@@ -353,12 +342,10 @@ class TaskService:
         return self.get(task_id)
 
     def get(self, task_id: str) -> dict[str, Any]:
-        self._require_author()
         with db.read() as conn:
             return self._summary(self._owned(conn, task_id))
 
     def list_mine(self) -> list[dict[str, Any]]:
-        self._require_author()
         with db.read() as conn:
             if conn is None:
                 return []
@@ -382,7 +369,6 @@ class TaskService:
 
     def update(self, task_id: str, **fields: Any) -> dict[str, Any]:
         """A draft changes freely; a published task keeps its kind and content (§3.3)."""
-        self._require_author()
         with db.read() as conn:
             row = self._owned(conn, task_id)
         if row["status"] == "archived":
@@ -417,7 +403,7 @@ class TaskService:
         return self.get(task_id)
 
     def hand_over(self, task_id: str, teacher_id: str) -> dict[str, Any]:
-        """An administrator gives a task they hold to a teacher (traceability #5)."""
+        """An administrator gives a task they hold to a learner (traceability #5)."""
         if _role(self.actor) != "admin":
             raise TaskError("Only administrators hand tasks over.")
         with db.write() as conn:
@@ -436,7 +422,6 @@ class TaskService:
         """
         from deeptutor.publishing import scope as scopes
 
-        self._require_author()
         with db.read() as conn:
             row = self._owned(conn, task_id)
         if row["status"] != "draft":
@@ -451,11 +436,11 @@ class TaskService:
         scopes.default_scope_on_publish(scopes.TASK, task_id)
         scope = scopes.get_scope(scopes.TASK, task_id)
         try:
-            receivers = scopes.audience(scope, students_only=True, owner_id=self.actor.id) if scope else set()
+            receivers = scopes.audience(scope, learners_only=True, owner_id=self.actor.id) if scope else set()
             reach = _target_audience(kind, row["target_id"])
             if reach is not None and receivers - reach:
                 raise TaskError(
-                    "Some of these students cannot open what this task asks for. Widen who receives it first."
+                    "Some of these learners cannot open what this task asks for. Widen who receives it first."
                 )
         except Exception:
             if not had_scope:
@@ -481,7 +466,6 @@ class TaskService:
 
     def archive(self, task_id: str) -> dict[str, Any]:
         """Withdraw: the author, or (D10) an administrator for anyone's published task."""
-        self._require_author()
         with db.write() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
             if row is None or not (
@@ -498,7 +482,6 @@ class TaskService:
 
     def delete(self, task_id: str) -> None:
         """Only a never-published task is deleted (R19); otherwise an administrator withdraws."""
-        self._require_author()
         with db.read() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone() if conn else None
         if row is not None and row["owner_user_id"] != self.actor.id:
@@ -519,7 +502,7 @@ class TaskService:
         from deeptutor.publishing import scope as scopes
 
         scope = scopes.get_scope(scopes.TASK, row["id"])
-        return scopes.audience(scope, students_only=True, owner_id=row["owner_user_id"]) if scope else set()
+        return scopes.audience(scope, learners_only=True, owner_id=row["owner_user_id"]) if scope else set()
 
     def _progress(self, row) -> dict[str, int]:
         receivers = self._receivers(row)
@@ -533,7 +516,6 @@ class TaskService:
 
     def detail(self, task_id: str) -> dict[str, Any]:
         """Each receiver's state."""
-        self._require_author()
         with db.read() as conn:
             row = self._owned(conn, task_id)
             completions = {
@@ -572,7 +554,7 @@ class StudentTasks:
 
     def _is_student(self) -> bool:
         """A learner here: a student, or anyone who joined something (platform batch 2 §6)."""
-        if _role(self.actor) == "student":
+        if _role(self.actor) != "admin":
             return True
         from deeptutor.catalog.enrollment import joined_by
 
@@ -603,7 +585,7 @@ class StudentTasks:
                     ids[start:start + 500],
                 )
             ]
-        student = _role(self.actor) == "student"
+        student = _role(self.actor) != "admin"
         out = []
         for row in rows:
             scope = scopes.get_scope(scopes.TASK, row["id"])
@@ -757,7 +739,6 @@ __all__ = [
     "StudentTasks",
     "TaskConflict",
     "TaskError",
-    "TaskForbidden",
     "TaskNotFound",
     "TaskService",
     "forget_student",

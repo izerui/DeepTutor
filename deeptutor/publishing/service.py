@@ -22,12 +22,11 @@ from deeptutor.publishing.scope import (
     KNOWLEDGE_BASE,
     MASTERY_PATH,
     PRACTICE_SET,
-    STUDENT_KINDS,
+    LEARNER_KINDS,
     TASK,
     COURSE,
     Scope,
     ScopeError,
-    ScopeForbidden,
     ScopeNeedsConfirmation,
     ScopeNotFound,
 )
@@ -94,15 +93,6 @@ class PublishService:
             raise ScopeNotFound("Only the publisher can choose who receives this.")
         return info
 
-    def _role(self) -> str:
-        from deeptutor.multi_user.accounts import live_role as _role
-
-        return _role(self.actor)
-
-    def _require_publisher(self) -> None:
-        if self._role() not in ("teacher", "admin"):
-            raise ScopeForbidden("Only teachers and administrators publish content.")
-
     def _current(self, kind: str, item_id: str, info: dict[str, Any]) -> Scope:
         # What is stored, with its members — never the empty scope a taken-down item
         # reads as, which saving would write back over the stored one (review M3).
@@ -121,12 +111,11 @@ class PublishService:
     def _reached(self, kind: str, scope: Scope, info: dict[str, Any]) -> set[str]:
         if not info["public"]:
             return set()
-        return scopes.audience(scope, students_only=kind in STUDENT_KINDS, owner_id=info["owner"])
+        return scopes.audience(scope, learners_only=kind in LEARNER_KINDS, owner_id=info["owner"])
 
     # ── API ───────────────────────────────────────────────────
 
     def describe(self, kind: str, item_id: str) -> dict[str, Any]:
-        self._require_publisher()
         info = self._item(kind, item_id)
         scope = self._current(kind, item_id, info)
         from deeptutor.multi_user.accounts import accounts as _accounts
@@ -148,7 +137,6 @@ class PublishService:
 
     def set_scope(self, kind: str, item_id: str, *, everyone: bool, confirm: bool = False) -> dict[str, Any]:
         """Keep or drop the old "everyone"; the accounts an older item named stay as stored."""
-        self._require_publisher()
         info = self._item(kind, item_id)
         if kind == MASTERY_PATH and not info["public"]:
             raise ScopeError("Publish this path before choosing who receives it.")

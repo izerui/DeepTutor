@@ -3,11 +3,11 @@
     DEEPTUTOR_HOME=/path/to/a/copy python -m deeptutor.catalog.migration_check --on-a-copy
 
 For every active account it records what they can open — practice sets,
-Mastery Paths, tasks, courses, books, knowledge bases — and, for students,
-their abilities and daily AI limit. Then it runs the migration (content
+Mastery Paths, tasks, courses, books, knowledge bases — and their daily AI
+limit. Then it runs the migration (content
 published to everyone goes to the market) and records it all again. Whatever someone lost is listed; losses the design expects (content
 published to everyone that the person never started) are counted apart.
-Exit code 0: nothing else was lost and no student's abilities changed.
+Exit code 0: nothing else was lost and no learner's AI limit changed.
 
 It writes to the data it is pointed at, so it refuses to run without
 ``--on-a-copy``.
@@ -66,11 +66,9 @@ def _reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
                 if r.created_by != user_id and kb_registry.can_read(r, actor)
             ),
         }
-        if account["role"] == "student":
-            from deeptutor.multi_user.roles import effective_ai_daily_tokens, effective_student_policy
+        from deeptutor.multi_user.roles import effective_ai_daily_tokens
 
-            out["policy"] = effective_student_policy(user_id)
-            out["ai_daily_tokens"] = effective_ai_daily_tokens(user_id)
+        out["ai_daily_tokens"] = effective_ai_daily_tokens(user_id)
         return out
     finally:
         reset_current_user(token)
@@ -127,7 +125,7 @@ def run() -> dict[str, Any]:
                 bucket.setdefault(kind, []).append(item_id)
         changed = {} if errors else {
             key: {"before": before[user_id].get(key), "after": after[user_id].get(key)}
-            for key in ("policy", "ai_daily_tokens") if before[user_id].get(key) != after[user_id].get(key)
+            for key in ("ai_daily_tokens",) if before[user_id].get(key) != after[user_id].get(key)
         }
         unexpected = sum(len(v) for v in lost.values()) + len(changed) + len(errors)
         unexpected_total += unexpected

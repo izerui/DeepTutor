@@ -2551,7 +2551,7 @@ export interface paths {
     };
     /**
      * Teacher Workbench
-     * @description The teacher's home (spec 2026-11-03 batch 3 §5.1); administrators get only their role.
+     * @description A learner's workbench (spec 2026-11-03 batch 3 §5.1, 2026-11-05 §2); administrators get only their role.
      */
     readonly get: operations["teacher_workbench_api_home_workbench_get"];
     readonly put?: never;
@@ -11890,7 +11890,7 @@ export interface paths {
     readonly put?: never;
     /**
      * Hand Over Course
-     * @description Traceability #5: an administrator gives a course they hold to a teacher.
+     * @description Traceability #5: an administrator gives a course they hold to a learner.
      */
     readonly post: operations["hand_over_course_api_tasks_courses__course_id__hand_over_post"];
     readonly delete?: never;
@@ -12816,7 +12816,7 @@ export interface components {
     };
     /**
      * AdminCreateUserRequest
-     * @description Admin user-creation payload: a teacher or a student (spec 2026-10-29 D1).
+     * @description Admin user-creation payload: a learner (spec 2026-11-05), stored as ``student``.
      */
     readonly AdminCreateUserRequest: {
       /** Password */
@@ -12829,10 +12829,10 @@ export interface components {
       readonly preset: "standard" | "learner" | "custom";
       /**
        * Role
-       * @default student
-       * @enum {string}
+       * @default learner
+       * @constant
        */
-      readonly role: "teacher" | "student";
+      readonly role: "learner";
       /** Username */
       readonly username: string;
     };
@@ -13096,11 +13096,6 @@ export interface components {
        * @default false
        */
       readonly is_admin: boolean;
-      /**
-       * Is Teacher
-       * @default false
-       */
-      readonly is_teacher: boolean;
       /** Learning Policy */
       readonly learning_policy?: {
         readonly [key: string]: unknown;
@@ -13109,10 +13104,6 @@ export interface components {
       readonly preset?: ("standard" | "learner" | "custom") | null;
       /** Role */
       readonly role?: string | null;
-      /** Student Policy */
-      readonly student_policy?: {
-        readonly [key: string]: unknown;
-      } | null;
       /** User Id */
       readonly user_id?: string | null;
       /** Username */
@@ -17617,11 +17608,16 @@ export interface components {
     };
     /**
      * SetRoleRequest
-     * @description Payload for the PUT /users/{username}/role endpoint.
+     * @description Payload for the PUT /users/{username}/role endpoint (spec 2026-11-05).
+     *
+     *     ``learner`` is stored as ``student``; the old role names are refused.
      */
     readonly SetRoleRequest: {
-      /** Role */
-      readonly role: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      readonly role: "admin" | "learner";
     };
     /** SetSessionModeRequest */
     readonly SetSessionModeRequest: {

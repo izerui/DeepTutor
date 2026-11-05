@@ -59,7 +59,7 @@ export default function KbSettingsSection({
     : moveSourceId.startsWith("workspace:")
       ? moveSourceId.slice("workspace:".length).split(":kb:")[0]
       : null;
-  const { isTeacher, allowPrivateKb, isAdmin } = useAuthStatus();
+  const { allowPrivateKb, isAdmin } = useAuthStatus();
   const canWrite = !kb.read_only && allowPrivateKb;
   const canManage = Boolean(kb.kb_id) && canWrite;
   // D10: an administrator withdraws or deletes someone else's published KB, nothing more.
@@ -304,7 +304,7 @@ export default function KbSettingsSection({
             ? t("Published knowledge bases are readable by the people who join them from the learning market, and usable in their chat.")
             : t("Only you can see this knowledge base. Items that reference it can still read it.")}
         </p>
-        {((canManage && (kb.visibility === "public" || isTeacher)) || canRetire) && onVisibilityChange && !kb.connector && (
+        {(canManage || canRetire) && onVisibilityChange && !kb.connector && (
           <button type="button" disabled={visibilityBusy || (canManage && references === null)}
             onClick={() =>
               kb.visibility === "public" ? void changeVisibility("private") : setPublishing(true)
@@ -340,7 +340,7 @@ export default function KbSettingsSection({
           </div>
         )}
         {/* Traceability #8: a private one is made public and submitted in one step. */}
-        {canManage && !kb.connector && (kb.visibility === "public" || (onVisibilityChange && (isTeacher || isAdmin))) && (
+        {canManage && !kb.connector && (kb.visibility === "public" || onVisibilityChange) && (
           <ListingPanel kind="knowledge_base" itemId={kb.kb_id}
             makePublic={kb.visibility === "public" ? undefined : makePublicForListing} />
         )}

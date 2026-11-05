@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { MyListings } from "@/components/catalog/MyListings";
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
 import { AiUsageNote } from "./AiUsage";
@@ -13,7 +14,16 @@ import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/ta
 import { authorLabel, itemHref, kindLabel, studyHref } from "@/components/catalog/catalog-format";
 import type { HomeAnnouncement } from "@/lib/catalog-api";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
-import { getAssignedTask, getHome, listAssignedTasks, type AssignedTask, type HomeData, type JoinedItem } from "@/lib/tasks-api";
+import {
+  getAssignedTask,
+  getHome,
+  listAssignedTasks,
+  listMyTasks,
+  type AssignedTask,
+  type HomeData,
+  type JoinedItem,
+} from "@/lib/tasks-api";
+import { getWorkbench, type Workbench } from "@/lib/workbench-api";
 
 const card = "rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--ring)]";
 
@@ -63,7 +73,7 @@ export function HomeAnnouncements({ items }: { items: HomeAnnouncement[] }) {
                 ) : (
                   title
                 )}
-                {" · "}{item.author || t("Former teacher")} · {formatWhen(item.created_at)}
+                {" · "}{item.author || t("Former author")} · {formatWhen(item.created_at)}
               </p>
             </li>
           );
@@ -95,11 +105,67 @@ export function JoinedSection({ items }: { items: JoinedItem[] }) {
   );
 }
 
+const SENT_KIND: Record<string, string> = {
+  task: "Task",
+  practice_set: "Practice set",
+  course: "Course",
+  mastery_path: "Mastery Path",
+};
+const sentHref = (kind: string, id: string) =>
+  kind === "task" ? `/tasks?task=${encodeURIComponent(id)}`
+    : kind === "practice_set" ? `/practice-sets?set=${encodeURIComponent(id)}`
+      : kind === "course" ? "/tasks?tab=courses" : MASTERY_HOME;
+
+/** What one sent out, with how far its learners are (spec 2026-11-05: every learner's home). */
+export function SentOut() {
+  const { t } = useTranslation();
+  const [board, setBoard] = useState<Workbench | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    getWorkbench().then(setBoard).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
+  }, [t]);
+  if (error) return <p role="alert" className="text-[12px] text-red-600">{error}</p>;
+  if (!board) return <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />;
+  const sent = board.sent ?? [];
+  return (
+    <section aria-labelledby="wb-sent" className="space-y-2" data-testid="home-sent">
+      <h2 id="wb-sent" className="text-[13px] font-semibold">{t("What I sent out")}</h2>
+      {sent.length === 0 ? (
+        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing published yet.")}</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {sent.map((item) => (
+            <li key={`${item.kind}:${item.id}`}>
+              <Link href={sentHref(item.kind, item.id)} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12.5px] hover:bg-[var(--muted)]/40">
+                <span className="w-24 shrink-0 text-[11px] text-[var(--muted-foreground)]">{t(SENT_KIND[item.kind])}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                {item.done === null ? (
+                  <span className="text-[11.5px] text-[var(--muted-foreground)]">
+                    {item.kind === "course" ? t("{{count}} tasks", { count: item.total }) : t("{{count}} learners", { count: item.total })}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2 text-[11.5px] text-[var(--muted-foreground)]">
+                    <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--muted)]">
+                      <span className="block h-full bg-[var(--primary)]" style={{ width: `${item.total ? Math.round((100 * item.done) / item.total) : 0}%` }} />
+                    </span>
+                    {t("{{done}} / {{total}} done", { done: item.done, total: item.total })}
+                  </span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /**
- * The student home (spec 2026-11-03 batch 1 §6): tasks from the courses one joined,
- * what is new in the learning market, and one's own learning — never mixed.
+ * Every learner's home (spec 2026-11-03 batch 1 §6; spec 2026-11-05): tasks from
+ * the courses one joined, what one sent out and listed, what is new in the
+ * learning market, and one's own learning — never mixed.
  */
-export default function StudentHome() {
+export default function LearnerHome() {
   const { t } = useTranslation();
   const [home, setHome] = useState<HomeData | null>(null);
   const [error, setError] = useState("");
@@ -121,10 +187,14 @@ export default function StudentHome() {
     if (!key) return;
     getAssignedTask(key)
       .then(setSelected)
-      .catch(() =>
+      .catch(async () => {
         // Older notifications named a practice set or a path as a task; open it directly.
-        isContentKey(key) ? router.replace(authorTaskHref(key, false)) : setError(t("This task is no longer available.")),
-      );
+        if (isContentKey(key)) return router.replace(authorTaskHref(key, false));
+        // A task one sent out opens in its editor (traceability #7).
+        const own = await listMyTasks().then((rows) => rows.some((row) => row.id === key)).catch(() => false);
+        if (own) router.replace(authorTaskHref(key, true));
+        else setError(t("This task is no longer available."));
+      });
   }, [t, taskParam, router]);
 
   const showHistory = () =>
@@ -187,6 +257,9 @@ export default function StudentHome() {
             )}
           </section>
 
+          <SentOut />
+          <MyListings />
+
           <JoinedSection items={home.joined ?? []} />
 
           {(home.market ?? []).length > 0 && (
@@ -210,11 +283,9 @@ export default function StudentHome() {
           <section aria-labelledby="home-mine" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 id="home-mine" className="text-[13px] font-semibold">{t("What I am learning")}</h2>
-              {home.can_create_path && (
-                <Link href={MASTERY_HOME} className="text-[12.5px] text-[var(--primary)] hover:underline">
-                  {t("New Mastery Path")}
-                </Link>
-              )}
+              <Link href={MASTERY_HOME} className="text-[12.5px] text-[var(--primary)] hover:underline">
+                {t("New Mastery Path")}
+              </Link>
             </div>
             {home.mine.length === 0 && (home.mine_courses ?? []).length === 0 ? (
               <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("You have not started anything of your own yet.")}</p>

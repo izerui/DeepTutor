@@ -52,7 +52,7 @@ from deeptutor.multi_user.device_credentials import (
 )
 from deeptutor.multi_user.identity import get_user, get_user_by_id
 from deeptutor.multi_user.learning_access import learning_policy_for_user
-from deeptutor.multi_user.models import AccountPreset
+from deeptutor.multi_user.models import AccountPreset, role_label
 from deeptutor.multi_user.paths import local_admin_user
 from deeptutor.multi_user.session_handoff import (
     CODE_LIFETIME_SECONDS,
@@ -287,21 +287,15 @@ class SessionHandoffCompleteRequest(BaseModel):
 
 
 class SetRoleRequest(BaseModel):
-    """Payload for the PUT /users/{username}/role endpoint."""
+    """Payload for the PUT /users/{username}/role endpoint (spec 2026-11-05).
 
-    role: str
+    ``learner`` is stored as ``student``; the old role names are refused.
+    """
 
-    @field_validator("role")
-    @classmethod
-    def role_valid(cls, v: str) -> str:
-        # Validate against the same whitelist the identity store enforces so
-        # the API layer and the storage layer share a single source of truth;
-        # a hardcoded subset here would 422 roles the store itself accepts.
-        from deeptutor.multi_user.models import ASSIGNABLE_ROLES
+    role: Literal["admin", "learner"]
 
-        if v not in ASSIGNABLE_ROLES:
-            raise ValueError(f"Role must be one of {sorted(ASSIGNABLE_ROLES)}")
-        return v
+    def stored_role(self) -> str:
+        return "admin" if self.role == "admin" else "student"
 
 
 class PublicRegisterRequest(RegisterRequest):
@@ -315,9 +309,9 @@ class RegistrationSettings(BaseModel):
 
 
 class AdminCreateUserRequest(RegisterRequest):
-    """Admin user-creation payload: a teacher or a student (spec 2026-10-29 D1)."""
+    """Admin user-creation payload: a learner (spec 2026-11-05), stored as ``student``."""
 
-    role: Literal["teacher", "student"] = "student"
+    role: Literal["learner"] = "learner"
     preset: AccountPreset = "standard"
 
 
@@ -353,8 +347,6 @@ class AuthStatusResponse(BaseModel):
     avatar: str = ""
     preset: AccountPreset | None = None
     learning_policy: dict | None = None
-    is_teacher: bool = False
-    student_policy: dict | None = None
 
 
 class UserInfo(BaseModel):
@@ -362,7 +354,13 @@ class UserInfo(BaseModel):
 
     id: str = ""
     username: str
+    #: ``admin`` or ``learner`` (spec 2026-11-05), whatever the record stores.
     role: str
+
+    @field_validator("role")
+    @classmethod
+    def shown_role(cls, value: str) -> str:
+        return role_label(value)
     created_at: str
     disabled: bool = False
     avatar: str = ""
@@ -678,27 +676,6 @@ async def require_admin(
     return payload
 
 
-async def require_teacher_or_admin(
-    payload: TokenPayload | None = Depends(require_auth),
-) -> TokenPayload:
-    """FastAPI dependency for teaching surfaces (admins and teachers).
-
-    The role is re-read from the user store: a teacher demoted by an admin
-    loses these routes immediately, not when their token expires.
-    """
-    if not AUTH_ENABLED:
-        return _local_admin_token_payload()
-
-    from deeptutor.multi_user.roles import TEACHING_ROLES, current_role
-
-    if payload is None or current_role() not in TEACHING_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Teacher or admin access required",
-        )
-    return payload
-
-
 _LEARNER_KB_READ_ROUTES = frozenset(
     {
         "/api/knowledge-bases",
@@ -843,10 +820,6 @@ async def require_learning_surface(
                 route_path=route_path,
             )
         )
-        # Batch 3 §7: features a student's policy turns off (Partners, own courses, …).
-        from deeptutor.multi_user.student_features import assert_student_feature
-
-        assert_student_feature(request_path, request.method, route_path)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
@@ -916,7 +889,6 @@ async def auth_status(
             username="local",
             role="admin",
             is_admin=True,
-            is_teacher=True,
             preset="standard",
         )
 
@@ -926,7 +898,6 @@ async def auth_status(
     preset: AccountPreset | None = None
     learning_policy = None
     live_role: str | None = payload.role if payload else None
-    student_policy = None
     if payload is not None:
         info = get_user_info(payload.username)
         if info:
@@ -943,22 +914,16 @@ async def auth_status(
         # learning policy gets the restricted learning experience; clients
         # still read it as ``preset == "learner"``.
         preset = "learner" if learning_policy is not None else "standard"
-        if live_role == "student":
-            from deeptutor.multi_user.roles import effective_student_policy
-
-            student_policy = effective_student_policy(payload.user_id)
     return AuthStatusResponse(
         enabled=True,
         authenticated=payload is not None,
         user_id=payload.user_id if payload else None,
         username=payload.username if payload else None,
-        role=live_role,
+        role=role_label(live_role) if live_role else None,
         is_admin=payload.role == "admin" if payload else False,
-        is_teacher=live_role in {"admin", "teacher"},
         avatar=avatar,
         preset=preset,
         learning_policy=learning_policy,
-        student_policy=student_policy,
     )
 
 
@@ -987,7 +952,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
             "ok": True,
             "user_id": payload.user_id,
             "username": payload.username,
-            "role": payload.role,
+            "role": role_label(payload.role),
             "is_admin": payload.role == "admin",
         }
 
@@ -1016,7 +981,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
         "ok": True,
         "user_id": result.user_id,
         "username": result.username,
-        "role": result.role,
+        "role": role_label(result.role),
         "is_admin": result.role == "admin",
     }
 
@@ -1059,7 +1024,7 @@ async def device_login(body: DeviceLoginRequest, response: Response) -> dict:
         "ok": True,
         "user_id": payload.user_id,
         "username": payload.username,
-        "role": payload.role,
+        "role": role_label(payload.role),
         "is_admin": payload.role == "admin",
         "device_credential_id": payload.device_credential_id,
     }
@@ -1333,7 +1298,7 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
             "ok": True,
             "user_id": result.get("id", ""),
             "username": body.username,
-            "role": "student",
+            "role": "learner",
             "is_first_user": True,
             "is_admin": False,
         }
@@ -1382,12 +1347,12 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     if first_user:
         logger.info(f"First user (admin) registered: '{body.username}'")
     else:
-        logger.info("Student registered: '%s'", body.username)
+        logger.info("Learner registered: '%s'", body.username)
     return {
         "ok": True,
         "user_id": user_id,
         "username": body.username,
-        "role": role,
+        "role": role_label(role),
         "is_first_user": first_user,
         "is_admin": role == "admin",
     }
@@ -1849,7 +1814,7 @@ def _create_admin_user(
             "ok": True,
             "user_id": result.get("id", ""),
             "username": body.username,
-            "role": "student",
+            "role": "learner",
             "is_admin": False,
             "preset": "standard",
         }
@@ -1860,7 +1825,7 @@ def _create_admin_user(
     from deeptutor.multi_user.identity import UsernameTaken
 
     try:
-        add_user(body.username, body.password, role=body.role, preset=body.preset, only_new=True)
+        add_user(body.username, body.password, role="student", preset=body.preset, only_new=True)
     except UsernameTaken:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken") from None
     created = next(
@@ -1871,7 +1836,7 @@ def _create_admin_user(
     role = str(created.get("role") or "") if created else ""
     preset = str(created.get("preset") or "standard") if created else "standard"
 
-    if role not in {"teacher", "student"}:
+    if role != "student":
         delete_user(body.username)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1913,7 +1878,7 @@ def _create_admin_user(
         "ok": True,
         "user_id": user_id,
         "username": body.username,
-        "role": role,
+        "role": role_label(role),
         "is_admin": False,
         "preset": preset,
     }
@@ -2243,7 +2208,8 @@ async def update_user_role(
     # Record the existing administrator as primary before a second one exists,
     # so each later administrator gets their own root (P1b).
     primary = primary_admin_id()
-    if body.role != "admin" and primary and str(target.get("id") or "") == primary:
+    new_role = body.stored_role()
+    if new_role != "admin" and primary and str(target.get("id") or "") == primary:
         # Their personal data lives in the legacy admin root (P1b); another
         # role would point the account at an empty one.
         raise HTTPException(
@@ -2251,31 +2217,16 @@ async def update_user_role(
             detail="The first administrator's role cannot be changed.",
         )
     old_role = str(target.get("role") or "")
-    if old_role == "teacher" and body.role == "student":
-        from deeptutor.multi_user.content_lifecycle import hand_over_published
-
-        # Spec 2026-11-02 §6.1: what they published goes to this administrator
-        # first; a failure leaves the role unchanged, so the change can be retried.
-        try:
-            await asyncio.to_thread(
-                hand_over_published, str(target.get("id") or ""), current.user_id or current.username
-            )
-        except Exception as exc:
-            logger.exception("Could not hand over what '%s' published", username)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Could not hand over what this teacher published. Nothing was changed; try again.",
-            ) from exc
-
-    updated = set_role(username, body.role)
+    # Spec 2026-11-05: administrators author too, so what they published stays theirs.
+    updated = set_role(username, new_role)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     from deeptutor.multi_user.content_lifecycle import after_role_change
 
-    # Spec 2026-10-29 §5: class rows and assignments follow the new role.
-    await asyncio.to_thread(after_role_change, str(target.get("id") or ""), old_role, body.role)
+    # Spec 2026-10-29 §5: what the account joined follows the new role.
+    await asyncio.to_thread(after_role_change, str(target.get("id") or ""), old_role, new_role)
 
     logger.info(
-        f"Admin '{current.username if current else 'local'}' set '{username}' role to {body.role!r}"
+        f"Admin '{current.username if current else 'local'}' set '{username}' role to {new_role!r}"
     )
-    return {"ok": True, "username": username, "role": body.role}
+    return {"ok": True, "username": username, "role": role_label(new_role)}

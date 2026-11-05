@@ -112,7 +112,7 @@ async def add_course_task(course_id: str, body: TaskCreate):
 
 @router.post("/courses/{course_id}/hand-over")
 async def hand_over_course(course_id: str, body: HandOver):
-    """Traceability #5: an administrator gives a course they hold to a teacher."""
+    """Traceability #5: an administrator gives a course they hold to a learner."""
     return {"course": await _call(lambda: _courses().hand_over(course_id, body.teacher_id))}
 
 

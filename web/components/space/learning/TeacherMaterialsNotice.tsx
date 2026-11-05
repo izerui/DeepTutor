@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { useAuthStatus } from '@/hooks/useAuthStatus'
 import type { MasteryTopic } from '@/lib/learning-api'
 import { listTeacherTemplates, type TeacherTemplate } from '@/lib/teaching-api'
 
@@ -23,7 +22,6 @@ export function TeacherMaterialsNotice({
   revision?: number
 }) {
   const { t } = useTranslation()
-  const { isTeacher } = useAuthStatus()
   const pathId = topic.path_id
   const workspaceId = topic.content_workspace_id ?? ''
   const [found, setFound] = useState<{ key: string; template?: TeacherTemplate }>({
@@ -32,7 +30,6 @@ export function TeacherMaterialsNotice({
   const key = `${pathId}\u0000${workspaceId}`
 
   useEffect(() => {
-    if (!isTeacher) return
     let alive = true
     listTeacherTemplates()
       .then(templates => {
@@ -47,7 +44,7 @@ export function TeacherMaterialsNotice({
     return () => {
       alive = false
     }
-  }, [isTeacher, key, pathId, workspaceId, revision])
+  }, [key, pathId, workspaceId, revision])
 
   // A previous path's answer is never shown on this one.
   const template = found.key === key ? found.template : undefined
@@ -64,7 +61,7 @@ export function TeacherMaterialsNotice({
           {template.materials_unavailable.join(' · ')}
         </p>
         <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-          {t('Students cannot continue this path until you replace them and publish an update.')}
+          {t('Learners cannot continue this path until you replace them and publish an update.')}
         </p>
       </div>
     </div>

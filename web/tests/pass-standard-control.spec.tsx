@@ -1,14 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-const { api, auth, t } = vi.hoisted(() => ({
+const { api, t } = vi.hoisted(() => ({
   api: { updateMasteryPassStandard: vi.fn() },
-  auth: { isTeacher: false, isAdmin: false },
   t: (key: string) => key,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t }) }));
 vi.mock("@/lib/learning-api", () => api);
-vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => auth }));
 
 import { PassStandardControl } from "@/components/space/learning/PassStandardControl";
 import type { MasteryTopic } from "@/lib/learning-api";
@@ -18,7 +16,6 @@ const topic = (pass_standard?: MasteryTopic["pass_standard"]) =>
 
 beforeEach(() => {
   api.updateMasteryPassStandard.mockReset();
-  auth.isTeacher = false;
 });
 
 it("lets the learner switch their own path and reports the saved topic", async () => {
@@ -32,20 +29,19 @@ it("lets the learner switch their own path and reports the saved topic", async (
   fireEvent.click(screen.getByRole("radio", { name: "Relaxed" }));
   await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
   expect(api.updateMasteryPassStandard).toHaveBeenCalledWith("topic_own", "relaxed");
-  expect(screen.queryByText(/students get the new standard/)).toBeNull();
 });
 
-it("shows a teacher path's standard read-only", () => {
+it("shows a published path's standard read-only", () => {
   render(<PassStandardControl topic={topic("standard")} locked onSaved={vi.fn()} />);
   expect(screen.queryByRole("radio")).toBeNull();
   expect(screen.getByText("Standard")).toBeTruthy();
-  expect(screen.getByText(/Set by your teacher/)).toBeTruthy();
+  expect(screen.getByText(/Set by its author/)).toBeTruthy();
 });
 
-it("tells teachers that students get a change with the next update", () => {
-  auth.isTeacher = true;
+it("tells every author that learners get a change with the next update", () => {
+  // Spec 2026-11-05: any learner may publish their path, so everyone gets the hint.
   render(<PassStandardControl topic={topic("strict")} locked={false} onSaved={vi.fn()} />);
-  expect(screen.getByText(/students get the new standard with your next update/)).toBeTruthy();
+  expect(screen.getByText(/learners get the new standard with your next update/)).toBeTruthy();
 });
 
 it("keeps the choice and says so when saving fails", async () => {

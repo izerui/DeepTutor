@@ -19,10 +19,10 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }));
 
 import { AiUsageNote } from "@/components/home/AiUsage";
-import { TeacherWorkbench } from "@/components/home/Workbench";
+import { SentOut } from "@/components/home/LearnerHome";
 import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
 import { AttemptReview, OptionBars } from "@/components/practice-sets/SetReview";
-import { navVisibleForRole, PRIMARY_NAV } from "@/components/sidebar/nav-entries";
+import { navVisibleUnderPolicy, PRIMARY_NAV } from "@/components/sidebar/nav-entries";
 
 beforeEach(() => {
   [practice, workbench].forEach((group) =>
@@ -58,31 +58,29 @@ it("draws how many picked each option and marks the right one", () => {
   expect(within(list).getByText("B. 4").className).toContain("font-semibold");
 });
 
-it("lays out the workbench: what was sent, no classes, nothing to grade, nobody to watch", async () => {
+it("lays out what one sent out: no classes, nothing to grade, nobody to watch", async () => {
   workbench.getWorkbench.mockResolvedValue({
-    role: "teacher",
-    classes: [],
+    role: "learner",
     sent: [{ kind: "practice_set", id: "ps_1", title: "Week 3", done: 1, total: 2, updated_at: 1 }],
   });
-  render(<TeacherWorkbench />);
+  render(<SentOut />);
   expect(await screen.findByText("1 / 2 done")).toBeTruthy();
   expect(screen.queryByText("To grade")).toBeNull();
   expect(screen.queryByRole("heading", { name: "My classes" })).toBeNull();
   expect(screen.queryByRole("heading", { name: /need attention/ })).toBeNull();
 });
 
-it("shows each role its entries and students only the features allowed to them", () => {
-  // Traceability #1: students answer the practice sets they joined.
-  expect(navVisibleForRole("/practice-sets", "student", {})).toBe(true);
-  expect(navVisibleForRole("/practice-sets", "teacher", null)).toBe(true);
-  expect(PRIMARY_NAV.some((entry) => entry.href === "/grading")).toBe(false);
-  expect(navVisibleForRole("/partners", "student", { allow_partners: false })).toBe(false);
-  expect(navVisibleForRole("/partners", "student", { allow_partners: true })).toBe(true);
-  expect(navVisibleForRole("/partners", "teacher", null)).toBe(true);
-  expect(navVisibleForRole("/tasks", "student", {})).toBe(true);
+it("shows every account the same entries, with no feature switches", () => {
+  // Spec 2026-11-05: partners, agents and Co-Writer are for everyone.
+  const hrefs = PRIMARY_NAV.map((entry) => entry.href);
+  for (const href of ["/practice-sets", "/tasks", "/partners", "/agents", "/co-writer"]) {
+    expect(hrefs).toContain(href);
+    expect(navVisibleUnderPolicy(href, null)).toBe(true);
+  }
+  expect(hrefs).not.toContain("/grading");
 });
 
-it("tells a limited student how much AI is left, and nothing without a limit", async () => {
+it("tells a limited learner how much AI is left, and nothing without a limit", async () => {
   workbench.getMyAiUsage.mockResolvedValue({ limit: 1000, used: 900, remaining_percent: 10 });
   const { unmount } = render(<AiUsageNote />);
   expect((await screen.findByRole("status")).textContent).toBe("AI left today: 10%");

@@ -67,22 +67,6 @@ def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_a
 # ── courses ────────────────────────────────────────────────
 
 
-def test_a_teacher_turned_student_keeps_draft_courses(as_account, ids):
-    from deeptutor.multi_user.content_lifecycle import hand_over_published
-    from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.store import db
-
-    with as_account("tina"):
-        draft = CourseService().create("Next term")
-        live = CourseService().create("This term")
-        CourseService().add_new_task(live["id"], "note", "Intro")
-        CourseService().publish(live["id"])
-    hand_over_published(ids["tina"], ids["adam"])
-    with db.read() as conn:
-        owners = dict(conn.execute("SELECT id, owner_user_id FROM courses").fetchall())
-    assert owners == {draft["id"]: ids["tina"], live["id"]: ids["adam"]}
-
-
 def test_a_failed_course_publication_publishes_none_of_its_tasks(as_account):
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import TaskError, TaskService
@@ -99,9 +83,10 @@ def test_a_failed_course_publication_publishes_none_of_its_tasks(as_account):
 # ── permissions ────────────────────────────────────────────
 
 
-def test_administrators_see_no_practice_answers(as_account, ids, deliver):
+def test_administrators_read_practice_answers_of_a_handed_over_set(as_account, ids, deliver):
+    """Spec 2026-11-05 §2: administrators read answers too (they were refused before)."""
     from deeptutor.practice_sets.review import PracticeReview
-    from deeptutor.practice_sets.service import PracticeForbidden, PracticeSetService
+    from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.practice_sets import store
 
     with as_account("tina"):
@@ -115,8 +100,9 @@ def test_administrators_see_no_practice_answers(as_account, ids, deliver):
         result = asyncio.run(PracticeSetService().submit(created["id"], {qid: "Private thoughts."}))
     with store.write() as conn:  # handed to the administrator when Tina left
         conn.execute("UPDATE practice_sets SET owner_user_id = ?", (ids["adam"],))
-    with as_account("adam"), pytest.raises(PracticeForbidden):
-        PracticeReview().attempt(created["id"], result["submission_id"])
+    with as_account("adam"):
+        attempt = PracticeReview().attempt(created["id"], result["submission_id"])
+    assert attempt["questions"][0]["answer"] == "Private thoughts."
 
 
 def test_a_failed_first_publication_keeps_no_receivers(as_account):
@@ -128,13 +114,6 @@ def test_a_failed_first_publication_keeps_no_receivers(as_account):
         with pytest.raises(PracticeError):
             PracticeSetService().publish(created["id"])  # no question yet
         assert scopes.get_scope(scopes.PRACTICE_SET, created["id"]) is None
-
-
-def test_partner_groups_follow_the_partners_switch():
-    from deeptutor.multi_user.student_features import feature_for
-
-    assert feature_for("/api/partner-groups", "GET", None) == "allow_partners"
-    assert feature_for("/api/partner-groups/g1/messages", "POST", None) == "allow_partners"
 
 
 def test_the_limit_error_survives_error_mapping():

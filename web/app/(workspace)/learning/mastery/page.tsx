@@ -27,7 +27,6 @@ import { activeWorkspaceId } from "@/lib/workspace-scope";
 import { learningLibrary } from "@/lib/learning-library";
 import { useLearningCreation, requestedLearningCreation } from "@/components/learning/LibraryWorkspace";
 import { type MasteryTopic } from "@/lib/learning-api";
-import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
 import {
   MASTERY_OPENING_SCOPE,
@@ -49,7 +48,6 @@ function MasteryPathRoute() {
   // narrows the atlas to that course's paths and adopts whatever is built here.
   const scope = useCourseScope();
   const creation = useLearningCreation(() => setWizardOpen(true));
-  const { isTeacher, allowPersonalMastery } = useAuthStatus();
   const [templates, setTemplates] = useState<TeacherTemplate[]>([]);
   const [publishing, setPublishing] = useState<{
     topic: MasteryTopic;
@@ -60,7 +58,6 @@ function MasteryPathRoute() {
   const templatesRequest = useRef(0);
 
   const loadTemplates = useCallback(async () => {
-    if (!isTeacher) return;
     // Overlapping reloads (after each change) settle on the newest.
     const request = ++templatesRequest.current;
     try {
@@ -70,7 +67,7 @@ function MasteryPathRoute() {
       // The atlas stays usable; the card actions simply show "publish".
       if (request === templatesRequest.current) setTemplates([]);
     }
-  }, [isTeacher]);
+  }, []);
 
   useEffect(() => {
     void loadTemplates();
@@ -107,7 +104,7 @@ function MasteryPathRoute() {
   }, [scope, topics]);
 
   // Publishing is offered on the owner's own cards only: an admin sees other
-  // teachers' paths in a separate list, where the server lets them archive
+  // authors' paths in a separate list, where the server lets them archive
   // but never publish (D17).
   const ownTemplates = useMemo(
     () => templates.filter((template) => template.is_owner),
@@ -120,28 +117,22 @@ function MasteryPathRoute() {
 
   return (
     <>
-      {allowPersonalMastery && creation.dialog}
+      {creation.dialog}
       <TopicAtlas
         topics={scopedTopics}
         loading={loading}
         error={error}
         scopeChip={scope ? <CourseScopeChip scope={scope} /> : null}
-        // A student whose policy forbids personal paths gets no create
-        // control at all, rather than one that does nothing (R12).
-        onCreate={
-          allowPersonalMastery
-            ? (trigger) => {
-                wizardTriggerRef.current = trigger;
-                creation.begin();
-              }
-            : undefined
-        }
+        onCreate={(trigger) => {
+          wizardTriggerRef.current = trigger;
+          creation.begin();
+        }}
         onRetry={() => {
           setLoading(true);
           void loadTopics();
         }}
-        teacherTemplates={isTeacher ? ownTemplates : undefined}
-        unlistedTemplates={isTeacher ? otherTemplates : undefined}
+        teacherTemplates={ownTemplates}
+        unlistedTemplates={otherTemplates}
         onPublish={(topic, template, trigger) => {
           teacherTriggerRef.current = trigger;
           setPublishing({ topic, template });
@@ -151,9 +142,7 @@ function MasteryPathRoute() {
           setManaging(template);
         }}
       />
-      {/* `?create=1` and create shortcuts cannot open it around the policy
-          either; the server refuses the creation regardless. */}
-      {wizardOpen && allowPersonalMastery && (
+      {wizardOpen && (
         <CreateTopicWizard
           returnFocusRef={wizardTriggerRef}
           onClose={() => setWizardOpen(false)}

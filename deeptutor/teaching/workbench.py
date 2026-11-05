@@ -1,11 +1,9 @@
-"""The teacher's home: a workbench (spec 2026-11-03 batch 3 §5.1).
+"""Every learner's home has a workbench (spec 2026-11-03 batch 3 §5.1, 2026-11-05 §2).
 
 What I sent out, with how far learners got; no "learners who need
-attention" any more (spec 2026-11-05 remove-teacher-management §1.3). The
-teacher's own learning is the student home's "mine" block, loaded by the
-page itself.
-Administrators get no workbench (they see no students' data): their home is
-links plus their own learning.
+attention" any more (spec 2026-11-05 remove-teacher-management §1.3). One's
+own learning is the home's "mine" block, loaded by the page itself.
+Administrators get no workbench: their home is links plus their own learning.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ def _sent(actor) -> list[dict[str, Any]]:
     for practice in PracticeSetService(actor).list_mine():
         if practice["status"] == "published":
             scope = get_scope(PRACTICE_SET, practice["id"])
-            total = len(audience(scope, students_only=True, owner_id=actor.id)) if scope else 0
+            total = len(audience(scope, learners_only=True, owner_id=actor.id)) if scope else 0
             items.append({"kind": "practice_set", "id": practice["id"], "title": practice["title"],
                           "done": practice["submitted_students"], "total": total,
                           "updated_at": practice["updated_at"]})
@@ -55,12 +53,13 @@ def _sent(actor) -> list[dict[str, Any]]:
 
 
 def workbench(actor=None) -> dict[str, Any]:
-    """A teacher's home: what they sent; anyone else gets only their role."""
+    """A learner's home: what they sent; an administrator gets only their role."""
     from deeptutor.multi_user.accounts import live_role as _role
+    from deeptutor.multi_user.models import role_label
 
     actor = actor or get_current_user()
-    role = _role(actor)
-    if role != "teacher":
+    role = role_label(_role(actor))
+    if role == "admin":
         return {"role": role}
     return {"role": role, "sent": _sent(actor)}
 

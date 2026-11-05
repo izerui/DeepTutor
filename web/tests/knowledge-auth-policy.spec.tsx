@@ -7,20 +7,18 @@ vi.mock("@/lib/auth", () => ({ fetchAuthStatus: fixture.status }));
 afterEach(() => cleanup());
 
 it.each([
-  ["admin", false, true, true],
-  ["teacher", false, true, true],
-  ["user", false, true, false],
-  ["student", false, false, false],
-  ["student", true, true, false],
-] as const)("derives effective KB write policy for %s (grant=%s)", async (role, grant, allowed, teacher) => {
-  fixture.status.mockResolvedValue({
-    role, is_teacher: role === "teacher", student_policy: { allow_private_kb: grant },
-  });
+  ["admin", null, true],
+  ["learner", null, true],
+  // Only a learning policy (the restricted learning shell) makes knowledge bases read-only.
+  ["learner", { allowed_surfaces: ["chat", "reading"] }, false],
+] as const)("derives KB write access for %s (learning policy: %j)", async (role, learningPolicy, allowed) => {
+  // Spec 2026-11-05: no feature switches; every learner writes their own knowledge bases.
+  fixture.status.mockResolvedValue({ role, learning_policy: learningPolicy });
   const { result } = renderHook(() => useAuthStatus());
   expect(result.current.allowPrivateKb).toBe(false);
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.allowPrivateKb).toBe(allowed);
-  expect(result.current.isTeacher).toBe(teacher);
+  expect(result.current.isAdmin).toBe(role === "admin");
 });
 
 it("retains the documented non-student fallback if runtime status is unavailable", async () => {

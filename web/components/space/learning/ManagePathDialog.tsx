@@ -143,7 +143,7 @@ export function ManagePathDialog({
               className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-red-600 hover:bg-red-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
             >
               <Trash2 aria-hidden className="h-4 w-4" />
-              {t("Delete teacher path")}
+              {t("Delete published path")}
             </button>
           ) : template.status !== "archived" ? (
             <button
@@ -175,12 +175,12 @@ export function ManagePathDialog({
         <ConfirmDialog
           title={
             confirming === "archive"
-              ? t("Archive this teacher path?")
-              : t("Delete this teacher path?")
+              ? t("Archive this published path?")
+              : t("Delete this published path?")
           }
           description={
             confirming === "archive"
-              ? t("Students can no longer open it. Their records are kept.")
+              ? t("Learners can no longer open it. Their records are kept.")
               : t("The path stays in your library; only its publishing record is removed.")
           }
           confirmLabel={confirming === "archive" ? t("Archive") : t("Delete")}

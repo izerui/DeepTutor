@@ -258,7 +258,7 @@ export default function ProfilePage() {
                       }`}
                     >
                       {isAdmin && <ShieldCheck size={11} strokeWidth={2} />}
-                      {isAdmin ? t("Administrator") : t(accountRoleLabelKey(profile.role))}
+                      {t(accountRoleLabelKey(profile.role))}
                     </span>
                   </div>
                   {joined && (

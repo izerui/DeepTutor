@@ -30,25 +30,6 @@ export interface NavEntry {
    * entry is hidden whenever a learning policy is in effect (#1222).
    */
   surfaces?: readonly string[]
-  /** Batch 3 §10: shown only to these roles (absent: everyone). */
-  roles?: readonly NavRole[]
-  /** Batch 3 §7: for a student, shown only when this ``student_policy`` key allows it. */
-  studentFeature?: string
-}
-
-export type NavRole = 'admin' | 'teacher' | 'student'
-
-/** Whether a role (and a student's permissions) sees an entry. */
-export function navVisibleForRole(
-  href: string,
-  role: NavRole | null,
-  studentPolicy: Record<string, boolean> | null,
-): boolean {
-  const entry = NAV_BY_HREF.get(href)
-  if (!entry || role === null) return true
-  if (entry.roles && !entry.roles.includes(role)) return false
-  if (role === 'student' && entry.studentFeature) return Boolean(studentPolicy?.[entry.studentFeature])
-  return true
 }
 
 /**
@@ -79,7 +60,6 @@ export const PRIMARY_NAV: NavEntry[] = [
     icon: HeartHandshake,
     tooltipKey: 'Partners tooltip',
     requires: 'llm',
-    studentFeature: 'allow_partners',
   },
   {
     href: LEARNING_HUB,
@@ -89,8 +69,8 @@ export const PRIMARY_NAV: NavEntry[] = [
     surfaces: ['reading', 'chat', 'books'],
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
-  // Spec 2026-10-29 §8: teachers write practice sets; everyone answers the ones
-  // they joined from the market or were sent by name (traceability #1).
+  // Spec 2026-11-05: every learner writes practice sets and answers the ones
+  // they joined from the market.
   {
     href: '/practice-sets',
     label: 'Practice sets',
@@ -115,7 +95,6 @@ export const PRIMARY_NAV: NavEntry[] = [
     tooltipKey: 'Co-Writer tooltip',
     requires: 'llm',
     defaultCollapsed: true,
-    studentFeature: 'allow_co_writer',
   },
   {
     href: '/agents',
@@ -123,7 +102,6 @@ export const PRIMARY_NAV: NavEntry[] = [
     icon: Bot,
     tooltipKey: 'Agents tooltip',
     defaultCollapsed: true,
-    studentFeature: 'allow_agents',
   },
 ]
 

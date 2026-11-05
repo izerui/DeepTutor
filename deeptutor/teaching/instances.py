@@ -220,8 +220,8 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
     if current_workspace_id():
         return []
     user_id = get_current_user().id
-    if current_role() != "student":
-        # Teachers and administrators study paths they joined (platform batch 2 §6).
+    if current_role() == "admin":
+        # Administrators study paths they joined (platform batch 2 §6).
         from deeptutor.catalog.enrollment import joined_by
 
         if not any(kind == "mastery_path" for kind, _ in joined_by(user_id)):

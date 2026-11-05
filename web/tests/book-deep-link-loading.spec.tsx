@@ -205,8 +205,8 @@ describe("book deep-link loading", () => {
     }));
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete cited"));
-    expect(await screen.findByText(/2 published teacher paths use this material/)).toBeTruthy();
-    expect(screen.getByText(/9 students assigned/)).toBeTruthy();
+    expect(await screen.findByText(/2 published paths use this material/)).toBeTruthy();
+    expect(screen.getByText(/9 learners assigned/)).toBeTruthy();
     expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirmed: null });
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
     await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
@@ -222,9 +222,9 @@ describe("book deep-link loading", () => {
       .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 3, affectedStudents: 4 } }));
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete cited"));
-    expect(await screen.findByText(/1 published teacher paths use this material/)).toBeTruthy();
+    expect(await screen.findByText(/1 published paths use this material/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
-    expect(await screen.findByText(/3 published teacher paths use this material/)).toBeTruthy();
+    expect(await screen.findByText(/3 published paths use this material/)).toBeTruthy();
     expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
       confirmed: { affectedPaths: 1, affectedStudents: 2 },
     });

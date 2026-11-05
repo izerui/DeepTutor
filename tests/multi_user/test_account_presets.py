@@ -81,8 +81,8 @@ def test_learner_preset_expands_to_a_conservative_grant(preset_client):
 
     assert response.status_code == 201, response.text
     body = response.json()
-    # Spec 2026-10-29 D1: a restricted learner is a student with a learning policy.
-    assert body["role"] == "student"
+    # Spec 2026-11-05: a restricted learner is a learner with a learning policy.
+    assert body["role"] == "learner"
     assert body["preset"] == "learner"
 
     grant = load_grant(body["user_id"])

@@ -15,7 +15,7 @@ from deeptutor.notifications import service as notifications
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import Scope
-from deeptutor.tasks.service import StudentTasks, TaskError, TaskForbidden, TaskNotFound, TaskService
+from deeptutor.tasks.service import StudentTasks, TaskError, TaskNotFound, TaskService
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
@@ -103,7 +103,7 @@ def test_a_task_must_not_reach_students_its_content_does_not(as_account):
     scopes._store_scope(scopes.TASK, task["id"], Scope(users=[_uid("sara"), _uid("sam")]), actor_id=_uid("tina"))
     _fixtures["deliver"]("practice_set", created["id"], "sara")
     course_id = _in_course(task["id"], to=(), publish=False)
-    with as_account("tina"), pytest.raises(TaskError, match="Some of these students"):
+    with as_account("tina"), pytest.raises(TaskError, match="Some of these learners"):
         CourseService().publish(course_id)  # the set does not reach Sam
     _fixtures["deliver"]("practice_set", created["id"], "sam")
     with as_account("tina"):
@@ -200,7 +200,7 @@ def test_book_tasks_complete_when_every_chosen_page_was_opened(as_account, teach
 # ── account events ─────────────────────────────────────────
 
 
-def test_a_departing_teachers_tasks_go_to_the_admin_who_hands_the_course_on(teaching_users, as_account):
+def test_a_promoted_learner_keeps_their_tasks_and_an_admin_hands_their_own_course_on(teaching_users, as_account):
     from deeptutor.api.routers import auth as auth_router
     from deeptutor.tasks.courses import CourseService
 
@@ -209,11 +209,11 @@ def test_a_departing_teachers_tasks_go_to_the_admin_who_hands_the_course_on(teac
     course_id = _in_course(first)
     note = _note(as_account)
     asyncio.run(auth_router.update_user_role(
-        "tina", auth_router.SetRoleRequest(role="student"),
+        "tina", auth_router.SetRoleRequest(role="admin"),
         current=auth_router.TokenPayload(username="adam", role="admin", user_id=_uid("adam")),
     ))
-    # Every task goes to the administrator.
-    with as_account("adam"):
+    # Spec 2026-11-05: administrators author too; tina keeps everything.
+    with as_account("tina"):
         assert TaskService().get(first)["kind"] == "note"
         assert TaskService().get(note)["kind"] == "note"
         CourseService().hand_over(course_id, _uid("tom"))
@@ -254,4 +254,4 @@ def test_the_home_lists_open_tasks_and_counts_history(as_account):
         payload = asyncio.run(home.home())
     assert [t["key"] for t in payload["assigned"]] == [open_task]
     assert payload["history_count"] == 1
-    assert payload["assigned"][0]["provenance"] == {"kind": "teacher", "name": "tina"}
+    assert payload["assigned"][0]["provenance"] == {"kind": "shared", "name": "tina"}

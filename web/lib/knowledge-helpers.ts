@@ -619,12 +619,6 @@ export function groupKnowledgeBases<T extends Pick<KnowledgeBase, "visibility" |
   return groups;
 }
 
-export function canCreateKnowledgeBases(
-  policy: { allow_private_kb: boolean } | null | undefined,
-): boolean {
-  return policy?.allow_private_kb ?? true;
-}
-
 /**
  * Resolve the display label for a knowledge-base ref.
  *

@@ -197,7 +197,7 @@
         "type": "object"
       },
       "AdminCreateUserRequest": {
-        "description": "Admin user-creation payload: a teacher or a student (spec 2026-10-29 D1).",
+        "description": "Admin user-creation payload: a learner (spec 2026-11-05), stored as ``student``.",
         "properties": {
           "password": {
             "title": "Password",
@@ -214,11 +214,8 @@
             "type": "string"
           },
           "role": {
-            "default": "student",
-            "enum": [
-              "teacher",
-              "student"
-            ],
+            "const": "learner",
+            "default": "learner",
             "title": "Role",
             "type": "string"
           },
@@ -687,11 +684,6 @@
             "title": "Is Admin",
             "type": "boolean"
           },
-          "is_teacher": {
-            "default": false,
-            "title": "Is Teacher",
-            "type": "boolean"
-          },
           "learning_policy": {
             "anyOf": [
               {
@@ -730,18 +722,6 @@
               }
             ],
             "title": "Role"
-          },
-          "student_policy": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Student Policy"
           },
           "user_id": {
             "anyOf": [
@@ -10471,9 +10451,13 @@
         "type": "object"
       },
       "SetRoleRequest": {
-        "description": "Payload for the PUT /users/{username}/role endpoint.",
+        "description": "Payload for the PUT /users/{username}/role endpoint (spec 2026-11-05).\n\n``learner`` is stored as ``student``; the old role names are refused.",
         "properties": {
           "role": {
+            "enum": [
+              "admin",
+              "learner"
+            ],
             "title": "Role",
             "type": "string"
           }
@@ -27006,7 +26990,7 @@
     },
     "/api/home/workbench": {
       "get": {
-        "description": "The teacher's home (spec 2026-11-03 batch 3 §5.1); administrators get only their role.",
+        "description": "A learner's workbench (spec 2026-11-03 batch 3 §5.1, 2026-11-05 §2); administrators get only their role.",
         "operationId": "teacher_workbench_api_home_workbench_get",
         "parameters": [
           {
@@ -70159,7 +70143,7 @@
     },
     "/api/tasks/courses/{course_id}/hand-over": {
       "post": {
-        "description": "Traceability #5: an administrator gives a course they hold to a teacher.",
+        "description": "Traceability #5: an administrator gives a course they hold to a learner.",
         "operationId": "hand_over_course_api_tasks_courses__course_id__hand_over_post",
         "parameters": [
           {

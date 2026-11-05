@@ -20,15 +20,17 @@ const stored: GrantPayload = {
   version: 2, user_id: "student", models: { llm: [] },
   knowledge_bases: [{ resource_id: "old", name: "Retired KB", custom: { preserve: [1, "two"] } }],
   skills: [], partners: [], enabled_tools: null, mcp_tools: null, exec_enabled: null,
-  learning_policy: null, student_policy: null,
+  learning_policy: null, ai_daily_tokens: null,
 };
 
-it("saves other assignments and student overrides without altering stored KB grants", async () => {
+it("saves other assignments and the daily AI limit without altering stored KB grants", async () => {
   vi.mocked(fetchAdminResources).mockResolvedValue(resources);
   vi.mocked(fetchUserGrant).mockResolvedValue(structuredClone(stored));
   vi.mocked(saveUserGrant).mockImplementation(async (_id, grant) => grant);
-  render(<GrantEditor userId="student" isStudent />);
-  await screen.findByRole("heading", { name: "Student permissions" });
+  render(<GrantEditor userId="student" />);
+  await screen.findByRole("heading", { name: "Daily AI limit" });
+  // Spec 2026-11-05: no feature switches are offered any more.
+  expect(screen.queryByRole("combobox", { name: "Create their own knowledge bases" })).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Knowledge" })).not.toBeInTheDocument();
   expect(screen.queryByText(/KBs/)).not.toBeInTheDocument();
   expect(screen.queryByText("Retired KB")).not.toBeInTheDocument();
@@ -36,8 +38,7 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(screen.queryByRole("checkbox", { name: /^Partner One/ })).not.toBeInTheDocument();
   for (const name of ["Model One", "Skill One", "Enable learning policy"])
     fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${name}`) }));
-  // Batch 3 §7: each permission is default / allow / deny; only what is set is stored.
-  fireEvent.change(screen.getByRole("combobox", { name: "Create their own knowledge bases" }), { target: { value: "allow" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Daily AI limit" }), { target: { value: "200000" } });
   fireEvent.click(screen.getByRole("button", { name: "Save assignments" }));
   await waitFor(() => expect(saveUserGrant).toHaveBeenCalledOnce());
   const saved = vi.mocked(saveUserGrant).mock.calls[0][1];
@@ -46,15 +47,8 @@ it("saves other assignments and student overrides without altering stored KB gra
   expect(saved.skills).toEqual([{ skill_id: "Skill One", access: "use", source: "admin" }]);
   expect(saved.partners).toEqual([]);
   expect(saved.learning_policy?.locked_persona).toBe("teacher");
-  expect(saved.student_policy).toEqual({ allow_private_kb: true });
+  expect(saved.ai_daily_tokens).toBe(200000);
+  expect(saved).not.toHaveProperty("student_policy");
   expect(saved.enabled_tools).toBeNull();
   expect(saved.mcp_tools).toBeNull();
-});
-
-it("does not show student-only controls for an ordinary user", async () => {
-  vi.mocked(fetchAdminResources).mockResolvedValue(resources);
-  vi.mocked(fetchUserGrant).mockResolvedValue(structuredClone(stored));
-  render(<GrantEditor userId="user" />);
-  await screen.findByRole("heading", { name: "Assign access" });
-  expect(screen.queryByRole("heading", { name: "Student permissions" })).not.toBeInTheDocument();
 });

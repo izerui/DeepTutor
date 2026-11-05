@@ -4,7 +4,6 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { updateMasteryPassStandard, type MasteryTopic, type PassStandard } from "@/lib/learning-api";
 
 /** ``explain``: what the tutor asks of an explanation under this standard (2026-11-03). */
@@ -31,7 +30,7 @@ const STANDARDS: { value: PassStandard; label: string; hint: string; explain: st
 
 /**
  * How strict the scored mastery check is on this path. The learner picks it on
- * their own path; on a teacher's path it is the teacher's and read-only.
+ * their own path; on a published path it is its author's and read-only.
  * Explanation-type objectives are judged by the tutor and are not affected.
  */
 export function PassStandardControl({
@@ -44,7 +43,6 @@ export function PassStandardControl({
   onSaved: (next: MasteryTopic) => void;
 }) {
   const { t } = useTranslation();
-  const { isTeacher, isAdmin } = useAuthStatus();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const current = topic.pass_standard ?? "strict";
@@ -72,7 +70,7 @@ export function PassStandardControl({
         {locked ? (
           <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 font-medium text-[var(--foreground)]">
             {t(selected.label)}
-            <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">· {t("Set by your teacher")}</span>
+            <span className="ml-1.5 font-normal text-[var(--muted-foreground)]">· {t("Set by its author")}</span>
           </span>
         ) : (
           <div
@@ -103,8 +101,8 @@ export function PassStandardControl({
       </div>
       <p className="text-[11.5px] text-[var(--muted-foreground)]">
         {t(selected.hint)} {t(selected.explain)}
-        {!locked && (isTeacher || isAdmin) && (
-          <> {t("If you published this path, students get the new standard with your next update.")}</>
+        {!locked && (
+          <> {t("If you published this path, learners get the new standard with your next update.")}</>
         )}
       </p>
       {error && (

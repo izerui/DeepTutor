@@ -21,7 +21,6 @@ from deeptutor.book import registry as books
 from deeptutor.core.visibility_intent import record_choice
 from deeptutor.knowledge import registry as kbs
 from deeptutor.multi_user.context import get_current_user
-from deeptutor.multi_user.roles import is_teacher_or_admin
 
 
 @contextmanager
@@ -280,8 +279,6 @@ def _apply_choices(
             "; ".join(f"{issue.name}: {issue.message}" for issue in planned.issues)
         )
     publish = [kb for kb in planned.private_kbs if choices.get(kb.kb_id) == "make_public"]
-    if publish and not is_teacher_or_admin():
-        raise books.BookVisibilityError("Only teachers and admins can make knowledge bases public.")
     for kb in planned.private_kbs:
         if choices.get(kb.kb_id) == "reference_only":
             # Only an explicit canonical choice supersedes pending legacy grants.
@@ -399,8 +396,6 @@ def change_visibility(
         _authorize(conn, record, force=force)
     record = books._target(conn, record.book_id)
     if visibility == "public":
-        if not is_teacher_or_admin():
-            raise books.BookVisibilityError("Only teachers and admins can publish books.")
         _apply_choices(conn, record, choices, force=force)
         if record.visibility != "public":
             from deeptutor.publishing.scope import BOOK, default_scope_on_publish

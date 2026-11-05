@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { fetchAuthStatus } from "@/lib/auth";
-import { canCreateKnowledgeBases } from "@/lib/knowledge-helpers";
 
 export interface LearningPolicyState {
   /** Surfaces this account may open. Everything else is hidden, not a 403. */
@@ -16,10 +15,12 @@ export interface AuthStatusState {
   authenticated: boolean;
   /** Whether the authenticated user is an admin. */
   isAdmin: boolean;
-  isTeacher: boolean;
+  /**
+   * False only under a learning policy (the restricted learning shell). Spec
+   * 2026-11-05: there are no feature switches; every learner may write their
+   * own knowledge bases.
+   */
   allowPrivateKb: boolean;
-  /** False only for a student whose policy forbids personal mastery paths (R12). */
-  allowPersonalMastery: boolean;
   /** Stable account id for account-scoped browser state. */
   userId: string | null;
   /** False when the runtime status endpoint could not be reached. */
@@ -32,20 +33,15 @@ export interface AuthStatusState {
    * absent instead of offered and then rejected (#1222).
    */
   learningPolicy: LearningPolicyState | null;
-  /** Batch 3 §7: a student's effective permissions (``null`` for everyone else). */
-  studentPolicy: Record<string, boolean> | null;
 }
 
 const INITIAL: AuthStatusState = {
   enabled: false,
   authenticated: false,
   isAdmin: false,
-  isTeacher: false,
   allowPrivateKb: false,
-  allowPersonalMastery: false,
   userId: null,
   statusAvailable: false,
-  studentPolicy: null,
   loading: true,
   learningPolicy: null,
 };
@@ -76,14 +72,9 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     enabled: Boolean(status?.enabled),
     authenticated: Boolean(status?.authenticated),
     isAdmin: status?.role === "admin",
-    isTeacher: Boolean(status?.is_teacher) || status?.role === "admin",
     // Learning accounts cannot create knowledge bases (the KB write routes are
     // outside their surface), so they get the read-only viewer (B3-P13).
-    allowPrivateKb:
-      !status?.learning_policy &&
-      (status?.role !== "student" || canCreateKnowledgeBases(status?.student_policy)),
-    // A failed status read (null) hides nothing; the backend gate decides.
-    allowPersonalMastery: status?.student_policy?.allow_personal_mastery !== false,
+    allowPrivateKb: !status?.learning_policy,
     userId:
       typeof status?.user_id === "string" && status.user_id.trim()
         ? status.user_id
@@ -91,8 +82,6 @@ function loadAuthStatus(): Promise<AuthStatusState> {
     statusAvailable: status !== null,
     loading: false,
     learningPolicy: learningPolicyFromStatus(status),
-    studentPolicy: status?.role === "student" && status.student_policy
-      ? (status.student_policy as Record<string, boolean>) : null,
   }));
 }
 

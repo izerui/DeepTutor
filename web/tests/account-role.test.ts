@@ -5,19 +5,17 @@ import test from "node:test";
 
 import { accountRoleLabelKey } from "../lib/account-role";
 
-test("all account roles retain distinct display labels", () => {
-  assert.equal(accountRoleLabelKey("admin"), "Admin");
-  assert.equal(accountRoleLabelKey("teacher"), "Teacher");
-  assert.equal(accountRoleLabelKey("student"), "Student");
-  assert.equal(accountRoleLabelKey("user"), "User");
+test("only administrators and learners are shown", () => {
+  assert.equal(accountRoleLabelKey("admin"), "Administrator");
+  assert.equal(accountRoleLabelKey("learner"), "Learner");
 
   for (const language of ["en", "zh", "de", "fr", "uk", "pl"]) {
     const labels = JSON.parse(
       readFileSync(path.resolve(process.cwd(), `locales/${language}/app.json`), "utf8"),
     ) as Record<string, string>;
-    for (const role of ["Teacher", "Student"]) {
+    for (const role of ["Administrator", "Learner"]) {
       assert.ok(labels[role], `${language} is missing ${role}`);
-      assert.notEqual(labels[role], labels.User, `${language} displays ${role} as User`);
     }
+    assert.notEqual(labels.Administrator, labels.Learner, `${language} shows both roles alike`);
   }
 });

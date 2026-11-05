@@ -182,8 +182,8 @@ def test_device_login_returns_normal_identity_and_revocation_invalidates_token(
     assert login.status_code == 200, login.text
     body = login.json()
     assert body["username"] == "learner"
-    # Spec 2026-10-29 D1: accounts created without a role are students.
-    assert body["role"] == "student"
+    # Spec 2026-11-05: accounts created without a role are learners.
+    assert body["role"] == "learner"
     token = login.cookies["dt_token"]
 
     status = client.get("/api/auth/status", headers=_auth(token))
@@ -539,7 +539,7 @@ def test_device_login_admits_non_admin_learner_accounts_and_still_rejects_admins
     )
     assert login.status_code == 200, login.text
     assert login.json()["username"] == "tess"
-    assert login.json()["role"] == "teacher"
+    assert login.json()["role"] == "learner"  # a stored teacher is a learner (spec 2026-11-05)
 
     admin_issue = client.post(
         "/api/auth/devices",

@@ -8,23 +8,11 @@ import { usePendingReviews } from "@/components/catalog/AdminNav";
 import { MyListings } from "@/components/catalog/MyListings";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import { getHome, type HomeData } from "@/lib/tasks-api";
-import { getWorkbench, type Workbench } from "@/lib/workbench-api";
 
 import { AiLimitSetting } from "./AiUsage";
-import { HomeAnnouncements, JoinedSection } from "./StudentHome";
+import { HomeAnnouncements, JoinedSection } from "./LearnerHome";
 
 const card = "rounded-xl border border-[var(--border)] p-3 transition-colors hover:border-[var(--ring)]";
-const SENT_KIND: Record<string, string> = {
-  task: "Task",
-  practice_set: "Practice set",
-  course: "Course",
-  mastery_path: "Mastery Path",
-};
-const sentHref = (kind: string, id: string) =>
-  kind === "task" ? `/tasks?task=${encodeURIComponent(id)}`
-    : kind === "practice_set" ? `/practice-sets?set=${encodeURIComponent(id)}`
-      : kind === "course" ? "/tasks" : MASTERY_HOME;
-
 /** The home data (own learning, what one joined, announcements), read once per page. */
 function useHome(): HomeData | null {
   const [home, setHome] = useState<HomeData | null>(null);
@@ -34,7 +22,7 @@ function useHome(): HomeData | null {
   return home;
 }
 
-/** The teacher's and the administrator's own learning, the student home's "mine" block. */
+/** The administrator's own learning, the learner home's "mine" block. */
 function MyLearning({ home }: { home: HomeData | null }) {
   const { t } = useTranslation();
   return (
@@ -61,70 +49,7 @@ function MyLearning({ home }: { home: HomeData | null }) {
   );
 }
 
-/** The teacher's home (spec 2026-11-03 batch 3 §5.1). */
-export function TeacherWorkbench() {
-  const { t } = useTranslation();
-  const home = useHome();
-  const [board, setBoard] = useState<Workbench | null>(null);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    getWorkbench().then(setBoard).catch((err) => setError(err instanceof Error ? t(err.message) : String(err)));
-  }, [t]);
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-8 px-6 py-8" data-testid="teacher-workbench">
-      <header>
-        <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
-        <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {t("What you sent out and listed, and your own learning.")}
-        </p>
-      </header>
-      {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
-      {/* Traceability #6: announcements of what one joined, as on the student home. */}
-      <HomeAnnouncements items={home?.announcements ?? []} />
-      {!board ? (
-        <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
-      ) : (
-        <>
-          <section aria-labelledby="wb-sent" className="space-y-2">
-            <h2 id="wb-sent" className="text-[13px] font-semibold">{t("What I sent out")}</h2>
-            {(board.sent ?? []).length === 0 ? (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing published yet.")}</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {(board.sent ?? []).map((item) => (
-                  <li key={`${item.kind}:${item.id}`}>
-                    <Link href={sentHref(item.kind, item.id)} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-[12.5px] hover:bg-[var(--muted)]/40">
-                      <span className="w-24 shrink-0 text-[11px] text-[var(--muted-foreground)]">{t(SENT_KIND[item.kind])}</span>
-                      <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
-                      {item.done === null ? (
-                        <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                          {item.kind === "course" ? t("{{count}} tasks", { count: item.total }) : t("{{count}} students", { count: item.total })}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2 text-[11.5px] text-[var(--muted-foreground)]">
-                          <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[var(--muted)]">
-                            <span className="block h-full bg-[var(--primary)]" style={{ width: `${item.total ? Math.round((100 * item.done) / item.total) : 0}%` }} />
-                          </span>
-                          {t("{{done}} / {{total}} done", { done: item.done, total: item.total })}
-                        </span>
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-      <MyListings />
-      <JoinedSection items={home?.joined ?? []} />
-      <MyLearning home={home} />
-    </div>
-  );
-}
-
-/** The administrator's home: the ways in, and their own learning (§5.2) — no students' data. */
+/** The administrator's home: the ways in, and their own learning (§5.2). */
 export function AdminHome() {
   const { t } = useTranslation();
   const links: [string, string][] = [
@@ -152,9 +77,9 @@ export function AdminHome() {
           </span>
         </Link>
       </div>
-      {/* Traceability #5: what administrators hold can go on to a teacher. */}
+      {/* Traceability #5: what administrators hold can go on to a learner. */}
       <p className="text-[12px] text-[var(--muted-foreground)]" data-testid="admin-hand-over-hint">
-        {t("Courses and tasks you hold can be handed to a teacher.")}{" "}
+        {t("Courses and tasks you hold can be handed to a learner.")}{" "}
         <Link href="/tasks?tab=courses" className="text-[var(--primary)] hover:underline">{t("Courses")}</Link>
       </p>
       <AiLimitSetting />

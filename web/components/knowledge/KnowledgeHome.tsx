@@ -2,7 +2,6 @@
 
 import { FeaturePage, PageHeader, pageActionClass, pageGridClass } from '@/components/layout/FeaturePage'
 import { SourceBadge } from "@/components/common/SourceBadge";
-import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { groupKnowledgeBases, knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import { groupByProvenance, provenanceGroupTitle, type Provenance } from "@/lib/provenance";
 
@@ -132,7 +131,6 @@ export default function KnowledgeHome({
     return kbs.filter((kb) => kb.name.toLowerCase().includes(q));
   }, [kbs, query]);
   const groups = groupKnowledgeBases(filteredKbs);
-  const { isAdmin, isTeacher } = useAuthStatus();
 
   const groupedProviders = useMemo(
     () => ({
@@ -366,7 +364,7 @@ export default function KnowledgeHome({
                     filteredKbs.filter((kb) => !kb.connector),
                     kbProvenance,
                   ).map((group) => [
-                    provenanceGroupTitle(group.kind, t, !(isAdmin || isTeacher)),
+                    provenanceGroupTitle(group.kind, t),
                     group.kind === "own" ? Lock : Globe,
                     group.items,
                   ] as const),

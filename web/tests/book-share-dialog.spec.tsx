@@ -117,7 +117,7 @@ it("lets the owner withdraw a referenced book after confirming teacher-path coun
   const button = screen.getByRole("button", { name: "Make private" });
   expect(button).toBeEnabled();
   fireEvent.click(button);
-  expect(await screen.findByRole("alert")).toHaveTextContent("{{count}} published teacher paths use this material");
+  expect(await screen.findByRole("alert")).toHaveTextContent("{{count}} published paths use this material");
   expect(fixture.setVisibility).toHaveBeenLastCalledWith("book:same", {
     visibility: "private", kb_choices: {}, force: false,
   }, "w");

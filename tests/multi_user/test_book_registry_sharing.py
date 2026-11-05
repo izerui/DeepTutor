@@ -108,17 +108,16 @@ def test_connectors_and_foreign_private_block_force_skips_connector(library, as_
 
 @pytest.mark.parametrize("role", ["user", "student"])
 def test_publish_role_and_force_permissions(library, as_user, role):
+    """Spec 2026-11-05: every learner publishes what they own; forcing stays with administrators."""
     book, _, private = library
     with as_user("t1", role=role):
-        with pytest.raises(books.BookVisibilityError, match="teachers"):
-            books.set_book_visibility(book.ref, "public")
-        with pytest.raises(books.BookVisibilityError, match="teachers"):
-            books.share_book_kbs(book.ref, {private.kb_id: "make_public"})
         with pytest.raises(books.BookVisibilityError, match="admins"):
             books.share_book_kbs(book.ref, force=True)
         books.share_book_kbs(book.ref)
         with pytest.raises(books.BookVisibilityError, match="Unknown"):
             books.share_book_kbs(book.ref, {"unrelated": "everyone"})
+        books.share_book_kbs(book.ref, {private.kb_id: "make_public"})
+        assert kbs.get_kb(private.kb_id).visibility == "public"
     with as_user("foreign", role="teacher"):
         with pytest.raises(books.BookVisibilityError, match="owner"):
             books.share_book_kbs(book.ref)
@@ -127,6 +126,8 @@ def test_publish_role_and_force_permissions(library, as_user, role):
         with pytest.raises(books.BookReferenceError, match="actor"):
             books.replace_book_references("template", "forged", [book.ref], created_by="t1")
     assert not protected(book)
+    with as_user("t1", role=role):
+        assert books.set_book_visibility(book.ref, "public").visibility == "public"
 
 
 @pytest.mark.parametrize("kind", ["template", "mastery_template"])
@@ -515,12 +516,6 @@ def test_explicit_reference_only_records_only_actual_private_targets(
     )
     choices = {kb.kb_id: "reference_only" for kb in (public, private, unrelated)}
     with as_user(actor, role=role):
-        if operation == "publish" and role == "user":
-            with pytest.raises(books.BookVisibilityError, match="teachers"):
-                books.set_book_visibility(book.ref, "public", kb_choices=choices)
-            assert kbs.get_meta("visibility_intent_v1:" + private.kb_id) is None
-            assert not protected(book)
-            return
         if operation == "publish":
             books.set_book_visibility(book.ref, "public", kb_choices=choices)
         else:

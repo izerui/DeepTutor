@@ -79,9 +79,8 @@ export default function AdminUsersPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [createUsername, setCreateUsername] = useState("");
   const [createPassword, setCreatePassword] = useState("");
-  // Spec 2026-10-29 P2: an account is a teacher or a student; a student may
-  // start with learning restrictions (the retired "learner" preset).
-  const [createRole, setCreateRole] = useState<"teacher" | "student">("student");
+  // Spec 2026-11-05: a new account is a learner, who may start with learning
+  // restrictions (the retired "learner" preset).
   const [createRestricted, setCreateRestricted] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -89,7 +88,6 @@ export default function AdminUsersPage() {
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
-  const [roleSavingUsername, setRoleSavingUsername] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,7 +120,6 @@ export default function AdminUsersPage() {
   function openCreateDialog() {
     setCreateUsername("");
     setCreatePassword("");
-    setCreateRole("student");
     setCreateRestricted(false);
     setCreateError("");
     setShowCreateDialog(true);
@@ -161,7 +158,7 @@ export default function AdminUsersPage() {
     }
     setCreateSubmitting(true);
     try {
-      await createUser(username, createPassword, createRole, createRole === "student" && createRestricted);
+      await createUser(username, createPassword, createRestricted);
       setShowCreateDialog(false);
       await load();
     } catch (e) {
@@ -170,22 +167,6 @@ export default function AdminUsersPage() {
       );
     } finally {
       setCreateSubmitting(false);
-    }
-  }
-
-  async function handleRoleChange(user: (typeof users)[number], role: AccountRole) {
-    if (role === user.role) return;
-    setActionError("");
-    setRoleSavingUsername(user.username);
-    try {
-      await setUserRole(user.username, role);
-      setUsers((prev) =>
-        prev.map((u) => (u.username === user.username ? { ...u, role } : u)),
-      );
-    } catch (e) {
-      setActionError(e instanceof Error ? t(e.message) : t("Failed to update role"));
-    } finally {
-      setRoleSavingUsername(null);
     }
   }
 
@@ -199,8 +180,8 @@ export default function AdminUsersPage() {
         await deleteUser(user.username);
         setUsers((prev) => prev.filter((u) => u.username !== user.username));
       } else {
-        // Spec 2026-10-29 D1: an administrator steps down to teacher.
-        const newRole = kind === "promote" ? "admin" : "teacher";
+        // Spec 2026-11-05: an administrator steps down to learner.
+        const newRole: AccountRole = kind === "promote" ? "admin" : "learner";
         await setUserRole(user.username, newRole);
         setUsers((prev) =>
           prev.map((u) =>
@@ -582,37 +563,17 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
                         <td className="px-5 py-3">
-                          {isAdmin || isSelf ? (
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
-                              ${
-                                isAdmin
-                                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                  : "bg-[var(--muted)]/50 text-[var(--muted-foreground)]"
-                              }`}
-                            >
-                              {isAdmin && <ShieldCheck size={11} strokeWidth={2} />}
-                              {t(accountRoleLabelKey(user.role))}
-                            </span>
-                          ) : (
-                            <select
-                              value={user.role}
-                              onChange={(event) =>
-                                void handleRoleChange(user, event.target.value as AccountRole)
-                              }
-                              disabled={roleSavingUsername === user.username}
-                              aria-label={t("Change role for {{username}}", {
-                                username: user.username,
-                              })}
-                              className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {(["teacher", "student"] as const).map((role) => (
-                                <option key={role} value={role}>
-                                  {t(accountRoleLabelKey(role))}
-                                </option>
-                              ))}
-                            </select>
-                          )}
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
+                            ${
+                              isAdmin
+                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                : "bg-[var(--muted)]/50 text-[var(--muted-foreground)]"
+                            }`}
+                          >
+                            {isAdmin && <ShieldCheck size={11} strokeWidth={2} />}
+                            {t(accountRoleLabelKey(user.role))}
+                          </span>
                         </td>
                         <td className="px-5 py-3.5 text-[var(--muted-foreground)]">
                           {formatDate(user.created_at, lang)}
@@ -640,7 +601,7 @@ export default function AdminUsersPage() {
                                 isSelf
                                   ? t("Cannot change your own role")
                                   : user.role === "admin"
-                                    ? t("Demote to teacher")
+                                    ? t("Make a learner")
                                     : t("Promote to admin")
                               } side="top">
                               <button
@@ -655,7 +616,7 @@ export default function AdminUsersPage() {
                                   isSelf
                                     ? t("Cannot change your own role")
                                     : user.role === "admin"
-                                      ? t("Demote to teacher")
+                                      ? t("Make a learner")
                                       : t("Promote to admin")
                                 }
                                 className="rounded-lg p-1.5 text-[var(--muted-foreground)]
@@ -725,7 +686,6 @@ export default function AdminUsersPage() {
                               <GrantEditor
                                 key={`${user.id}-${user.role}`}
                                 userId={user.id}
-                                isStudent={user.role === "student"}
                               />
                               <BookPermissionEditor userId={user.id} />
                               {user.preset === "learner" && (
@@ -757,7 +717,7 @@ export default function AdminUsersPage() {
             ? t("Delete user")
             : confirmTarget?.kind === "promote"
               ? t("Promote to admin")
-              : t("Demote to teacher")
+              : t("Make a learner")
         }
         tone={confirmTarget?.kind === "delete" ? "danger" : "default"}
         confirmLabel={
@@ -806,9 +766,9 @@ export default function AdminUsersPage() {
                     "This permanently removes the account and its assignments. This cannot be undone.",
                   )
                 : confirmTarget.kind === "promote"
-                  ? t(
+                  ? `${t(
                       "Admins can manage users and assignments. Each admin keeps their own learning data.",
-                    )
+                    )} ${t("What they made stays theirs.")}`
                   : t(
                       "They will lose access to the admin area and switch to their own assigned workspace.",
                     )}
@@ -894,50 +854,22 @@ export default function AdminUsersPage() {
               />
             </label>
 
-            <fieldset className="mb-4">
-              <legend className="mb-1.5 block text-xs text-[var(--muted-foreground)]">
-                {t("Role")}
-              </legend>
-              <div
-                className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--muted)]/50 p-1"
-                role="group"
-                aria-label={t("Role")}
-              >
-                {(["student", "teacher"] as const).map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    disabled={createSubmitting}
-                    aria-pressed={createRole === role}
-                    onClick={() => setCreateRole(role)}
-                    className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                      createRole === role
-                        ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
-                        : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {t(role === "teacher" ? "Teacher" : "Student")}
-                  </button>
-                ))}
-              </div>
-              {createRole === "student" && (
-                <label className="mt-2 flex items-start gap-2 text-xs text-[var(--foreground)]">
-                  <input
-                    type="checkbox"
-                    checked={createRestricted}
-                    disabled={createSubmitting}
-                    onChange={(event) => setCreateRestricted(event.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    {t("Learning restrictions")}
-                    <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-                      {t("Chat and Immersive Reading only, with uploads and tools disabled until assigned.")}
-                    </span>
-                  </span>
-                </label>
-              )}
-            </fieldset>
+            {/* Spec 2026-11-05: new accounts are learners; promote one afterwards. */}
+            <label className="mb-4 flex items-start gap-2 text-xs text-[var(--foreground)]">
+              <input
+                type="checkbox"
+                checked={createRestricted}
+                disabled={createSubmitting}
+                onChange={(event) => setCreateRestricted(event.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                {t("Learning restrictions")}
+                <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+                  {t("Chat and Immersive Reading only, with uploads and tools disabled until assigned.")}
+                </span>
+              </span>
+            </label>
 
             {createError && (
               <p className="mb-3 text-xs text-red-500">{createError}</p>

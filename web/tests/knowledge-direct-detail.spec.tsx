@@ -81,7 +81,7 @@ it("deletes a KB cited by teacher paths only after confirming the counts (R1)", 
   }));
   expect(fixture.deleteKb).toHaveBeenCalledTimes(2);
   expect(confirm).toHaveBeenCalledTimes(2);
-  expect(String(confirm.mock.calls[1][0])).toContain("published teacher paths use this material");
+  expect(String(confirm.mock.calls[1][0])).toContain("published paths use this material");
 });
 
 it("applies the effective student policy to fetched details too", async () => {

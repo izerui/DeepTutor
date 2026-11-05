@@ -15,17 +15,9 @@ export interface AuthStatus {
   authenticated: boolean;
   user_id?: string;
   username?: string;
+  /** ``admin`` or ``learner`` (spec 2026-11-05: the only two roles). */
   role?: string;
   is_admin?: boolean;
-  /** Admin or teacher, from the live account role. */
-  is_teacher?: boolean;
-  /** Present only for student accounts. */
-  student_policy?: {
-    allow_personal_mastery: boolean;
-    allow_private_kb: boolean;
-    /** Batch 3 §7.1; older servers omit them. */
-    [key: string]: boolean;
-  } | null;
   /** Server-side account preset; null for identities without a local account. */
   preset?: "standard" | "learner" | "custom" | null;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */

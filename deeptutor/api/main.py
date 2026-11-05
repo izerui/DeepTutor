@@ -129,12 +129,13 @@ async def lifespan(app: FastAPI):
         app.state.application_container = application_container
     await application_container.start()
     try:
-        # Spec 2026-10-29 P2: three roles; idempotent, so it runs on every start.
+        # Spec 2026-10-29 P2: the retired learner preset moves into grants;
+        # idempotent, so it runs on every start.
         from deeptutor.multi_user.role_migration import run_role_migration
 
         await asyncio.to_thread(run_role_migration)
     except Exception:
-        logger.exception("Role migration failed; legacy roles stay readable")
+        logger.exception("Role migration failed; learner presets stay readable")
     from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
     from deeptutor.api.utils.task_log_stream import get_task_stream_manager
     from deeptutor.knowledge.progress_events import install_progress_ports
@@ -677,8 +678,8 @@ app.include_router(imports.router, prefix="/api/imports", tags=["imports"], depe
 app.include_router(
     dashboard.router, prefix="/api/dashboard", tags=["dashboard"], dependencies=_auth
 )
-# Teacher templates live under the mastery prefix, so learning accounts reach
-# them through the same surface check; the router itself requires a teacher.
+# Authors' path templates live under the mastery prefix, so learning accounts
+# reach them through the same surface check.
 app.include_router(
     mastery_teaching.router,
     prefix="/api/mastery-paths/teaching",

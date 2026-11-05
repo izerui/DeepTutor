@@ -211,7 +211,7 @@ it("shows an update's change list with per-point decisions and the affected stud
   await act(async () => {});
   await act(async () => {});
   expect(screen.getByRole("heading", { name: "Publish update" })).toBeVisible();
-  expect(screen.getByText("2 students will get this update the next time they study")).toBeVisible();
+  expect(screen.getByText("2 learners will get this update the next time they study")).toBeVisible();
   expect(screen.getByText("Removed: Derivatives")).toBeVisible();
   fireEvent.change(screen.getByRole("combobox", { name: "Derivative rules" }), {
     target: { value: "reworded:kp_d" },
@@ -221,7 +221,7 @@ it("shows an update's change list with per-point decisions and the affected stud
   await act(async () => {});
   // Publication succeeded with a post-version warning: said explicitly, then closed by the teacher.
   expect(screen.getByText("Published, but some steps need attention")).toBeVisible();
-  expect(screen.getByText("Student assignments did not complete.")).toBeVisible();
+  expect(screen.getByText("Learner assignments did not complete.")).toBeVisible();
   expect(published).not.toHaveBeenCalled();
   expect(api.publishTemplate.mock.calls[0][1].kp_decisions).toEqual({
     kp_l: { kind: "unchanged" },
@@ -319,7 +319,7 @@ it("offers publishing only on an own card; other teachers' paths are manage-only
   );
   expect(screen.getByText(/Published v2/)).toBeVisible();
   expect(screen.getAllByRole("button", { name: "Publish update" })).toHaveLength(1);
-  const others = screen.getByRole("region", { name: "Other teacher paths" });
+  const others = screen.getByRole("region", { name: "Other authors' paths" });
   expect(within(others).queryByRole("button", { name: /Publish/ })).toBeNull();
   expect(within(others).getByText(/Only tom can edit and publish this path/)).toBeVisible();
   fireEvent.click(within(others).getByRole("button", { name: "Manage path" }));

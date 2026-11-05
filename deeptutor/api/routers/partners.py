@@ -1790,10 +1790,7 @@ async def partner_chat_ws(ws: WebSocket, partner_id: str):
     # made by hand: an unknown partner and one the caller may not talk to close
     # identically. ``ws_require_auth`` has already bound the current user, so
     # the token has to be released on this early exit too.
-    from deeptutor.multi_user.roles import student_allows
-
-    # Batch 3 §7: Partners off for a student closes the socket like an unknown partner.
-    if not mgr.partner_exists(partner_id) or not can_use_partner(partner_id) or not student_allows("allow_partners"):
+    if not mgr.partner_exists(partner_id) or not can_use_partner(partner_id):
         if user_token is not None:
             reset_current_user(user_token)
         await ws.close(code=4404)

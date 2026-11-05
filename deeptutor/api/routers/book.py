@@ -396,7 +396,7 @@ def _book_payload(
     data.update(resolved.capabilities())
     from deeptutor.publishing.provenance import provenance
 
-    # Spec 2026-11-02 §3.1: own / school / teacher / shared.
+    # Spec 2026-11-02 §3.1, 2026-11-05: own / school / shared.
     data["provenance"] = (
         provenance(resolved.record.created_by, get_current_user())
         if resolved.record is not None else {"kind": "own", "name": ""}
@@ -1250,15 +1250,11 @@ async def get_book_sharing(book_id: str) -> dict[str, Any]:
 @router.put("/books/{book_id}/visibility")
 @retiring_route(lambda kwargs: kwargs["req"].visibility == "private")
 async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[str, Any]:
-    from deeptutor.multi_user.roles import is_teacher_or_admin
-
     unpublish = req.visibility == "private"
     resolved, record = _registered_writable(book_id, unpublish=unpublish)
     user = get_current_user()
     if req.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
-    if req.visibility == "public" and not is_teacher_or_admin():
-        raise HTTPException(status_code=403, detail="Only teachers and admins can make a book public.")
     def apply(confirmed: frozenset[str] | None) -> tuple[book_registry.BookRecord, dict[str, Any]]:
         with book_sharing.shared_write() as conn:
             current = _locked_writable(conn, resolved, record, registry_only=unpublish)

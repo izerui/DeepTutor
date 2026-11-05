@@ -8,7 +8,6 @@ import pytest
 
 from deeptutor.practice_sets.service import (
     PracticeConflict,
-    PracticeForbidden,
     PracticeNotFound,
     PracticeSetService,
     exact_result,
@@ -101,8 +100,10 @@ def test_outsiders_and_other_teachers_are_refused(published_set, as_account):
         with pytest.raises(PracticeNotFound):
             PracticeSetService().report(published_set)
     with as_account("sara"):
-        with pytest.raises(PracticeForbidden):
-            PracticeSetService().create("Mine")
+        # Spec 2026-11-05: a learner writes sets of their own, but not another's report.
+        assert PracticeSetService().create("Mine")["id"]
+        with pytest.raises(PracticeNotFound):
+            PracticeSetService().report(published_set)
 
 
 def test_a_new_revision_keeps_old_submissions(published_set, as_account, fake_judge):

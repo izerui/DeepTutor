@@ -133,7 +133,8 @@ def test_provenance_follows_the_publishers_live_role(teaching_users, as_account,
         assert provenance(me.id, me) == {"kind": "own", "name": ""}
         assert provenance(teaching_users["adam"]["id"], me)["kind"] == "school"
         assert provenance(LOCAL_ADMIN_ID, me)["kind"] == "school"
-        assert provenance(teaching_users["tina"]["id"], me) == {"kind": "teacher", "name": "tina"}
+        # Spec 2026-11-05: no teacher label; every other learner is its author.
+        assert provenance(teaching_users["tina"]["id"], me) == {"kind": "shared", "name": "tina"}
         assert provenance(stu, me) == {"kind": "shared", "name": "stu"}
     set_role("tina", "admin")
     with as_account("sara"):
@@ -147,13 +148,13 @@ def test_assigned_practice_sets_say_where_they_come_from(as_account, deliver):
     deliver(PRACTICE_SET, set_id, "sara")
     with as_account("sara"):
         [row] = PracticeSetService().assigned()
-    assert row["provenance"] == {"kind": "teacher", "name": "tina"}
+    assert row["provenance"] == {"kind": "shared", "name": "tina"}
 
 
 # ── 6. administrators withdraw others' practice sets ───────
 
 
-def test_admins_withdraw_but_never_open_others_practice_sets(as_account, deliver):
+def test_admins_withdraw_and_read_but_never_edit_others_practice_sets(as_account, deliver):
     set_id = _draft_set(as_account, "tina")
     with as_account("adam"):
         assert PracticeSetService().withdrawable() == []  # a draft is nobody else's business
@@ -165,10 +166,11 @@ def test_admins_withdraw_but_never_open_others_practice_sets(as_account, deliver
     with as_account("adam"):
         service = PracticeSetService()
         assert [row["id"] for row in service.withdrawable()] == [set_id]
-        for action in (lambda: service.get(set_id), lambda: service.report(set_id),
-                       lambda: service.update(set_id, title="Mine now")):
+        for action in (lambda: service.get(set_id), lambda: service.update(set_id, title="Mine now")):
             with pytest.raises(PracticeNotFound):
                 action()
+        # Spec 2026-11-05 §2: the results are read-only for administrators too.
+        assert service.report(set_id)["set_id"] == set_id
         service.delete(set_id)  # an administrator's "delete" withdraws
     with as_account("sara"):
         assert PracticeSetService().assigned() == []
@@ -176,10 +178,10 @@ def test_admins_withdraw_but_never_open_others_practice_sets(as_account, deliver
         assert PracticeSetService().get(set_id)["status"] == "archived"
 
 
-# ── 7. a teacher who becomes a student hands over what they published ──
+# ── 7. a learner who becomes an administrator keeps what they published ──
 
 
-def test_a_demoted_teacher_hands_over_only_what_they_published(
+def test_a_learner_made_administrator_keeps_what_they_published(
     teaching_users, as_account, tmp_path, teacher_draft, publish_template, monkeypatch, deliver
 ):
     from deeptutor.api.routers import auth as auth_router
@@ -199,14 +201,20 @@ def test_a_demoted_teacher_hands_over_only_what_they_published(
     deliver(PRACTICE_SET, published_set, "sara")
 
     asyncio.run(auth_router.update_user_role(
-        "tina", auth_router.SetRoleRequest(role="student"),
+        "tina", auth_router.SetRoleRequest(role="admin"),
         current=auth_router.TokenPayload(username="adam", role="admin", user_id=adam),
     ))
-    assert TeachingStore().get_template(template_id).owner_user_id == adam
-    assert registry.get_kb(public_kb.kb_id).created_by == adam
+    # Spec 2026-11-05: administrators author too; nothing moves.
+    assert TeachingStore().get_template(template_id).owner_user_id == tina
+    assert registry.get_kb(public_kb.kb_id).created_by == tina
     assert registry.get_kb(private_kb.kb_id).created_by == tina
-    with as_account("adam"):
+    with as_account("tina"):
         assert PracticeSetService().get(published_set)["status"] == "published"
+    # A learner who stays a learner keeps everything too.
+    asyncio.run(auth_router.update_user_role(
+        "tom", auth_router.SetRoleRequest(role="learner"),
+        current=auth_router.TokenPayload(username="adam", role="admin", user_id=adam),
+    ))
     from deeptutor.practice_sets import store as practice_store
 
     with practice_store.read() as conn:
@@ -215,23 +223,3 @@ def test_a_demoted_teacher_hands_over_only_what_they_published(
     # Students keep learning what was published.
     with as_account("sara"):
         assert [row["id"] for row in PracticeSetService().assigned()] == [published_set]
-
-
-def test_a_failed_hand_over_leaves_the_role_unchanged(teaching_users, monkeypatch):
-    from fastapi import HTTPException
-
-    from deeptutor.api.routers import auth as auth_router
-    from deeptutor.multi_user import content_lifecycle as lifecycle
-    from deeptutor.multi_user.identity import get_user
-
-    def broken(*_args, **_kwargs):
-        raise RuntimeError("store is read-only")
-
-    monkeypatch.setattr(lifecycle, "hand_over_published", broken)
-    with pytest.raises(HTTPException):
-        asyncio.run(auth_router.update_user_role(
-            "tina", auth_router.SetRoleRequest(role="student"),
-            current=auth_router.TokenPayload(username="adam", role="admin",
-                                              user_id=teaching_users["adam"]["id"]),
-        ))
-    assert get_user("tina")["role"] == "teacher"

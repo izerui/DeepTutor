@@ -3,7 +3,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 // Platform batch 3: learning reports and announcements for courses and Mastery
 // Paths ("needs attention" and teacher remedial practice are gone, spec 2026-11-05).
-const { catalog, workbench, tasks, push, search, t } = vi.hoisted(() => ({
+const { auth, catalog, workbench, tasks, push, search, t } = vi.hoisted(() => ({
+  auth: { isAdmin: false, loading: false },
   catalog: {
     getLearnerReport: vi.fn(),
     getReportPoints: vi.fn(),
@@ -22,6 +23,7 @@ const { catalog, workbench, tasks, push, search, t } = vi.hoisted(() => ({
     key.replace(/\{\{(\w+)\}\}/g, (_: string, name: string) => String(values?.[name] ?? "")),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t, i18n: { language: "en" } }) }));
+vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => auth }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => "/reports",
@@ -45,8 +47,7 @@ vi.mock("@/components/catalog/AdminNav", () => ({ usePendingReviews: () => 0 }))
 
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
 import LearnerReportPage from "@/components/catalog/LearnerReport";
-import StudentHome from "@/components/home/StudentHome";
-import { TeacherWorkbench } from "@/components/home/Workbench";
+import LearnerHome from "@/components/home/LearnerHome";
 import { notificationText } from "@/components/notifications/NotificationBell";
 import type { ContentAnnouncement, LearnerReport, LearnerRow } from "@/lib/catalog-api";
 import type { AppNotification } from "@/lib/notifications-api";
@@ -56,6 +57,8 @@ beforeEach(() => {
     Object.values(group).forEach((fn) => (fn as ReturnType<typeof vi.fn>).mockReset()));
   push.mockReset();
   search.value = "";
+  auth.isAdmin = false;
+  workbench.getWorkbench.mockResolvedValue({ role: "learner", sent: [] });
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
@@ -124,6 +127,22 @@ it("reports a course: tasks, practice score and an export link, no homework or a
   await waitFor(() => expect(catalog.getLearnerReport).toHaveBeenLastCalledWith("course", "crs_1", null));
   fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
   await waitFor(() => expect(catalog.downloadReport).toHaveBeenLastCalledWith("course", "crs_1", null));
+});
+
+it("lets an administrator read a course report, without the author's editing links", async () => {
+  // Spec 2026-11-05: administrators read every learning report, read-only.
+  auth.isAdmin = true;
+  search.value = "kind=course&id=crs_1";
+  catalog.getLearnerReport.mockResolvedValue(courseReport);
+  catalog.getReportPoints.mockResolvedValue(points);
+  render(<LearnerReportPage />);
+  expect(await screen.findByRole("heading", { name: "Physics" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "sara" })).toBeTruthy();
+  // Back goes to the course's introduction, not the author's course editor.
+  expect(screen.getByRole("link", { name: "Learning market" }).getAttribute("href")).toBe("/market/item?kind=course&id=crs_1");
+  // A practice set's results live in its author's editor: named, not linked.
+  expect(screen.queryByRole("link", { name: "Week 1 quiz" })).toBeNull();
+  expect(screen.getByRole("region", { name: "Practice sets in this course" }).textContent).toContain("Week 1 quiz");
 });
 
 it("reports a path without the course columns, and shows a learner's detail", async () => {
@@ -228,23 +247,23 @@ it("keeps a learner's panel out of the way when there is nothing to read", async
 
 it("shows the newest announcements on the home, each linking to its course or path", async () => {
   tasks.getHome.mockResolvedValue({
-    assigned: [], history_count: 0, can_create_path: false, market: [], mine: [],
+    assigned: [], history_count: 0, market: [], mine: [],
     announcements: [
       announcement({ text: "Lab on Friday." }),
       announcement({ id: "an_2", kind: "mastery_path", item_id: "tpl_1", item_title: "Algebra", text: "New module." }),
     ],
   });
-  render(<StudentHome />);
+  render(<LearnerHome />);
   const block = await screen.findByRole("region", { name: "Announcements" });
   expect(within(block).getByText("Lab on Friday.")).toBeTruthy();
   expect(within(block).getByRole("link", { name: "Physics" }).getAttribute("href")).toBe("/tasks?course=crs_1");
   expect(within(block).getByRole("link", { name: "Algebra" }).getAttribute("href")).toBe("/market/item?kind=mastery_path&id=tpl_1");
 });
 
-it("has no learners-who-need-attention list on the workbench", async () => {
-  workbench.getWorkbench.mockResolvedValue({ role: "teacher", sent: [], classes: [] });
-  tasks.getHome.mockResolvedValue({ mine: [] });
-  render(<TeacherWorkbench />);
+it("has no learners-who-need-attention list on the home", async () => {
+  workbench.getWorkbench.mockResolvedValue({ role: "learner", sent: [] });
+  tasks.getHome.mockResolvedValue({ assigned: [], history_count: 0, mine: [] });
+  render(<LearnerHome />);
   expect(await screen.findByRole("heading", { name: "What I sent out" })).toBeTruthy();
   expect(screen.queryByRole("heading", { name: /need attention/ })).toBeNull();
 });

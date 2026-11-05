@@ -111,9 +111,9 @@ def empty_grant(user_id: str) -> dict[str, Any]:
         "cli_apps": None,
         "exec_enabled": None,
         "learning_policy": None,
-        # Student-only account abilities (see ``roles.STUDENT_POLICY_DEFAULTS``);
-        # ``None`` means the defaults. Ignored for every other role.
-        "student_policy": None,
+        # The learner's own daily AI tokens (batch 3 §8); ``None`` follows the
+        # school default, ``0`` is no limit.
+        "ai_daily_tokens": None,
     }
 
 
@@ -217,9 +217,15 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
     base["learning_policy"] = _normalize_learning_policy(
         _upstream_learning_policy(payload.get("learning_policy"))
     )
-    from .roles import normalize_student_policy
+    from .roles import AI_DAILY_TOKENS, normalize_ai_daily_tokens
 
-    base["student_policy"] = normalize_student_policy(payload.get("student_policy"))
+    tokens = normalize_ai_daily_tokens(payload.get(AI_DAILY_TOKENS))
+    legacy = payload.get("student_policy")
+    if tokens is None and isinstance(legacy, dict):
+        # Spec 2026-11-05 §3: the retired student policy is no longer read,
+        # except the personal AI limit it used to carry.
+        tokens = normalize_ai_daily_tokens(legacy.get(AI_DAILY_TOKENS))
+    base[AI_DAILY_TOKENS] = tokens
     return base
 
 
@@ -264,10 +270,6 @@ def load_grant(user_id: str) -> dict[str, Any]:
             raise GrantStorageError(f"Grant for user {user_id} has invalid {key}")
     if stored.get("exec_enabled") is not None and not isinstance(stored["exec_enabled"], bool):
         raise GrantStorageError(f"Grant for user {user_id} has invalid exec_enabled")
-    if stored.get("student_policy") is not None and not isinstance(
-        stored["student_policy"], dict
-    ):
-        raise GrantStorageError(f"Grant for user {user_id} has invalid student_policy")
     if stored.get("learning_policy") is not None and not isinstance(
         stored["learning_policy"], dict
     ):

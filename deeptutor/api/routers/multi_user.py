@@ -564,7 +564,7 @@ async def assign_guardian_materials(
         status_code=410,
         detail=(
             "Per-learner book assignment has been retired. Public books are available "
-            "to every account; ask a teacher or an admin to make a book public."
+            "to every account; ask its author or an admin to make a book public."
         ),
     )
 

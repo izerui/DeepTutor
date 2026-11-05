@@ -205,20 +205,17 @@ def _answered_set(as_account, owner):
     return set_id, submission_id
 
 
-def test_an_administrator_reads_answers_of_their_own_set_only(as_account, teaching_users):
-    from deeptutor.practice_sets import store
+def test_an_administrator_reads_answers_of_any_set(as_account, teaching_users):
+    """Spec 2026-11-05 §2: administrators read the author's review too, read-only."""
     from deeptutor.practice_sets.review import PracticeReview
-    from deeptutor.practice_sets.service import PracticeForbidden
 
     own, submission = _answered_set(as_account, "adam")
     with as_account("adam"):
         attempt = PracticeReview().attempt(own, submission)
     assert attempt["questions"][0]["answer"] == "Putting things together."
-    # A set handed over to the administrator keeps its writer: no answers.
-    handed, handed_submission = _answered_set(as_account, "tina")
-    with store.write() as conn:
-        conn.execute("UPDATE practice_sets SET owner_user_id = ? WHERE id = ?", (_uid(teaching_users, "adam"), handed))
-    with as_account("adam"), pytest.raises(PracticeForbidden):
-        PracticeReview().attempt(handed, handed_submission)
+    others, others_submission = _answered_set(as_account, "tina")
+    with as_account("adam"):
+        attempt = PracticeReview().attempt(others, others_submission)
+    assert attempt["questions"][0]["answer"] == "Putting things together."
 
 

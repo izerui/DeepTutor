@@ -349,10 +349,7 @@ async def partner_group_ws(ws: WebSocket, group_id: str):
     user_token = await ws_require_auth(ws)
     if user_token is ws_auth_failed:
         return
-    from deeptutor.multi_user.roles import student_allows
-
-    # Batch 3 §7: Partners off for a student closes group chats too.
-    if get_partner_group_manager().get_group(group_id) is None or not student_allows("allow_partners"):
+    if get_partner_group_manager().get_group(group_id) is None:
         if user_token is not None:
             reset_current_user(user_token)
         await ws.close(code=4404)

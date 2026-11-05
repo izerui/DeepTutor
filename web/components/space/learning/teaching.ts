@@ -119,7 +119,7 @@ export interface Message {
 /** Server source-issue codes, localized; the server's English text is never shown as the reason. */
 const ISSUE_KEYS: Record<string, string> = {
   personal_source:
-    "{{label}} is a personal source and cannot be shared with students. Upload it to a knowledge base and reference that instead.",
+    "{{label}} is a personal source and cannot be shared with learners. Upload it to a knowledge base and reference that instead.",
   connector:
     "{{label}} is a personal connector and cannot be shared. Upload the material to a knowledge base instead.",
   missing_kb: "{{label}}: the knowledge base no longer exists.",
@@ -128,10 +128,10 @@ const ISSUE_KEYS: Record<string, string> = {
   missing_document: "{{label}}: the document no longer exists in its knowledge base.",
   missing_book: "{{label}}: the book no longer exists.",
   workspace_unavailable: "{{label}}: the workspace it came from is unavailable.",
-  book_kb_blocked: "{{label}}: a knowledge base this book cites cannot be shared with students.",
+  book_kb_blocked: "{{label}}: a knowledge base this book cites cannot be shared with learners.",
 };
 const BOOK_NOT_SHAREABLE = "{{label}} is someone else's private book, or cannot be shared.";
-const UNKNOWN_ISSUE = "{{label}} cannot be shared with students.";
+const UNKNOWN_ISSUE = "{{label}} cannot be shared with learners.";
 
 /** `sourceKinds` maps the draft's source ids to their kinds (a book vs. a library). */
 export function sourceIssueMessage(
@@ -167,9 +167,9 @@ export function publishStepMessage(
   }
   const fixed: Record<string, string> = {
     documents: "Registering the cited documents",
-    knowledge_base_references: "Knowledge base access for students",
-    book_references: "Book access for students",
-    assignments: "Student assignments",
+    knowledge_base_references: "Knowledge base access for learners",
+    book_references: "Book access for learners",
+    assignments: "Learner assignments",
   };
   return fixed[step] ? { key: fixed[step] } : { key: "Step {{step}}", values: { step } };
 }
@@ -197,13 +197,13 @@ export function teachingErrorMessage(
   switch (error.status) {
     case 403:
       return context === "manage"
-        ? { key: "You can no longer manage this teacher path." }
-        : { key: "Only the teacher who owns this path can publish it." };
+        ? { key: "You can no longer manage this published path." }
+        : { key: "Only the author of this path can publish it." };
     case 404:
-      return { key: "This teacher path no longer exists." };
+      return { key: "This published path no longer exists." };
     case 409:
       return {
-        key: "This teacher path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.",
+        key: "This published path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.",
       };
     default:
       return { key: "Update failed" };
@@ -220,7 +220,7 @@ export function unpublishableReason(template: TeacherTemplate): Message {
   }
   if (!template.draft_path_id) {
     return {
-      key: "Its teacher's account was removed, so it has no editable draft and cannot be published again. You can still manage or archive it.",
+      key: "Its author's account was removed, so it has no editable draft and cannot be published again. You can still manage or archive it.",
     };
   }
   return {

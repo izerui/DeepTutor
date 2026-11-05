@@ -10,7 +10,7 @@ import { WithdrawalConfirmationError } from "@/lib/withdrawal-confirmation";
 import type { KnowledgeBase } from "@/lib/knowledge-helpers";
 
 const fixture = vi.hoisted(() => ({
-  auth: { isAdmin: false, isTeacher: true, allowPrivateKb: true },
+  auth: { isAdmin: false, allowPrivateKb: true },
   references: vi.fn(),
   files: vi.fn(),
   deleteFile: vi.fn(),
@@ -41,7 +41,7 @@ const owned: KnowledgeBase = {
   read_only: false, can_set_default: true, visibility: "private", created_by: "teacher",
 };
 beforeEach(() => {
-  fixture.auth = { isAdmin: false, isTeacher: true, allowPrivateKb: true };
+  fixture.auth = { isAdmin: false, allowPrivateKb: true };
   fixture.references.mockReset().mockResolvedValue({ references: [], other_references: { total: 0, by_kind: {} } });
   fixture.files.mockReset().mockResolvedValue([{ name: "sample.txt", type: "file" }]);
   fixture.deleteFile.mockReset().mockResolvedValue({ was_indexed: false });
@@ -96,7 +96,7 @@ it.each([true, false])("asks to confirm teacher-path impact by counts, then retr
   fireEvent.click(button);
   await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
   expect(confirm.mock.calls[0][0]).toBe(
-    "2 published teacher paths use this material\n5 students assigned\nThose paths will show this material as unavailable. Continue?",
+    "2 published paths use this material\n5 learners assigned\nThose paths will show this material as unavailable. Continue?",
   );
   if (accept) await waitFor(() => expect(change).toHaveBeenLastCalledWith("private", {
     confirmed: { affectedPaths: 2, affectedStudents: 5 },
@@ -205,22 +205,22 @@ it("groups public/private/connectors and removes creation and external connectio
   const common = { providers: [], onOpenKb: vi.fn(), onSectionChange: vi.fn() };
   const { rerender } = render(<KnowledgeHome {...common} activeSection="knowledge-bases" kbs={[
     owned,
-    { name: "atlas", visibility: "public", owned: false, provenance: { kind: "teacher", name: "teacher" } },
+    { name: "atlas", visibility: "public", owned: false, provenance: { kind: "shared", name: "tina" } },
     { name: "rules", visibility: "public", owned: false, provenance: { kind: "school", name: "" } },
     { name: "vault", connector: true },
   ]} />);
   // Spec 2026-11-02 §3.1: grouped by where each comes from, labelled the same way.
-  for (const name of ["From other teachers", "Published by the platform", "Mine", "My connectors"]) {
+  for (const name of ["From other authors", "Published by the platform", "Mine", "My connectors"]) {
     expect(screen.getByRole("heading", { name: new RegExp(name) })).toBeTruthy();
   }
-  expect(screen.getByText("Published by teacher")).toBeTruthy();
+  expect(screen.getByText("Published by tina")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "New knowledge base" })).toBeNull();
   rerender(<KnowledgeHome {...common} activeSection="knowledge-engines" kbs={[]} />);
   expect(screen.queryByText("External knowledge sources")).toBeNull();
 });
 
 it("lets an admin only withdraw or delete someone else's published KB (spec 2026-10-29 D10)", async () => {
-  fixture.auth = { isAdmin: true, isTeacher: false, allowPrivateKb: true };
+  fixture.auth = { isAdmin: true, allowPrivateKb: true };
   const change = vi.fn().mockResolvedValue(undefined);
   render(<KbSettingsSection
     kb={{ ...owned, owned: false, read_only: true, can_retire: true, visibility: "public" }}

@@ -33,31 +33,29 @@ import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
 
 /**
- * Tasks (spec 2026-11-03 batch 1): teachers and administrators assign them and
- * see who has done them; students see every task they received, by state.
+ * Tasks (spec 2026-11-03 batch 1; spec 2026-11-05): everyone sees the tasks of
+ * the courses they joined, and edits the tasks of the courses they made.
  */
 export default function TasksHub() {
   const { t } = useTranslation();
-  const { isAdmin, isTeacher, loading } = useAuthStatus();
+  const { isAdmin, loading } = useAuthStatus();
   if (loading) return <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />;
   return (
     <div className="space-y-6">
       <header>
         <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Tasks")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {isAdmin || isTeacher
-            ? t("Edit the tasks of your courses and see who has done them.")
-            : t("Tasks from the courses you joined.")}
+          {t("Tasks from the courses you joined, and the tasks of the courses you made.")}
         </p>
       </header>
-      {isAdmin || isTeacher ? <AuthorTabs isAdmin={isAdmin} /> : <StudentView />}
+      <AuthorTabs isAdmin={isAdmin} />
     </div>
   );
 }
 
 /**
- * Tasks grouped by course, the courses themselves (platform batch 2 §5: tasks
- * live in courses), and what the author joined to learn (§6).
+ * What one joined to learn (§6), one's tasks grouped by course, and one's
+ * courses themselves (platform batch 2 §5: tasks live in courses).
  */
 function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
@@ -65,10 +63,18 @@ function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   const params = useSearchParams();
   const courseParam = params.get("course");
   // ``?tab=courses`` returns from a course's learning report; ``?tab=joined&task=``
-  // opens a task of a course one joined (traceability #7).
+  // opens a task of a course one joined (traceability #7); ``?task=`` alone is
+  // one's own task. Otherwise learners start with what they joined.
   const tabParam = params.get("tab");
+  const taskParam = params.get("task");
   const [tab, setTab] = useState<"tasks" | "courses" | "joined">(
-    courseParam || tabParam === "joined" ? "joined" : tabParam === "courses" ? "courses" : "tasks",
+    courseParam || tabParam === "joined"
+      ? "joined"
+      : tabParam === "courses"
+        ? "courses"
+        : tabParam === "tasks" || taskParam || isAdmin
+          ? "tasks"
+          : "joined",
   );
   const [openTask, setOpenTask] = useState<string | null>(null);
   const tabClass = (on: boolean) =>
@@ -76,14 +82,14 @@ function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="space-y-4">
       <div role="tablist" className="flex gap-1">
+        <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => setTab("joined")}>
+          {t("Courses I joined")}
+        </button>
         <button type="button" role="tab" aria-selected={tab === "tasks"} className={tabClass(tab === "tasks")} onClick={() => setTab("tasks")}>
           {t("Tasks")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "courses"} className={tabClass(tab === "courses")} onClick={() => setTab("courses")}>
           {t("Courses")}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => setTab("joined")}>
-          {t("Courses I joined")}
         </button>
       </div>
       {tab === "tasks" ? (
@@ -91,7 +97,7 @@ function AuthorTabs({ isAdmin }: { isAdmin: boolean }) {
       ) : tab === "courses" ? (
         <CourseAuthorView isAdmin={isAdmin} onOpenTask={(id) => { setOpenTask(id); setTab("tasks"); }} />
       ) : (
-        <StudentView />
+        <JoinedView />
       )}
     </div>
   );
@@ -323,8 +329,8 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
         <span className="text-[12px] text-[var(--muted-foreground)]">{t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}</span>
       </div>
       <textarea
-        aria-label={t("Instructions for students")}
-        placeholder={t("Instructions for students")}
+        aria-label={t("Instructions for learners")}
+        placeholder={t("Instructions for learners")}
         rows={4}
         className={inputClass}
         value={task.description}
@@ -351,7 +357,7 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
         )}
         {task.status === "published" && (
           <button type="button" className={actionClass}
-            onClick={() => window.confirm(t("Withdraw this task? Students will see it as closed.")) && void run(() => archiveTask(task.id))}>
+            onClick={() => window.confirm(t("Withdraw this task? Learners will see it as closed.")) && void run(() => archiveTask(task.id))}>
             {t("Withdraw")}
           </button>
         )}
@@ -362,24 +368,24 @@ function TaskEditor({ taskId, onChanged, onDeleted }: { taskId: string; onChange
           </button>
         )}
       </div>
-      {/* Traceability #5: a task in no course goes on its own to a teacher. */}
+      {/* Traceability #5: a task in no course goes on its own to a learner. */}
       {isAdmin && !task.course_id && (
-        <HandOverPanel handOver={(teacherId) => handOverTask(task.id, teacherId)} onDone={onDeleted} />
+        <HandOverPanel handOver={(learnerId) => handOverTask(task.id, learnerId)} onDone={onDeleted} />
       )}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 
-      {!draft && <StudentsTable task={task} />}
+      {!draft && <LearnersTable task={task} />}
     </fieldset>
   );
 }
 
-function StudentsTable({ task }: { task: TaskDetail }) {
+function LearnersTable({ task }: { task: TaskDetail }) {
   const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h3 className="text-[13px] font-semibold">{t("Students")}</h3>
+      <h3 className="text-[13px] font-semibold">{t("Learners")}</h3>
       {task.students.length === 0 ? (
-        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No students receive this yet.")}</p>
+        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No learners receive this yet.")}</p>
       ) : (
         <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
           {task.students.map((student) => (
@@ -399,11 +405,11 @@ function StudentsTable({ task }: { task: TaskDetail }) {
   );
 }
 
-function StudentView() {
+function JoinedView() {
   const { t } = useTranslation();
   const params = useSearchParams();
   const courseParam = params.get("course");
-  // ``?task=`` (a notification's link, or ``/start?task=`` for a teacher) opens that task.
+  // ``?task=`` (a notification's link) opens that task.
   const taskParam = params.get("task");
   const [tasks, setTasks] = useState<AssignedTask[] | null>(null);
   const [selected, setSelected] = useState<AssignedTask | null>(null);

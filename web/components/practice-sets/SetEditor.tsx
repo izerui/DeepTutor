@@ -165,8 +165,8 @@ export function SetEditor({
       </div>
       <p className={hintClass}>
         {saved.current_revision > 0
-          ? t("Published v{{revision}}. Changes reach students only after you publish a new version; earlier submissions keep their version.", { revision: saved.current_revision })
-          : t("Draft. Students see nothing until you publish.")}
+          ? t("Published v{{revision}}. Changes reach learners only after you publish a new version; earlier submissions keep their version.", { revision: saved.current_revision })
+          : t("Draft. Learners see nothing until you publish.")}
       </p>
       {saved.current_revision === 0 && (
         <p className={hintClass}>
@@ -184,7 +184,7 @@ export function SetEditor({
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-[13px]"
           rows={2}
           maxLength={4000}
-          placeholder={t("Instructions for students (optional)")}
+          placeholder={t("Instructions for learners (optional)")}
           value={draft.description}
           onChange={(e) => patch({ description: e.target.value })}
         />
@@ -269,7 +269,7 @@ export function SetEditor({
               type="button"
               className={actionClass}
               onClick={() => {
-                if (window.confirm(t("Archive this practice set? Students can no longer answer it; results are kept."))) {
+                if (window.confirm(t("Archive this practice set? Learners can no longer answer it; results are kept."))) {
                   void run(() => archiveSet(setId));
                 }
               }}
@@ -614,7 +614,7 @@ function ReportSection({ setId }: { setId: string }) {
             <table className="w-full min-w-[560px] text-[12.5px]">
               <thead className="text-left text-[11.5px] text-[var(--muted-foreground)]">
                 <tr>
-                  <th className="px-2 py-1.5">{t("Student")}</th>
+                  <th className="px-2 py-1.5">{t("Learner")}</th>
                   <th className="px-2 py-1.5">{t("First score")}</th>
                   <th className="px-2 py-1.5">{t("Best score")}</th>
                   <th className="px-2 py-1.5">{t("Attempts")}</th>
