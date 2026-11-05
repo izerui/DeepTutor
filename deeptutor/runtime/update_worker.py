@@ -78,10 +78,15 @@ def _run_logged(command: list[str], *, cwd: Path, log_path: Path) -> int:
     return completed.returncode
 
 
-def _launch_restart(job: UpdateJob, *, log_path: Path) -> None:
+def _launch_restart(job: UpdateJob, *, log_path: Path) -> subprocess.Popen[bytes]:
     command, home = build_restart_command(job)
+    # The restart runs from the runtime home; never import a stale package
+    # that happens to sit there instead of the freshly installed one.
+    env = os.environ.copy()
+    env["PYTHONSAFEPATH"] = "1"
     kwargs: dict[str, object] = {
         "cwd": str(home),
+        "env": env,
         "stdin": subprocess.DEVNULL,
         "stderr": subprocess.STDOUT,
         "close_fds": True,
@@ -95,7 +100,7 @@ def _launch_restart(job: UpdateJob, *, log_path: Path) -> None:
     else:
         kwargs["start_new_session"] = True
     with log_path.open("a", encoding="utf-8") as log:
-        subprocess.Popen(  # type: ignore[arg-type,call-overload] # nosec B603
+        return subprocess.Popen(  # type: ignore[arg-type,call-overload] # nosec B603
             command, stdout=log, **kwargs
         )
 
