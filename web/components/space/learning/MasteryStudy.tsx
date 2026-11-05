@@ -63,8 +63,8 @@ import { ModeSwitch } from "./ModeSwitch";
 import { AuthorPathBanner } from "./AuthorPathBanner";
 import { isAuthorInstance } from "./teaching";
 import { topicDisplayName, type Translate } from "./format";
-import { LevelUpCelebration } from "./LevelUpCelebration";
-import { MasteryComposer } from "./MasteryComposer";
+
+
 import { ProgressRing } from "./ProgressRing";
 import { StudyOutline } from "./StudyOutline";
 
@@ -112,6 +112,14 @@ const MODE_PRESENTATION: Record<
       "Review re-tests what you have already mastered. Due items come first, but you can revisit anything.",
   },
 };
+
+const MasteryComposer = dynamic(
+  () => import("./MasteryComposer").then(module => module.MasteryComposer),
+);
+const LevelUpCelebration = dynamic(
+  () => import("./LevelUpCelebration").then(module => module.LevelUpCelebration),
+  { ssr: false },
+);
 
 const ChatMessageList = dynamic(
   () => import("@/features/chat/messages").then(module => module.ChatMessageList),
@@ -910,12 +918,12 @@ export function MasteryStudy({
           onDone={() => setCelebration(null)}
         />
       )}
-      <SaveToNotebookModal
+      {showSaveModal && <SaveToNotebookModal
         open={showSaveModal}
         payload={notebookSavePayload}
         messages={notebookSaveMessages}
         onClose={() => setShowSaveModal(false)}
-      />
+      />}
       <SessionViewerPanel
         ref={viewerPanelRef}
         open={viewerOpen}
