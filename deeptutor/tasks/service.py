@@ -862,8 +862,8 @@ def remove_homework() -> int:
     """Startup, once per data dir: homework is gone from the platform (spec 2026-11-05).
 
     Deletes every homework task with its place in courses, completions,
-    receivers and joins, the hand-ins with their files, and the homework
-    notifications. What points at the tasks goes first and the tasks last, so
+    receivers and joins, the hand-ins with their files, and the notifications
+    about them. What points at the tasks goes first and the tasks last, so
     a step that fails leaves the tasks to find again at the next start.
     Does nothing once done.
     """
@@ -878,13 +878,15 @@ def remove_homework() -> int:
     if not ids and not had_hand_ins and not files.exists():
         return 0
     from deeptutor.catalog.enrollment import forget_item
-    from deeptutor.notifications.service import forget_kinds
+    from deeptutor.notifications.service import forget_kinds, forget_links
     from deeptutor.publishing.scope import TASK, forget
 
     for task_id in ids:
         forget(TASK, task_id)
         forget_item(TASK, task_id)
     forget_kinds(["homework_submitted", "homework_graded", "homework_regraded", "homework_returned"])
+    # Task notifications of the same kinds as ordinary tasks' (published, opened, due…): by link.
+    forget_links([link for task_id in ids for link in (f"/start?task={task_id}", f"/tasks?task={task_id}")])
     if files.exists():
         shutil.rmtree(files)
     with db.write() as conn:

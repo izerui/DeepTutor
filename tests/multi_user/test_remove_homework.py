@@ -52,6 +52,7 @@ CREATE INDEX idx_task_submissions_student ON task_submissions(student_id);
 """
 
 HOMEWORK_KINDS = ("homework_submitted", "homework_graded", "homework_regraded", "homework_returned")
+TASK_KINDS = ("task_published", "task_opened", "task_due_soon", "task_due_changed")
 
 
 @pytest.fixture
@@ -134,6 +135,14 @@ def old_data(as_account, ids, in_course):
         )
     notifications.notify([ids["tina"]], "homework_submitted", {"title": "Essay"}, link=f"/start?task={homework}")
     notifications.notify([ids["sara"]], "homework_graded", {"title": "Essay"}, link=f"/start?task={homework}")
+    # Kinds ordinary tasks use too: the homework's and the note's.
+    for task_id, title in ((homework, "Essay"), (note, "Read chapter 1")):
+        for kind in TASK_KINDS:
+            notifications.notify(
+                [ids["sara"]], kind, {"title": title, "due_at": now + 3600},
+                link=f"/start?task={task_id}", dedupe_key=f"{kind}:{task_id}:{now + 3600}",
+            )
+    notifications.notify([ids["tom"]], "tasks_transferred", {"count": 1}, link=f"/tasks?task={homework}")
     return SimpleNamespace(note=note, homework=homework, course=course_id, folder=folder)
 
 
@@ -185,6 +194,7 @@ def test_old_homework_goes_and_the_rest_stays(as_account, ids, old_data):
 @pytest.mark.parametrize("step", [
     "deeptutor.catalog.enrollment.forget_item",
     "deeptutor.notifications.service.forget_kinds",
+    "deeptutor.notifications.service.forget_links",
 ])
 def test_a_failed_step_leaves_the_homework_for_the_next_start(as_account, ids, old_data, monkeypatch, step):
     import importlib
@@ -235,12 +245,38 @@ def test_a_failed_step_leaves_the_homework_for_the_next_start(as_account, ids, o
     assert _task_enrollments(old_data.homework) == 0
     for user in ("tina", "sara"):
         assert not {n["kind"] for n in notifications.list_for(ids[user])} & set(HOMEWORK_KINDS)
+    assert _task_notices(ids["sara"], old_data.homework) == set()
+    assert _task_notices(ids["sara"], old_data.note) == set(TASK_KINDS)
     assert scopes.get_scope(scopes.TASK, old_data.note).users == note_scope.users
     assert _task_enrollments(old_data.note) == note_enrollments
     with as_account("sara"):
         [entry] = StudentTasks().assigned()
     assert (entry["key"], entry["state"]) == (old_data.note, "completed")
     assert remove_homework() == 0
+
+
+def _task_notices(user_id: str, task_id: str) -> set[str]:
+    return {n["kind"] for n in notifications.list_for(user_id, limit=200) if n["link"] == f"/start?task={task_id}"}
+
+
+def test_task_notifications_of_old_homework_go_and_ordinary_ones_stay(ids, old_data):
+    from deeptutor.tasks.service import remove_homework
+
+    assert _task_notices(ids["sara"], old_data.homework) >= set(TASK_KINDS)
+    assert _task_notices(ids["sara"], old_data.note) == set(TASK_KINDS)
+    homework_unread = len([
+        n for n in notifications.list_for(ids["sara"], limit=200)
+        if n["link"] == f"/start?task={old_data.homework}" and not n["read"]
+    ])
+    unread = notifications.unread_count(ids["sara"])
+
+    remove_homework()
+
+    assert _task_notices(ids["sara"], old_data.homework) == set()
+    assert not [n for n in notifications.list_for(ids["tom"]) if n["link"] == f"/tasks?task={old_data.homework}"]
+    assert _task_notices(ids["sara"], old_data.note) == set(TASK_KINDS)
+    # The unread count no longer counts them.
+    assert notifications.unread_count(ids["sara"]) == unread - homework_unread
 
 
 def test_removing_homework_without_any_data_does_nothing(teaching_users):
