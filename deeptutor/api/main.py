@@ -183,14 +183,6 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Knowledge-base registry backfill failed")
 
-    # Spec 2026-11-05: homework was removed; its tasks, hand-ins and files go once.
-    try:
-        from deeptutor.tasks.service import remove_homework
-
-        await asyncio.to_thread(remove_homework)
-    except Exception:
-        logger.exception("Removing homework failed")
-
     # Platform batch 1 §7: content published to everyone moves into the market once.
     try:
         from deeptutor.catalog.migration import run_at_startup

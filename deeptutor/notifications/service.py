@@ -150,27 +150,6 @@ def forget_user(user_id: str) -> None:
         conn.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
 
 
-def forget_links(links: list[str]) -> None:
-    """Notifications pointing at something that no longer exists go (e.g. removed homework tasks)."""
-    if not db.path().exists() or not links:
-        return
-    with db.write() as conn:
-        for start in range(0, len(links), 500):
-            chunk = links[start:start + 500]
-            conn.execute(
-                f"DELETE FROM notifications WHERE link IN ({','.join('?' for _ in chunk)})", chunk  # nosec B608
-            )
-
-
-def forget_kinds(kinds: list[str]) -> None:
-    """Notifications of a kind the platform no longer has go (e.g. homework, spec 2026-11-05)."""
-    if not db.path().exists() or not kinds:
-        return
-    with db.write() as conn:
-        conn.execute(
-            f"DELETE FROM notifications WHERE kind IN ({','.join('?' for _ in kinds)})", kinds  # nosec B608
-        )
-
 def notify_handover(successor_id: str, from_user_id: str, from_name: str, counts: dict[str, int]) -> None:
     """One summary to whoever took over a departing teacher's content (spec 2026-11-03 batch 4 §3)."""
     moved = {kind: int(n) for kind, n in counts.items() if n}
@@ -180,4 +159,4 @@ def notify_handover(successor_id: str, from_user_id: str, from_name: str, counts
            link="/start", dedupe_key=f"content_transferred:{from_user_id}:{successor_id}", bump=True)
 
 
-__all__ = ["db", "forget_kinds", "forget_links", "forget_user", "list_for", "mark_read", "notify", "notify_handover", "unread_count"]
+__all__ = ["db", "forget_user", "list_for", "mark_read", "notify", "notify_handover", "unread_count"]

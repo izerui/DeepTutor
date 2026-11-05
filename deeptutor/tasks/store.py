@@ -8,14 +8,10 @@ Lives in ``<SYSTEM_ROOT>/tasks.sqlite3``:
 * ``task_completions``: once a student completed a task (or a practice set /
   Mastery Path shown as one), it stays completed (R24);
 * ``courses`` / ``course_items``: tasks in an order.
-
-Homework was removed (spec 2026-11-05); :func:`files_root` is where its
-hand-ins were kept, for the startup cleanup.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from deeptutor.multi_user.system_db import SystemDb
 
@@ -75,11 +71,4 @@ CREATE TABLE IF NOT EXISTS course_items (
 )
 
 
-def files_root() -> Path:
-    from deeptutor.multi_user import paths
-
-    base = db.path_override.parent if db.path_override is not None else paths.SYSTEM_ROOT
-    return base / "task_files"
-
-
-__all__ = ["db", "files_root"]
+__all__ = ["db"]

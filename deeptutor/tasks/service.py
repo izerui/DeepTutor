@@ -28,7 +28,7 @@ import uuid
 
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.models import CurrentUser
-from deeptutor.tasks.store import db, files_root
+from deeptutor.tasks.store import db
 
 logger = logging.getLogger(__name__)
 
@@ -858,59 +858,6 @@ def forget_student(user_id: str) -> None:
         conn.execute("DELETE FROM task_completions WHERE student_id = ?", (user_id,))
 
 
-def remove_homework() -> int:
-    """Startup, once per data dir: homework is gone from the platform (spec 2026-11-05).
-
-    Deletes every homework task with its place in courses, completions,
-    receivers and joins, the hand-ins with their files, and the notifications
-    about them. A course left with nothing in it leaves the market; it stays
-    for its author to fill. What points at the tasks goes first and the
-    tasks last, so a step that fails leaves the tasks to find again at the
-    next start.
-    Does nothing once done.
-    """
-    if not db.path().exists():
-        return 0
-    with db.read() as conn:
-        ids = [r[0] for r in conn.execute("SELECT id FROM tasks WHERE kind = 'homework'")]
-        # Courses holding homework and nothing else are empty once it goes.
-        emptied = [r[0] for r in conn.execute(
-            "SELECT i.course_id FROM course_items i JOIN tasks t ON t.id = i.task_id "
-            "GROUP BY i.course_id HAVING SUM(t.kind != 'homework') = 0"
-        )]
-        had_hand_ins = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'task_submissions'"
-        ).fetchone() is not None
-    files = files_root()
-    if not ids and not had_hand_ins and not files.exists():
-        return 0
-    from deeptutor.catalog.enrollment import forget_item
-    from deeptutor.catalog.listings import leave_market
-    from deeptutor.notifications.service import forget_kinds, forget_links
-    from deeptutor.publishing.scope import COURSE, TASK, forget
-
-    for course_id in emptied:
-        leave_market(COURSE, course_id)
-    for task_id in ids:
-        forget(TASK, task_id)
-        forget_item(TASK, task_id)
-    forget_kinds(["homework_submitted", "homework_graded", "homework_regraded", "homework_returned"])
-    # Task notifications of the same kinds as ordinary tasks' (published, opened, due…): by link.
-    forget_links([link for task_id in ids for link in (f"/start?task={task_id}", f"/tasks?task={task_id}")])
-    if files.exists():
-        shutil.rmtree(files)
-    with db.write() as conn:
-        for start in range(0, len(ids), 500):
-            chunk = ids[start:start + 500]
-            marks = ",".join("?" for _ in chunk)
-            conn.execute(f"DELETE FROM course_items WHERE task_id IN ({marks})", chunk)  # nosec B608
-            conn.execute(f"DELETE FROM task_completions WHERE task_key IN ({marks})", chunk)  # nosec B608
-            conn.execute(f"DELETE FROM tasks WHERE id IN ({marks})", chunk)  # nosec B608
-        conn.execute("DROP TABLE IF EXISTS task_submissions")
-    logger.info("Removed %d homework tasks", len(ids))
-    return len(ids)
-
-
 __all__ = [
     "StudentTasks",
     "TaskConflict",
@@ -919,6 +866,5 @@ __all__ = [
     "TaskNotFound",
     "TaskService",
     "forget_student",
-    "remove_homework",
     "transfer_tasks",
 ]

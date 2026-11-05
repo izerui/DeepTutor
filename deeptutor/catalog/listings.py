@@ -542,29 +542,20 @@ def _with_author(entry: dict[str, Any]) -> dict[str, Any]:
 def content_closed(kind: str, item_id: str) -> None:
     """The author archived it or made it private: it leaves the market (§2)."""
     try:
-        leave_market(kind, item_id)
+        if not db.path().exists():
+            return
+        with db.write() as conn:
+            row = _row(conn, kind, item_id)
+            if row is None or row["status"] not in ("listed", "pending"):
+                return
+            target = "unlisted" if row["status"] == "listed" else "draft"
+            conn.execute(
+                "UPDATE listings SET status = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
+                (target, time.time(), kind, item_id),
+            )
+            _event(conn, kind, item_id, row["owner_user_id"], "closed")
     except Exception:
         logger.exception("Could not take %s %s out of the market", kind, item_id)
-
-
-def leave_market(kind: str, item_id: str) -> bool:
-    """Take it out of the market: listed → unlisted, pending → draft; raises when it cannot.
-
-    Whether it was in the market. The author puts it back when it is ready.
-    """
-    if not db.path().exists():
-        return False
-    with db.write() as conn:
-        row = _row(conn, kind, item_id)
-        if row is None or row["status"] not in ("listed", "pending"):
-            return False
-        target = "unlisted" if row["status"] == "listed" else "draft"
-        conn.execute(
-            "UPDATE listings SET status = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
-            (target, time.time(), kind, item_id),
-        )
-        _event(conn, kind, item_id, row["owner_user_id"], "closed")
-    return True
 
 
 def forget(kind: str, item_id: str) -> None:
@@ -607,5 +598,5 @@ def follow_owners(from_user_id: str) -> int:
 
 __all__ = [
     "ListingConflict", "ListingError", "ListingForbidden", "ListingNotFound", "ListingService", "author_name",
-    "author_role", "clean_tags", "content_closed", "describe", "follow_owners", "forget", "leave_market", "status",
+    "author_role", "clean_tags", "content_closed", "describe", "follow_owners", "forget", "status",
 ]
