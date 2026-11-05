@@ -45,6 +45,10 @@ const backHref = (kind: ReportKind, id: string, admin: boolean) =>
 export const practiceSetHref = (setId: string, kind: ReportKind, itemId: string) =>
   `/practice-sets?set=${encodeURIComponent(setId)}${kind === "course" ? `&course=${encodeURIComponent(itemId)}` : ""}`;
 
+/** A course's practice set results, read only, for an administrator (spec 2026-11-05 one-learner-role §2). */
+export const setResultsHref = (setId: string, courseId: string) =>
+  `/practice-sets/results?set=${encodeURIComponent(setId)}&course=${encodeURIComponent(courseId)}`;
+
 /** Mastered of total over the paths of this item. */
 function mastered(row: Pick<LearnerRow, "paths">): { mastered: number; total: number } {
   return row.paths.reduce(
@@ -210,14 +214,11 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
           <ul className="space-y-1 text-[12.5px]">
             {report.practice_sets.map((setId) => (
               <li key={setId}>
-                {/* The results live in the author's set editor; administrators read the titles only. */}
-                {isAdmin ? (
-                  setTitles.get(setId) || t("Practice set")
-                ) : (
-                  <Link href={practiceSetHref(setId, kind, itemId)} className="text-[var(--primary)] hover:underline">
-                    {setTitles.get(setId) || t("Practice set")}
-                  </Link>
-                )}
+                {/* The author reads the results in the set editor; an administrator on a read-only page. */}
+                <Link href={isAdmin ? setResultsHref(setId, itemId) : practiceSetHref(setId, kind, itemId)}
+                  className="text-[var(--primary)] hover:underline">
+                  {setTitles.get(setId) || t("Practice set")}
+                </Link>
               </li>
             ))}
           </ul>

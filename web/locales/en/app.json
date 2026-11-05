@@ -5407,7 +5407,6 @@
   "AI left today: {{percent}}%": "AI left today: {{percent}}%",
   "All time": "All time",
   "Answers in period": "Answers in period",
-  "Answers to short-answer questions and the options picked are shown to you only.": "Answers to short-answer questions and the options picked are shown to you only.",
   "Attempts allowed": "Attempts allowed",
   "Chapters (none ticked: the whole book)": "Chapters (none ticked: the whole book)",
   "Daily AI limit": "Daily AI limit",
@@ -5761,5 +5760,7 @@
   "Tasks from the courses you joined, and the tasks of the courses you made.": "Tasks from the courses you joined, and the tasks of the courses you made.",
   "Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.": "Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.",
   "Some of these learners cannot open what this task asks for. Widen who receives it first.": "Some of these learners cannot open what this task asks for. Widen who receives it first.",
-  "What they made stays theirs.": "What they made stays theirs."
+  "What they made stays theirs.": "What they made stays theirs.",
+  "Answers to short-answer questions and the options picked are shown only to the author and administrators.": "Answers to short-answer questions and the options picked are shown only to the author and administrators.",
+  "Practice set results": "Practice set results"
 }

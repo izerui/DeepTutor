@@ -5093,7 +5093,6 @@
   "AI left today: {{percent}}%": "IA restante aujourd'hui : {{percent}} %",
   "All time": "Depuis le début",
   "Answers in period": "Réponses sur la période",
-  "Answers to short-answer questions and the options picked are shown to you only.": "Les réponses aux questions ouvertes et les options choisies ne sont visibles que par vous.",
   "Attempts allowed": "Tentatives autorisées",
   "Chapters (none ticked: the whole book)": "Chapitres (aucun coché : tout le livre)",
   "Daily AI limit": "Limite d'IA quotidienne",
@@ -5446,5 +5445,7 @@
   "Tasks from the courses you joined, and the tasks of the courses you made.": "Les tâches des cours que vous avez rejoints et celles des cours que vous avez créés.",
   "Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.": "Répondez aux séries d'exercices que vous avez rejointes, ou écrivez les vôtres, publiez-les, mettez-les sur le marché d'apprentissage et voyez comment les apprenants s'en sont sortis.",
   "Some of these learners cannot open what this task asks for. Widen who receives it first.": "Certains de ces apprenants ne peuvent pas ouvrir ce que demande cette tâche. Élargis d’abord qui le reçoit.",
-  "What they made stays theirs.": "Ce qu’ils ont créé leur reste."
+  "What they made stays theirs.": "Ce qu’ils ont créé leur reste.",
+  "Answers to short-answer questions and the options picked are shown only to the author and administrators.": "Les réponses aux questions ouvertes et les options choisies ne sont visibles que par l’auteur et les administrateurs.",
+  "Practice set results": "Résultats de la série d’exercices"
 }

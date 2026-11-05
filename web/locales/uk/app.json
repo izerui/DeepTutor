@@ -5451,7 +5451,6 @@
   "AI left today: {{percent}}%": "Залишок ШІ на сьогодні: {{percent}}%",
   "All time": "Весь час",
   "Answers in period": "Відповіді за період",
-  "Answers to short-answer questions and the options picked are shown to you only.": "Відповіді на відкриті питання та вибрані варіанти бачите лише ви.",
   "Attempts allowed": "Дозволено спроб",
   "Chapters (none ticked: the whole book)": "Розділи (нічого не вибрано: уся книга)",
   "Daily AI limit": "Денний ліміт ШІ",
@@ -5805,5 +5804,7 @@
   "Tasks from the courses you joined, and the tasks of the courses you made.": "Завдання з курсів, до яких ви приєдналися, і завдання ваших власних курсів.",
   "Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.": "Відповідайте на набори вправ, до яких ви приєдналися, або створюйте власні, публікуйте їх, розміщуйте на навчальному ринку та дивіться, як впоралися учні.",
   "Some of these learners cannot open what this task asks for. Widen who receives it first.": "Деякі з цих учнів не можуть відкрити те, чого вимагає це завдання. Спершу розшир коло отримувачів.",
-  "What they made stays theirs.": "Те, що вони створили, лишається їхнім."
+  "What they made stays theirs.": "Те, що вони створили, лишається їхнім.",
+  "Answers to short-answer questions and the options picked are shown only to the author and administrators.": "Відповіді на відкриті запитання та вибрані варіанти бачать лише автор і адміністратори.",
+  "Practice set results": "Результати набору вправ"
 }

@@ -5407,7 +5407,6 @@
   "AI left today: {{percent}}%": "今天的 AI 用量还剩 {{percent}}%",
   "All time": "全部时间",
   "Answers in period": "期间答题数",
-  "Answers to short-answer questions and the options picked are shown to you only.": "主观题答案和学习者选的选项只给你看。",
   "Attempts allowed": "最多作答次数",
   "Chapters (none ticked: the whole book)": "章节（不勾就是整本）",
   "Daily AI limit": "每天 AI 用量上限",
@@ -5761,5 +5760,7 @@
   "Tasks from the courses you joined, and the tasks of the courses you made.": "你加入的课程里的任务，以及你做的课程里的任务。",
   "Answer the practice sets you joined, or write your own, publish them, put them in the learning market, and see how learners did.": "做你加入的练习集，也可以自己出题、发布、上架到学习市场，并查看学习者的完成情况。",
   "Some of these learners cannot open what this task asks for. Widen who receives it first.": "其中有学习者打不开这个任务要求的内容，请先放宽那项内容的发布范围。",
-  "What they made stays theirs.": "他们做过的内容仍归他们自己。"
+  "What they made stays theirs.": "他们做过的内容仍归他们自己。",
+  "Answers to short-answer questions and the options picked are shown only to the author and administrators.": "主观题答案和学习者选的选项只给作者和管理员看。",
+  "Practice set results": "练习集成绩"
 }

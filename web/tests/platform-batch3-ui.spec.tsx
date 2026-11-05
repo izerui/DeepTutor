@@ -140,9 +140,9 @@ it("lets an administrator read a course report, without the author's editing lin
   expect(screen.getByRole("button", { name: "sara" })).toBeTruthy();
   // Back goes to the course's introduction, not the author's course editor.
   expect(screen.getByRole("link", { name: "Learning market" }).getAttribute("href")).toBe("/market/item?kind=course&id=crs_1");
-  // A practice set's results live in its author's editor: named, not linked.
-  expect(screen.queryByRole("link", { name: "Week 1 quiz" })).toBeNull();
-  expect(screen.getByRole("region", { name: "Practice sets in this course" }).textContent).toContain("Week 1 quiz");
+  // A practice set's results open read-only, not in its author's editor.
+  expect(screen.getByRole("link", { name: "Week 1 quiz" }).getAttribute("href"))
+    .toBe("/practice-sets/results?set=ps_1&course=crs_1");
 });
 
 it("reports a path without the course columns, and shows a learner's detail", async () => {
