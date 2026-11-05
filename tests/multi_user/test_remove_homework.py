@@ -353,3 +353,76 @@ def test_homework_is_refused_by_the_api(teaching_users, monkeypatch):
         ("GET", f"/api/tasks/{task_id}/students/{sara}/files/a.txt"),
     ):
         assert client.request(method, path, headers=tina).status_code in (404, 405), path
+
+
+def _listed(kind: str, item_id: str, owner_id: str) -> None:
+    from deeptutor.catalog.store import db as catalog_db
+
+    now = time.time()
+    with catalog_db.write() as conn:
+        conn.execute(
+            "INSERT INTO listings (kind, item_id, owner_user_id, status, title, stages_json, subjects_json, "
+            "approved_once, created_at, updated_at, listed_at) "
+            "VALUES (?, ?, ?, 'listed', ?, '[\"high\"]', '[\"physics\"]', 1, ?, ?, ?)",
+            (kind, item_id, owner_id, item_id, now, now, now),
+        )
+
+
+def test_a_course_of_homework_only_leaves_the_market_and_a_mixed_one_stays(as_account, ids, old_data):
+    from deeptutor.catalog import listings
+    from deeptutor.catalog.enrollment import EnrollmentNotFound, join
+    from deeptutor.catalog.market import Filters, search
+    from deeptutor.multi_user.context import get_current_user
+    from deeptutor.tasks.courses import CourseService
+    from deeptutor.tasks.service import StudentTasks, remove_homework
+    from deeptutor.tasks.store import db as task_db
+
+    # A published course holding only homework, listed like the mixed one.
+    only, homework = "crs_onlyhomework", "task_oldhomework2"
+    now = time.time()
+    with task_db.write() as conn:
+        conn.execute(
+            "INSERT INTO courses (id, owner_user_id, title, status, created_at, updated_at, published_at) "
+            "VALUES (?, ?, 'Essays', 'published', ?, ?, ?)",
+            (only, ids["tina"], now, now, now),
+        )
+        conn.execute(
+            "INSERT INTO tasks (id, owner_user_id, kind, title, status, created_at, updated_at, published_at) "
+            "VALUES (?, ?, 'homework', 'Essay 2', 'published', ?, ?, ?)",
+            (homework, ids["tina"], now, now, now),
+        )
+        conn.execute("INSERT INTO course_items VALUES (?, ?, 0)", (only, homework))
+    _listed("course", only, ids["tina"])
+    _listed("course", old_data.course, ids["tina"])
+
+    def market(name: str) -> set[str]:
+        with as_account(name):
+            return {e["id"] for e in search(get_current_user(), Filters())["items"]}
+
+    assert {only, old_data.course} <= market("tom")
+
+    assert remove_homework() == 2
+
+    # Emptied: out of the market, nobody joins it, the author keeps it to fill again.
+    assert listings.status("course", only) == "unlisted"
+    assert only not in market("tom")
+    with as_account("tom"), pytest.raises(EnrollmentNotFound):
+        join(get_current_user(), "course", only)
+    with as_account("tina"):
+        kept = CourseService().get(only)
+    assert (kept["status"], kept["tasks"]) == ("published", [])
+
+    # Mixed: still listed, joined and learned as before.
+    assert listings.status("course", old_data.course) == "listed"
+    assert old_data.course in market("tom")
+    with as_account("tom"):
+        join(get_current_user(), "course", old_data.course)
+        assert [e["key"] for e in StudentTasks().assigned()] == [old_data.note]
+    with as_account("sara"):
+        [entry] = StudentTasks().assigned()
+    assert (entry["key"], entry["state"]) == (old_data.note, "completed")
+
+    # A second start changes nothing.
+    assert remove_homework() == 0
+    assert listings.status("course", only) == "unlisted"
+    assert listings.status("course", old_data.course) == "listed"
