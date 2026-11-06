@@ -76,7 +76,7 @@ class ReviewService:
             raise ListingNotFound("Not found.")
         return info
 
-    def _view(self, row, owner: str) -> dict[str, Any]:
+    def _view(self, row, owner: str, reported: set[str] | None = None) -> dict[str, Any]:
         from deeptutor.multi_user.ownership import owns
 
         mine = row["user_id"] == self.actor.id
@@ -86,6 +86,9 @@ class ReviewService:
             "created_at": row["created_at"], "updated_at": row["updated_at"],
             "mine": mine, "can_reply": owns(owner, self.actor),
             "can_delete": mine or self._role() == "admin",
+            # Audit fix B §1: anyone but its writer reports a review, once while it is open.
+            "can_report": not mine and self._role() != "admin",
+            "reported": row["user_id"] in (reported or set()),
         }
 
     def list_for(self, kind: str, item_id: str, page: int = 1) -> dict[str, Any]:
@@ -103,10 +106,13 @@ class ReviewService:
             ).fetchall() if conn else []
         average = round(sum(r["stars"] for r in rows) / len(rows), 2) if rows else None
         start = (max(1, page) - 1) * PAGE
+        from deeptutor.catalog.flags import reported_by
+
+        reported = reported_by(self.actor.id, kind, item_id)
         return {
             "average": average,
             "count": len(rows),
-            "reviews": [self._view(r, info.owner) for r in rows[start:start + PAGE]],
+            "reviews": [self._view(r, info.owner, reported) for r in rows[start:start + PAGE]],
             "mine": next((self._view(r, info.owner) for r in rows if r["user_id"] == self.actor.id), None),
             "can_review": joined and not owns(info.owner, self.actor),
         }
@@ -150,11 +156,15 @@ class ReviewService:
         target = user_id or self.actor.id
         if target != self.actor.id and self._role() != "admin":
             raise ListingForbidden("Only administrators delete other people's reviews.")
-        self._item(kind, item_id)
+        info = self._item(kind, item_id)
         with db.write() as conn:
             conn.execute(
                 "DELETE FROM reviews WHERE kind = ? AND item_id = ? AND user_id = ?", (kind, item_id, target)
             )
+        from deeptutor.catalog.flags import REVIEW_DELETED, resolve
+
+        # Audit fix B §1: whoever reported it hears that it is gone.
+        resolve(kind, item_id, target, REVIEW_DELETED, self.actor.id, title=info.title)
         return self.list_for(kind, item_id)
 
     def reply(self, kind: str, item_id: str, user_id: str, text: str) -> dict[str, Any]:
@@ -203,6 +213,9 @@ def forget_user(user_id: str) -> None:
         with db.write() as conn:
             conn.execute("DELETE FROM reviews WHERE user_id = ?", (user_id,))
             conn.execute("DELETE FROM favorites WHERE user_id = ?", (user_id,))
+        from deeptutor.catalog import flags
+
+        flags.forget_user(user_id)
 
 
 def forget_item(kind: str, item_id: str) -> None:
@@ -210,6 +223,9 @@ def forget_item(kind: str, item_id: str) -> None:
         with db.write() as conn:
             conn.execute("DELETE FROM reviews WHERE kind = ? AND item_id = ?", (kind, item_id))
             conn.execute("DELETE FROM favorites WHERE kind = ? AND item_id = ?", (kind, item_id))
+        from deeptutor.catalog import flags
+
+        flags.forget_item(kind, item_id)
 
 
 __all__ = ["ReviewService", "favorites_of", "forget_item", "forget_user", "ratings"]

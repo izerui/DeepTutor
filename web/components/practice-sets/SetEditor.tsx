@@ -7,7 +7,6 @@ import { Archive, BookOpen, Plus, Save, Send, Sparkles, Trash2, X } from "lucide
 import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import QuestionBankPicker from "@/components/chat/QuestionBankPicker";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import { listKnowledgeBases } from "@/features/knowledge/api/catalog";
 import {
   archiveSet,
@@ -50,7 +49,7 @@ const blankQuestion = (): PracticeQuestion => ({
   points: 1,
 });
 
-/** A teacher's practice set: draft, publish, scope and report (spec 2026-10-29 §8). */
+/** An author's practice set: draft, publish and report (spec 2026-10-29 §8). */
 export function SetEditor({
   setId,
   onChanged,
@@ -150,7 +149,7 @@ export function SetEditor({
               void run(async () => {
                 await save();
                 // Platform batch 1 §4.4: a first publication goes to nobody until people join from the market.
-                return publishSet(setId, saved.current_revision === 0 ? JOIN_ONLY_SCOPE : undefined);
+                return publishSet(setId);
               }, t("Published."))
             }
           >

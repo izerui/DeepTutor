@@ -1,6 +1,5 @@
 import { apiFetch, apiUrl } from "./api";
 import { downloadAuthenticated } from "./authenticated-download";
-import type { ScopeUpdate } from "./publish-api";
 import type {
   AttemptTally,
   PracticeSetResult,
@@ -15,9 +14,6 @@ export const CATALOG_KINDS: readonly CatalogKind[] = ["book", "knowledge_base", 
 
 export type ListingStatus = "none" | "draft" | "pending" | "rejected" | "listed" | "unlisted" | "taken_down";
 export type SortOrder = "newest" | "popular" | "rating";
-
-/** Published for the market: nobody receives it until they join (platform batch 1 §4.4). */
-export const JOIN_ONLY_SCOPE: ScopeUpdate = { everyone: false, join_only: true };
 
 /** Chinese and English always; the built-in entries also in German, French, Polish and Ukrainian. */
 export interface TaxonomyName {
@@ -150,10 +146,18 @@ export interface StudyTarget {
   name?: string;
 }
 
+/** Why nobody studies it now (audit fix B §2): an administrator took it down, or its author withdrew it. */
+export type Unavailable = "taken_down" | "archived";
+
 export interface CatalogItemDetail extends CatalogEntry {
   mine: boolean;
   closed: boolean;
+  unavailable?: Unavailable | null;
   can_join: boolean;
+  /** Audit fix B §1: anyone but its author reports it. */
+  can_report?: boolean;
+  /** The viewer's report of it is still open. */
+  reported?: boolean;
   preview: CatalogPreview;
   study: StudyTarget;
 }
@@ -480,6 +484,10 @@ export interface ItemReview {
   can_reply: boolean;
   /** One's own, or any (administrators). */
   can_delete: boolean;
+  /** Audit fix B §1: anyone but its writer reports it. */
+  can_report?: boolean;
+  /** The viewer's report of it is still open. */
+  reported?: boolean;
 }
 
 export interface ItemReviews {
@@ -507,3 +515,45 @@ export const replyToReview = (kind: string, id: string, userId: string, text: st
   call<ItemReviews>(`${reviews(kind, id)}/${encodeURIComponent(userId)}/reply`, send("PUT", { text }));
 export const setFavorite = (kind: string, id: string, on: boolean) =>
   call<{ favorited: boolean }>(`/items${item(kind, id)}/favorite`, send(on ? "PUT" : "DELETE"));
+
+// ── reports of content and reviews (audit fix B §1) ──────
+
+export type FlagReason = "wrong" | "infringement" | "advertising" | "inappropriate" | "other";
+export const FLAG_REASONS: readonly FlagReason[] = ["wrong", "infringement", "advertising", "inappropriate", "other"];
+export const FLAG_NOTE_MAX = 500;
+
+export interface FlagReport {
+  reporter: string;
+  reason: FlagReason;
+  note: string;
+  created_at: number;
+}
+
+/** The open reports of one item or one review, gathered for an administrator. */
+export interface FlagGroup {
+  kind: CatalogKind;
+  id: string;
+  /** Empty for the item itself; the reviewer's id for a review. */
+  review_user_id: string;
+  target: "item" | "review";
+  title: string;
+  status: ListingStatus;
+  author: string;
+  count: number;
+  reasons: Partial<Record<FlagReason, number>>;
+  reports: FlagReport[];
+  first_at: number | null;
+  review: { author: string; stars: number | null; text: string; exists: boolean } | null;
+}
+
+export type FlagAction = "take_down" | "delete_review" | "dismiss";
+
+export const reportItem = (kind: string, id: string, reason: FlagReason, note: string) =>
+  call<{ reported: boolean }>(`/items${item(kind, id)}/report`, send("POST", { reason, note }));
+export const reportReview = (kind: string, id: string, userId: string, reason: FlagReason, note: string) =>
+  call<{ reported: boolean }>(`${reviews(kind, id)}/${encodeURIComponent(userId)}/report`, send("POST", { reason, note }));
+export const listFlags = () => call<{ reports: FlagGroup[] }>("/review/reports").then((r) => r.reports);
+export const handleFlags = (group: Pick<FlagGroup, "kind" | "id" | "review_user_id">, action: FlagAction, reason = "") =>
+  call<{ handled: FlagAction }>("/review/reports/handle", send("POST", {
+    kind: group.kind, item_id: group.id, review_user_id: group.review_user_id, action, reason,
+  }));

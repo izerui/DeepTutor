@@ -15,7 +15,6 @@ import {
 } from "@/lib/withdrawal-confirmation";
 import type { Book, BookKbChoice, BookSharing } from "@/lib/book-types";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 
 const ISSUE_MESSAGES = {
   connector: "Personal connectors cannot be shared.",
@@ -81,8 +80,6 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
       await bookApi.setVisibility(requestedRef, {
         visibility: makingPublic ? "public" : "private",
         kb_choices: makingPublic ? choices : {},
-        // Platform batch 1 §4.4: nobody receives it until they join from the market.
-        ...(makingPublic ? { scope: JOIN_ONLY_SCOPE } : {}),
         force: makingPublic && isAdmin && force,
         ...(!makingPublic ? confirmationFields(impact) : {}),
       }, workspaceId);
@@ -105,7 +102,6 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
     await bookApi.setVisibility(requestedRef, {
       visibility: "public",
       kb_choices: choices,
-      scope: JOIN_ONLY_SCOPE,
       force: isAdmin && force,
     }, workspaceId);
     if (!alive.current) return;

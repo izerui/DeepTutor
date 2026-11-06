@@ -304,7 +304,7 @@ it("has no deadline or answer-timing setting, saves none and publishes for joine
   expect(screen.queryByText("Show answers")).toBeNull();
   expect(screen.queryByText(/deadline/i)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
-  await waitFor(() => expect(practice.publishSet).toHaveBeenCalledWith("ps_1", { everyone: false, join_only: true }));
+  await waitFor(() => expect(practice.publishSet).toHaveBeenCalledWith("ps_1"));
   const saved = practice.updateSet.mock.calls[0][1];
   expect(saved).not.toHaveProperty("due_at");
   expect(saved).not.toHaveProperty("reveal");

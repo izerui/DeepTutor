@@ -213,6 +213,7 @@ async def _teacher_course_index() -> ResourceIndex:
             "total": len(row["tasks"]),
         }
         for row in rows
+        if not row.get("unavailable")  # taken down or withdrawn (audit fix B §2)
     }
 
 

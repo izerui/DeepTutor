@@ -10,6 +10,7 @@ import {
   deleteReview,
   listReviews,
   replyToReview,
+  reportReview,
   REVIEW_REPLY_MAX,
   REVIEW_TEXT_MAX,
   saveMyReview,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/catalog-api";
 
 import { catalogError, formatDay } from "./catalog-format";
+import { ReportForm } from "./ReportForm";
 
 const textareaClass =
   "min-h-16 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 text-[13px] outline-none focus:border-[var(--ring)]";
@@ -120,6 +122,7 @@ export function ReviewsSection({ kind, itemId, onRated }: { kind: string; itemId
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [replying, setReplying] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -223,6 +226,15 @@ export function ReviewsSection({ kind, itemId, onRated }: { kind: string; itemId
                       {t("Delete")}
                     </button>
                   )}
+                  {/* Audit fix B §1: anyone but its writer reports a review. */}
+                  {review.can_report && !review.reported && reporting !== review.user_id && (
+                    <button type="button" className="text-[var(--muted-foreground)] hover:underline"
+                      aria-label={t("Report the review by {{name}}", { name: review.author || t("Learner") })}
+                      onClick={() => setReporting(review.user_id)}>
+                      {t("Report this")}
+                    </button>
+                  )}
+                  {review.reported && <span data-testid="review-reported">{t("Reported")}</span>}
                 </span>
               </div>
               {review.text && <p className="whitespace-pre-line">{review.text}</p>}
@@ -231,6 +243,20 @@ export function ReviewsSection({ kind, itemId, onRated }: { kind: string; itemId
                   <p className="text-[11.5px] font-medium text-[var(--muted-foreground)]">{t("Author's reply")}</p>
                   <p className="whitespace-pre-line">{review.reply}</p>
                 </div>
+              )}
+              {reporting === review.user_id && (
+                <ReportForm
+                  label={t("Report this review")}
+                  onSend={(reason, note) => reportReview(kind, itemId, review.user_id, reason, note)}
+                  onCancel={() => setReporting(null)}
+                  onDone={() => {
+                    setReporting(null);
+                    setData((cur) => cur && {
+                      ...cur,
+                      reviews: cur.reviews.map((r) => (r.user_id === review.user_id ? { ...r, reported: true } : r)),
+                    });
+                  }}
+                />
               )}
               {replying === review.user_id && (
                 <ReplyForm initial={review.reply ?? ""} busy={busy}

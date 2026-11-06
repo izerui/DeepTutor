@@ -139,6 +139,56 @@ def _notify(user_ids, kind: str, row, *, reason: str = "") -> None:
     )
 
 
+def _people_in(kind: str, item_id: str, owner: str) -> set[str]:
+    """Everyone in the item now, however they came in (a course: those who joined it)."""
+    with db.read() as conn:
+        if conn is None:
+            return set()
+        if kind == scopes.COURSE:
+            rows = conn.execute(
+                "SELECT DISTINCT user_id FROM enrollments WHERE kind = ? AND item_id = ? AND left_at IS NULL "
+                "AND via IN (?, ?)",
+                (kind, item_id, *enrollment.DIRECT),
+            )
+        else:
+            rows = conn.execute(
+                "SELECT DISTINCT user_id FROM enrollments WHERE kind = ? AND item_id = ? AND left_at IS NULL",
+                (kind, item_id),
+            )
+        return {r[0] for r in rows} - {owner}
+
+
+def notify_withdrawn(kind: str, item_id: str, how: str, *, title: str = "", owner: str = "") -> None:
+    """Tell the people in an item that it was taken down, unlisted or withdrawn (audit fix B §2).
+
+    *how*: ``taken_down`` (an administrator), ``unlisted`` (out of the market,
+    still studied) or ``archived`` (its author archived it or made it private).
+    Best effort: a notice never makes the change that caused it fail.
+    """
+    try:
+        if not db.path().exists():
+            return
+        if not title or not owner:
+            info = items.info(kind, item_id)
+            title = title or (info.title if info else "")
+            owner = owner or (info.owner if info else "")
+        people = _people_in(kind, item_id, owner)
+        if not people:
+            return
+        from deeptutor.notifications.service import notify
+
+        link = (
+            f"/tasks?course={item_id}" if kind == scopes.COURSE
+            else f"/market/item?kind={kind}&id={item_id}"
+        )
+        notify(
+            people, "content_withdrawn", {"content": kind, "title": title, "how": how},
+            link=link, dedupe_key=f"content_withdrawn:{kind}:{item_id}:{how}:{time.strftime('%Y-%m-%d')}",
+        )
+    except Exception:
+        logger.warning("Could not tell the people in %s %s that it went", kind, item_id, exc_info=True)
+
+
 def _event(conn, kind: str, item_id: str, actor_id: str, action: str, reason: str = "") -> None:
     conn.execute(
         "INSERT INTO listing_events (kind, item_id, actor_id, action, reason, at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -313,9 +363,10 @@ class ListingService:
         return self.get(kind, item_id)
 
     def unlist(self, kind: str, item_id: str) -> dict[str, Any]:
-        """Out of the market; those who joined keep studying it."""
+        """Out of the market; those who joined keep studying it, and are told (audit fix B §2)."""
         self._own_item(kind, item_id)
-        self._move(kind, item_id, ("listed",), "unlisted", "unlisted")
+        row = self._move(kind, item_id, ("listed",), "unlisted", "unlisted")
+        notify_withdrawn(kind, item_id, "unlisted", title=row["title"], owner=row["owner_user_id"])
         return self.get(kind, item_id)
 
     def relist(self, kind: str, item_id: str) -> dict[str, Any]:
@@ -429,6 +480,11 @@ class ListingService:
 
         notify_lost(kind, item_id, owner=row["owner_user_id"], name=row["title"])  # batch 3 §6
         _notify([row["owner_user_id"]], "listing_taken_down", row, reason=reason)
+        # Audit fix B: the people in it hear it went (§2); whoever reported it, what was decided (§1).
+        notify_withdrawn(kind, item_id, "taken_down", title=row["title"], owner=row["owner_user_id"])
+        from deeptutor.catalog.flags import TAKEN_DOWN, resolve
+
+        resolve(kind, item_id, "", TAKEN_DOWN, self.actor.id, title=row["title"])
         return describe(row)
 
     def classify(
@@ -536,22 +592,23 @@ def _with_author(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def content_closed(kind: str, item_id: str) -> None:
-    """The author archived it or made it private: it leaves the market (§2)."""
+    """The author archived it or made it private: it leaves the market (§2), and the
+    people in it are told (audit fix B §2)."""
     try:
         if not db.path().exists():
             return
         with db.write() as conn:
             row = _row(conn, kind, item_id)
-            if row is None or row["status"] not in ("listed", "pending"):
-                return
-            target = "unlisted" if row["status"] == "listed" else "draft"
-            conn.execute(
-                "UPDATE listings SET status = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
-                (target, time.time(), kind, item_id),
-            )
-            _event(conn, kind, item_id, row["owner_user_id"], "closed")
+            if row is not None and row["status"] in ("listed", "pending"):
+                target = "unlisted" if row["status"] == "listed" else "draft"
+                conn.execute(
+                    "UPDATE listings SET status = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
+                    (target, time.time(), kind, item_id),
+                )
+                _event(conn, kind, item_id, row["owner_user_id"], "closed")
     except Exception:
         logger.exception("Could not take %s %s out of the market", kind, item_id)
+    notify_withdrawn(kind, item_id, "archived")
 
 
 def forget(kind: str, item_id: str) -> None:
@@ -594,5 +651,5 @@ def follow_owners(from_user_id: str) -> int:
 
 __all__ = [
     "ListingConflict", "ListingError", "ListingForbidden", "ListingNotFound", "ListingService", "author_name",
-    "author_role", "clean_tags", "content_closed", "describe", "follow_owners", "forget", "status",
+    "author_role", "clean_tags", "content_closed", "describe", "follow_owners", "forget", "notify_withdrawn", "status",
 ]

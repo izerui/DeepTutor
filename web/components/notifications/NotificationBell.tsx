@@ -70,6 +70,22 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return t("“{{title}}” was not approved: {{reason}}", { title, reason: p.reason });
     case "listing_taken_down":
       return t("“{{title}}” was taken out of the market: {{reason}}", { title, reason: p.reason });
+    // Audit fix B §2: something one is in was taken down, taken out of the market or withdrawn.
+    case "content_withdrawn":
+      if (p.how === "taken_down") return t("“{{title}}” was taken down. Your learning records are kept.", { title });
+      if (p.how === "unlisted") return t("“{{title}}” was taken out of the market. You can keep studying it.", { title });
+      return t("“{{title}}” is no longer available: its author withdrew it. Your learning records are kept.", { title });
+    // Audit fix B §1: reports, for administrators and for whoever reported.
+    case "report_submitted":
+      return (item.count ?? 1) > 1
+        ? t("{{count}} new reports about “{{title}}”", { title, count: item.count })
+        : t("Someone reported “{{title}}”", { title });
+    case "report_resolved":
+      if (p.outcome === "taken_down") return t("You reported “{{title}}”: it was taken down. Thank you.", { title });
+      if (p.outcome === "review_deleted") return t("The review of “{{title}}” you reported was removed. Thank you.", { title });
+      return p.target === "review"
+        ? t("The review of “{{title}}” you reported was checked and kept.", { title })
+        : t("You reported “{{title}}”: it was checked and kept.", { title });
     // Follow-ups §1: new reviews of one's item, at most one notification a day (counted).
     case "listing_reviewed":
       return (item.count ?? 1) > 1

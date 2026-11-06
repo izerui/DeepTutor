@@ -126,7 +126,6 @@ it("registers a first publish, defaults private materials to public and sends th
     kp_decisions: {},
     kb_choices: { kb_1: "reference_only" },
     book_choices: { bk_1: "make_public" },
-    join_only: true,
   });
 });
 

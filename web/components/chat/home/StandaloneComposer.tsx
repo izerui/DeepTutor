@@ -25,6 +25,8 @@ import dynamic from "next/dynamic";
 import { MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { useAuthStatus } from "@/hooks/useAuthStatus";
+
 import ChatComposer from "@/components/chat/home/ChatComposer";
 import type { ContextBudget } from "@/components/chat/home/ContextBudgetChip";
 import type { ResourceSelection } from "@/features/chat/ChatStateAdapter";
@@ -249,6 +251,8 @@ function StandaloneComposerImpl({
   contextBudget = null,
 }: StandaloneComposerProps) {
   const { t } = useTranslation();
+  // Audit fix B §3: partners are for administrators; learners are not offered them.
+  const { isAdmin } = useAuthStatus();
 
   // ── Composer DOM refs ─────────────────────────────────────────
   const composerRef = useRef<HTMLDivElement>(null);
@@ -900,9 +904,9 @@ function StandaloneComposerImpl({
         selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
         onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}
         selectedPartnerGroup={selectedPartnerGroup}
-        onSelectPartnerGroup={handleSelectPartnerGroup}
+        onSelectPartnerGroup={isAdmin ? handleSelectPartnerGroup : undefined}
         selectedPartner={selectedPartner}
-        onSelectPartner={handleSelectPartner}
+        onSelectPartner={isAdmin ? handleSelectPartner : undefined}
         subagentBudget={subagentBudget}
         onSubagentBudgetChange={setSubagentBudget}
         personaSelection={personaSelection}

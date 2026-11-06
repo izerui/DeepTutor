@@ -53,7 +53,7 @@ export function SetResults({ setId, initiallyOpen = false }: { setId: string; in
       ) : !report ? (
         <div aria-busy="true" className="h-20 animate-pulse rounded-xl bg-[var(--muted)]" />
       ) : report.students.length === 0 ? (
-        <p className={hintClass}>{t("Nobody receives this practice set yet.")}</p>
+        <p className={hintClass}>{t("Nobody has joined this practice set yet.")}</p>
       ) : (
         <div className="space-y-4">
           <div className="overflow-x-auto">

@@ -25,6 +25,8 @@ export interface NavEntry {
   defaultCollapsed?: boolean
   /** Model capability this feature needs; locked when the user lacks it. */
   requires?: Capability
+  /** Shown to administrators only (audit fix B §3). */
+  adminOnly?: boolean
 }
 
 /**
@@ -48,12 +50,14 @@ export const PRIMARY_NAV: NavEntry[] = [
     tooltipKey: 'Home tooltip',
     requires: 'llm',
   },
+  // Audit fix B §3: IM bots run on the server, on shared resources: administrators only.
   {
     href: '/partners',
     label: 'Partners',
     icon: HeartHandshake,
     tooltipKey: 'Partners tooltip',
     requires: 'llm',
+    adminOnly: true,
   },
   {
     href: LEARNING_HUB,
@@ -107,6 +111,11 @@ export const PRIMARY_NAV_HREFS = PRIMARY_NAV.map(entry => entry.href)
 export const NAV_BY_HREF = new Map(
   [...PRIMARY_NAV, ...SECONDARY_NAV].map(entry => [entry.href, entry])
 )
+
+/** The entries this account sees: learners do not see administrators' ones. */
+export function navHrefsFor(hrefs: readonly string[], isAdmin: boolean): string[] {
+  return hrefs.filter(href => isAdmin || !NAV_BY_HREF.get(href)?.adminOnly)
+}
 
 export function isNavActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)

@@ -343,7 +343,7 @@ def _market_path(as_account, teacher_draft):
         template = service.register("topic_calculus", "")
         preview = asyncio.run(service.preview_publish(template.id))
         asyncio.run(service.publish(
-            template.id, PublishRequest(draft_revision=preview["draft_revision"], join_only=True),
+            template.id, PublishRequest(draft_revision=preview["draft_revision"]),
         ))
     return template.id
 

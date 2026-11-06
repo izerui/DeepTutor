@@ -146,5 +146,3 @@ class PublishRequest(BaseModel):
     kb_choices: dict[str, KbChoice] = Field(default_factory=dict)
     #: book_id -> choice, for the caller's own private books the path cites.
     book_choices: dict[str, KbChoice] = Field(default_factory=dict)
-    #: Published for the market: nobody receives it until they join (platform batch 1 §4.4).
-    join_only: bool = False

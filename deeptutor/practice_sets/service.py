@@ -395,25 +395,6 @@ class PracticeSetService:
                 )
         return self.get(set_id)
 
-    def _notify_unsubmitted(self, set_id: str, title: str, kind: str, params: dict[str, Any]) -> None:
-        """Tell the students the set reaches who have not submitted it yet."""
-        from deeptutor.notifications.service import notify
-        from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
-
-        scope = get_scope(PRACTICE_SET, set_id)
-        reached = audience(scope, learners_only=True, owner_id=self.actor.id) if scope else set()
-        with store.read() as conn:
-            done = {
-                r[0] for r in conn.execute(
-                    "SELECT DISTINCT student_id FROM practice_submissions WHERE set_id = ?", (set_id,)
-                )
-            } if conn else set()
-        notify(
-            reached - done, kind, {"title": title, **params},
-            # Straight to the set: once classes retire a set is no longer shown as a task (traceability #2).
-            link=f"/practice-sets?set={set_id}", dedupe_key=f"{kind}:practice_set:{set_id}:{params}",
-        )
-
     def publish(self, set_id: str) -> dict[str, Any]:
         """Freeze the draft as the next revision (§8.5); earlier submissions keep theirs."""
         with store.read() as conn:
@@ -441,11 +422,6 @@ class PracticeSetService:
                 "UPDATE practice_sets SET status = 'published', current_revision = ?, updated_at = ? "
                 "WHERE id = ?",
                 (revision, now, set_id),
-            )
-        if revision == 1:
-            self._notify_unsubmitted(
-                set_id, row["title"], "content_published",
-                {"content": "practice_set", "teacher": self.actor.username},
             )
         return self.get(set_id)
 

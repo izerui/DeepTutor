@@ -156,7 +156,46 @@ class CourseService:
             self._publish_drafts(course_id)
             # Its members get the new tasks and what they cite (platform batch 1 §4.3).
             refresh_course(course_id)
+            if added:
+                self._tell_members_of_new_lessons(course_id, row["title"], added)
         return self.get(course_id)
+
+    def _tell_members_of_new_lessons(self, course_id: str, course_title: str, added: list[str]) -> None:
+        """Audit fix B §5: the people who joined a published course hear of its new lessons.
+
+        One notice a day per course; more lessons that day raise its count.
+        """
+        try:
+            from deeptutor.catalog.enrollment import DIRECT, access_state
+            from deeptutor.catalog.store import db as catalog_db
+            from deeptutor.notifications.service import notify
+
+            if access_state("course", course_id)[0]:
+                return  # taken down: nobody reaches its lessons
+            with catalog_db.read() as conn:
+                people = {
+                    r[0] for r in conn.execute(
+                        "SELECT DISTINCT user_id FROM enrollments WHERE kind = 'course' AND item_id = ? "
+                        "AND left_at IS NULL AND via IN (?, ?)",
+                        (course_id, *DIRECT),
+                    )
+                } if conn else set()
+            people.discard(self.actor.id)
+            if not people:
+                return
+            with db.read() as conn:
+                first = conn.execute("SELECT title FROM tasks WHERE id = ?", (added[0],)).fetchone()
+            notify(
+                people, "task_published",
+                # ``teacher`` is the author's name (the stored key, as before); ``course`` the course.
+                {"title": first["title"] if first else "", "teacher": self.actor.username, "course": course_title},
+                link=f"/tasks?course={course_id}",
+                dedupe_key=f"lessons_added:{course_id}:{time.strftime('%Y-%m-%d')}", bump=True,
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("Could not tell %s of its new lessons", course_id, exc_info=True)
 
     def add_new_task(self, course_id: str, kind: str, title: str) -> dict[str, Any]:
         """Create a task and put it at the end of the course in one step (§2)."""
@@ -235,7 +274,7 @@ class CourseService:
             raise
 
     def publish(self, course_id: str) -> dict[str, Any]:
-        """Settle receivers, check published tasks reach them, publish drafts, then the course."""
+        """Settle its (empty) receivers, publish its draft lessons, then the course."""
         from deeptutor.publishing import scope as scopes
 
         with db.read() as conn:
@@ -253,9 +292,7 @@ class CourseService:
             raise TaskError(refused)
         had_scope = scopes.get_scope(scopes.COURSE, course_id) is not None
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
-        scope = scopes.get_scope(scopes.COURSE, course_id)
         try:
-            receivers = scopes.audience(scope, learners_only=True, owner_id=self.actor.id) if scope else set()
             self._publish_drafts(course_id)
         except Exception:
             if not had_scope:
@@ -267,10 +304,7 @@ class CourseService:
                 "UPDATE courses SET status = 'published', published_at = ?, updated_at = ? WHERE id = ?",
                 (now, now, course_id),
             )
-        from deeptutor.notifications.service import notify
-
-        notify(receivers, "course_published", {"title": row["title"], "teacher": self.actor.username},
-               link=f"/tasks?course={course_id}", dedupe_key=f"course_published:{course_id}")
+        # Nobody has joined a course that was never published: there is nobody to tell (audit fix B §6).
         return self.get(course_id)
 
     def archive(self, course_id: str) -> dict[str, Any]:
@@ -305,7 +339,12 @@ class CourseService:
 
 
 def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
-    """Published courses that reach the student, each with its tasks as the student sees them."""
+    """Published courses that reach the learner, each with its lessons as the learner sees them.
+
+    A course one joined that an administrator took down, or its author
+    withdrew, stays with ``unavailable`` set (audit fix B §2): its lessons are
+    what the learner still has, their records kept.
+    """
     from deeptutor.publishing import scope as scopes
     from deeptutor.publishing.provenance import provenance
 
@@ -316,7 +355,8 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             return []
         try:
             rows = conn.execute(
-                "SELECT * FROM courses WHERE status = 'published' ORDER BY published_at DESC"
+                "SELECT * FROM courses WHERE status IN ('published', 'archived') "
+                "ORDER BY COALESCE(published_at, updated_at) DESC"
             ).fetchall()
         except sqlite3.OperationalError:
             return []  # a task store from before courses
@@ -326,18 +366,27 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             )]
             for r in rows
         }
-    from deeptutor.catalog.enrollment import joined_by
+    from deeptutor.catalog.enrollment import access_state, joined_by
 
     # Only courses one joined, or was named in, can reach one: no walk over every course.
-    joined = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE} | set(
-        scopes.named_items(scopes.COURSE, actor.id)
-    )
-    rows = [r for r in rows if r["id"] in joined]
-    # Students by name, and anyone who joined.
-    reached = [
-        r for r in rows if (s := scopes.get_scope(scopes.COURSE, r["id"])) and r["owner_user_id"] != actor.id
-        and ((student and scopes._reaches(s, actor.id)) or actor.id in s.members)
-    ]
+    direct = {item for kind, item in joined_by(actor.id) if kind == scopes.COURSE}
+    joined = direct | set(scopes.named_items(scopes.COURSE, actor.id))
+    reached: list[tuple[Any, str | None]] = []
+    for r in rows:
+        if r["id"] not in joined or r["owner_user_id"] == actor.id:
+            continue
+        unavailable = (
+            "taken_down" if access_state(scopes.COURSE, r["id"])[0]
+            else "archived" if r["status"] == "archived" else None
+        )
+        if unavailable:
+            if r["id"] in direct:
+                reached.append((r, unavailable))
+            continue
+        s = scopes.get_scope(scopes.COURSE, r["id"])
+        # Learners by name (older data), and anyone who joined.
+        if s and ((student and scopes._reaches(s, actor.id)) or actor.id in s.members):
+            reached.append((r, None))
     if not reached:
         return []
     entries = {e["key"]: e for e in StudentTasks(actor).assigned()}
@@ -345,9 +394,10 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
         {
             "id": r["id"], "title": r["title"], "description": r["description"],
             "provenance": provenance(r["owner_user_id"], actor), "published_at": r["published_at"],
+            "unavailable": unavailable,
             "tasks": [entries[t] for t in items[r["id"]] if t in entries],
         }
-        for r in reached
+        for r, unavailable in reached
     ]
 
 

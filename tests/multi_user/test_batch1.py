@@ -103,7 +103,7 @@ def test_a_task_must_not_reach_students_its_content_does_not(as_account):
     scopes._store_scope(scopes.TASK, task["id"], Scope(users=[_uid("sara"), _uid("sam")]), actor_id=_uid("tina"))
     _fixtures["deliver"]("practice_set", created["id"], "sara")
     course_id = _in_course(task["id"], to=(), publish=False)
-    with as_account("tina"), pytest.raises(TaskError, match="Some of these learners"):
+    with as_account("tina"), pytest.raises(TaskError, match="Some learners of this lesson"):
         CourseService().publish(course_id)  # the set does not reach Sam
     _fixtures["deliver"]("practice_set", created["id"], "sam")
     with as_account("tina"):
@@ -123,7 +123,8 @@ def test_a_practice_set_task_completes_and_completion_stays(as_account):
     _fixtures["deliver"]("practice_set", created["id"], "sara")  # she joined it
     with as_account("tina"):
         practice.publish(created["id"])
-    assert "content_published" in _kinds(as_account, "sara")
+    # Audit fix B §6: a first publication tells nobody (nobody can have joined yet).
+    assert "content_published" not in _kinds(as_account, "sara")
     with as_account("sara"):
         assert StudentTasks().assigned() == []  # a practice set is not a task by itself
     with as_account("tina"):
@@ -163,8 +164,8 @@ def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account
 
 def test_notes_are_marked_done_by_the_student(as_account):
     note = _note(as_account, "Revise chapter 3")
-    # A course announces its tasks once, as the course.
-    assert "course_published" in _kinds(as_account, "sara")
+    # Audit fix B §6: a first publication announces nothing.
+    assert "course_published" not in _kinds(as_account, "sara")
     assert _entry(as_account, "sara", note)["state"] == "open"
     with as_account("sara"):
         assert StudentTasks().mark_done(note)["state"] == "completed"
@@ -228,6 +229,7 @@ def test_a_deleted_students_completions_and_notifications_go(teaching_users, as_
     task_id = _note(as_account)
     with as_account("sara"):
         StudentTasks().mark_done(task_id)
+    notifications.notify([_uid("sara")], "content_announcement", {"title": "Revise", "teacher": "tina"})
     assert notifications.list_for(_uid("sara"))
     failed, _ = run_stages(_uid("sara"), _uid("adam"), ("task_records", "notifications"))
     assert failed == []

@@ -228,15 +228,24 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
     entry["favorited"] = (kind, item_id) in favorites_of(viewer.id)
     entry["author"] = author_name(row["owner_user_id"], accounts)
     entry["author_role"] = author_role(row["owner_user_id"], accounts)
+    blocked = bool(row["blocked"] if "blocked" in row.keys() else 0)
+    admin = _role(viewer) == "admin"
+    from deeptutor.catalog.flags import reported_by
+
     return {
         **entry,
         "joined": joined.get((kind, item_id)),
         "mine": mine,
-        "closed": info.closed,
+        # Taken down by an administrator, or archived / made private by its author:
+        # nobody studies it now (audit fix B §2), whatever their records say.
+        "closed": info.closed or blocked,
+        "unavailable": "taken_down" if blocked else ("archived" if info.closed else None),
         "can_join": row["status"] == "listed" and not mine and not info.closed,
+        # Audit fix B §1: anyone but its author reports it, once while the report is open.
+        "can_report": not mine and not admin,
+        "reported": "" in reported_by(viewer.id, kind, item_id),
         # A taken-down item shows its contents to its author and administrators only (review L1).
-        "preview": items.preview(kind, item_id) if not (row["blocked"] if "blocked" in row.keys() else 0)
-        or mine or _role(viewer) == "admin" else {},
+        "preview": items.preview(kind, item_id) if not blocked or mine or admin else {},
         "study": _study_target(kind, item_id),
     }
 

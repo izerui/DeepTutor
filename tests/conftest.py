@@ -232,8 +232,9 @@ def _legacy_first_publish(request, monkeypatch):
     every account. The tests about other rules of books and knowledge bases
     (reading, references, withdrawal, health, listings) were written then
     and keep that outcome: such a publication stores no scope. Everything
-    else — market publications (``join_only``) and every other kind —
-    follows the real rule, and tests
+    else — market publications (tests wrap them in ``scope.join_only()``,
+    a test-only marker set here) and every other kind — follows the real
+    rule, and tests
     marked ``first_publish_rule`` get the real rule for books and knowledge
     bases too.
     """
@@ -260,7 +261,7 @@ def _legacy_first_publish(request, monkeypatch):
             return
         real(kind, item_id)
 
-    monkeypatch.setattr(scope, "join_only", join_only)
+    monkeypatch.setattr(scope, "join_only", join_only, raising=False)
     monkeypatch.setattr(scope, "default_scope_on_publish", legacy)
 
 

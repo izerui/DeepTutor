@@ -692,16 +692,6 @@ class TeachingService:
                 scopes.default_scope_on_publish(scopes.MASTERY_PATH, template.id)
             except Exception as exc:
                 warn("assignments", exc)
-        if first:
-            from deeptutor.notifications.service import notify
-
-            # Spec 2026-11-03 batch 1 §5.1: its students hear of a new path once.
-            notify(
-                {a.student_user_id for a in self.store.list_assignments(template.id) if a.status == "active"},
-                "content_published",
-                {"content": "mastery_path", "title": template.title, "teacher": user.username},
-                link=f"/learning/mastery/assigned_{template.id}", dedupe_key=f"content_published:mastery_path:{template.id}",
-            )
         return warnings
 
     def _write_references(

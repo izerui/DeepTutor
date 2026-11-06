@@ -1783,6 +1783,12 @@ async def partner_chat_ws(ws: WebSocket, partner_id: str):
     user_token = await ws_require_auth(ws)
     if user_token is ws_auth_failed:
         return
+    if not get_current_user().is_admin:
+        # Administrators only (audit fix B §3), like the HTTP routes.
+        if user_token is not None:
+            reset_current_user(user_token)
+        await ws.close(code=4403)
+        return
 
     mgr = get_partner_manager()
 

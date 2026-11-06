@@ -19,10 +19,6 @@ test("preset drafts reuse the apply flow that owns each setting", () => {
   const endpoints = source("lib/settings-extensions.ts");
   assert.match(endpoints, /"document-parsing": "\/api\/settings\/document-parsing"/);
   assert.match(endpoints, /tools: "\/api\/settings\/enabled-tools"/);
-
-  const panel = source("components/settings/SettingsPresetsPanel.tsx");
-  assert.match(panel, /stagePreset\(preset\.id\)/);
-  assert.doesNotMatch(panel, /apiFetch|applyCatalog/);
 });
 
 test("staging happens against the draft endpoint, not the apply endpoint", () => {

@@ -21,12 +21,19 @@ import {
 import { AdminNav } from "./AdminNav";
 import { authorLabel, catalogError, formatDay, itemHref, kindLabel, STATUS_TONE, statusLabel } from "./catalog-format";
 import { CatalogPreview } from "./CatalogPreview";
+import { FlagQueue } from "./FlagQueue";
 import { TagInput } from "./TagInput";
 import { TaxonomyPicker } from "./TaxonomyPicker";
 import { useTaxonomy } from "./useTaxonomy";
 
 export const REASON_MAX = 500;
-type Tab = "pending" | "listed";
+type Tab = "pending" | "listed" | "reports";
+
+/** ``?tab=reports`` (a report's notification) opens the reports. */
+function initialTab(): Tab {
+  if (typeof window === "undefined") return "pending";
+  return new URLSearchParams(window.location.search).get("tab") === "reports" ? "reports" : "pending";
+}
 
 function eventLabel(action: string, t: (key: string) => string): string {
   switch (action) {
@@ -260,10 +267,10 @@ export function ReviewDetail({
   );
 }
 
-/** The market review (§5.1): the queue, oldest first, and everything in the market. */
+/** The market review (§5.1): the queue, oldest first, everything in the market, and the reports (audit fix B §1). */
 export default function ReviewDesk() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>("pending");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [selected, setSelected] = useState<CatalogEntry | null>(null);
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
@@ -278,6 +285,7 @@ export default function ReviewDesk() {
   const error = answer?.key === key ? answer.error : "";
 
   useEffect(() => {
+    if (tab === "reports") return;
     let alive = true;
     (tab === "pending" ? listReviewQueue() : listReviewListed(search))
       .then((next) => alive && setAnswer({ key, rows: next, error: "" }))
@@ -297,82 +305,86 @@ export default function ReviewDesk() {
         <AdminNav refresh={refresh} />
         <h1 className="mb-4 font-serif text-xl font-semibold">{t("Listing review")}</h1>
         <div role="tablist" className="mb-4 flex gap-1.5">
-          {(["pending", "listed"] as Tab[]).map((key) => (
+          {(["pending", "listed", "reports"] as Tab[]).map((key) => (
             <button key={key} type="button" role="tab" aria-selected={tab === key}
               className={`rounded-lg px-3 py-1.5 text-[13px] ${tab === key ? "bg-[var(--muted)] font-medium" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`}
               onClick={() => {
                 setTab(key);
                 setSelected(null);
               }}>
-              {key === "pending" ? t("Waiting for review") : t("In the market")}
+              {key === "pending" ? t("Waiting for review") : key === "listed" ? t("In the market") : t("Reported content")}
             </button>
           ))}
         </div>
-        <div className="flex flex-col gap-6 md:flex-row">
-          <div className="space-y-2 md:w-80 md:shrink-0">
-            {tab === "listed" && (
-              <form role="search" onSubmit={(e) => {
-                e.preventDefault();
-                setSearch(q);
-              }}>
-                <input className={inputClass} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search the market")} placeholder={t("Search the market")} />
-              </form>
-            )}
-            {tab === "listed" && (
-              <label className="flex items-center gap-2 text-[12.5px]">
-                <input type="checkbox" checked={onlyUnclassified} onChange={(e) => setOnlyUnclassified(e.target.checked)} />
-                {t("Only those needing classification")}
-              </label>
-            )}
-            {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
-            {rows === null ? (
-              !error && <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
-            ) : rows.length === 0 ? (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">
-                {tab === "pending" ? t("Nothing waits for review.") : t("Nothing found.")}
-              </p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]" aria-label={t("Listings")}>
-                {rows.map((row) => {
-                  const on = selected?.kind === row.kind && selected.id === row.id;
-                  return (
-                    <li key={`${row.kind}:${row.id}`}>
-                      <button type="button" aria-current={on ? "true" : undefined}
-                        className={`w-full space-y-0.5 p-2.5 text-left text-[12.5px] hover:bg-[var(--muted)]/40 ${on ? "bg-[var(--muted)]/60" : ""}`}
-                        onClick={() => setSelected(row)}>
-                        <span className="flex items-center gap-1.5">
-                          <span className="min-w-0 flex-1 truncate font-medium">{row.title}</span>
-                          {tab === "listed" && row.needs_classification && (
-                            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300"
-                              data-testid="needs-classification">
-                              {t("Needs classification")}
-                            </span>
-                          )}
-                        </span>
-                        <span className="block text-[11px] text-[var(--muted-foreground)]">
-                          {kindLabel(row.kind, t)} · {authorLabel(row, t)}
-                          {tab === "pending" && row.submitted_at ? ` · ${formatDay(row.submitted_at)}` : ""}
-                          {tab === "listed" ? ` · ${statusLabel(row.status, t)}` : ""}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+        {tab === "reports" ? (
+          <FlagQueue onChanged={() => setRefresh((v) => v + 1)} />
+        ) : (
+          <div className="flex flex-col gap-6 md:flex-row">
+            <div className="space-y-2 md:w-80 md:shrink-0">
+              {tab === "listed" && (
+                <form role="search" onSubmit={(e) => {
+                  e.preventDefault();
+                  setSearch(q);
+                }}>
+                  <input className={inputClass} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("Search the market")} placeholder={t("Search the market")} />
+                </form>
+              )}
+              {tab === "listed" && (
+                <label className="flex items-center gap-2 text-[12.5px]">
+                  <input type="checkbox" checked={onlyUnclassified} onChange={(e) => setOnlyUnclassified(e.target.checked)} />
+                  {t("Only those needing classification")}
+                </label>
+              )}
+              {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
+              {rows === null ? (
+                !error && <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
+              ) : rows.length === 0 ? (
+                <p className="text-[12.5px] text-[var(--muted-foreground)]">
+                  {tab === "pending" ? t("Nothing waits for review.") : t("Nothing found.")}
+                </p>
+              ) : (
+                <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]" aria-label={t("Listings")}>
+                  {rows.map((row) => {
+                    const on = selected?.kind === row.kind && selected.id === row.id;
+                    return (
+                      <li key={`${row.kind}:${row.id}`}>
+                        <button type="button" aria-current={on ? "true" : undefined}
+                          className={`w-full space-y-0.5 p-2.5 text-left text-[12.5px] hover:bg-[var(--muted)]/40 ${on ? "bg-[var(--muted)]/60" : ""}`}
+                          onClick={() => setSelected(row)}>
+                          <span className="flex items-center gap-1.5">
+                            <span className="min-w-0 flex-1 truncate font-medium">{row.title}</span>
+                            {tab === "listed" && row.needs_classification && (
+                              <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300"
+                                data-testid="needs-classification">
+                                {t("Needs classification")}
+                              </span>
+                            )}
+                          </span>
+                          <span className="block text-[11px] text-[var(--muted-foreground)]">
+                            {kindLabel(row.kind, t)} · {authorLabel(row, t)}
+                            {tab === "pending" && row.submitted_at ? ` · ${formatDay(row.submitted_at)}` : ""}
+                            {tab === "listed" ? ` · ${statusLabel(row.status, t)}` : ""}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {selected ? (
+                <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} canClassify={tab === "listed"}
+                  onClassified={() => setRefresh((v) => v + 1)} onDone={() => {
+                  setSelected(null);
+                  setRefresh((v) => v + 1);
+                }} />
+              ) : (
+                <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Open a listing to read it and decide.")}</p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            {selected ? (
-              <ReviewDetail key={`${selected.kind}:${selected.id}`} entry={selected} canClassify={tab === "listed"}
-                onClassified={() => setRefresh((v) => v + 1)} onDone={() => {
-                setSelected(null);
-                setRefresh((v) => v + 1);
-              }} />
-            ) : (
-              <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Open a listing to read it and decide.")}</p>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

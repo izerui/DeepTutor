@@ -1561,6 +1561,23 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/catalog/items/{kind}/{item_id}/report": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Report Item */
+    readonly post: operations["report_item_api_catalog_items__kind___item_id__report_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/catalog/items/{kind}/{item_id}/reviews": {
     readonly parameters: {
       readonly query?: never;
@@ -1606,6 +1623,23 @@ export interface paths {
     /** Reply Review */
     readonly put: operations["reply_review_api_catalog_items__kind___item_id__reviews__user_id__reply_put"];
     readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/reviews/{user_id}/report": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Report Review */
+    readonly post: operations["report_review_api_catalog_items__kind___item_id__reviews__user_id__report_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -1914,6 +1948,40 @@ export interface paths {
     readonly get: operations["review_listed_api_catalog_review_listed_get"];
     readonly put?: never;
     readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/review/reports": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Flag Queue */
+    readonly get: operations["flag_queue_api_catalog_review_reports_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/review/reports/handle": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Handle Flags */
+    readonly post: operations["handle_flags_api_catalog_review_reports_handle_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -7303,24 +7371,6 @@ export interface paths {
      */
     readonly get: operations["withdrawable_sets_api_practice_sets_withdrawable_get"];
     readonly put?: never;
-    readonly post?: never;
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/publish/{kind}/{item_id}/scope": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /** Get Scope */
-    readonly get: operations["get_scope_api_publish__kind___item_id__scope_get"];
-    /** Set Scope */
-    readonly put: operations["set_scope_api_publish__kind___item_id__scope_put"];
     readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
@@ -13185,7 +13235,6 @@ export interface components {
       readonly kb_choices?: {
         readonly [key: string]: "make_public" | "reference_only";
       };
-      readonly scope?: components["schemas"]["ScopeChoice"] | null;
       /**
        * Visibility
        * @enum {string}
@@ -14384,6 +14433,35 @@ export interface components {
        */
       readonly service: "llm" | "task";
     };
+    /** FlagAction */
+    readonly FlagAction: {
+      /** Action */
+      readonly action: string;
+      /** Item Id */
+      readonly item_id: string;
+      /** Kind */
+      readonly kind: string;
+      /**
+       * Reason
+       * @default
+       */
+      readonly reason: string;
+      /**
+       * Review User Id
+       * @default
+       */
+      readonly review_user_id: string;
+    };
+    /** FlagBody */
+    readonly FlagBody: {
+      /**
+       * Note
+       * @default
+       */
+      readonly note: string;
+      /** Reason */
+      readonly reason: string;
+    };
     /** FromBankRequest */
     readonly FromBankRequest: {
       /** Entry Ids */
@@ -14718,7 +14796,6 @@ export interface components {
        * @default false
        */
       readonly force: boolean;
-      readonly scope?: components["schemas"]["ScopeChoice"] | null;
       /**
        * Visibility
        * @enum {string}
@@ -16547,10 +16624,6 @@ export interface components {
       /** Username */
       readonly username: string;
     };
-    /** PublishBody */
-    readonly PublishBody: {
-      readonly scope?: components["schemas"]["ScopeChoice"] | null;
-    };
     /** PublishRequest */
     readonly PublishRequest: {
       /** Book Choices */
@@ -16559,11 +16632,6 @@ export interface components {
       };
       /** Draft Revision */
       readonly draft_revision: number;
-      /**
-       * Join Only
-       * @default false
-       */
-      readonly join_only: boolean;
       /** Kb Choices */
       readonly kb_choices?: {
         readonly [key: string]: "make_public" | "reference_only";
@@ -17146,35 +17214,6 @@ export interface components {
       readonly worker_count: number;
       /** Worker Id */
       readonly worker_id: string;
-    };
-    /**
-     * ScopeChoice
-     * @description Sent with a first publication (spec 2026-11-02 §4.1): nobody is named, people join.
-     */
-    readonly ScopeChoice: {
-      /**
-       * Everyone
-       * @default false
-       */
-      readonly everyone: boolean;
-      /**
-       * Join Only
-       * @default false
-       */
-      readonly join_only: boolean;
-    };
-    /** ScopeUpdate */
-    readonly ScopeUpdate: {
-      /**
-       * Confirm
-       * @default false
-       */
-      readonly confirm: boolean;
-      /**
-       * Everyone
-       * @default false
-       */
-      readonly everyone: boolean;
     };
     /**
      * ServerPayload
@@ -17785,10 +17824,6 @@ export interface components {
       readonly kind: "mastery_path" | "practice_set" | "book" | "note";
       /** Title */
       readonly title: string;
-    };
-    /** TaskPublish */
-    readonly TaskPublish: {
-      readonly scope?: components["schemas"]["ScopeChoice"] | null;
     };
     /** TaskUpdate */
     readonly TaskUpdate: {
@@ -19353,6 +19388,8 @@ export type SchemaExportDocxRequest =
   components["schemas"]["ExportDocxRequest"];
 export type SchemaFetchModelsPayload =
   components["schemas"]["FetchModelsPayload"];
+export type SchemaFlagAction = components["schemas"]["FlagAction"];
+export type SchemaFlagBody = components["schemas"]["FlagBody"];
 export type SchemaFromBankRequest = components["schemas"]["FromBankRequest"];
 export type SchemaGenerateFromNotebookRequest =
   components["schemas"]["GenerateFromNotebookRequest"];
@@ -19528,7 +19565,6 @@ export type SchemaProviderProbePayload =
   components["schemas"]["ProviderProbePayload"];
 export type SchemaPublicRegisterRequest =
   components["schemas"]["PublicRegisterRequest"];
-export type SchemaPublishBody = components["schemas"]["PublishBody"];
 export type SchemaPublishRequest = components["schemas"]["PublishRequest"];
 export type SchemaQuestionBankMaterial =
   components["schemas"]["QuestionBankMaterial"];
@@ -19587,8 +19623,6 @@ export type SchemaRoundSummaryRequest =
   components["schemas"]["RoundSummaryRequest"];
 export type SchemaRunStartRequest = components["schemas"]["RunStartRequest"];
 export type SchemaRuntimeStatus = components["schemas"]["RuntimeStatus"];
-export type SchemaScopeChoice = components["schemas"]["ScopeChoice"];
-export type SchemaScopeUpdate = components["schemas"]["ScopeUpdate"];
 export type SchemaServerPayload = components["schemas"]["ServerPayload"];
 export type SchemaServicePreviewPayload =
   components["schemas"]["ServicePreviewPayload"];
@@ -19665,7 +19699,6 @@ export type SchemaTagMerge = components["schemas"]["TagMerge"];
 export type SchemaTaskBoard = components["schemas"]["TaskBoard"];
 export type SchemaTaskCard = components["schemas"]["TaskCard"];
 export type SchemaTaskCreate = components["schemas"]["TaskCreate"];
-export type SchemaTaskPublish = components["schemas"]["TaskPublish"];
 export type SchemaTaskUpdate = components["schemas"]["TaskUpdate"];
 export type SchemaTestResponse = components["schemas"]["TestResponse"];
 export type SchemaTextPositionSelectorPayload =
@@ -23339,6 +23372,48 @@ export interface operations {
       };
     };
   };
+  readonly report_item_api_catalog_items__kind___item_id__report_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["FlagBody"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly item_reviews_api_catalog_items__kind___item_id__reviews_get: {
     readonly parameters: {
       readonly query?: {
@@ -23436,6 +23511,49 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["ReplyBody"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly report_review_api_catalog_items__kind___item_id__reviews__user_id__report_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+        readonly user_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["FlagBody"];
       };
     };
     readonly responses: {
@@ -24215,6 +24333,80 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly flag_queue_api_catalog_review_reports_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly handle_flags_api_catalog_review_reports_handle_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["FlagAction"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -35632,12 +35824,7 @@ export interface operations {
         readonly dt_token?: string | null;
       };
     };
-    readonly requestBody?: {
-      readonly content: {
-        readonly "application/json":
-          components["schemas"]["PublishBody"] | null;
-      };
-    };
+    readonly requestBody?: never;
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -35956,82 +36143,6 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly get_scope_api_publish__kind___item_id__scope_get: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly item_id: string;
-        readonly kind: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly set_scope_api_publish__kind___item_id__scope_put: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly item_id: string;
-        readonly kind: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["ScopeUpdate"];
-      };
-    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -45673,12 +45784,7 @@ export interface operations {
         readonly dt_token?: string | null;
       };
     };
-    readonly requestBody?: {
-      readonly content: {
-        readonly "application/json":
-          components["schemas"]["TaskPublish"] | null;
-      };
-    };
+    readonly requestBody?: never;
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -46075,12 +46181,7 @@ export interface operations {
         readonly dt_token?: string | null;
       };
     };
-    readonly requestBody?: {
-      readonly content: {
-        readonly "application/json":
-          components["schemas"]["TaskPublish"] | null;
-      };
-    };
+    readonly requestBody?: never;
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {

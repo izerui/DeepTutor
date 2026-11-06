@@ -10,7 +10,6 @@ from typing import Any, Literal, TypeVar
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
 from deeptutor.tasks.service import StudentTasks, TaskError, TaskService
 
@@ -42,11 +41,6 @@ class TaskUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=20_000)
     target_id: str | None = Field(default=None, max_length=200)
     settings: dict[str, Any] | None = None
-
-
-class TaskPublish(BaseModel):
-    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
-    scope: ScopeChoice | None = None
 
 
 class CourseCreate(BaseModel):
@@ -128,9 +122,8 @@ async def add_course_practice_set(course_id: str, body: CoursePracticeSet):
 
 
 @router.post("/courses/{course_id}/publish")
-async def publish_course(course_id: str, body: TaskPublish | None = None):
-    with chosen(body.scope if body else None):
-        return {"course": await _call(lambda: _courses().publish(course_id))}
+async def publish_course(course_id: str):
+    return {"course": await _call(lambda: _courses().publish(course_id))}
 
 
 @router.post("/courses/{course_id}/archive")
@@ -184,9 +177,8 @@ async def update_task(task_id: str, body: TaskUpdate):
 
 
 @router.post("/{task_id}/publish")
-async def publish_task(task_id: str, body: TaskPublish | None = None):
-    with chosen(body.scope if body else None):
-        return {"task": await _call(TaskService().publish, task_id)}
+async def publish_task(task_id: str):
+    return {"task": await _call(TaskService().publish, task_id)}
 
 
 @router.post("/{task_id}/archive")

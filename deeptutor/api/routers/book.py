@@ -59,7 +59,6 @@ from deeptutor.multi_user.book_access import (
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.runtime.stream_bus import StreamBus
 
-from deeptutor.api.routers.publishing import ScopeChoice
 from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
 
 router = APIRouter(dependencies=[Depends(enter_mastery_template_scope)])
@@ -1135,8 +1134,6 @@ class BookVisibilityRequest(BaseModel):
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
     kb_choices: dict[str, Literal["make_public", "reference_only"]] = Field(default_factory=dict)
-    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
-    scope: ScopeChoice | None = None
 
 
 def _record_matches_storage(resolved: ResolvedBook, record: book_registry.BookRecord) -> bool:
@@ -1277,13 +1274,11 @@ async def set_book_visibility(book_id: str, req: BookVisibilityRequest) -> dict[
 
     from deeptutor.teaching.access import WithdrawalConsentRequired
 
-    from deeptutor.api.routers.publishing import chosen
     from deeptutor.publishing.scope import ScopeError
 
     try:
         # Registry writers and the teaching-store counting stay off the event loop.
-        with chosen(req.scope):
-            updated, plan = await asyncio.to_thread(run)
+        updated, plan = await asyncio.to_thread(run)
     except ScopeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except WithdrawalConsentRequired as exc:

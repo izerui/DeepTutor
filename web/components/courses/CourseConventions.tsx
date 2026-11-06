@@ -61,7 +61,7 @@ export default function CourseConventions({
           </h2>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
             {t(
-              "Notation, the teacher's angle, how you want to be taught. Every conversation in this subject starts knowing this.",
+              "Notation, the way it should be explained, how you want to be taught. Every conversation in this subject starts knowing this.",
             )}
           </p>
         </div>

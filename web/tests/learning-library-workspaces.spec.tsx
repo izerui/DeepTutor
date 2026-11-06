@@ -2,7 +2,6 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useLearningCreation } from '@/components/learning/LibraryWorkspace'
-import { ActivityLibrary } from '@/components/learning/ActivityLibrary'
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), query: '', library: vi.fn() }))
 vi.mock('next/navigation', () => ({
@@ -55,28 +54,4 @@ it('opens creation after client navigation even before window.location reflects 
   view.rerender(<Creation open={open} />)
   await waitFor(() => expect(open).toHaveBeenCalledOnce())
   expect(mocks.replace).toHaveBeenCalledWith('/learning/books?dt_workspace=other', { scroll: false })
-})
-it('keeps equal practice IDs in separate workspaces and filters without changing write scope', async () => {
-  const libraryResult = { items: [
-    { id: 1, question: 'Original question', content_workspace_id: '', content_workspace_name: 'Default workspace' },
-    { id: 1, question: 'Other question', content_workspace_id: 'other', content_workspace_name: 'Other' },
-  ], unavailable_workspaces: [] }
-  let libraryPromise!: Promise<typeof libraryResult>
-  let resolveLibrary!: (result: typeof libraryResult) => void
-  mocks.library.mockImplementation(() => {
-    libraryPromise = new Promise(resolve => { resolveLibrary = resolve })
-    return libraryPromise
-  })
-  render(<ActivityLibrary kind="practice" onCreate={vi.fn()} />)
-  await act(async () => {
-    resolveLibrary(libraryResult)
-    await libraryPromise.then(() => Promise.resolve())
-  })
-  expect(await screen.findByRole('link', { name: /Original question/ })).toHaveAttribute('href', '/learning/practice?store=1&question=1&dt_workspace=')
-  expect(screen.getByRole('link', { name: /Other question/ })).toHaveAttribute('href', '/learning/practice?store=1&question=1&dt_workspace=other')
-  fireEvent.change(screen.getByLabelText('Filter by workspace'), { target: { value: 'other' } })
-  expect(screen.queryByRole('link', { name: /Original question/ })).toBeNull()
-  expect(screen.getByRole('link', { name: /Other question/ })).toBeInTheDocument()
-  expect(mocks.push).not.toHaveBeenCalled()
-  expect(window.location.search).toBe('')
 })

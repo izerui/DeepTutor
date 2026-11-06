@@ -26,12 +26,12 @@ QUESTIONS = [
 
 @pytest.fixture
 def http(teaching_users, monkeypatch):
-    """The task, practice-set, publishing, notification and home routers behind real auth."""
+    """The task, practice-set, notification, home and market routers behind real auth."""
     from fastapi import Depends, FastAPI
     from fastapi.testclient import TestClient
 
     import deeptutor.api.routers.auth as auth_router
-    from deeptutor.api.routers import catalog, home, notifications, practice_sets, publishing, tasks
+    from deeptutor.api.routers import catalog, home, notifications, practice_sets, tasks
     from deeptutor.services.auth import TokenPayload
 
     tokens = {n: TokenPayload(username=n, role=r["role"], user_id=r["id"]) for n, r in teaching_users.items()}
@@ -41,7 +41,7 @@ def http(teaching_users, monkeypatch):
     auth = [Depends(auth_router.require_auth)]
     for router, prefix in (
         (tasks.router, "/api/tasks"), (practice_sets.router, "/api/practice-sets"),
-        (publishing.router, "/api/publish"), (notifications.router, "/api/notifications"),
+        (notifications.router, "/api/notifications"),
         (home.router, "/api/home"), (catalog.router, "/api/catalog"),
     ):
         app.include_router(router, prefix=prefix, dependencies=auth)
@@ -62,30 +62,24 @@ def _draft_set(http) -> str:
 # ── naming who receives content ────────────────────────────
 
 
-def test_publishing_refuses_named_receivers(http, teaching_users):
+def test_publishing_names_nobody(http, teaching_users):
+    """Audit fix B §6: publishing takes no receivers; whatever an older client sends names nobody."""
     sara = teaching_users["sara"]["id"]
     set_id = _draft_set(http)
-    refused = http("POST", f"/api/practice-sets/{set_id}/publish", json={"scope": {"users": [sara]}})
-    assert refused.status_code == 422
-    assert scopes.get_scope(scopes.PRACTICE_SET, set_id) is None
-    assert http("POST", f"/api/practice-sets/{set_id}/publish",
-                json={"scope": {"everyone": True}}).status_code == 422
-    # Older clients send an empty list with every choice; that still publishes, to nobody named.
-    published = http("POST", f"/api/practice-sets/{set_id}/publish",
-                     json={"scope": {"everyone": False, "users": [], "join_only": True}})
+    published = http("POST", f"/api/practice-sets/{set_id}/publish", json={"scope": {"users": [sara]}})
     assert published.status_code == 200, published.text
     assert scopes.get_scope(scopes.PRACTICE_SET, set_id).users == []
 
     course = http("POST", "/api/tasks/courses", json={"title": "Waves"}).json()["course"]
     http("POST", f"/api/tasks/courses/{course['id']}/tasks", json={"kind": "note", "title": "Read"})
     assert http("POST", f"/api/tasks/courses/{course['id']}/publish",
-                json={"scope": {"users": [sara]}}).status_code == 422
-    assert scopes.get_scope(scopes.COURSE, course["id"]) is None
+                json={"scope": {"users": [sara]}}).status_code == 200
+    assert scopes.get_scope(scopes.COURSE, course["id"]).users == []
 
-    # Changing who receives it names nobody either.
+    # Nothing changes who receives it any more.
     assert http("PUT", f"/api/publish/practice_set/{set_id}/scope",
-                json={"everyone": False, "users": [sara]}).status_code == 422
-    assert scopes.get_scope(scopes.PRACTICE_SET, set_id).users == []
+                json={"everyone": False, "users": [sara]}).status_code in (404, 405)
+    assert http("GET", f"/api/publish/practice_set/{set_id}/scope").status_code in (404, 405)
     assert http("GET", "/api/publish/people?q=sa").status_code in (404, 405)
 
 

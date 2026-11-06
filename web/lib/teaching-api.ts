@@ -129,8 +129,6 @@ export interface PublishInput {
   kp_decisions: Record<string, KpDecision>;
   kb_choices: Record<string, KbChoice>;
   book_choices: Record<string, KbChoice>;
-  /** Platform batch 1 §4.4: published for the market; nobody receives it until they join. */
-  join_only?: boolean;
 }
 
 async function teachingJson<T>(path: string, init?: RequestInit): Promise<T> {

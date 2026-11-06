@@ -16,7 +16,6 @@ from deeptutor.multi_user.context import get_current_user
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import BOOK, KNOWLEDGE_BASE, PRACTICE_SET, get_scope
-from deeptutor.publishing.service import PublishService
 
 
 def _leave(teaching_users, name: str, kind: str, item_id: str) -> None:
@@ -164,17 +163,6 @@ def test_a_first_publication_reaches_nobody_until_they_join_and_admins_still_see
     for name, expected in (("sara", False), ("uma", False), ("adam", True)):
         with as_account(name):
             assert registry.can_read(current, get_current_user()) is expected, name
-
-
-def test_a_scope_change_keeps_the_accounts_an_older_scope_named(teaching_books, teaching_users, as_account):
-    sara = teaching_users["sara"]["id"]
-    book_id = teaching_books.public.book_id
-    # Older data: Tom's public book named Sara (spec 2026-11-05 remove-teacher-management §2).
-    scopes._store_scope(BOOK, book_id, scopes.Scope(users=[sara]), actor_id=teaching_users["tom"]["id"])
-    with as_account("tom"):
-        described = PublishService().set_scope(BOOK, book_id, everyone=False, confirm=True)
-    assert described["scope"]["users"] == [{"id": sara, "username": "sara"}]
-    assert get_scope(BOOK, book_id).users == [sara]
 
 
 # ── practice sets ──────────────────────────────────────────

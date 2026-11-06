@@ -17,19 +17,15 @@ const HARNESSES = [
   },
 ] as const;
 
-test("new harnesses are present in connected-agent labels and glyph dispatch", () => {
-  const connected = readWebFile("components", "agents", "ConnectedAgents.tsx");
+test("new harnesses are present in the glyph dispatch", () => {
   const icons = readWebFile("components", "agents", "agent-icons.tsx");
 
   for (const harness of HARNESSES) {
-    assert.match(connected, new RegExp(`kind === ["']${harness.kind}["']`));
-    assert.match(connected, new RegExp(harness.label));
     assert.match(icons, new RegExp(`kind === ["']${harness.kind}["']`));
   }
 });
 
 test("Gemini CLI is retired and agent glyphs use official local assets", () => {
-  const connected = readWebFile("components", "agents", "ConnectedAgents.tsx");
   const icons = readWebFile("components", "agents", "agent-icons.tsx");
   const registry = readWebFile(
     "..",
@@ -39,7 +35,7 @@ test("Gemini CLI is retired and agent glyphs use official local assets", () => {
     "registry.py",
   );
 
-  assert.doesNotMatch(connected, /kind === ["']gemini["']/);
+  assert.doesNotMatch(icons, /kind === ["']gemini["']/);
   assert.doesNotMatch(registry, /GeminiBackend/);
   const retiredRoute = path.join(
     process.cwd(),

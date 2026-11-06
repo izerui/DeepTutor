@@ -1,6 +1,5 @@
 "use client";
 
-import type { ScopeUpdate } from "@/lib/publish-api";
 import Tooltip from "@/shared/ui/Tooltip";
 import { knowledgeBaseRef } from "@/lib/knowledge-helpers";
 import type { WithdrawalImpact } from "@/lib/withdrawal-confirmation";
@@ -90,7 +89,7 @@ interface KnowledgeBaseDetailProps {
   onMove?: (kbName: string, targetWorkspaceId: string) => Promise<void>;
   onVisibilityChange?: (
     kbName: string, visibility: KnowledgeBaseVisibility,
-    options?: { confirmed?: WithdrawalImpact; scope?: ScopeUpdate },
+    options?: { confirmed?: WithdrawalImpact },
   ) => Promise<void>;
   onClearHistory: (kbName: string) => void;
   onBack?: () => void;

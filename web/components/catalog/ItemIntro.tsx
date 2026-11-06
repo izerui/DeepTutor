@@ -13,6 +13,7 @@ import {
   CATALOG_KINDS,
   getCatalogItem,
   REPORT_KINDS,
+  reportItem,
   type CatalogItemDetail,
   type CatalogKind,
   type ReportKind,
@@ -24,6 +25,7 @@ import { CatalogPreview } from "./CatalogPreview";
 import { FavoriteButton } from "./FavoriteButton";
 import { JoinButton } from "./JoinButton";
 import { ListingPanel } from "./ListingPanel";
+import { ReportForm } from "./ReportForm";
 import { formatRating, ReviewsSection } from "./Reviews";
 import { useTaxonomy } from "./useTaxonomy";
 
@@ -37,6 +39,7 @@ export default function ItemIntro() {
   const [item, setItem] = useState<CatalogItemDetail | null>(null);
   const [error, setError] = useState("");
   const [managing, setManaging] = useState(params?.get("manage") === "1");
+  const [reporting, setReporting] = useState(false);
   const { nameOf, classificationOf } = useTaxonomy();
 
   const load = useCallback(() => {
@@ -111,7 +114,29 @@ export default function ItemIntro() {
             {t("Learning report")}
           </Link>
         )}
+        {/* Audit fix B §1: anyone but its author reports it; an administrator decides. */}
+        {item.can_report && !item.reported && !reporting && (
+          <button type="button" className={actionClass} onClick={() => setReporting(true)}>
+            {t("Report this")}
+          </button>
+        )}
+        {item.reported && (
+          <span className="text-[12px] text-[var(--muted-foreground)]" data-testid="item-reported">
+            {t("Reported. An administrator will look at it.")}
+          </span>
+        )}
       </div>
+      {reporting && (
+        <ReportForm
+          label={t("Report this content")}
+          onSend={(reason, note) => reportItem(item.kind, item.id, reason, note)}
+          onCancel={() => setReporting(false)}
+          onDone={() => {
+            setReporting(false);
+            setItem((cur) => (cur ? { ...cur, reported: true } : cur));
+          }}
+        />
+      )}
       {item.mine && managing && <ListingPanel kind={item.kind} itemId={item.id} onChanged={load} />}
 
       {hasLearners && (item.mine || item.joined) && (

@@ -95,18 +95,9 @@ def test_a_course_does_not_hand_out_someone_elses_unlisted_book(as_account, teac
 # ── M1, M2, M3, M4 ─────────────────────────────────────────
 
 
-def test_everyone_goes_through_the_market(as_account):
-    from deeptutor.publishing.service import PublishService, ScopeError
-
-    set_id = _market_set(as_account)
-    with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=True)
-
-
 def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.publishing import scope as scopes
-    from deeptutor.publishing.service import PublishService, ScopeError
 
     sara = _uid(teaching_users, "sara")
     with as_account("tina"):
@@ -120,8 +111,6 @@ def test_a_taken_down_item_keeps_its_stored_scope(as_account, teaching_users):
     _list(as_account, "practice_set", set_id)
     with as_account("adam"):
         _listings().take_down("practice_set", set_id, "Wrong.")
-    with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=False)
     assert scopes._stored_scope("practice_set", set_id).users == [sara]  # untouched
 
 
@@ -341,20 +330,6 @@ def test_a_migrated_set_with_an_older_deadline_is_listed(as_account, teaching_us
         listing = _listings().get("practice_set", created["id"])
     assert listing["status"] == "listed"
     assert ("practice_set", created["id"]) in joined_by(_uid(teaching_users, "sara"))  # she keeps it
-
-
-def test_publishing_tells_learners_where_to_go(as_account, teaching_users, deliver):
-    from deeptutor.notifications import service as notifications
-    from deeptutor.practice_sets.service import PracticeSetService
-
-    with as_account("tina"):
-        created = PracticeSetService().create("Week 1")
-        PracticeSetService().update(created["id"], questions=QUESTIONS)
-    deliver("practice_set", created["id"], "sara")  # she joined it, and hears of its publication
-    with as_account("tina"):
-        PracticeSetService().publish(created["id"])
-    [notice] = [n for n in notifications.list_for(_uid(teaching_users, "sara")) if n["kind"] == "content_published"]
-    assert notice["link"].startswith("/practice-sets?set=")
 
 
 def test_home_lists_what_one_joined(as_account, teaching_users):

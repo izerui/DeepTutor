@@ -437,3 +437,49 @@ async def add_favorite(kind: str, item_id: str) -> dict[str, Any]:
 @router.delete("/items/{kind}/{item_id}/favorite")
 async def remove_favorite(kind: str, item_id: str) -> dict[str, Any]:
     return await _call(_reviews().favorite, kind, item_id, False)
+
+
+# ── reports of content and reviews (audit fix B §1) ───────
+
+
+class FlagBody(BaseModel):
+    reason: str = Field(pattern="^(wrong|infringement|advertising|inappropriate|other)$")
+    note: str = Field(default="", max_length=1000)
+
+
+class FlagAction(BaseModel):
+    kind: str = Field(max_length=40)
+    item_id: str = Field(max_length=200)
+    #: Empty for the item itself; the reviewer's id for one of its reviews.
+    review_user_id: str = Field(default="", max_length=200)
+    action: str = Field(pattern="^(take_down|delete_review|dismiss)$")
+    #: Shown to the author when the item is taken down.
+    reason: str = Field(default="", max_length=1000)
+
+
+def _flags():
+    from deeptutor.catalog.flags import FlagService
+
+    return FlagService()
+
+
+@router.post("/items/{kind}/{item_id}/report")
+async def report_item(kind: str, item_id: str, body: FlagBody) -> dict[str, Any]:
+    return await _call(_flags().report, kind, item_id, body.reason, body.note)
+
+
+@router.post("/items/{kind}/{item_id}/reviews/{user_id}/report")
+async def report_review(kind: str, item_id: str, user_id: str, body: FlagBody) -> dict[str, Any]:
+    return await _call(_flags().report, kind, item_id, body.reason, body.note, user_id)
+
+
+@router.get("/review/reports")
+async def flag_queue() -> dict[str, Any]:
+    return {"reports": await _call(_flags().queue)}
+
+
+@router.post("/review/reports/handle")
+async def handle_flags(body: FlagAction) -> dict[str, Any]:
+    return await _call(
+        _flags().handle, body.kind, body.item_id, body.action, review_user_id=body.review_user_id, reason=body.reason,
+    )

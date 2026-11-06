@@ -1214,16 +1214,6 @@
             "title": "Kb Choices",
             "type": "object"
           },
-          "scope": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScopeChoice"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "visibility": {
             "enum": [
               "public",
@@ -3979,6 +3969,64 @@
         "title": "FetchModelsPayload",
         "type": "object"
       },
+      "FlagAction": {
+        "properties": {
+          "action": {
+            "pattern": "^(take_down|delete_review|dismiss)$",
+            "title": "Action",
+            "type": "string"
+          },
+          "item_id": {
+            "maxLength": 200,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 40,
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "review_user_id": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Review User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "item_id",
+          "action"
+        ],
+        "title": "FlagAction",
+        "type": "object"
+      },
+      "FlagBody": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Note",
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^(wrong|infringement|advertising|inappropriate|other)$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "FlagBody",
+        "type": "object"
+      },
       "FromBankRequest": {
         "properties": {
           "entry_ids": {
@@ -4732,16 +4780,6 @@
             "default": false,
             "title": "Force",
             "type": "boolean"
-          },
-          "scope": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScopeChoice"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "visibility": {
             "enum": [
@@ -8490,22 +8528,6 @@
         "title": "PublicRegisterRequest",
         "type": "object"
       },
-      "PublishBody": {
-        "properties": {
-          "scope": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScopeChoice"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "title": "PublishBody",
-        "type": "object"
-      },
       "PublishRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8523,11 +8545,6 @@
           "draft_revision": {
             "title": "Draft Revision",
             "type": "integer"
-          },
-          "join_only": {
-            "default": false,
-            "title": "Join Only",
-            "type": "boolean"
           },
           "kb_choices": {
             "additionalProperties": {
@@ -9808,39 +9825,6 @@
           "recovery_interval_seconds"
         ],
         "title": "RuntimeStatus",
-        "type": "object"
-      },
-      "ScopeChoice": {
-        "description": "Sent with a first publication (spec 2026-11-02 §4.1): nobody is named, people join.",
-        "properties": {
-          "everyone": {
-            "default": false,
-            "title": "Everyone",
-            "type": "boolean"
-          },
-          "join_only": {
-            "default": false,
-            "title": "Join Only",
-            "type": "boolean"
-          }
-        },
-        "title": "ScopeChoice",
-        "type": "object"
-      },
-      "ScopeUpdate": {
-        "properties": {
-          "confirm": {
-            "default": false,
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "everyone": {
-            "default": false,
-            "title": "Everyone",
-            "type": "boolean"
-          }
-        },
-        "title": "ScopeUpdate",
         "type": "object"
       },
       "ServerPayload": {
@@ -11401,22 +11385,6 @@
           "title"
         ],
         "title": "TaskCreate",
-        "type": "object"
-      },
-      "TaskPublish": {
-        "properties": {
-          "scope": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScopeChoice"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "title": "TaskPublish",
         "type": "object"
       },
       "TaskUpdate": {
@@ -21873,6 +21841,101 @@
         ]
       }
     },
+    "/api/catalog/items/{kind}/{item_id}/report": {
+      "post": {
+        "operationId": "report_item_api_catalog_items__kind___item_id__report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Report Item Api Catalog Items  Kind   Item Id  Report Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Item",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/items/{kind}/{item_id}/reviews": {
       "get": {
         "operationId": "item_reviews_api_catalog_items__kind___item_id__reviews_get",
@@ -22341,6 +22404,110 @@
           }
         },
         "summary": "Reply Review",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/items/{kind}/{item_id}/reviews/{user_id}/report": {
+      "post": {
+        "operationId": "report_review_api_catalog_items__kind___item_id__reviews__user_id__report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Report Review Api Catalog Items  Kind   Item Id  Reviews  User Id  Report Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Review",
         "tags": [
           "catalog"
         ]
@@ -23457,6 +23624,150 @@
           }
         },
         "summary": "Review Listed",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/review/reports": {
+      "get": {
+        "operationId": "flag_queue_api_catalog_review_reports_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Flag Queue Api Catalog Review Reports Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Flag Queue",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/review/reports/handle": {
+      "post": {
+        "operationId": "handle_flags_api_catalog_review_reports_handle_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Handle Flags Api Catalog Review Reports Handle Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Handle Flags",
         "tags": [
           "catalog"
         ]
@@ -47783,23 +48094,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/PublishBody"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -48130,176 +48424,6 @@
         "summary": "Take Set",
         "tags": [
           "practice-sets"
-        ]
-      }
-    },
-    "/api/publish/{kind}/{item_id}/scope": {
-      "get": {
-        "operationId": "get_scope_api_publish__kind___item_id__scope_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "item_id",
-            "required": true,
-            "schema": {
-              "title": "Item Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Scope",
-        "tags": [
-          "publishing"
-        ]
-      },
-      "put": {
-        "operationId": "set_scope_api_publish__kind___item_id__scope_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "item_id",
-            "required": true,
-            "schema": {
-              "title": "Item Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
-          {
-            "in": "cookie",
-            "name": "dt_token",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Dt Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScopeUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Scope",
-        "tags": [
-          "publishing"
         ]
       }
     },
@@ -69043,23 +69167,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/TaskPublish"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -69653,23 +69760,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/TaskPublish"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {

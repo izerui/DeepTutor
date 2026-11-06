@@ -248,13 +248,13 @@ function LearnersTable({ task }: { task: TaskDetail }) {
     <section className="space-y-2">
       <h3 className="text-[13px] font-semibold">{t("Learners")}</h3>
       {task.students.length === 0 ? (
-        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No learners receive this yet.")}</p>
+        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nobody has joined yet.")}</p>
       ) : (
         <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
           {task.students.map((learner) => (
             <li key={learner.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">
               <span className="font-medium">{learner.username}</span>
-              {!learner.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Not in scope")}</span>}
+              {!learner.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("No longer has access")}</span>}
               <span className="text-[11.5px] text-[var(--muted-foreground)]">
                 {learner.completed
                   ? learner.self_reported ? t("Done (self-reported)") : t("Done")

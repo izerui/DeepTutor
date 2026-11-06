@@ -7,6 +7,7 @@ Lives in ``<SYSTEM_ROOT>/catalog.sqlite3``:
 * ``listing_events``: every state change, who made it and why;
 * ``enrollments``: who joined what. One row per way in (``self``,
   ``migrated``, ``course:<id>``); leaving stamps ``left_at`` and keeps the row;
+* ``content_reports``: learners' reports of content and reviews (audit fix B §1);
 * ``catalog_meta``: one-off markers (the 9.1 migration).
 """
 
@@ -129,6 +130,26 @@ CREATE TABLE IF NOT EXISTS favorites (
     PRIMARY KEY (kind, item_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, created_at DESC);
+
+-- Reports of listed content and of reviews (audit fix B §1). One per person and
+-- target: ``review_user_id`` is '' for the item itself, the reviewer for a review.
+-- ``outcome`` is 'open' until an administrator acts: 'taken_down', 'review_deleted'
+-- or 'dismissed'. Nothing is ever taken down automatically.
+CREATE TABLE IF NOT EXISTS content_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    review_user_id TEXT NOT NULL DEFAULT '',
+    reporter_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    outcome TEXT NOT NULL DEFAULT 'open',
+    handled_by TEXT NOT NULL DEFAULT '',
+    handled_at REAL,
+    UNIQUE (kind, item_id, review_user_id, reporter_id)
+);
+CREATE INDEX IF NOT EXISTS idx_content_reports_open ON content_reports(outcome, created_at);
 
 CREATE TABLE IF NOT EXISTS catalog_meta (
     key TEXT PRIMARY KEY,

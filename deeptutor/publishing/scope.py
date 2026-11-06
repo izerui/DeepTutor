@@ -20,8 +20,6 @@ transaction has committed.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 import logging
 import time
@@ -48,16 +46,6 @@ class ScopeError(Exception):
 
 class ScopeNotFound(ScopeError):
     status_code = 404
-
-
-class ScopeNeedsConfirmation(ScopeError):
-    """Narrowing would cut people off; nothing was written (spec §7.2)."""
-
-    status_code = 409
-
-    def __init__(self, affected: int) -> None:
-        super().__init__(f"This change removes access for {affected} people.")
-        self.affected = affected
 
 
 @dataclass
@@ -207,12 +195,6 @@ def _store_scope(kind: str, item_id: str, scope: Scope, *, actor_id: str) -> Non
         )
 
 
-@contextmanager
-def join_only(enabled: bool = True) -> Iterator[None]:
-    """Kept for callers that say so explicitly: publishing reaches only who joins anyway."""
-    yield
-
-
 def default_scope_on_publish(kind: str, item_id: str) -> None:
     """A first publication stores an empty scope: nobody is named, people join.
 
@@ -350,13 +332,11 @@ __all__ = [
     "TASK",
     "Scope",
     "ScopeError",
-    "ScopeNeedsConfirmation",
     "ScopeNotFound",
     "allows",
     "audience",
     "forget",
     "get_scope",
-    "join_only",
     "managed_items",
     "named_items",
     "reconcile_student",

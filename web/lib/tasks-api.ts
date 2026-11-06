@@ -1,6 +1,5 @@
 import { apiFetch, apiUrl } from "./api";
 import type { Provenance } from "./provenance";
-import type { ScopeUpdate } from "./publish-api";
 
 /** Tasks are system-level: never workspace-scoped (spec 2026-11-03 batch 1). */
 const BASE = "/api/tasks";
@@ -23,6 +22,8 @@ export interface TaskSummary {
   description: string;
   target_id: string;
   target_title: string;
+  /** Audit fix B §5: its author archived the practice set or Mastery Path it asks for. */
+  target_archived?: boolean;
   settings: TaskSettings;
   status: "draft" | "published" | "archived";
   created_at: number;
@@ -60,6 +61,8 @@ export interface AssignedTask {
   description: string;
   target_id: string;
   target_title: string;
+  /** Audit fix B §5: closed because its author archived what it asks for. */
+  target_archived?: boolean;
   settings: TaskSettings;
   state: TaskState;
   completed_at: number | null;
@@ -100,9 +103,8 @@ export const updateTask = (
   taskId: string,
   fields: Partial<Pick<TaskSummary, "title" | "description" | "target_id" | "settings">>,
 ) => call<{ task: TaskSummary }>(id(taskId), send("PUT", fields)).then((r) => r.task);
-/** ``scope``: who receives a first publication (spec 2026-11-02 §4.1). */
-export const publishTask = (taskId: string, scope?: ScopeUpdate) =>
-  call<{ task: TaskSummary }>(`${id(taskId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.task);
+export const publishTask = (taskId: string) =>
+  call<{ task: TaskSummary }>(`${id(taskId)}/publish`, send("POST")).then((r) => r.task);
 export const archiveTask = (taskId: string) =>
   call<{ task: TaskSummary }>(`${id(taskId)}/archive`, send("POST")).then((r) => r.task);
 export const deleteTask = (taskId: string) => call<{ ok: boolean }>(id(taskId), send("DELETE"));
@@ -167,6 +169,8 @@ export interface AssignedCourse {
   description: string;
   provenance: Provenance;
   published_at: number | null;
+  /** Audit fix B §2: taken down, or withdrawn by its author; the learner's records stay. */
+  unavailable?: "taken_down" | "archived" | null;
   tasks: AssignedTask[];
 }
 
@@ -182,8 +186,8 @@ export const addCourseTask = (courseId: string, kind: TaskKind, title: string) =
 /** Follow-ups §3: one's published practice set becomes the course's next task. */
 export const addCoursePracticeSet = (courseId: string, setId: string) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/practice-sets`, send("POST", { set_id: setId })).then((r) => r.course);
-export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
-  call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST", scope ? { scope } : {})).then((r) => r.course);
+export const publishCourse = (courseId: string) =>
+  call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST")).then((r) => r.course);
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
 export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
 /** Traceability #5: an administrator gives a course they hold to a teacher. */

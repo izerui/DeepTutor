@@ -45,7 +45,8 @@ def test_a_course_publishes_its_tasks_once_and_withdrawing_it_keeps_them(ids, as
         courses.publish(course["id"])
         assert all(t["status"] == "published" for t in courses.get(course["id"])["tasks"])
     kinds = _kinds(ids["sara"])
-    assert kinds.count("course_published") == 1 and "task_published" not in kinds
+    # Audit fix B §6: the first publication announces nothing (nobody can have joined yet).
+    assert "course_published" not in kinds and "task_published" not in kinds
     with as_account("sara"):
         [mine] = assigned_courses()
     assert [t["key"] for t in mine["tasks"]] == [first, second]
@@ -53,5 +54,8 @@ def test_a_course_publishes_its_tasks_once_and_withdrawing_it_keeps_them(ids, as
     with as_account("tina"):
         CourseService().archive(course["id"])
     with as_account("sara"):
-        assert assigned_courses() == []
+        # Audit fix B §2: the course stays among what she is learning, marked withdrawn.
+        [withdrawn] = assigned_courses()
+    assert withdrawn["id"] == course["id"] and withdrawn["unavailable"] == "archived"
+    assert "content_withdrawn" in _kinds(ids["sara"])
     assert _entry(as_account, "sara", first)["state"] == "open"  # the task stays

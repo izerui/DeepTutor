@@ -51,13 +51,10 @@ def _assigned_sets(as_account, name):
 
 def test_publishing_with_nobody_chosen_reaches_nobody(as_account):
     from deeptutor.publishing import scope as scopes
-    from deeptutor.publishing.service import PublishService, ScopeError
 
     set_id = _published_set(as_account)  # nothing chosen: nobody, no error
     assert scopes._stored_scope(scopes.PRACTICE_SET, set_id).empty
     assert _assigned_sets(as_account, "sara") == []
-    with as_account("tina"), pytest.raises(ScopeError):
-        PublishService().set_scope("practice_set", set_id, everyone=True)
 
 
 # ── registration (§4) ──────────────────────────────────────

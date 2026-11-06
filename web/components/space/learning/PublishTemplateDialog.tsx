@@ -169,8 +169,6 @@ export function PublishTemplateDialog({
         kp_decisions: decisions,
         kb_choices: kbChoices,
         book_choices: bookChoices,
-        // Platform batch 1 §4.4: no receivers are chosen; people join from the market.
-        join_only: true,
       });
       // Published, but something after the revision failed: say so and let
       // the teacher close the dialog themselves.
@@ -479,7 +477,7 @@ export function PublishTemplateDialog({
                 ))}
               </ul>
               <p className="mt-1 text-[var(--muted-foreground)]">
-                {t("Ask its owner to widen who receives it, or use your own material instead.")}
+                {t("Use your own material, or material in the learning market.")}
               </p>
             </section>
           )}

@@ -577,7 +577,6 @@ from deeptutor.api.routers import (
     book,
     capabilities,
     capabilities_settings,
-    publishing,
     practice_sets,
     tasks,
     notifications,
@@ -675,7 +674,6 @@ app.include_router(
     tags=["mastery-teaching"],
     dependencies=_auth,
 )
-app.include_router(publishing.router, prefix="/api/publish", tags=["publishing"], dependencies=_auth)
 app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
 # Spec 2026-11-03 batch 1: tasks, notifications, the student home.
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
@@ -828,17 +826,16 @@ app.include_router(
 app.include_router(
     agent_config.router, prefix="/api/agent-config", tags=["agent-config"], dependencies=_auth
 )
-# Partners are per-user resources now: anyone may build their own, and an admin
-# may assign theirs to others. Only ``_auth`` here — every route in the router
-# declares whether it needs *use* or *manage* rights on the partner it names
-# (see ``multi_user.partner_access``), which a blanket admin gate could not
-# express.
-app.include_router(partners.router, prefix="/api/partners", tags=["partners"], dependencies=_auth)
+# Partners connect IM bots (WeChat, Feishu, QQ…) and start and stop them on the
+# server, on shared resources: administrators only (audit fix B §3). Each route
+# still declares the *use* or *manage* rights it needs on the partner it names
+# (see ``multi_user.partner_access``); the sockets check the role by hand.
+app.include_router(partners.router, prefix="/api/partners", tags=["partners"], dependencies=_admin)
 app.include_router(
     partner_groups.router,
     prefix="/api/partner-groups",
     tags=["partner-groups"],
-    dependencies=_auth,
+    dependencies=_admin,
 )
 app.include_router(partners.ws_router, prefix="/ws/partners", tags=["partners"])
 app.include_router(

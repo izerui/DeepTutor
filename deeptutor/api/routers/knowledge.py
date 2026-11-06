@@ -128,7 +128,6 @@ log_dir = config.get("paths", {}).get("user_log_dir") or config.get("logging", {
 logger = logging.getLogger(__name__)
 
 
-from deeptutor.api.routers.publishing import ScopeChoice
 from deeptutor.publishing.scope import ScopeError
 from deeptutor.publishing.admin import retiring_route  # spec 2026-10-29 D10
 
@@ -2284,6 +2283,25 @@ def _kb_config_target(kb_name: str, *, require_write: bool):
     )
 
 
+def _require_admin_for_connection(current: dict, update: dict) -> None:
+    """Audit fix B §7: where a connected KB connects to is the administrators' to change.
+
+    The server reaches the address, credentials and paths stored there; a
+    learner changes the name, description and retrieval settings only.
+    Fields sent back unchanged are fine.
+    """
+    from deeptutor.knowledge.kb_types import CONNECTED_KB_TYPES, CONNECTOR_CONFIG_FIELDS
+
+    if current.get("type") not in CONNECTED_KB_TYPES or get_current_user().is_admin:
+        return
+    changed = {key for key, value in update.items() if value != current.get(key)}
+    if changed & CONNECTOR_CONFIG_FIELDS:
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators change where a connected knowledge base connects to.",
+        )
+
+
 @router.get("/knowledge-bases/{kb_name}/config")
 async def get_kb_config(kb_name: str):
     """Get configuration for a specific knowledge base."""
@@ -2309,6 +2327,7 @@ async def update_kb_config(kb_name: str, config: dict):
         service, kb_name, kb_base_dir = _kb_config_target(kb_name, require_write=True)
         current_config = service.get_kb_config(kb_name)
         validate_kb_config_update(current_config, config)
+        _require_admin_for_connection(current_config, config)
         # Older clients may send back the full GET payload while editing a
         # retrieval setting. Preserve those no-op fields, but disallow rebinding.
         if any(
@@ -3952,8 +3971,6 @@ class KbVisibilityRequest(BaseModel):
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)
     expected_students: int | None = Field(default=None, ge=0)
-    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
-    scope: ScopeChoice | None = None
 
 
 def _registered_record(kb_name: str):
@@ -3979,10 +3996,7 @@ async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
     resolve_kb(kb_name, require_write=True)
     if payload.force and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can force a visibility change.")
-    from deeptutor.api.routers.publishing import chosen
-
-    with chosen(payload.scope):
-        return await asyncio.to_thread(_apply_kb_visibility, record.kb_id, payload)
+    return await asyncio.to_thread(_apply_kb_visibility, record.kb_id, payload)
 
 
 def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, str]:

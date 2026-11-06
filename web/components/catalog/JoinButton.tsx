@@ -33,7 +33,16 @@ export function JoinButton({ item, onChanged }: { item: CatalogItemDetail; onCha
 
   if (item.mine) return null;
   if (item.joined && item.closed) {
-    return <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("This content is no longer available.")}</p>;
+    // Audit fix B §2: instead of "Go study", why it cannot be studied; the records stay.
+    return (
+      <p className="text-[12.5px] text-[var(--muted-foreground)]" data-testid="item-unavailable">
+        {item.unavailable === "taken_down"
+          ? t("This was taken down. Your learning records are kept.")
+          : item.unavailable === "archived"
+            ? t("Its author withdrew this. Your learning records are kept.")
+            : t("This content is no longer available.")}
+      </p>
+    );
   }
 
   return (

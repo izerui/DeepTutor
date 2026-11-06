@@ -165,6 +165,24 @@ def _target_title(kind: str, target_id: str) -> str:
     return ""
 
 
+def _target_archived(kind: str, target_id: str) -> bool:
+    """Its author archived the practice set or Mastery Path a lesson asks for (audit fix B §5)."""
+    if not target_id:
+        return False
+    if kind == "practice_set":
+        from deeptutor.practice_sets import store as practice_store
+
+        with practice_store.read() as conn:
+            row = conn.execute("SELECT status FROM practice_sets WHERE id = ?", (target_id,)).fetchone() if conn else None
+        return bool(row and row["status"] == "archived")
+    if kind == "mastery_path":
+        from deeptutor.teaching.store import TeachingStore
+
+        template = TeachingStore().get_template(target_id)
+        return bool(template and template.status == "archived")
+    return False
+
+
 def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> bool:
     """Whether the student can still open the referenced content."""
     if kind == "note":
@@ -272,6 +290,7 @@ class TaskService:
             "description": row["description"],
             "target_id": row["target_id"],
             "target_title": _target_title(row["kind"], row["target_id"]) if row["target_id"] else "",
+            "target_archived": _target_archived(row["kind"], row["target_id"]),
             "settings": settings,
             "status": row["status"],
             "created_at": row["created_at"],
@@ -445,7 +464,7 @@ class TaskService:
             reach = _target_audience(kind, row["target_id"])
             if reach is not None and receivers - reach:
                 raise TaskError(
-                    "Some of these learners cannot open what this lesson asks for. Widen who receives it first."
+                    "Some learners of this lesson cannot open what it asks for. Use your own content or content in the market."
                 )
         except Exception:
             if not had_scope:
@@ -643,6 +662,8 @@ class StudentTasks:
             "description": description,
             "target_id": target_id,
             "target_title": _target_title(kind, target_id) if target_id else "",
+            # Audit fix B §5: why a lesson closed, when its author archived what it asks for.
+            "target_archived": state == "closed" and _target_archived(kind, target_id),
             "settings": settings,
             "state": state,
             "completed_at": completion["completed_at"] if completion else None,

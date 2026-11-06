@@ -56,7 +56,7 @@ def _reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
             ),
             # Practice sets and paths shown as tasks stop being tasks by design (batch 2 §5).
             "task": sorted(t["key"] for t in StudentTasks(actor).assigned() if ":" not in t["key"]),
-            "course": sorted(c["id"] for c in assigned_courses(actor)),
+            "course": sorted(c["id"] for c in assigned_courses(actor) if not c.get("unavailable")),
             "book": sorted(
                 r.book_id for r in book_registry.list_book_records()
                 if r.created_by != user_id and book_registry.can_read_book(r, actor)

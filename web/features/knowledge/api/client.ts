@@ -1630,8 +1630,6 @@ export async function setKnowledgeBaseVisibility(
   options?: {
     force?: boolean;
     confirmed?: WithdrawalImpact | null;
-    /** First publication: who receives it (spec 2026-11-02 §4.1). */
-    scope?: import("@/lib/publish-api").ScopeUpdate;
   },
 ): Promise<{ kb_id: string; ref: string; visibility: "public" | "private" }> {
   const res = await apiFetch(apiUrl(`/api/knowledge-bases/${encodeURIComponent(ref)}/visibility`), {
@@ -1641,7 +1639,6 @@ export async function setKnowledgeBaseVisibility(
       visibility,
       force: Boolean(options?.force),
       ...confirmationFields(options?.confirmed),
-      ...(options?.scope ? { scope: options.scope } : {}),
     }),
   });
   await throwIfWithdrawalNeedsConfirmation(res);

@@ -5,8 +5,6 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Globe, Lock, Star, Trash2 } from "lucide-react";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
-import type { ScopeUpdate } from "@/lib/publish-api";
 import { listKnowledgeBaseReferences, type KnowledgeBaseReferenceSummary } from "@/features/knowledge/api/catalog";
 import {
   describeOtherReferences,
@@ -35,7 +33,7 @@ interface KbSettingsSectionProps {
   onMove?: (targetWorkspaceId: string) => Promise<void>;
   /** Rule R1: retried with the confirmed counts after the user accepts the teacher-path impact. */
   onVisibilityChange?: (
-    visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact; scope?: ScopeUpdate },
+    visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact },
   ) => Promise<void>;
 }
 
@@ -84,7 +82,7 @@ export default function KbSettingsSection({
     return () => { alive = false; };
   }, [canManage, sourceId, kb.visibility]);
 
-  const changeVisibility = async (next: KnowledgeBaseVisibility, scope?: ScopeUpdate) => {
+  const changeVisibility = async (next: KnowledgeBaseVisibility) => {
     if (!onVisibilityChange || !(canManage || canRetire)) return;
     setVisibilityBusy(true);
     setVisibilityError(null);
@@ -93,11 +91,7 @@ export default function KbSettingsSection({
       // paths only need the owner to confirm the (counts-only) impact.
       await runWithWithdrawalConfirmation(
         (confirmed) =>
-          confirmed
-            ? onVisibilityChange(next, { confirmed })
-            : scope
-              ? onVisibilityChange(next, { scope })
-              : onVisibilityChange(next),
+          confirmed ? onVisibilityChange(next, { confirmed }) : onVisibilityChange(next),
         t,
       );
       setPublishing(false);
@@ -113,7 +107,7 @@ export default function KbSettingsSection({
     if (!onVisibilityChange) return;
     const done = await runWithWithdrawalConfirmation(
       (confirmed) =>
-        confirmed ? onVisibilityChange("public", { confirmed }) : onVisibilityChange("public", { scope: JOIN_ONLY_SCOPE }),
+        confirmed ? onVisibilityChange("public", { confirmed }) : onVisibilityChange("public"),
       t,
     );
     if (!done) throw new Error("Make the knowledge base public first.");
@@ -323,7 +317,7 @@ export default function KbSettingsSection({
               <button
                 type="button"
                 disabled={visibilityBusy}
-                onClick={() => void changeVisibility("public", JOIN_ONLY_SCOPE)}
+                onClick={() => void changeVisibility("public")}
                 className="rounded-md bg-[var(--primary)] px-2.5 py-1 text-xs text-[var(--primary-foreground)] disabled:opacity-50"
               >
                 {t("Make public")}

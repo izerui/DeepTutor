@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 SELF = "self"
 MIGRATED = "migrated"
 COURSE_PREFIX = "course:"
-#: Ways in that count as "joined" (the learner chose it); via a course does not.
+#: Ways in the learner chose (they may leave them); via a course is the course's.
 DIRECT = (SELF, MIGRATED)
 
 
@@ -91,18 +91,25 @@ def joined_count(kind: str, item_id: str) -> int:
 
 
 def joined_counts(keys: list[tuple[str, str]] | None = None) -> dict[tuple[str, str], int]:
-    """People who joined each item themselves (or by the migration), not via a course."""
+    """People in each item now: who joined it, and who came in through a course (audit fix B §5).
+
+    The same people as :func:`members` and the learning reports count; a
+    course an administrator took down brings nobody.
+    """
+    where = (
+        "e.left_at IS NULL AND NOT (e.via LIKE 'course:%' AND EXISTS (SELECT 1 FROM listings l "
+        "WHERE l.kind = 'course' AND l.item_id = substr(e.via, 8) AND l.blocked = 1))"
+    )
     with db.read() as conn:
         if conn is None:
             return {}
         rows = conn.execute(
-            "SELECT kind, item_id, COUNT(DISTINCT user_id) FROM enrollments "
-            "WHERE left_at IS NULL AND via IN (?, ?) GROUP BY kind, item_id",
-            DIRECT,
+            f"SELECT e.kind, e.item_id, COUNT(DISTINCT e.user_id) FROM enrollments e WHERE {where} "  # nosec B608
+            "GROUP BY e.kind, e.item_id",
         ).fetchall() if keys is None or len(keys) > 1 else conn.execute(
-            "SELECT kind, item_id, COUNT(DISTINCT user_id) FROM enrollments "
-            "WHERE kind = ? AND item_id = ? AND left_at IS NULL AND via IN (?, ?) GROUP BY kind, item_id",
-            (*keys[0], *DIRECT),
+            f"SELECT e.kind, e.item_id, COUNT(DISTINCT e.user_id) FROM enrollments e "  # nosec B608
+            f"WHERE e.kind = ? AND e.item_id = ? AND {where} GROUP BY e.kind, e.item_id",
+            keys[0],
         ).fetchall()
     counts = {(r[0], r[1]): int(r[2]) for r in rows}
     if keys is None:

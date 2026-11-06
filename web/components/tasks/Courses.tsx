@@ -9,7 +9,6 @@ import { actionClass, inputClass, primaryClass } from "@/components/common/form-
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
-import { JOIN_ONLY_SCOPE } from "@/lib/catalog-api";
 import {
   addCourseTask,
   archiveCourse,
@@ -240,6 +239,13 @@ function CourseEditor({
                 <span className="text-[11px] text-[var(--muted-foreground)]">
                   {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
                 </span>
+                {/* Audit fix B §5: learners see this lesson closed until it asks for something else. */}
+                {task.target_archived && (
+                  <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300"
+                    data-testid="lesson-target-archived">
+                    {t("You archived what this lesson asks for; learners cannot open it.")}
+                  </span>
+                )}
                 {editable && (
                   <>
                     <button type="button" aria-label={t("Move up")} disabled={index === 0} onClick={() => move(index, -1)} className="disabled:opacity-30">
@@ -307,7 +313,7 @@ function CourseEditor({
       <div className="flex flex-wrap gap-2">
         {course.status === "draft" && (
           <button type="button" className={primaryClass} disabled={course.tasks.length === 0}
-            onClick={() => void run(() => publishCourse(course.id, JOIN_ONLY_SCOPE))}>
+            onClick={() => void run(() => publishCourse(course.id))}>
             {t("Publish")}
           </button>
         )}
@@ -374,18 +380,31 @@ export function LearnerCourses({
       {courses.map((course) => {
         const done = course.tasks.filter((task) => task.state === "completed").length;
         return (
-          <div key={course.id} className="rounded-xl border border-[var(--border)] p-3">
+          <div key={course.id} className="rounded-xl border border-[var(--border)] p-3" data-testid="learner-course">
             <button type="button" className="flex w-full flex-wrap items-center gap-2 text-left" onClick={() => setOpen(open === course.id ? null : course.id)}>
               <span className="text-[14px] font-medium">{course.title}</span>
               <SourceBadge provenance={course.provenance} />
+              {course.unavailable && (
+                <span className="rounded-full bg-[var(--muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted-foreground)]" data-testid="course-unavailable">
+                  {t("Course no longer available")}
+                </span>
+              )}
               <span className="text-[11.5px] text-[var(--muted-foreground)]">
                 {t("{{done}} / {{total}} done", { done, total: course.tasks.length })}
               </span>
             </button>
+            {course.unavailable && (
+              // Audit fix B §2: kept among what one learns, with why, instead of vanishing.
+              <p className="mt-1 text-[12px] text-[var(--muted-foreground)]">
+                {course.unavailable === "taken_down"
+                  ? t("This course was taken down. Your learning records are kept.")
+                  : t("Its author withdrew this course. Your learning records are kept.")}
+              </p>
+            )}
             {open === course.id && (
               <div className="mt-2 space-y-2">
                 {course.description && <p className="whitespace-pre-line text-[12.5px]">{course.description}</p>}
-                <AnnouncementsPanel kind="course" itemId={course.id} />
+                {!course.unavailable && <AnnouncementsPanel kind="course" itemId={course.id} />}
                 <ol className="space-y-1">
                   {course.tasks.map((task, index) => (
                     <li key={task.key}>
@@ -394,6 +413,9 @@ export function LearnerCourses({
                         <span className="w-5 text-right tabular-nums text-[var(--muted-foreground)]">{index + 1}.</span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONE[task.state]}`}>{t(STATE_LABEL[task.state])}</span>
                         <span className="font-medium">{task.title}</span>
+                        {task.target_archived && (
+                          <span className="text-[11px] text-[var(--muted-foreground)]">{t("Archived by its author")}</span>
+                        )}
                       </button>
                     </li>
                   ))}
@@ -412,7 +434,8 @@ export function LearningCoursesLink() {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<AssignedCourse[]>([]);
   useEffect(() => {
-    listAssignedCourses().then(setCourses).catch(() => setCourses([]));
+    // What one can still open; taken-down or withdrawn courses stay under "Learning" only.
+    listAssignedCourses().then((rows) => setCourses(rows.filter((course) => !course.unavailable))).catch(() => setCourses([]));
   }, []);
   if (!courses.length) return null;
   return (

@@ -10,7 +10,6 @@ from typing import Any, Literal, TypeVar
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
 
 from deeptutor.practice_sets.service import PracticeError, PracticeSetService, judge_ungraded
@@ -124,15 +123,9 @@ async def update_set(set_id: str, body: SetUpdate):
     }
 
 
-class PublishBody(BaseModel):
-    #: First publication (spec 2026-11-02 §4.1): it names nobody; people join.
-    scope: ScopeChoice | None = None
-
-
 @router.post("/{set_id}/publish")
-async def publish_set(set_id: str, body: PublishBody | None = None):
-    with chosen(body.scope if body else None):
-        return {"set": await _call(PracticeSetService().publish, set_id)}
+async def publish_set(set_id: str):
+    return {"set": await _call(PracticeSetService().publish, set_id)}
 
 
 @router.post("/{set_id}/archive")

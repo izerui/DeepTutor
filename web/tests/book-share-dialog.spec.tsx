@@ -36,7 +36,6 @@ it("defaults private KB choices to the server plan and publishes for the market 
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(fixture.setVisibility).toHaveBeenCalledWith("book:same", {
     visibility: "public", kb_choices: { kb1: "reference_only" }, force: false,
-    scope: { everyone: false, join_only: true },
   }, "w");
 });
 it("shows the market listing instead of receivers once the book is public", async () => {

@@ -76,8 +76,10 @@ it("loads conversation history while navigation remains usable, then preserves s
   const history = await screen.findByText("Retained session");
   const scroller = history.closest(".overflow-y-auto");
   expect(scroller).toContainElement(
-    screen.getByRole("link", { name: "Partners" }),
+    screen.getByRole("link", { name: "Learning market" }),
   );
+  // Audit fix B §3: learners are not offered partners.
+  expect(screen.queryByRole("link", { name: "Partners" })).toBeNull();
   expect(scroller).not.toContainElement(
     screen.getByRole("link", { name: "Home" }),
   );
