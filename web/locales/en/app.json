@@ -5141,8 +5141,6 @@
   "The path stays in your library; only its publishing record is removed.": "The path stays in your library; only its publishing record is removed.",
   "Other authors' paths": "Other authors' paths",
   "by {{name}}": "by {{name}}",
-  "{{count}} learners assigned_one": "{{count}} learner assigned",
-  "{{count}} learners assigned_other": "{{count}} learners assigned",
   "{{count}} learners will get this update the next time they study_one": "{{count}} learner will get this update the next time they study",
   "{{count}} learners will get this update the next time they study_other": "{{count}} learners will get this update the next time they study",
   "This published path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.": "This published path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.",
@@ -5341,7 +5339,6 @@
   "You have not started anything of your own yet.": "You have not started anything of your own yet.",
   "read-only": "read-only",
   "{{count}} lessons were handed over to you": "{{count}} lessons were handed over to you",
-  "{{count}} to grade": "{{count}} to grade",
   "{{done}} / {{total}} done": "{{done}} / {{total}} done",
   "{{mastered}} / {{total}} mastered": "{{mastered}} / {{total}} mastered",
   "{{author}} added the lesson “{{title}}”": "{{author}} added the lesson “{{title}}”",
@@ -5373,7 +5370,6 @@
   "Delete this course? Its lessons are kept.": "Delete this course? Its lessons are kept.",
   "Department": "Department",
   "Departments": "Departments",
-  "Departments and grades": "Departments and grades",
   "Former author": "Former author",
   "Grade": "Grade",
   "Grades": "Grades",
@@ -5766,5 +5762,6 @@
   "Not rated yet": "Not rated yet",
   "{{count}} learners on those paths": "{{count}} learners on those paths",
   "Updating the path's learners": "Updating the path's learners",
-  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Add them to a course from the course editor, or open one to delete or withdraw it."
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Add them to a course from the course editor, or open one to delete or withdraw it.",
+  "{{count}} not graded": "{{count}} not graded"
 }

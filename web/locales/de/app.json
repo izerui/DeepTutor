@@ -5141,8 +5141,6 @@
   "The path stays in your library; only its publishing record is removed.": "Der Pfad bleibt in deiner Bibliothek; nur sein Veröffentlichungseintrag wird entfernt.",
   "Other authors' paths": "Pfade anderer Autoren",
   "by {{name}}": "von {{name}}",
-  "{{count}} learners assigned_one": "{{count}} Lernender zugewiesen",
-  "{{count}} learners assigned_other": "{{count}} Lernende zugewiesen",
   "{{count}} learners will get this update the next time they study_one": "{{count}} Lernender erhält diese Aktualisierung beim nächsten Lernen",
   "{{count}} learners will get this update the next time they study_other": "{{count}} Lernende erhalten diese Aktualisierung beim nächsten Lernen",
   "This published path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.": "Dieser veröffentlichte Pfad wurde inzwischen geändert (anderswo bearbeitet, veröffentlicht oder archiviert). Lade ihn neu und versuche es erneut.",
@@ -5341,7 +5339,6 @@
   "You have not started anything of your own yet.": "Du hast noch nichts Eigenes begonnen.",
   "read-only": "schreibgeschützt",
   "{{count}} lessons were handed over to you": "{{count}} Lektionen wurden dir übergeben",
-  "{{count}} to grade": "{{count}} zu bewerten",
   "{{done}} / {{total}} done": "{{done}} / {{total}} erledigt",
   "{{mastered}} / {{total}} mastered": "{{mastered}} / {{total}} gemeistert",
   "{{author}} added the lesson “{{title}}”": "{{author}} hat die Lektion „{{title}}“ hinzugefügt",
@@ -5373,7 +5370,6 @@
   "Delete this course? Its lessons are kept.": "Diesen Kurs löschen? Seine Lektionen bleiben erhalten.",
   "Department": "Fachbereich",
   "Departments": "Fachbereiche",
-  "Departments and grades": "Fachbereiche und Jahrgänge",
   "Former author": "Ehemaliger Autor",
   "Grade": "Jahrgang",
   "Grades": "Jahrgänge",
@@ -5766,5 +5762,6 @@
   "Not rated yet": "Noch nicht bewertet",
   "{{count}} learners on those paths": "{{count}} Lernende auf diesen Pfaden",
   "Updating the path's learners": "Lernende des Pfads aktualisieren",
-  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Füge sie im Kurseditor einem Kurs hinzu, oder öffne eine, um sie zu löschen oder zurückzuziehen."
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Füge sie im Kurseditor einem Kurs hinzu, oder öffne eine, um sie zu löschen oder zurückzuziehen.",
+  "{{count}} not graded": "{{count}} nicht bewertet"
 }

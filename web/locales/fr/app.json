@@ -4809,9 +4809,7 @@
   "The path stays in your library; only its publishing record is removed.": "Le parcours reste dans votre bibliothèque ; seul son enregistrement de publication est supprimé.",
   "Other authors' paths": "Parcours d'autres auteurs",
   "by {{name}}": "par {{name}}",
-  "{{count}} learners assigned_one": "{{count}} apprenant attribué",
   "{{count}} learners assigned_many": "{{count}} apprenants attribués",
-  "{{count}} learners assigned_other": "{{count}} apprenants attribués",
   "{{count}} learners will get this update the next time they study_one": "{{count}} apprenant recevra cette mise à jour à sa prochaine séance",
   "{{count}} learners will get this update the next time they study_many": "{{count}} apprenants recevront cette mise à jour à leur prochaine séance",
   "{{count}} learners will get this update the next time they study_other": "{{count}} apprenants recevront cette mise à jour à leur prochaine séance",
@@ -5027,7 +5025,6 @@
   "You have not started anything of your own yet.": "Vous n'avez encore rien commencé par vous-même.",
   "read-only": "lecture seule",
   "{{count}} lessons were handed over to you": "{{count}} leçons vous ont été transférées",
-  "{{count}} to grade": "{{count}} à noter",
   "{{done}} / {{total}} done": "{{done}} / {{total}} faits",
   "{{mastered}} / {{total}} mastered": "{{mastered}} / {{total}} maîtrisés",
   "{{author}} added the lesson “{{title}}”": "{{author}} a ajouté la leçon « {{title}} »",
@@ -5059,7 +5056,6 @@
   "Delete this course? Its lessons are kept.": "Supprimer ce cours ? Ses leçons sont conservées.",
   "Department": "Département",
   "Departments": "Départements",
-  "Departments and grades": "Départements et promotions",
   "Former author": "Ancien auteur",
   "Grade": "Promotion",
   "Grades": "Promotions",
@@ -5451,5 +5447,6 @@
   "Not rated yet": "Pas encore noté",
   "{{count}} learners on those paths": "{{count}} apprenants sur ces parcours",
   "Updating the path's learners": "Mise à jour des apprenants du parcours",
-  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Ajoute-les à un cours depuis l’éditeur de cours, ou ouvre-en une pour la supprimer ou la retirer."
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Ajoute-les à un cours depuis l’éditeur de cours, ou ouvre-en une pour la supprimer ou la retirer.",
+  "{{count}} not graded": "{{count}} non notée(s)"
 }

@@ -5157,10 +5157,8 @@
   "The path stays in your library; only its publishing record is removed.": "Шлях залишиться у вашій бібліотеці; буде видалено лише запис про його публікацію.",
   "Other authors' paths": "Шляхи інших авторів",
   "by {{name}}": "автор: {{name}}",
-  "{{count}} learners assigned_one": "{{count}} призначений учень",
   "{{count}} learners assigned_few": "{{count}} призначені учні",
   "{{count}} learners assigned_many": "{{count}} призначених учнів",
-  "{{count}} learners assigned_other": "{{count}} призначених учнів",
   "{{count}} learners will get this update the next time they study_one": "{{count}} учень отримає це оновлення під час наступного навчання",
   "{{count}} learners will get this update the next time they study_few": "{{count}} учні отримають це оновлення під час наступного навчання",
   "{{count}} learners will get this update the next time they study_many": "{{count}} учнів отримають це оновлення під час наступного навчання",
@@ -5385,7 +5383,6 @@
   "You have not started anything of your own yet.": "Ви ще не почали нічого власного.",
   "read-only": "лише перегляд",
   "{{count}} lessons were handed over to you": "Вам передано {{count}} уроків",
-  "{{count}} to grade": "{{count}} на оцінювання",
   "{{done}} / {{total}} done": "{{done}} / {{total}} виконано",
   "{{mastered}} / {{total}} mastered": "Опановано {{mastered}} / {{total}}",
   "{{author}} added the lesson “{{title}}”": "{{author}} додав(ла) урок «{{title}}»",
@@ -5417,7 +5414,6 @@
   "Delete this course? Its lessons are kept.": "Видалити цей курс? Його уроки збережуться.",
   "Department": "Факультет",
   "Departments": "Факультети",
-  "Departments and grades": "Факультети та курси",
   "Former author": "Колишній автор",
   "Grade": "Курс",
   "Grades": "Курси",
@@ -5810,5 +5806,6 @@
   "Not rated yet": "Ще не оцінено",
   "{{count}} learners on those paths": "{{count}} учнів на цих шляхах",
   "Updating the path's learners": "Оновлення учнів шляху",
-  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Додай їх до курсу в редакторі курсу або відкрий один, щоб видалити чи відкликати його."
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Додай їх до курсу в редакторі курсу або відкрий один, щоб видалити чи відкликати його.",
+  "{{count}} not graded": "{{count}} не оцінено"
 }

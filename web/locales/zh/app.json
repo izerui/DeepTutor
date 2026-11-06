@@ -5141,8 +5141,6 @@
   "The path stays in your library; only its publishing record is removed.": "路径本身仍保留在你的资料库中，只删除它的发布记录。",
   "Other authors' paths": "其他作者的路径",
   "by {{name}}": "作者：{{name}}",
-  "{{count}} learners assigned_one": "已分配 {{count}} 名学习者",
-  "{{count}} learners assigned_other": "已分配 {{count}} 名学习者",
   "{{count}} learners will get this update the next time they study_one": "{{count}} 名学习者会在下次学习时收到这次更新",
   "{{count}} learners will get this update the next time they study_other": "{{count}} 名学习者会在下次学习时收到这次更新",
   "This published path changed in the meantime (edited, published or archived elsewhere). Load it again and retry.": "这条已发布的路径刚刚有了变化（在别处被编辑、发布或归档）。请重新加载后再试。",
@@ -5341,7 +5339,6 @@
   "You have not started anything of your own yet.": "你还没有开始自己的学习。",
   "read-only": "只读",
   "{{count}} lessons were handed over to you": "有 {{count}} 个课时转交给了你",
-  "{{count}} to grade": "{{count}} 份待批改",
   "{{done}} / {{total}} done": "{{done}} / {{total}} 已完成",
   "{{mastered}} / {{total}} mastered": "已掌握 {{mastered}} / {{total}}",
   "{{author}} added the lesson “{{title}}”": "{{author}} 加了新课时「{{title}}」",
@@ -5373,7 +5370,6 @@
   "Delete this course? Its lessons are kept.": "删除这门课程？里面的课时会保留。",
   "Department": "院系",
   "Departments": "院系",
-  "Departments and grades": "院系和年级",
   "Former author": "已离开的作者",
   "Grade": "年级",
   "Grades": "年级",
@@ -5766,5 +5762,6 @@
   "Not rated yet": "还没有评分",
   "{{count}} learners on those paths": "这些路线上有 {{count}} 名学习者",
   "Updating the path's learners": "更新路线上的学习者",
-  "Add them to a course from the course editor, or open one to delete or withdraw it.": "可以在课程编辑里把它们加进课程，或者点开删除（已发布的是撤回）。"
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "可以在课程编辑里把它们加进课程，或者点开删除（已发布的是撤回）。",
+  "{{count}} not graded": "{{count}} 题未判分"
 }

@@ -89,7 +89,7 @@ export function SetResults({ setId, initiallyOpen = false }: { setId: string; in
                       )}
                       {(learner.ungraded ?? 0) > 0 && (
                         <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                          {t("{{count}} to grade", { count: learner.ungraded })}
+                          {t("{{count}} not graded", { count: learner.ungraded })}
                         </span>
                       )}
                     </td>
