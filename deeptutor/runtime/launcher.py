@@ -575,6 +575,11 @@ def _owned_orphan_started_at(
         if supervisor <= 0 or _is_pid_alive(supervisor):
             return None
         if role == "start.backend":
+            # Framework Python on macOS runs Python.app after entering through
+            # the sys.executable launcher. Compare actual process executables
+            # on both sides so that our own backend is not mistaken for a
+            # foreign interpreter.
+            interpreter = Path(psutil.Process().exe()).resolve()
             # Multiprocess uvicorn workers have spawn command lines; their
             # parent carries the exact application command and interpreter.
             for candidate in [process, *process.parents()]:
@@ -586,7 +591,7 @@ def _owned_orphan_started_at(
                     for i in range(len(args) - 2)
                 ):
                     if (
-                        Path(candidate.exe()).resolve() == Path(sys.executable).resolve()
+                        Path(candidate.exe()).resolve() == interpreter
                         and Path(candidate.cwd()).resolve() == runtime_home.resolve()
                     ):
                         return process.create_time()
