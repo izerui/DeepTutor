@@ -311,6 +311,12 @@ class MasteryInteractionError(RuntimeError):
     """Base error for invalid durable question lifecycle transitions."""
 
 
+_UNINSPECTED_VISUAL_REPAIR = (
+    "This visual practice had no verified pixel inspection. Void it and pose a "
+    "supported replacement; a challenge cannot create mastery evidence."
+)
+
+
 class NoPendingInteractionError(MasteryInteractionError):
     """Raised when grading or resuming without an outstanding question."""
 
@@ -2482,9 +2488,7 @@ class LearningService:
 
                 candidate_answer = str(expected_answer or question.expected_answer)
                 if not question.visual_context.get("pixels_inspected"):
-                    raise MasteryInteractionError(
-                        "This visual practice had no verified pixel inspection. Void it and pose a supported replacement; a challenge cannot create mastery evidence."
-                    )
+                    raise MasteryInteractionError(_UNINSPECTED_VISUAL_REPAIR)
                 try:
                     corrected_visual, corrected_aliases = prepare_visual(
                         {
@@ -3437,6 +3441,11 @@ class LearningService:
         receipt = None
         try:
             if question.visual_context:
+                if not question.visual_context.get("pixels_inspected"):
+                    # prepare_visual below is not given the original model-input
+                    # hashes, so an uninspected card would fail closed with the
+                    # pixel error and never reach the void guidance (#2494).
+                    raise MasteryInteractionError(_UNINSPECTED_VISUAL_REPAIR)
                 from deeptutor.learning.visual_practice import (
                     prepare_visual,
                     verified_visual_images,
