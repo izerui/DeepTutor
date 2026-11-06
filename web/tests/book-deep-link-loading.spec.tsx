@@ -206,7 +206,7 @@ describe("book deep-link loading", () => {
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete cited"));
     expect(await screen.findByText(/2 published paths use this material/)).toBeTruthy();
-    expect(screen.getByText(/9 learners assigned/)).toBeTruthy();
+    expect(screen.getByText(/9 learners on those paths/)).toBeTruthy();
     expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirmed: null });
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
     await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {

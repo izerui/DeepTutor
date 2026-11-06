@@ -182,7 +182,7 @@ it("offers administrators to hand a course over and shows the server's reason", 
   tasks.listMyTasks.mockResolvedValue([]);
   tasks.getCourse.mockResolvedValue({ id: "crs_1", title: "Physics", description: "", status: "published", published_at: 1, tasks: [] });
   tasks.handOverCourse.mockRejectedValueOnce(new Error("Choose an active learner."));
-  render(<CourseAuthorView isAdmin onOpenTask={() => undefined} />);
+  render(<CourseAuthorView isAdmin />);
   fireEvent.click(await screen.findByRole("button", { name: /Physics/ }));
   const panel = await screen.findByTestId("hand-over");
   fireEvent.change(await within(panel).findByRole("combobox", { name: "Learner" }), { target: { value: "u_zoe" } });
@@ -200,7 +200,7 @@ it("offers no hand-over to learners", async () => {
   tasks.listMyCourses.mockResolvedValue([{ id: "crs_1", title: "Physics", status: "draft", task_count: 0, updated_at: 1 }]);
   tasks.listMyTasks.mockResolvedValue([]);
   tasks.getCourse.mockResolvedValue({ id: "crs_1", title: "Physics", description: "", status: "draft", published_at: null, tasks: [] });
-  render(<CourseAuthorView isAdmin={false} onOpenTask={() => undefined} />);
+  render(<CourseAuthorView isAdmin={false} />);
   fireEvent.click(await screen.findByRole("button", { name: /Physics/ }));
   await screen.findByTestId("course-editor");
   expect(screen.queryByTestId("hand-over")).toBeNull();
@@ -233,7 +233,7 @@ it("shows an administrator what they joined, the announcements and the hand-over
   expect(await screen.findByTestId("home-joined")).toBeTruthy();
   expect(screen.getByText("Exam on Friday")).toBeTruthy();
   expect(screen.getByTestId("admin-hand-over-hint").textContent).toContain(
-    "Courses and tasks you hold can be handed to a learner.");
+    "Courses and lessons you hold can be handed to a learner.");
 });
 
 it("shows a learner what they joined, under neutral wording", async () => {
@@ -241,7 +241,7 @@ it("shows a learner what they joined, under neutral wording", async () => {
   render(<LearnerHome />);
   expect(await screen.findByTestId("home-joined")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "From my courses" })).toBeTruthy();
-  expect(screen.getByText("Tasks from your courses, what is new in the market, and what you are learning yourself.")).toBeTruthy();
+  expect(screen.getByText("Lessons from your courses, what is new in the market, and what you are learning yourself.")).toBeTruthy();
 });
 
 // ── #7 ──

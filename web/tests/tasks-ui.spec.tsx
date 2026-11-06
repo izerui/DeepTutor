@@ -50,13 +50,16 @@ it("words notifications and marks them all read", async () => {
   notes.unreadNotifications.mockResolvedValue(2);
   notes.listNotifications.mockResolvedValue({ unread: 2, notifications: [
     { id: "n1", kind: "task_published", params: { teacher: "tina", title: "Essay" }, link: "/start?task=task_1", count: 1, created_at: 1, read: false },
+    { id: "n3", kind: "task_published", params: { teacher: "tina", title: "Lab", course: "Waves" }, link: "/start?task=task_2", count: 1, created_at: 3, read: false },
     { id: "n2", kind: "content_announcement", params: { teacher: "tina", title: "Waves" }, link: "/tasks?course=crs_1", count: 1, created_at: 2, read: false },
   ] });
   notes.markNotificationsRead.mockResolvedValue(0);
   render(<NotificationBell />);
   const bell = await screen.findByRole("button", { name: "Notifications (2 unread)" });
   fireEvent.click(bell);
-  expect(await screen.findByText(/tina assigned “Essay”/)).toBeTruthy();
+  // Spec 2026-11-06: author-neutral; the stored param is still called ``teacher``.
+  expect(await screen.findByText(/tina added the lesson “Essay”/)).toBeTruthy();
+  expect(screen.getByText(/tina added a lesson to “Waves”/)).toBeTruthy();
   expect(screen.getByText(/tina posted an announcement in “Waves”/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Mark all read" }));
   await waitFor(() => expect(notes.markNotificationsRead).toHaveBeenCalledWith());

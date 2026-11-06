@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Star } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -11,9 +11,14 @@ import { CATALOG_KINDS, getAuthor, type AuthorPage } from "@/lib/catalog-api";
 
 import { catalogError, kindLabel } from "./catalog-format";
 import { ItemCard } from "./ItemCard";
+import { formatRating } from "./Reviews";
 import { useTaxonomy } from "./useTaxonomy";
 
-/** An author's page (§5.1): their name, how many learn from them, their items by kind. */
+const stat = "min-w-[9rem] rounded-xl border border-[var(--border)] px-3 py-2";
+const statLabel = "text-[11.5px] text-[var(--muted-foreground)]";
+const statValue = "mt-0.5 text-[14px] font-medium text-[var(--foreground)]";
+
+/** An author's page (§5.1): their name, their items, ratings and learners, their items by kind. */
 export default function AuthorProfile() {
   const { t } = useTranslation();
   const id = useSearchParams()?.get("id") ?? "";
@@ -55,7 +60,31 @@ export default function AuthorProfile() {
   return (
     <div data-testid="author-profile">
       {back}
-      <PageHeader title={name} description={t("{{count}} learners in total", { count: author.learners })} />
+      <PageHeader title={name} />
+      {/* Spec 2026-11-06 §2: how much they offer, how it is rated, how many learn from it. */}
+      <dl className="mb-6 flex flex-wrap gap-3" data-testid="author-stats">
+        <div className={stat}>
+          <dt className={statLabel}>{t("Items in the market")}</dt>
+          <dd className={`${statValue} tabular-nums`}>{author.item_count ?? author.items.length}</dd>
+        </div>
+        <div className={stat}>
+          <dt className={statLabel}>{t("Average rating")}</dt>
+          <dd className={`${statValue} inline-flex items-center gap-1`}>
+            {author.rating != null && author.rating_count > 0 ? (
+              <>
+                <Star size={14} aria-hidden className="text-amber-500" fill="currentColor" />
+                {t("{{rating}} ({{count}} reviews)", { rating: formatRating(author.rating), count: author.rating_count })}
+              </>
+            ) : (
+              <span className="text-[var(--muted-foreground)]">{t("Not rated yet")}</span>
+            )}
+          </dd>
+        </div>
+        <div className={stat}>
+          <dt className={statLabel}>{t("Learners")}</dt>
+          <dd className={`${statValue} tabular-nums`}>{author.learners}</dd>
+        </div>
+      </dl>
       {author.items.length === 0 ? (
         <p className="text-[13px] text-[var(--muted-foreground)]">{t("Nothing in the market yet.")}</p>
       ) : (

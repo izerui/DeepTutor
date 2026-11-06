@@ -106,7 +106,7 @@ it("reports a course: tasks, practice score and an export link, no homework or a
   expect(screen.queryByLabelText("Only learners who need attention")).toBeNull();
   // Answers and tasks done in the period, on this course only.
   expect(screen.getByText("Answers in period")).toBeTruthy();
-  expect(screen.getByText("Tasks done in period")).toBeTruthy();
+  expect(screen.getByText("Lessons done in period")).toBeTruthy();
   expect(within(sara).getByText("12")).toBeTruthy();
   expect(within(sara).getByText("3")).toBeTruthy();
   expect(screen.getByText("Only what happened in this course is shown.")).toBeTruthy();
@@ -162,8 +162,8 @@ it("reports a path without the course columns, and shows a learner's detail", as
   });
   render(<LearnerReportPage />);
   expect(await screen.findByRole("heading", { name: "Algebra" })).toBeTruthy();
-  expect(screen.queryByText("Tasks done")).toBeNull();
-  expect(screen.queryByText("Tasks done in period")).toBeNull();
+  expect(screen.queryByText("Lessons done")).toBeNull();
+  expect(screen.queryByText("Lessons done in period")).toBeNull();
   expect(screen.getByText("Answers in period")).toBeTruthy();
   expect(screen.getByText("Only what happened in this path is shown.")).toBeTruthy();
   expect(screen.queryByText("Practice: best score")).toBeNull();

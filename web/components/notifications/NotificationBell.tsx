@@ -17,7 +17,7 @@ const POLL_MS = 60_000;
 type Translate = (key: string, values?: Record<string, unknown>) => string;
 
 const TRANSFERRED: [string, string][] = [
-  ["tasks", "{{count}} tasks"],
+  ["tasks", "{{count}} lessons"],
   ["courses", "{{count}} courses"],
   ["practice_sets", "{{count}} practice sets"],
   ["teacher_paths", "{{count}} Mastery Paths"],
@@ -25,7 +25,7 @@ const TRANSFERRED: [string, string][] = [
   ["knowledge_bases", "{{count}} knowledge bases"],
 ];
 
-/** Batch 4 §3: one summary of everything a departing teacher handed over. */
+/** Batch 4 §3: one summary of everything a departing author handed over. */
 function transferredText(p: Record<string, unknown>, t: Translate): string {
   const parts = TRANSFERRED.filter(([key]) => Number(p[key]) > 0).map(([key, label]) => t(label, { count: p[key] }));
   return p.from
@@ -38,17 +38,20 @@ export function notificationText(item: AppNotification, t: Translate): string {
   const p = item.params;
   const title = String(p.title ?? "");
   switch (item.kind) {
+    // Stored params keep the name ``teacher``: it is the author's name.
     case "task_published":
-      return t("{{teacher}} assigned “{{title}}”", { teacher: p.teacher, title });
+      return p.course
+        ? t("{{author}} added a lesson to “{{title}}”", { author: p.teacher, title: String(p.course) })
+        : t("{{author}} added the lesson “{{title}}”", { author: p.teacher, title });
     case "content_published":
       return p.content === "mastery_path"
-        ? t("{{teacher}} published the Mastery Path “{{title}}”", { teacher: p.teacher, title })
-        : t("{{teacher}} published the practice set “{{title}}”", { teacher: p.teacher, title });
+        ? t("{{author}} published the Mastery Path “{{title}}”", { author: p.teacher, title })
+        : t("{{author}} published the practice set “{{title}}”", { author: p.teacher, title });
     // Platform batch 3 §3: an announcement in a course or a Mastery Path one joined.
     case "content_announcement":
-      return t("{{teacher}} posted an announcement in “{{title}}”", { teacher: p.teacher, title });
+      return t("{{author}} posted an announcement in “{{title}}”", { author: p.teacher, title });
     case "course_published":
-      return t("{{teacher}} published the course “{{title}}”", { teacher: p.teacher, title });
+      return t("{{author}} published the course “{{title}}”", { author: p.teacher, title });
     case "material_withdrawn":
       // Batch 3 §6: the material was withdrawn, made private or deleted; count is all learners.
       return t("Material “{{material}}” cited by “{{title}}” is no longer available ({{count}} learners affected)", {
@@ -57,7 +60,7 @@ export function notificationText(item: AppNotification, t: Translate): string {
     case "content_transferred":
       return transferredText(p, t);
     case "tasks_transferred":
-      return t("{{count}} tasks were handed over to you", { count: p.count });
+      return t("{{count}} lessons were handed over to you", { count: p.count });
     // Platform batch 1 §2: the listing's way through review.
     case "listing_submitted":
       return t("“{{title}}” is waiting for review", { title });

@@ -13,6 +13,7 @@ const { api, tasks, practice, router, search, t } = vi.hoisted(() => ({
     deleteReview: vi.fn(),
     replyToReview: vi.fn(),
     setFavorite: vi.fn(),
+    getFeatured: vi.fn(),
   },
   tasks: { getTask: vi.fn(), getCourse: vi.fn(), addCoursePracticeSet: vi.fn() },
   practice: { getSet: vi.fn(), getReport: vi.fn(), updateSet: vi.fn(), publishSet: vi.fn() },
@@ -95,6 +96,7 @@ const entry = (over: Partial<CatalogEntry> = {}): CatalogEntry => ({
 
 beforeEach(() => {
   for (const group of [api, tasks, practice]) for (const mock of Object.values(group)) mock.mockReset();
+  api.getFeatured.mockResolvedValue({ popular: [], top_rated: [] });
   router.replace.mockReset();
   resetTaxonomyCache();
   api.getTaxonomy.mockResolvedValue(taxonomy);

@@ -252,12 +252,41 @@ def author_page(viewer: CurrentUser, author_id: str) -> dict[str, Any]:
         raise ListingNotFound("Not found.")
     joined = enrollment.joined_by(viewer.id)
     entries.sort(key=lambda e: -(e["listed_at"] or 0))
+    rated = [e for e in entries if e["rating"] is not None and e["rating_count"]]
+    rating_count = sum(e["rating_count"] for e in rated)
+    # Spec 2026-11-06 §2: the average over rated items, weighted by how many rated each.
+    rating = round(sum(e["rating"] * e["rating_count"] for e in rated) / rating_count, 2) if rating_count else None
     return {
         "id": author_id,
         "name": name,
         "role": author_role(author_id, accounts),
         "learners": sum(e["learners"] for e in entries),
+        "item_count": len(entries),
+        "rating": rating,
+        "rating_count": rating_count,
         "items": [_public(e, joined) for e in entries],
+    }
+
+
+FEATURED_LIMIT = 8
+FEATURED_MIN_RATINGS = 3
+
+
+def featured(viewer: CurrentUser) -> dict[str, Any]:
+    """Two rows above the market list (spec 2026-11-06 §3): most learners, best rated."""
+    from deeptutor.multi_user.accounts import accounts as _accounts
+
+    from deeptutor.catalog.reviews import favorites_of
+
+    entries = _entries(_accounts())
+    popular = sorted(entries, key=lambda e: (-e["learners"], -(e["listed_at"] or 0)))[:FEATURED_LIMIT]
+    rated = [e for e in entries if e["rating"] is not None and e["rating_count"] >= FEATURED_MIN_RATINGS]
+    rated.sort(key=lambda e: (-e["rating"], -e["rating_count"], -(e["listed_at"] or 0)))
+    joined = enrollment.joined_by(viewer.id)
+    favorites = favorites_of(viewer.id)
+    return {
+        "popular": [_public(e, joined, favorites) for e in popular],
+        "top_rated": [_public(e, joined, favorites) for e in rated[:FEATURED_LIMIT]],
     }
 
 
@@ -265,4 +294,4 @@ def parse_list(value: str | None) -> list[str]:
     return [part for part in (value or "").split(",") if part][:50]
 
 
-__all__ = ["Filters", "PAGE_SIZE", "SORTS", "author_page", "detail", "parse_list", "recent", "search"]
+__all__ = ["Filters", "PAGE_SIZE", "SORTS", "author_page", "detail", "featured", "parse_list", "recent", "search"]

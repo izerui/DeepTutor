@@ -143,25 +143,19 @@ const task = (over: Partial<MyTask>): MyTask => ({
   course_id: "", course_title: "", total: 0, completed: 0, target_available: true, ...over,
 });
 
-it("groups the author's tasks by course, offers no new-task form and points to the courses", async () => {
-  tasks.listMyTasks.mockResolvedValue([
-    task({ id: "t1", title: "Essay", course_id: "c1", course_title: "Waves" }),
-    task({ id: "t2", title: "Old quiz" }),
-    task({ id: "t3", title: "Lab", course_id: "c1", course_title: "Waves" }),
-  ]);
-  // Spec 2026-11-05: learners land on what they joined; ?tab=tasks opens their own tasks.
+it("shows courses only: what one joined and what one made, with no separate list of lessons", async () => {
+  tasks.listMyTasks.mockResolvedValue([task({ id: "t1", title: "Essay", course_id: "c1", course_title: "Waves" })]);
+  tasks.listMyCourses.mockResolvedValue([{ id: "c1", title: "Waves", status: "draft", task_count: 1, updated_at: 1 }]);
+  // Spec 2026-11-06: the older ``?tab=tasks`` lands on one's own courses.
   search.value = "tab=tasks";
   render(<TasksHub />);
-  const waves = await screen.findByRole("region", { name: "Waves" });
-  expect(within(waves).getByText("Essay")).toBeTruthy();
-  expect(within(waves).getByText("Lab")).toBeTruthy();
-  expect(within(screen.getByRole("region", { name: "Other tasks" })).getByText("Old quiz")).toBeTruthy();
-  expect(screen.queryByPlaceholderText("New task title")).toBeNull();
-  expect(screen.queryByLabelText("Kind of task")).toBeNull();
-  expect(screen.getByText("Tasks are added inside a course.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Go to courses" }));
-  expect(screen.getByRole("tab", { name: "Courses" }).getAttribute("aria-selected")).toBe("true");
-  await waitFor(() => expect(tasks.listMyCourses).toHaveBeenCalled());
+  expect(screen.getByRole("heading", { name: "Courses" })).toBeTruthy();
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Courses I joined", "Courses I made"]);
+  expect(screen.getByRole("tab", { name: "Courses I made" }).getAttribute("aria-selected")).toBe("true");
+  expect(await screen.findByText("Waves")).toBeTruthy();
+  expect(screen.getByText("Draft · 1 lessons")).toBeTruthy();
+  expect(screen.queryByText("Essay")).toBeNull();
+  expect(screen.queryByRole("tab", { name: "Tasks" })).toBeNull();
 });
 
 const detail = (over: Partial<TaskDetail>): TaskDetail => ({
@@ -173,7 +167,7 @@ it("offers Publish only for a draft that sits in a course", async () => {
   tasks.listMyTasks.mockResolvedValue([task({ id: "t9", title: "Draft", status: "draft" })]);
   tasks.getTask.mockResolvedValue(detail({ kind: "note" }));
   const { unmount } = render(<TasksHub />);
-  expect(await screen.findByText("This task is in no course. Add it to a course; it is published with the course.")).toBeTruthy();
+  expect(await screen.findByText("This lesson is in no course. Add it to a course; it is published with the course.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
   unmount();

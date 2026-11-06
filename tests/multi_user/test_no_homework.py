@@ -28,7 +28,7 @@ def test_homework_is_refused_by_the_service(as_account):
     from deeptutor.tasks.service import TaskError, TaskService
 
     for name in ("tina", "adam"):
-        with as_account(name), pytest.raises(TaskError, match="Unknown kind of task"):
+        with as_account(name), pytest.raises(TaskError, match="Unknown kind of lesson"):
             TaskService().create("homework", "Essay")
     with as_account("tina"):
         course_id = CourseService().create("Waves")["id"]

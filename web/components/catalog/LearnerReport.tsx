@@ -156,8 +156,8 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
                 <th className={cell}>{t("Learner")}</th>
                 <th className={cell}>{t("Last studied")}</th>
                 <th className={cell}>{t("Answers in period")}</th>
-                {isCourse && <th className={cell}>{t("Tasks done in period")}</th>}
-                {isCourse && <th className={cell}>{t("Tasks done")}</th>}
+                {isCourse && <th className={cell}>{t("Lessons done in period")}</th>}
+                {isCourse && <th className={cell}>{t("Lessons done")}</th>}
                 <th className={cell}>{t("Mastered points")}</th>
                 {isCourse && <th className={cell}>{t("Practice: best score")}</th>}
               </tr>
@@ -297,7 +297,7 @@ function LearnerDetailView({ kind, itemId, userId }: { kind: ReportKind; itemId:
       <h2 className="text-[13px] font-semibold text-[var(--foreground)]">{detail.username}</h2>
       {detail.tasks && (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">
-          {t("{{done}} / {{total}} tasks done", { done: detail.tasks.done, total: detail.tasks.total })}
+          {t("{{done}} / {{total}} lessons done", { done: detail.tasks.done, total: detail.tasks.total })}
         </p>
       )}
       {detail.practice_sets.length > 0 && (

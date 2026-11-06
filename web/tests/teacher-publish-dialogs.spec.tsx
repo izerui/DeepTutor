@@ -221,7 +221,7 @@ it("shows an update's change list with per-point decisions and the affected stud
   await act(async () => {});
   // Publication succeeded with a post-version warning: said explicitly, then closed by the teacher.
   expect(screen.getByText("Published, but some steps need attention")).toBeVisible();
-  expect(screen.getByText("Learner assignments did not complete.")).toBeVisible();
+  expect(screen.getByText("Updating the path's learners did not complete.")).toBeVisible();
   expect(published).not.toHaveBeenCalled();
   expect(api.publishTemplate.mock.calls[0][1].kp_decisions).toEqual({
     kp_l: { kind: "unchanged" },

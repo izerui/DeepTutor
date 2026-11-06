@@ -96,7 +96,7 @@ it.each([true, false])("asks to confirm teacher-path impact by counts, then retr
   fireEvent.click(button);
   await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
   expect(confirm.mock.calls[0][0]).toBe(
-    "2 published paths use this material\n5 learners assigned\nThose paths will show this material as unavailable. Continue?",
+    "2 published paths use this material\n5 learners on those paths\nThose paths will show this material as unavailable. Continue?",
   );
   if (accept) await waitFor(() => expect(change).toHaveBeenLastCalledWith("private", {
     confirmed: { affectedPaths: 2, affectedStudents: 5 },

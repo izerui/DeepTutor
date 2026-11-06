@@ -259,7 +259,7 @@ class TaskService:
     def _owned(self, conn, task_id: str):
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone() if conn else None
         if row is None or row["owner_user_id"] != self.actor.id:
-            raise TaskNotFound("Task not found.")
+            raise TaskNotFound("Lesson not found.")
         return row
 
     @staticmethod
@@ -327,7 +327,7 @@ class TaskService:
 
     def create(self, kind: str, title: str) -> dict[str, Any]:
         if kind not in KINDS:
-            raise TaskError("Unknown kind of task.")
+            raise TaskError("Unknown kind of lesson.")
         title = str(title or "").strip()
         if not title or len(title) > TITLE_MAX:
             raise TaskError(f"A title must contain 1 to {TITLE_MAX} characters.")
@@ -372,7 +372,7 @@ class TaskService:
         with db.read() as conn:
             row = self._owned(conn, task_id)
         if row["status"] == "archived":
-            raise TaskConflict("This task was withdrawn.")
+            raise TaskConflict("This lesson was withdrawn.")
         published = row["status"] == "published"
         sets: dict[str, Any] = {}
         if fields.get("title") is not None:
@@ -384,7 +384,7 @@ class TaskService:
             sets["description"] = str(fields["description"])[:TEXT_MAX]
         if fields.get("target_id") is not None or fields.get("settings") is not None:
             if published:
-                raise TaskConflict("A published task keeps what it asks for; withdraw it and assign a new one.")
+                raise TaskConflict("A published lesson keeps what it asks for; withdraw it and add a new one.")
             target = str(fields.get("target_id") if fields.get("target_id") is not None else row["target_id"])
             settings = fields.get("settings")
             if settings is None:
@@ -405,7 +405,7 @@ class TaskService:
     def hand_over(self, task_id: str, teacher_id: str) -> dict[str, Any]:
         """An administrator gives a task they hold to a learner (traceability #5)."""
         if _role(self.actor) != "admin":
-            raise TaskError("Only administrators hand tasks over.")
+            raise TaskError("Only administrators hand lessons over.")
         with db.write() as conn:
             self._owned(conn, task_id)
             _hand_tasks_to(conn, self.actor.id, teacher_id, [task_id])
@@ -425,10 +425,10 @@ class TaskService:
         with db.read() as conn:
             row = self._owned(conn, task_id)
         if row["status"] != "draft":
-            raise TaskConflict("This task was already published.")
+            raise TaskConflict("This lesson was already published.")
         if not _in_a_course(task_id):
             # Learning platform: tasks go out as part of a course.
-            raise TaskError("Add the task to a course; it is published with the course.")
+            raise TaskError("Add the lesson to a course; it is published with the course.")
         kind = row["kind"]
         settings = self._check_target(kind, row["target_id"], json.loads(row["settings_json"] or "{}")) \
             if kind not in ("note",) else {}
@@ -440,7 +440,7 @@ class TaskService:
             reach = _target_audience(kind, row["target_id"])
             if reach is not None and receivers - reach:
                 raise TaskError(
-                    "Some of these learners cannot open what this task asks for. Widen who receives it first."
+                    "Some of these learners cannot open what this lesson asks for. Widen who receives it first."
                 )
         except Exception:
             if not had_scope:
@@ -459,7 +459,8 @@ class TaskService:
 
             notify(
                 receivers, "task_published",
-                {"title": row["title"], "teacher": self.actor.username},
+                # ``teacher`` is the author's name (stored as before); ``course`` names the course it joins.
+                {"title": row["title"], "teacher": self.actor.username, "course": _course_of(task_id)["course_title"]},
                 link=f"/start?task={task_id}", dedupe_key=f"task_published:{task_id}",
             )
         return self.get(task_id)
@@ -472,7 +473,7 @@ class TaskService:
                 row["owner_user_id"] == self.actor.id
                 or (_role(self.actor) == "admin" and row["status"] == "published")
             ):
-                raise TaskNotFound("Task not found.")
+                raise TaskNotFound("Lesson not found.")
             conn.execute(
                 "UPDATE tasks SET status = 'archived', updated_at = ? WHERE id = ?", (_now(), task_id)
             )
@@ -490,7 +491,7 @@ class TaskService:
         with db.write() as conn:
             row = self._owned(conn, task_id)
             if row["status"] != "draft":
-                raise TaskConflict("Published tasks cannot be deleted; withdraw them instead.")
+                raise TaskConflict("Published lessons cannot be deleted; withdraw them instead.")
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         from deeptutor.publishing.scope import TASK, forget
 
@@ -677,14 +678,14 @@ class StudentTasks:
         for entry in self.assigned():
             if entry["key"] == key:
                 return entry
-        raise TaskNotFound("Task not found.")
+        raise TaskNotFound("Lesson not found.")
 
     def mark_done(self, task_id: str) -> dict[str, Any]:
         entry = self.get(task_id)
         if entry["kind"] != "note":
-            raise TaskError("This task completes itself when you do what it asks.")
+            raise TaskError("This lesson completes itself when you do what it asks.")
         if entry["state"] == "closed":
-            raise TaskConflict("This task is closed.")
+            raise TaskConflict("This lesson is closed.")
         self._record_completion(task_id, self_reported=True)
         return self.get(task_id)
 

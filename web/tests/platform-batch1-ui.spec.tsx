@@ -15,6 +15,7 @@ const { api, auth, router, search, t } = vi.hoisted(() => ({
     rejectListing: vi.fn(),
     takeDownListing: vi.fn(),
     approveListing: vi.fn(),
+    getFeatured: vi.fn(),
   },
   auth: { isAdmin: false, enabled: true, loading: false },
   router: { replace: vi.fn(), push: vi.fn() },
@@ -70,6 +71,7 @@ beforeEach(() => {
   router.replace.mockReset();
   resetTaxonomyCache();
   api.getTaxonomy.mockResolvedValue(taxonomy);
+  api.getFeatured.mockResolvedValue({ popular: [], top_rated: [] });
   Object.assign(auth, { isAdmin: false, enabled: true, loading: false });
   search.value = "";
 });

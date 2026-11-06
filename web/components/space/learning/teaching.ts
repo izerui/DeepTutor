@@ -169,7 +169,7 @@ export function publishStepMessage(
     documents: "Registering the cited documents",
     knowledge_base_references: "Knowledge base access for learners",
     book_references: "Book access for learners",
-    assignments: "Learner assignments",
+    assignments: "Updating the path's learners",
   };
   return fixed[step] ? { key: fixed[step] } : { key: "Step {{step}}", values: { step } };
 }

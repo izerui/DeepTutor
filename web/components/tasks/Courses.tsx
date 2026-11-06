@@ -31,16 +31,31 @@ import {
 } from "@/lib/tasks-api";
 
 import { HandOverPanel } from "./HandOver";
+import { LessonEditor } from "./LessonEditor";
 import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
 const errorText = (err: unknown, t: (key: string) => string) => (err instanceof Error ? t(err.message) : String(err));
 
-/** One's own courses: tasks in an order (spec 2026-11-03 batch 2 §5). */
-export function CourseAuthorView({ isAdmin, onOpenTask }: { isAdmin: boolean; onOpenTask: (taskId: string) => void }) {
+/**
+ * One's own courses: lessons in an order (spec 2026-11-03 batch 2 §5); a
+ * lesson opens beside its course (spec 2026-11-06 §1).
+ */
+export function CourseAuthorView({
+  isAdmin,
+  initialLesson = null,
+  onLessonMissing,
+}: {
+  isAdmin: boolean;
+  /** ``?task=``: one's own lesson to open. */
+  initialLesson?: string | null;
+  /** That lesson is not one's own: look for it among what one joined. */
+  onLessonMissing?: () => void;
+}) {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<CourseSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [lesson, setLesson] = useState<string | null>(initialLesson);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
 
@@ -69,17 +84,17 @@ export function CourseAuthorView({ isAdmin, onOpenTask }: { isAdmin: boolean; on
           <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />
         ) : courses.length === 0 ? (
           <p className="text-[12.5px] text-[var(--muted-foreground)]">
-            {t("No courses yet. A course lays out a term's tasks in order.")}
+            {t("No courses yet. A course puts its lessons in order.")}
           </p>
         ) : (
           <ul className="space-y-1">
             {courses.map((course) => (
               <li key={course.id}>
-                <button type="button" onClick={() => setSelected(course.id)}
+                <button type="button" onClick={() => { setSelected(course.id); setLesson(null); }}
                   className={`w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-[var(--muted)] ${selected === course.id ? "bg-[var(--muted)]" : ""}`}>
                   <span className="block truncate font-medium text-[var(--foreground)]">{course.title}</span>
                   <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                    {t(STATUS_LABEL[course.status])} · {t("{{count}} tasks", { count: course.task_count })}
+                    {t(STATUS_LABEL[course.status])} · {t("{{count}} lessons", { count: course.task_count })}
                   </span>
                 </button>
               </li>
@@ -88,9 +103,19 @@ export function CourseAuthorView({ isAdmin, onOpenTask }: { isAdmin: boolean; on
         )}
       </aside>
       <section className="min-w-0">
-        {selected ? (
+        {lesson ? (
+          <div className="space-y-3" data-testid="lesson-in-course">
+            <button type="button" className={actionClass} onClick={() => setLesson(null)}>
+              {selected ? t("Back to the course") : t("Back")}
+            </button>
+            <LessonEditor key={lesson} taskId={lesson} onChanged={refresh}
+              onDeleted={() => { setLesson(null); refresh(); }}
+              onLoaded={(task) => task.course_id && setSelected((current) => current ?? task.course_id)}
+              onMissing={onLessonMissing} />
+          </div>
+        ) : selected ? (
           <CourseEditor key={selected} courseId={selected} isAdmin={isAdmin} onChanged={refresh}
-            onOpenTask={onOpenTask} onDeleted={() => { setSelected(null); refresh(); }} />
+            onOpenTask={setLesson} onDeleted={() => { setSelected(null); refresh(); }} />
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
             {t("Pick a course or create one.")}
@@ -167,12 +192,12 @@ function CourseEditor({
         onBlur={(e) => e.target.value !== course.description && void run(() => updateCourse(course.id, { description: e.target.value }))} />
 
       <div className="space-y-2">
-        <h3 className="text-[13px] font-medium">{t("Tasks in order")}</h3>
+        <h3 className="text-[13px] font-medium">{t("Lessons in order")}</h3>
         <p className="text-[11.5px] text-[var(--muted-foreground)]">
-          {t("The order is a suggestion; learners can do the tasks in any order.")}
+          {t("The order is a suggestion; learners can take the lessons in any order.")}
         </p>
         {course.tasks.length === 0 ? (
-          <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No tasks yet.")}</p>
+          <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No lessons yet.")}</p>
         ) : (
           <ol className="space-y-1">
             {course.tasks.map((task, index) => (
@@ -209,18 +234,18 @@ function CourseEditor({
             setNewTitle("");
             void run(() => addCourseTask(course.id, kind, name));
           }}>
-            <select aria-label={t("Kind of task")} className={`${inputClass} w-auto`} value={kind} onChange={(e) => setKind(e.target.value as TaskKind)}>
+            <select aria-label={t("Kind of lesson")} className={`${inputClass} w-auto`} value={kind} onChange={(e) => setKind(e.target.value as TaskKind)}>
               {kinds.map((k) => <option key={k} value={k}>{t(KIND_LABEL[k])}</option>)}
             </select>
-            <input className={`${inputClass} w-56`} value={newTitle} maxLength={200} placeholder={t("New task title")}
+            <input className={`${inputClass} w-56`} value={newTitle} maxLength={200} placeholder={t("New lesson title")}
               onChange={(e) => setNewTitle(e.target.value)} />
-            <button type="submit" className={primaryClass} disabled={!newTitle.trim()}>{t("Add new task")}</button>
+            <button type="submit" className={primaryClass} disabled={!newTitle.trim()}>{t("Add new lesson")}</button>
           </form>
         )}
         {editable && (
           <div className="flex flex-wrap gap-2">
-            <select aria-label={t("Add an existing task")} className={`${inputClass} w-auto`} value={pick} onChange={(e) => setPick(e.target.value)}>
-              <option value="">{t("Add an existing task…")}</option>
+            <select aria-label={t("Add an existing lesson")} className={`${inputClass} w-auto`} value={pick} onChange={(e) => setPick(e.target.value)}>
+              <option value="">{t("Add an existing lesson…")}</option>
               {addable.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
             </select>
             <button type="button" className={actionClass} disabled={!pick}
@@ -234,7 +259,7 @@ function CourseEditor({
       {course.status === "draft" && (
         <>
           <p className="text-[11.5px] text-[var(--muted-foreground)]">
-            {t("Publishing also publishes its draft tasks. Nobody receives the course until they join from the learning market; list it here once it is published.")}
+            {t("Publishing also publishes its draft lessons. Nobody receives the course until they join from the learning market; list it here once it is published.")}
           </p>
         </>
       )}
@@ -257,13 +282,13 @@ function CourseEditor({
         )}
         {course.status === "published" && (
           <button type="button" className={actionClass}
-            onClick={() => window.confirm(t("Withdraw this course? Its tasks stay with the learners.")) && void run(() => archiveCourse(course.id))}>
+            onClick={() => window.confirm(t("Withdraw this course? Its lessons stay with the learners.")) && void run(() => archiveCourse(course.id))}>
             {t("Withdraw")}
           </button>
         )}
         {course.status === "draft" && (
           <button type="button" className={actionClass}
-            onClick={() => window.confirm(t("Delete this course? Its tasks are kept.")) &&
+            onClick={() => window.confirm(t("Delete this course? Its lessons are kept.")) &&
               void deleteCourse(course.id).then(onDeleted).catch((err) => setError(errorText(err, t)))}>
             {t("Delete")}
           </button>
@@ -279,14 +304,19 @@ function CourseEditor({
 /** The courses one joined, each with its tasks in order. */
 export function StudentCourses({
   courseId,
+  openTaskKey = null,
   onOpenTask,
   reload = 0,
+  onLoaded,
 }: {
   /** ``?course=`` (a notification's link): that course is shown open. */
   courseId: string | null;
+  /** ``?task=``: the course holding that lesson is shown open. */
+  openTaskKey?: string | null;
   onOpenTask: (task: AssignedTask) => void;
-  /** Changes when one of the learner's tasks changed: read the courses again. */
+  /** Changes when one of the learner's lessons changed: read the courses again. */
   reload?: number;
+  onLoaded?: (courses: AssignedCourse[]) => void;
 }) {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<AssignedCourse[]>([]);
@@ -298,8 +328,15 @@ export function StudentCourses({
     setOpen(courseId);
   }
   useEffect(() => {
-    listAssignedCourses().then(setCourses).catch(() => setCourses([]));
-  }, [reload]);
+    listAssignedCourses()
+      .catch(() => [] as AssignedCourse[])
+      .then((rows) => {
+        setCourses(rows);
+        onLoaded?.(rows);
+        const holder = openTaskKey ? rows.find((course) => course.tasks.some((task) => task.key === openTaskKey)) : undefined;
+        if (holder) setOpen((current) => current ?? holder.id);
+      });
+  }, [reload, onLoaded, openTaskKey]);
   if (!courses.length) return null;
   return (
     <section className="space-y-2" data-testid="student-courses">

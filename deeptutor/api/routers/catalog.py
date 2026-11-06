@@ -79,6 +79,13 @@ async def items(
     return await _call(search, get_current_user(), filters)
 
 
+@router.get("/featured")
+async def featured() -> dict[str, Any]:
+    from deeptutor.catalog.market import featured as featured_items
+
+    return await _call(featured_items, get_current_user())
+
+
 @router.get("/items/{kind}/{item_id}")
 async def item(kind: str, item_id: str) -> dict[str, Any]:
     from deeptutor.catalog.market import detail

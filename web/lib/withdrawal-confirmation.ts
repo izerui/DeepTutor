@@ -70,7 +70,7 @@ export class WithdrawalConfirmationError extends Error {
 export function describeWithdrawalImpact(impact: WithdrawalImpact, t: Translate): string {
   return [
     t("{{count}} published paths use this material", { count: impact.affectedPaths }),
-    t("{{count}} learners assigned", { count: impact.affectedStudents }),
+    t("{{count}} learners on those paths", { count: impact.affectedStudents }),
     t("Those paths will show this material as unavailable. Continue?"),
   ].join("\n");
 }

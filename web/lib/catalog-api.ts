@@ -163,7 +163,17 @@ export interface AuthorPage {
   name: string;
   role: string;
   learners: number;
+  /** Spec 2026-11-06 §2: items in the market, their average rating weighted by raters (``null`` when unrated). */
+  item_count: number;
+  rating: number | null;
+  rating_count: number;
   items: CatalogEntry[];
+}
+
+/** Spec 2026-11-06 §3: the two rows above the market list. */
+export interface FeaturedItems {
+  popular: CatalogEntry[];
+  top_rated: CatalogEntry[];
 }
 
 export interface AuthorListing extends CatalogEntry {
@@ -244,6 +254,7 @@ export const joinItem = (kind: string, id: string) =>
 export const leaveItem = (kind: string, id: string) =>
   call<{ joined: unknown }>(`/items${item(kind, id)}/join`, send("DELETE"));
 export const getAuthor = (authorId: string) => call<AuthorPage>(`/authors/${encodeURIComponent(authorId)}`);
+export const getFeatured = () => call<FeaturedItems>("/featured");
 
 export const listMyListings = () => call<{ listings: CatalogEntry[] }>("/listings/mine").then((r) => r.listings);
 export const getListing = (kind: string, id: string) => call<AuthorListing>(`/listings${item(kind, id)}`);

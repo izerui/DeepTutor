@@ -11,6 +11,7 @@ import { marketQueryString, searchMarket, type MarketPage, type MarketQuery, typ
 
 import { catalogError } from "./catalog-format";
 import { ActiveFilters, FacetSidebar } from "./FacetSidebar";
+import { FeaturedRows, useFeatured } from "./FeaturedRows";
 import { ItemCard } from "./ItemCard";
 import { clearConditions, hasConditions, parseMarketQuery } from "./market-query";
 import { subjectLabel, useTaxonomy } from "./useTaxonomy";
@@ -57,6 +58,9 @@ export default function MarketBrowser() {
     () => Object.fromEntries((result?.facets.authors ?? []).map((a) => [a.id, a.role === "admin" || !a.name ? t("Platform") : a.name])),
     [result, t],
   );
+  // Spec 2026-11-06 §3: the featured rows show on the plain market only (no search, filter, favorites or later page).
+  const plain = !hasConditions(query) && !query.favorites && (query.page ?? 1) === 1;
+  const featured = useFeatured();
   const pageSize = result?.page_size || 24;
   const pages = result ? Math.max(1, Math.ceil(result.total / pageSize)) : 1;
   const page = query.page ?? 1;
@@ -116,6 +120,7 @@ export default function MarketBrowser() {
         </div>
         <div className="min-w-0 flex-1 space-y-3">
           <ActiveFilters query={query} nameOf={nameOf} subjectNameOf={subjectNameOf} authorNames={authorNames} onChange={go} />
+          {plain && <FeaturedRows featured={featured} nameOf={nameOf} classificationOf={classificationOf} />}
           {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
           {result && (
             <p className="text-[12px] text-[var(--muted-foreground)]" role="status">

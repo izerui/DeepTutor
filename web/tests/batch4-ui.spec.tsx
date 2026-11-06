@@ -26,7 +26,7 @@ const note = (kind: string, params: Record<string, unknown>): AppNotification =>
 
 it("words the hand-over summary and the withdrawn-material notice", () => {
   expect(notificationText(note("content_transferred", { from: "tom", tasks: 3, practice_sets: 1, books: 0 }), t))
-    .toBe("tom's content was handed over to you: 3 tasks, 1 practice sets");
+    .toBe("tom's content was handed over to you: 3 lessons, 1 practice sets");
   expect(notificationText(note("material_withdrawn", { title: "Waves", material: "Optics", count: 2 }), t))
     .toBe("Material “Optics” cited by “Waves” is no longer available (2 learners affected)");
 });

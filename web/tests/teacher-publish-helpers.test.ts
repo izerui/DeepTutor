@@ -79,7 +79,7 @@ test("publish steps name the material they acted on", () => {
   assert.deepEqual(publishStepMessage("share:book:bk_1", {}).values, { name: "bk_1" });
   assert.equal(publishStepMessage("make_public:book:bk_1").key, "Making the book {{name}} public");
   assert.equal(publishStepMessage("documents").key, "Registering the cited documents");
-  assert.equal(publishStepMessage("assignments").key, "Learner assignments");
+  assert.equal(publishStepMessage("assignments").key, "Updating the path's learners");
   assert.equal(publishStepMessage("book_references").key, "Book access for learners");
   assert.equal(
     publishStepMessage("knowledge_base_references").key,

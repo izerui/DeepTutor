@@ -12,7 +12,8 @@ import { AiUsageNote } from "./AiUsage";
 import { authorTaskHref, isContentKey } from "./task-links";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
 import { authorLabel, itemHref, kindLabel, studyHref } from "@/components/catalog/catalog-format";
-import type { HomeAnnouncement } from "@/lib/catalog-api";
+import { useFeatured } from "@/components/catalog/FeaturedRows";
+import type { CatalogEntry, HomeAnnouncement } from "@/lib/catalog-api";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import {
   getAssignedTask,
@@ -24,6 +25,8 @@ import {
   type JoinedItem,
 } from "@/lib/tasks-api";
 import { getWorkbench, type Workbench } from "@/lib/workbench-api";
+
+type HomeMarketItem = Pick<CatalogEntry, "kind" | "id" | "title" | "author" | "author_role">;
 
 const card = "rounded-xl border border-[var(--border)] p-3 text-left transition-colors hover:border-[var(--ring)]";
 
@@ -106,7 +109,7 @@ export function JoinedSection({ items }: { items: JoinedItem[] }) {
 }
 
 const SENT_KIND: Record<string, string> = {
-  task: "Task",
+  task: "Lesson",
   practice_set: "Practice set",
   course: "Course",
   mastery_path: "Mastery Path",
@@ -141,7 +144,7 @@ export function SentOut() {
                 <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
                 {item.done === null ? (
                   <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                    {item.kind === "course" ? t("{{count}} tasks", { count: item.total }) : t("{{count}} learners", { count: item.total })}
+                    {item.kind === "course" ? t("{{count}} lessons", { count: item.total }) : t("{{count}} learners", { count: item.total })}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2 text-[11.5px] text-[var(--muted-foreground)]">
@@ -160,6 +163,39 @@ export function SentOut() {
   );
 }
 
+function MarketCards({ id, title, items }: { id: string; title: string; items: HomeMarketItem[] }) {
+  const { t } = useTranslation();
+  return (
+    <section aria-labelledby={id} className="space-y-3" data-testid={id}>
+      <div className="flex items-center justify-between">
+        <h2 id={id} className="text-[13px] font-semibold">{title}</h2>
+        <Link href="/market" className="text-[12.5px] text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <Link key={`${item.kind}:${item.id}`} href={itemHref(item.kind, item.id)} className={card}>
+            <span className="text-[11px] text-[var(--muted-foreground)]">{kindLabel(item.kind, t)}</span>
+            <span className="mt-1 block truncate text-[14px] font-medium">{item.title}</span>
+            <span className="block truncate text-[11.5px] text-[var(--muted-foreground)]">{authorLabel(item, t)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** What is new in the market and, beside it, what most people learn (spec 2026-11-06 §3); each hidden when empty. */
+export function MarketRows({ recent, popular }: { recent: HomeMarketItem[]; popular: HomeMarketItem[] }) {
+  const { t } = useTranslation();
+  if (recent.length === 0 && popular.length === 0) return null;
+  return (
+    <div className="space-y-6">
+      {recent.length > 0 && <MarketCards id="home-market" title={t("New in the market")} items={recent} />}
+      {popular.length > 0 && <MarketCards id="home-popular" title={t("Most popular")} items={popular.slice(0, 6)} />}
+    </div>
+  );
+}
+
 /**
  * Every learner's home (spec 2026-11-03 batch 1 §6; spec 2026-11-05): tasks from
  * the courses one joined, what one sent out and listed, what is new in the
@@ -171,6 +207,7 @@ export default function LearnerHome() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<AssignedTask | null>(null);
   const [history, setHistory] = useState<AssignedTask[] | null>(null);
+  const popular = useFeatured()?.popular ?? [];
 
   const refresh = useCallback(() => {
     getHome()
@@ -193,7 +230,7 @@ export default function LearnerHome() {
         // A task one sent out opens in its editor (traceability #7).
         const own = await listMyTasks().then((rows) => rows.some((row) => row.id === key)).catch(() => false);
         if (own) router.replace(authorTaskHref(key, true));
-        else setError(t("This task is no longer available."));
+        else setError(t("This lesson is no longer available."));
       });
   }, [t, taskParam, router]);
 
@@ -208,7 +245,7 @@ export default function LearnerHome() {
         <div>
           <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Home")}</h1>
           <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-            {t("Tasks from your courses, what is new in the market, and what you are learning yourself.")}
+            {t("Lessons from your courses, what is new in the market, and what you are learning yourself.")}
           </p>
         </div>
         <Link href="/chat" className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[13px]">
@@ -262,23 +299,7 @@ export default function LearnerHome() {
 
           <JoinedSection items={home.joined ?? []} />
 
-          {(home.market ?? []).length > 0 && (
-            <section aria-labelledby="home-market" className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 id="home-market" className="text-[13px] font-semibold">{t("New in the market")}</h2>
-                <Link href="/market" className="text-[12.5px] text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {(home.market ?? []).map((item) => (
-                  <Link key={`${item.kind}:${item.id}`} href={itemHref(item.kind, item.id)} className={card}>
-                    <span className="text-[11px] text-[var(--muted-foreground)]">{kindLabel(item.kind, t)}</span>
-                    <span className="mt-1 block truncate text-[14px] font-medium">{item.title}</span>
-                    <span className="block truncate text-[11.5px] text-[var(--muted-foreground)]">{authorLabel(item, t)}</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
+          <MarketRows recent={home.market ?? []} popular={popular} />
 
           <section aria-labelledby="home-mine" className="space-y-3">
             <div className="flex items-center justify-between">

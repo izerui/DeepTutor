@@ -131,7 +131,7 @@ class CourseService:
                 kept = set(self._items(conn, course_id))
                 # New items are one's own tasks; items already there may have been handed to others.
                 if any(t not in mine and t not in kept for t in wanted):
-                    raise TaskError("A course holds your own tasks that are not withdrawn.")
+                    raise TaskError("A course holds your own lessons that are not withdrawn.")
                 added = [t for t in wanted if t not in kept]
                 conn.execute("DELETE FROM course_items WHERE course_id = ?", (course_id,))
                 conn.executemany(
@@ -243,7 +243,7 @@ class CourseService:
         if row["status"] != "draft":
             raise TaskConflict("This course was already published.")
         if not items:
-            raise TaskError("Add at least one task before publishing.")
+            raise TaskError("Add at least one lesson before publishing.")
         had_scope = scopes.get_scope(scopes.COURSE, course_id) is not None
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)
