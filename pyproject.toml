@@ -41,7 +41,7 @@ dependencies = [
     # MCP client. Core rather than a `partners`-only extra (issue #792): the
     # default chat/tool surface includes configurable MCP servers, so a plain
     # install must be able to connect them without an optional extra.
-    "mcp>=1.26.0,<2.0.0",
+    "mcp>=1.30.0,<2.0.0",
     "pageindex>=0.2.10,<0.3.0",
     # Partner channel QR onboarding (WeChat, WeCom, Feishu). Same reasoning as
     # `mcp` above: scan-based onboarding is part of the default partner setup

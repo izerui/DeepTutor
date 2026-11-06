@@ -129,7 +129,7 @@ def test_mcp_client_is_a_core_dependency(metadata_path: Path) -> None:
         dependencies = tomllib.load(file)["project"]["dependencies"]
 
     mcp_requirements = [item for item in dependencies if item.split(">")[0].strip() == "mcp"]
-    assert mcp_requirements == ["mcp>=1.26.0,<2.0.0"]
+    assert mcp_requirements == ["mcp>=1.30.0,<2.0.0"]
 
 
 def test_partners_extra_does_not_redeclare_the_core_mcp_client() -> None:
@@ -147,7 +147,7 @@ def test_requirements_mirror_the_core_mcp_client() -> None:
     partners_text = (requirements / "partners.txt").read_text(encoding="utf-8")
 
     # cli.txt mirrors the core dependency set, so the client belongs there...
-    assert "mcp>=1.26.0,<2.0.0" in cli_text
+    assert "mcp>=1.30.0,<2.0.0" in cli_text
     # ...and partners.txt inherits it transitively rather than redeclaring it.
     assert "-r server.txt" in partners_text
     assert "mcp>=" not in partners_text
