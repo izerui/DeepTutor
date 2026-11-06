@@ -85,9 +85,9 @@ it("lets the owner withdraw despite other accounts' references, shown only as co
   expect(confirm).not.toHaveBeenCalled();
 });
 
-it.each([true, false])("asks to confirm teacher-path impact by counts, then retries with confirm (accept=%s)", async (accept) => {
+it.each([true, false])("asks to confirm author-path impact by counts, then retries with confirm (accept=%s)", async (accept) => {
   const change = vi.fn()
-    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 2, affectedStudents: 5 }))
+    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 2, affectedLearners: 5 }))
     .mockResolvedValue(undefined);
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(accept);
   render(<KbSettingsSection kb={{ ...owned, visibility: "public" }} onVisibilityChange={change} />);
@@ -99,7 +99,7 @@ it.each([true, false])("asks to confirm teacher-path impact by counts, then retr
     "2 published paths use this material\n5 learners on those paths\nThose paths will show this material as unavailable. Continue?",
   );
   if (accept) await waitFor(() => expect(change).toHaveBeenLastCalledWith("private", {
-    confirmed: { affectedPaths: 2, affectedStudents: 5 },
+    confirmed: { affectedPaths: 2, affectedLearners: 5 },
   }));
   await waitFor(() => expect(button).not.toBeDisabled());
   expect(change).toHaveBeenCalledTimes(accept ? 2 : 1);

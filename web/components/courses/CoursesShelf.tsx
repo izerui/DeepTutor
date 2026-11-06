@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import CourseDialog from "@/components/courses/CourseDialog";
-import { TeacherCoursesLink } from "@/components/tasks/Courses";
+import { LearningCoursesLink } from "@/components/tasks/Courses";
 import { createCourse, listCourses, type StudyCourse } from "@/lib/courses-api";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { listAllSessions, type SessionSummary } from "@/lib/session-api";
@@ -124,7 +124,7 @@ export default function CoursesShelf() {
         title={t("My subjects")}
         description={t("One subject's material, paths, notes and conversations, all in one place.")}
       />
-      <TeacherCoursesLink />
+      <LearningCoursesLink />
 
       {loading ? (
         <div className={pageGridClass(3)}>

@@ -6,13 +6,13 @@ import { AlertTriangle, BookOpen, GraduationCap, Megaphone, X } from 'lucide-rea
 import { useTranslation } from 'react-i18next'
 
 import { useAuthStatus } from '@/hooks/useAuthStatus'
-import { acknowledgeTeacherUpdate, type MasteryTopic } from '@/lib/learning-api'
+import { acknowledgeAuthorUpdate, type MasteryTopic } from '@/lib/learning-api'
 import { bookRoute } from '@/lib/learning-routes'
 import { withMasteryTemplate } from '@/lib/mastery-template-scope'
 import {
   MATERIALS_UNAVAILABLE_DETAIL_KEY,
   MATERIALS_UNAVAILABLE_KEY,
-} from '@/lib/teacher-path-messages'
+} from '@/lib/author-path-messages'
 
 /** The path's books, by their canonical `book:<id>` ref (never re-prefixed). */
 function courseBooks(topic: MasteryTopic) {
@@ -26,7 +26,7 @@ function courseBooks(topic: MasteryTopic) {
  * that its outline is not theirs to edit, that it just changed, and when its
  * materials are gone (the tutor will not teach it from its own knowledge).
  */
-export function TeacherPathBanner({
+export function AuthorPathBanner({
   topic,
   compact = false,
 }: {
@@ -65,7 +65,7 @@ export function TeacherPathBanner({
     setHiddenRevision(revision)
     // A failed acknowledgement would bring the notice back on the next
     // visit; show it again now rather than pretend it was recorded.
-    acknowledgeTeacherUpdate(topic.path_id).catch(() =>
+    acknowledgeAuthorUpdate(topic.path_id).catch(() =>
       setHiddenRevision(current => (current === revision ? null : current))
     )
   }

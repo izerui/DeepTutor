@@ -5442,6 +5442,7 @@
   "Lesson": "Leçon",
   "Back to the course": "Retour au cours",
   "Other lessons": "Autres leçons",
+  "Lessons in no course": "Leçons hors de tout cours",
   "{{author}} added a lesson to “{{title}}”": "{{author}} a ajouté une leçon à « {{title}} »",
   "Most popular": "Les plus populaires",
   "Highly rated": "Bien notés",
@@ -5449,5 +5450,6 @@
   "Average rating": "Note moyenne",
   "Not rated yet": "Pas encore noté",
   "{{count}} learners on those paths": "{{count}} apprenants sur ces parcours",
-  "Updating the path's learners": "Mise à jour des apprenants du parcours"
+  "Updating the path's learners": "Mise à jour des apprenants du parcours",
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Ajoute-les à un cours depuis l’éditeur de cours, ou ouvre-en une pour la supprimer ou la retirer."
 }

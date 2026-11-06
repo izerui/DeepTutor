@@ -67,24 +67,24 @@ it("renders an authorized stable detail absent from the intentionally narrower c
   expect(await screen.findByText("Catalog")).toBeTruthy();
 });
 
-it("deletes a KB cited by teacher paths only after confirming the counts (R1)", async () => {
+it("deletes a KB cited by author paths only after confirming the counts (R1)", async () => {
   fixture.references.mockResolvedValue({ references: [], other_references: { total: 1, by_kind: { mastery_template: 1 } } });
   fixture.deleteKb
-    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 4 }))
+    .mockRejectedValueOnce(new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedLearners: 4 }))
     .mockResolvedValue(undefined);
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   render(<KnowledgePage />);
   expect(await screen.findByText("Authorized private")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Delete loaded detail" }));
   await waitFor(() => expect(fixture.deleteKb).toHaveBeenLastCalledWith("kb:private", {
-    confirmed: { affectedPaths: 1, affectedStudents: 4 },
+    confirmed: { affectedPaths: 1, affectedLearners: 4 },
   }));
   expect(fixture.deleteKb).toHaveBeenCalledTimes(2);
   expect(confirm).toHaveBeenCalledTimes(2);
   expect(String(confirm.mock.calls[1][0])).toContain("published paths use this material");
 });
 
-it("applies the effective student policy to fetched details too", async () => {
+it("applies the effective learner policy to fetched details too", async () => {
   fixture.auth = { isAdmin: false, allowPrivateKb: false };
   render(<KnowledgePage />);
   expect(await screen.findByText("Authorized private")).toBeTruthy();

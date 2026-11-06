@@ -9,7 +9,7 @@ export const WITHDRAWAL_CONFIRMATION_CODE = "referenced_by_teacher_paths";
 
 export interface WithdrawalImpact {
   affectedPaths: number;
-  affectedStudents: number;
+  affectedLearners: number;
 }
 
 /** Other accounts' references, which the server only ever reports as counts. */
@@ -31,7 +31,7 @@ export function parseWithdrawalImpact(detail: unknown): WithdrawalImpact | null 
   if (!detail || typeof detail !== "object") return null;
   const raw = detail as Record<string, unknown>;
   if (raw.code !== WITHDRAWAL_CONFIRMATION_CODE) return null;
-  return { affectedPaths: count(raw.affected_paths), affectedStudents: count(raw.affected_students) };
+  return { affectedPaths: count(raw.affected_paths), affectedLearners: count(raw.affected_students) };
 }
 
 export function parseOtherReferences(value: unknown): OtherReferences {
@@ -51,7 +51,7 @@ export function confirmationFields(impact: WithdrawalImpact | null | undefined):
   expected_students?: number;
 } {
   return impact
-    ? { confirm: true, expected_paths: impact.affectedPaths, expected_students: impact.affectedStudents }
+    ? { confirm: true, expected_paths: impact.affectedPaths, expected_students: impact.affectedLearners }
     : {};
 }
 
@@ -70,7 +70,7 @@ export class WithdrawalConfirmationError extends Error {
 export function describeWithdrawalImpact(impact: WithdrawalImpact, t: Translate): string {
   return [
     t("{{count}} published paths use this material", { count: impact.affectedPaths }),
-    t("{{count}} learners on those paths", { count: impact.affectedStudents }),
+    t("{{count}} learners on those paths", { count: impact.affectedLearners }),
     t("Those paths will show this material as unavailable. Continue?"),
   ].join("\n");
 }

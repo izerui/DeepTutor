@@ -6,7 +6,7 @@ export interface AttemptTally {
   incorrect: number;
 }
 
-export interface TeacherPathReport {
+export interface AuthorPathReport {
   template_id: string;
   title: string;
   revision: number;

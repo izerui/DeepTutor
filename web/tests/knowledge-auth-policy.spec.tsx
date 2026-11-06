@@ -21,7 +21,7 @@ it.each([
   expect(result.current.isAdmin).toBe(role === "admin");
 });
 
-it("retains the documented non-student fallback if runtime status is unavailable", async () => {
+it("retains the documented non-learner fallback if runtime status is unavailable", async () => {
   fixture.status.mockResolvedValue(null);
   const { result } = renderHook(() => useAuthStatus());
   await waitFor(() => expect(result.current.loading).toBe(false));

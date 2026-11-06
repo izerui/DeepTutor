@@ -10,7 +10,7 @@ import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   archiveTemplate,
   deleteTemplate,
-  type TeacherTemplate,
+  type AuthorTemplate,
 } from "@/lib/teaching-api";
 
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
@@ -32,7 +32,7 @@ export function ManagePathDialog({
   onClose,
   onChanged,
 }: {
-  template: TeacherTemplate;
+  template: AuthorTemplate;
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
   onChanged: () => void;

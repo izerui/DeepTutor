@@ -19,8 +19,8 @@ vi.mock("@/hooks/useAuthStatus", () => ({ useAuthStatus: () => ({ isAdmin: false
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 
 import LearnerHome from "@/components/home/LearnerHome";
-import { StudentCourses } from "@/components/tasks/Courses";
-import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
+import { LearnerCourses } from "@/components/tasks/Courses";
+import { LearnerLessonDetail } from "@/components/tasks/LearnerLessonDetail";
 import type { AssignedTask } from "@/lib/tasks-api";
 
 const note: AssignedTask = {
@@ -47,19 +47,19 @@ it("still shows an older class announcement on the home, by its class name (plat
 });
 
 it("shows a task with no deadline or opening, ready to do", () => {
-  render(<StudentTaskDetail task={note} onChanged={vi.fn()} />);
+  render(<LearnerLessonDetail task={note} onChanged={vi.fn()} />);
   expect(screen.getByText("To do")).toBeTruthy();
   expect(screen.queryByText(/^Due |^Opens /)).toBeNull();
   expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
 });
 
-it("lists a teacher's course with its tasks in order and opens the one from the link", async () => {
+it("lists an author's course with its tasks in order and opens the one from the link", async () => {
   tasks.listAssignedCourses.mockResolvedValue([{
     id: "crs_1", title: "Waves, term 1", description: "Read in order.", provenance: { kind: "shared", name: "tina" }, published_at: 1,
     tasks: [{ ...note, key: "task_1", task_id: "task_1", title: "Intro", state: "completed" }, note],
   }]);
   const open = vi.fn();
-  render(<StudentCourses courseId="crs_1" onOpenTask={open} />);
+  render(<LearnerCourses courseId="crs_1" onOpenTask={open} />);
   expect(await screen.findByText("Waves, term 1")).toBeTruthy();
   expect(screen.getByText("1 / 2 done")).toBeTruthy();
   const items = screen.getAllByRole("listitem").map((li) => li.textContent);

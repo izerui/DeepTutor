@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { MasteryTopic } from '@/lib/learning-api'
-import { listTeacherTemplates, type TeacherTemplate } from '@/lib/teaching-api'
+import { listAuthorTemplates, type AuthorTemplate } from '@/lib/teaching-api'
 
 import { templateForTopic } from './teaching'
 
@@ -13,7 +13,7 @@ import { templateForTopic } from './teaching'
  * On a teacher's own draft: which published materials students can no longer
  * read (an admin made them private or deleted them, spec 7.4).
  */
-export function TeacherMaterialsNotice({
+export function AuthorMaterialsNotice({
   topic,
   revision = 0,
 }: {
@@ -24,14 +24,14 @@ export function TeacherMaterialsNotice({
   const { t } = useTranslation()
   const pathId = topic.path_id
   const workspaceId = topic.content_workspace_id ?? ''
-  const [found, setFound] = useState<{ key: string; template?: TeacherTemplate }>({
+  const [found, setFound] = useState<{ key: string; template?: AuthorTemplate }>({
     key: '',
   })
   const key = `${pathId}\u0000${workspaceId}`
 
   useEffect(() => {
     let alive = true
-    listTeacherTemplates()
+    listAuthorTemplates()
       .then(templates => {
         if (!alive) return
         const template = templateForTopic(

@@ -64,7 +64,7 @@ it("discards old plans when the selected workspace changes", async () => {
   await act(async () => resolve({ ...sharing, kbs: { ...sharing.kbs, private_kbs: [] } }));
   expect(screen.getByRole("combobox", { name: "Physics" })).toBeVisible();
 });
-it("student owner of a public book can withdraw but not publish (B2-11)", async () => {
+it("learner owner of a public book can withdraw but not publish (B2-11)", async () => {
   const publicBook = { ...book, visibility: "public" as const } as Book;
   fixture.sharing.mockResolvedValue({
     ...sharing,
@@ -79,7 +79,7 @@ it("student owner of a public book can withdraw but not publish (B2-11)", async 
   await act(async () => {});
   expect(screen.getByRole("button", { name: "Make private" })).toBeEnabled();
 });
-it("student owner blocked from publishing a private book when can_make_public is false (B2-11)", async () => {
+it("learner owner blocked from publishing a private book when can_make_public is false (B2-11)", async () => {
   fixture.sharing.mockResolvedValue({
     ...sharing,
     visibility: "private",
@@ -102,7 +102,7 @@ it("blocks publication issues until an administrator explicitly chooses force", 
   fireEvent.click(screen.getByRole("checkbox", { name: force }));
   expect(screen.getByRole("button", { name: "Make public" })).toBeEnabled();
 });
-it("lets the owner withdraw a referenced book after confirming teacher-path counts (R1)", async () => {
+it("lets the owner withdraw a referenced book after confirming author-path counts (R1)", async () => {
   const publicBook = { ...book, visibility: "public" as const } as Book;
   fixture.sharing.mockResolvedValue({
     ...sharing, visibility: "public", kbs: { ...sharing.kbs, private_kbs: [] },

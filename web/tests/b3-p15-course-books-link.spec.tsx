@@ -17,9 +17,9 @@ vi.mock('react-i18next', () => ({
 }))
 vi.mock('@/hooks/useAuthStatus', () => ({ useAuthStatus: () => auth.state }))
 
-import { TeacherPathBanner } from '@/components/space/learning/TeacherPathBanner'
+import { AuthorPathBanner } from '@/components/space/learning/AuthorPathBanner'
 
-function teacherTopic(): MasteryTopic {
+function authorTopic(): MasteryTopic {
   return {
     path_id: 'assigned_tpl1',
     name: 'Waves',
@@ -49,7 +49,7 @@ afterEach(() => cleanup())
 
 it('hides the Course books link when the learning policy excludes books', () => {
   auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat', 'reading'] } }
-  render(<TeacherPathBanner topic={teacherTopic()} />)
+  render(<AuthorPathBanner topic={authorTopic()} />)
   expect(screen.queryByText(/Course books/)).toBeNull()
   expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
   // The provenance line is unaffected.
@@ -58,13 +58,13 @@ it('hides the Course books link when the learning policy excludes books', () => 
 
 it('renders nothing in compact mode when the only content was the hidden books', () => {
   auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat'] } }
-  const { container } = render(<TeacherPathBanner compact topic={teacherTopic()} />)
+  const { container } = render(<AuthorPathBanner compact topic={authorTopic()} />)
   expect(container).toBeEmptyDOMElement()
 })
 
 it('keeps the link for a learner whose policy grants books', () => {
   auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat', 'books'] } }
-  render(<TeacherPathBanner topic={teacherTopic()} />)
+  render(<AuthorPathBanner topic={authorTopic()} />)
   expect(screen.getByRole('link', { name: 'Waves book' }).getAttribute('href')).toBe(
     '/learning/books/book%3Abk_waves?mastery_template=tpl1'
   )
@@ -72,12 +72,12 @@ it('keeps the link for a learner whose policy grants books', () => {
 
 it('offers no link before the auth status is known (no flash for learners)', () => {
   auth.state = { loading: true, learningPolicy: null }
-  render(<TeacherPathBanner topic={teacherTopic()} />)
+  render(<AuthorPathBanner topic={authorTopic()} />)
   expect(screen.queryByText(/Course books/)).toBeNull()
   expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
 })
 
 it('keeps the link for accounts without a learning policy', () => {
-  render(<TeacherPathBanner topic={teacherTopic()} />)
+  render(<AuthorPathBanner topic={authorTopic()} />)
   expect(screen.getByRole('link', { name: 'Waves book' })).toBeTruthy()
 })

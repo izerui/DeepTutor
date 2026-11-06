@@ -58,9 +58,14 @@ export function CourseAuthorView({
   const [lesson, setLesson] = useState<string | null>(initialLesson);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
+  // One's lessons that no course holds (made before courses, or taken out of one).
+  const [loose, setLoose] = useState<MyTask[]>([]);
 
   const refresh = useCallback(() => {
     listMyCourses().then(setCourses).catch((err) => setError(errorText(err, t)));
+    listMyTasks()
+      .then((rows) => setLoose(rows.filter((task) => !task.course_id)))
+      .catch(() => setLoose([]));
   }, [t]);
   useEffect(refresh, [refresh]);
 
@@ -100,6 +105,29 @@ export function CourseAuthorView({
               </li>
             ))}
           </ul>
+        )}
+        {loose.length > 0 && (
+          <section className="space-y-1 pt-2" aria-labelledby="lessons-in-no-course" data-testid="lessons-in-no-course">
+            <h2 id="lessons-in-no-course" className="px-1 text-[12.5px] font-semibold text-[var(--foreground)]">
+              {t("Lessons in no course")}
+            </h2>
+            <p className="px-1 text-[11.5px] text-[var(--muted-foreground)]">
+              {t("Add them to a course from the course editor, or open one to delete or withdraw it.")}
+            </p>
+            <ul className="space-y-1">
+              {loose.map((task) => (
+                <li key={task.id}>
+                  <button type="button" onClick={() => { setSelected(null); setLesson(task.id); }}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-[var(--muted)] ${lesson === task.id ? "bg-[var(--muted)]" : ""}`}>
+                    <span className="block truncate font-medium text-[var(--foreground)]">{task.title}</span>
+                    <span className="text-[11.5px] text-[var(--muted-foreground)]">
+                      {t(KIND_LABEL[task.kind])} · {t(STATUS_LABEL[task.status])}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </aside>
       <section className="min-w-0">
@@ -302,7 +330,7 @@ function CourseEditor({
 }
 
 /** The courses one joined, each with its tasks in order. */
-export function StudentCourses({
+export function LearnerCourses({
   courseId,
   openTaskKey = null,
   onOpenTask,
@@ -339,8 +367,7 @@ export function StudentCourses({
   }, [reload, onLoaded, openTaskKey]);
   if (!courses.length) return null;
   return (
-    <section className="space-y-2" data-testid="student-courses">
-      <h2 className="text-[13px] font-semibold">{t("Courses")}</h2>
+    <section className="space-y-2" aria-label={t("Courses")} data-testid="learner-courses">
       {courses.map((course) => {
         const done = course.tasks.filter((task) => task.state === "completed").length;
         return (
@@ -378,7 +405,7 @@ export function StudentCourses({
 }
 
 /** On the learner's own course shelf: the courses they joined, kept apart from their own. */
-export function TeacherCoursesLink() {
+export function LearningCoursesLink() {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<AssignedCourse[]>([]);
   useEffect(() => {
@@ -386,7 +413,7 @@ export function TeacherCoursesLink() {
   }, []);
   if (!courses.length) return null;
   return (
-    <section className="space-y-2" data-testid="teacher-courses">
+    <section className="space-y-2" data-testid="learning-courses">
       <h2 className="text-[13px] font-semibold">{t("Courses I am learning")}</h2>
       <ul className="flex flex-wrap gap-2">
         {courses.map((course) => (

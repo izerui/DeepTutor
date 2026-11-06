@@ -24,20 +24,20 @@ const t = (key: string, values?: Record<string, unknown>) =>
 
 beforeEach(() => fixture.fetch.mockReset());
 
-it("parses only the counts-only teacher-path confirmation code", () => {
+it("parses only the counts-only author-path confirmation code", () => {
   expect(parseWithdrawalImpact({
     code: "referenced_by_teacher_paths", affected_paths: 3, affected_students: 11,
-  })).toEqual({ affectedPaths: 3, affectedStudents: 11 });
+  })).toEqual({ affectedPaths: 3, affectedLearners: 11 });
   expect(parseWithdrawalImpact({ code: "book_referenced", affected_paths: 3 })).toBeNull();
   expect(parseWithdrawalImpact("referenced_by_teacher_paths")).toBeNull();
   expect(parseWithdrawalImpact({ code: "referenced_by_teacher_paths", affected_paths: -1 }))
-    .toEqual({ affectedPaths: 0, affectedStudents: 0 });
+    .toEqual({ affectedPaths: 0, affectedLearners: 0 });
   expect(parseOtherReferences({ total: 2, by_kind: { course: 2 } })).toEqual({ total: 2, by_kind: { course: 2 } });
   expect(parseOtherReferences(undefined)).toEqual({ total: 0, by_kind: {} });
 });
 
 it("describes the impact with counts only", () => {
-  expect(describeWithdrawalImpact({ affectedPaths: 1, affectedStudents: 2 }, t)).toBe(
+  expect(describeWithdrawalImpact({ affectedPaths: 1, affectedLearners: 2 }, t)).toBe(
     "1 published paths use this material\n2 learners on those paths\n"
       + "Those paths will show this material as unavailable. Continue?",
   );
@@ -53,11 +53,11 @@ it("book API keeps the structured 409 detail and sends confirm on delete/visibil
     code: "referenced_by_teacher_paths", affected_paths: 1, affected_students: 6, message: "Confirm",
   } }, { status: 409 }));
   const failure = await bookApi.delete("book:b", "").catch((error: unknown) => error);
-  expect(bookWithdrawalImpact(failure)).toEqual({ affectedPaths: 1, affectedStudents: 6 });
+  expect(bookWithdrawalImpact(failure)).toEqual({ affectedPaths: 1, affectedLearners: 6 });
   expect(bookWithdrawalImpact(new Error("other"))).toBeNull();
 
   fixture.fetch.mockResolvedValueOnce(Response.json({ deleted: true, book_id: "b" }));
-  await bookApi.delete("book:b", "", { confirmed: { affectedPaths: 1, affectedStudents: 6 } });
+  await bookApi.delete("book:b", "", { confirmed: { affectedPaths: 1, affectedLearners: 6 } });
   expect(fixture.fetch.mock.lastCall?.[0]).toMatch(
     /\/books\/book%3Ab\?confirm=true&expected_paths=1&expected_students=6$/,
   );
@@ -71,7 +71,7 @@ it("book API keeps the structured 409 detail and sends confirm on delete/visibil
 });
 
 it("runs once, asks with the counts, and repeats confirming exactly those counts", async () => {
-  const needs = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 3 });
+  const needs = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedLearners: 3 });
   for (const accept of [true, false]) {
     const run = vi.fn().mockRejectedValueOnce(needs).mockResolvedValue(undefined);
     const ask = vi.fn().mockReturnValue(accept);
@@ -89,8 +89,8 @@ it("runs once, asks with the counts, and repeats confirming exactly those counts
 });
 
 it("asks again with fresh counts when they changed after the first confirmation", async () => {
-  const first = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedStudents: 3 });
-  const changed = new WithdrawalConfirmationError("changed", { affectedPaths: 2, affectedStudents: 5 });
+  const first = new WithdrawalConfirmationError("confirm", { affectedPaths: 1, affectedLearners: 3 });
+  const changed = new WithdrawalConfirmationError("changed", { affectedPaths: 2, affectedLearners: 5 });
   const run = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(changed).mockResolvedValue(undefined);
   const ask = vi.fn().mockReturnValue(true);
   expect(await runWithWithdrawalConfirmation(run, t, ask)).toBe(true);

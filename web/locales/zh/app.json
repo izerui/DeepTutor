@@ -5757,6 +5757,7 @@
   "Lesson": "课时",
   "Back to the course": "返回课程",
   "Other lessons": "其他课时",
+  "Lessons in no course": "不在任何课程里的课时",
   "{{author}} added a lesson to “{{title}}”": "{{author}} 在「{{title}}」里加了新课时",
   "Most popular": "最受欢迎",
   "Highly rated": "好评",
@@ -5764,5 +5765,6 @@
   "Average rating": "平均评分",
   "Not rated yet": "还没有评分",
   "{{count}} learners on those paths": "这些路线上有 {{count}} 名学习者",
-  "Updating the path's learners": "更新路线上的学习者"
+  "Updating the path's learners": "更新路线上的学习者",
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "可以在课程编辑里把它们加进课程，或者点开删除（已发布的是撤回）。"
 }

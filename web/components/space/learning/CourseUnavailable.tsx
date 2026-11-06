@@ -5,7 +5,7 @@ import { GraduationCap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { MASTERY_HOME } from '@/lib/learning-routes'
-import { COURSE_UNAVAILABLE_KEY } from '@/lib/teacher-path-messages'
+import { COURSE_UNAVAILABLE_KEY } from '@/lib/author-path-messages'
 import { scopedUrl } from '@/lib/workspace-scope'
 
 /**

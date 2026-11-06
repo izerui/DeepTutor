@@ -6,7 +6,7 @@ import type {
   ChangeSuggestion,
   KpDecision,
   PublishPreview,
-  TeacherTemplate,
+  AuthorTemplate,
 } from "../lib/teaching-api";
 import {
   TeachingApiError,
@@ -18,7 +18,7 @@ import {
   decisionValue,
   defaultKpDecisions,
   duplicateContinuations,
-  isTeacherInstance,
+  isAuthorInstance,
   keepChoices,
   keepKpDecisions,
   parseDecision,
@@ -43,7 +43,7 @@ const assigned: TopicLike = {
   },
 };
 
-function template(overrides: Partial<TeacherTemplate> = {}): TeacherTemplate {
+function template(overrides: Partial<AuthorTemplate> = {}): AuthorTemplate {
   return {
     id: "tpl_1",
     owner_user_id: "u_tina",
@@ -64,8 +64,8 @@ function template(overrides: Partial<TeacherTemplate> = {}): TeacherTemplate {
 }
 
 test("assigned topics are told apart by their origin", () => {
-  assert.equal(isTeacherInstance(assigned), true);
-  assert.equal(isTeacherInstance(own), false);
+  assert.equal(isAuthorInstance(assigned), true);
+  assert.equal(isAuthorInstance(own), false);
   const split = splitAssignedTopics([own, assigned]);
   assert.deepEqual(split.assigned.map((topic) => topic.path_id), ["assigned_tpl_1"]);
   assert.deepEqual(split.own.map((topic) => topic.path_id), ["topic_a"]);
@@ -126,7 +126,7 @@ test("publishing waits for a clean preview, an idle dialog and unique continuati
   assert.equal(canSubmitPublish(preview, reused, false), false);
 });
 
-test("Study-page source links carry the teacher path (R9)", () => {
+test("Study-page source links carry the author path (R9)", () => {
   const page = "/api/knowledge-bases/kb%3Aabc/source-page?source_path=a.pdf&page=2";
   assert.equal(withMasteryTemplate(page, ""), page);
   assert.equal(

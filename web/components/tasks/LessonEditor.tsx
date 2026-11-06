@@ -17,7 +17,7 @@ import {
   updateTask,
   type TaskDetail,
 } from "@/lib/tasks-api";
-import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
+import { listAuthorTemplates, type AuthorTemplate } from "@/lib/teaching-api";
 
 import { HandOverPanel } from "./HandOver";
 import { KIND_LABEL } from "./task-format";
@@ -33,14 +33,14 @@ function TargetPicker({
 }) {
   const { t } = useTranslation();
   const [sets, setSets] = useState<PracticeSetSummary[]>([]);
-  const [paths, setPaths] = useState<TeacherTemplate[]>([]);
+  const [paths, setPaths] = useState<AuthorTemplate[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
 
   useEffect(() => {
     if (task.kind === "practice_set") listMySets().then((rows) => setSets(rows.filter((r) => r.status === "published"))).catch(() => undefined);
     if (task.kind === "mastery_path")
-      listTeacherTemplates().then((rows) => setPaths(rows.filter((r) => r.is_owner && r.status === "published"))).catch(() => undefined);
+      listAuthorTemplates().then((rows) => setPaths(rows.filter((r) => r.is_owner && r.status === "published"))).catch(() => undefined);
     if (task.kind === "book") bookApi.list().then((r) => setBooks(r.books)).catch(() => undefined);
   }, [task.kind]);
 
@@ -251,13 +251,13 @@ function LearnersTable({ task }: { task: TaskDetail }) {
         <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("No learners receive this yet.")}</p>
       ) : (
         <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
-          {task.students.map((student) => (
-            <li key={student.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">
-              <span className="font-medium">{student.username}</span>
-              {!student.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Not in scope")}</span>}
+          {task.students.map((learner) => (
+            <li key={learner.id} className="flex flex-wrap items-center gap-2 p-3 text-[13px]">
+              <span className="font-medium">{learner.username}</span>
+              {!learner.in_scope && <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Not in scope")}</span>}
               <span className="text-[11.5px] text-[var(--muted-foreground)]">
-                {student.completed
-                  ? student.self_reported ? t("Done (self-reported)") : t("Done")
+                {learner.completed
+                  ? learner.self_reported ? t("Done (self-reported)") : t("Done")
                   : t("Not done")}
               </span>
             </li>

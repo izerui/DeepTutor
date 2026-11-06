@@ -439,7 +439,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
    * store, like any shared book's). Editor surfaces such as the health
    * banner stay closed, so they are left out instead of failing.
    */
-  const teacherPathReader =
+  const authorPathReader =
     !!detail &&
     !isAdmin &&
     detail.book.source === 'shared' &&
@@ -1295,7 +1295,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
                 onResume={canEditBook ? () => void handleResumeBook() : undefined}
                 resuming={resumingBook}
               />
-              {!teacherPathReader && (
+              {!authorPathReader && (
               <BookHealthBanner
                 bookId={selectedBookId}
                 refreshKey={detail?.book.updated_at}

@@ -4,14 +4,14 @@ import { Send, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import type { MasteryTopic } from '@/lib/learning-api'
-import type { TeacherTemplate } from '@/lib/teaching-api'
+import type { AuthorTemplate } from '@/lib/teaching-api'
 
 import { unpublishableReason } from './teaching'
 
 const BUTTON =
   'inline-flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-2 font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40'
 
-function TemplateStatus({ template }: { template: TeacherTemplate }) {
+function TemplateStatus({ template }: { template: AuthorTemplate }) {
   const { t } = useTranslation()
   return (
     <>
@@ -29,7 +29,7 @@ function TemplateStatus({ template }: { template: TeacherTemplate }) {
 }
 
 /** The footer of a teacher's own path card: its publishing state and controls. */
-export function TeacherCardActions({
+export function AuthorCardActions({
   topic,
   template,
   onPublish,
@@ -37,13 +37,13 @@ export function TeacherCardActions({
 }: {
   topic: MasteryTopic
   /** Only a template this account owns, whose draft is this topic. */
-  template?: TeacherTemplate
+  template?: AuthorTemplate
   onPublish: (
     topic: MasteryTopic,
-    template: TeacherTemplate | undefined,
+    template: AuthorTemplate | undefined,
     trigger: HTMLButtonElement
   ) => void
-  onManage: (template: TeacherTemplate, trigger: HTMLButtonElement) => void
+  onManage: (template: AuthorTemplate, trigger: HTMLButtonElement) => void
 }) {
   const { t } = useTranslation()
   const published = Boolean(template && template.current_revision > 0)
@@ -80,18 +80,18 @@ export function TeacherCardActions({
  * a removed teacher's transferred path, or one whose draft is gone. They can
  * be managed but not published from this page, and the reason is said.
  */
-export function UnlistedTeacherTemplates({
+export function UnlistedAuthorTemplates({
   templates,
   onManage,
 }: {
-  templates: TeacherTemplate[]
-  onManage: (template: TeacherTemplate, trigger: HTMLButtonElement) => void
+  templates: AuthorTemplate[]
+  onManage: (template: AuthorTemplate, trigger: HTMLButtonElement) => void
 }) {
   const { t } = useTranslation()
   if (templates.length === 0) return null
   return (
-    <section aria-labelledby="unlisted-teacher-paths" className="mt-10">
-      <h2 id="unlisted-teacher-paths" className="text-sm font-semibold">
+    <section aria-labelledby="unlisted-author-paths" className="mt-10">
+      <h2 id="unlisted-author-paths" className="text-sm font-semibold">
         {t("Other authors' paths")}
       </h2>
       <ul className="mt-3 divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--card)]">

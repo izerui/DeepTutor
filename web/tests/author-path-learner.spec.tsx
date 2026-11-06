@@ -5,7 +5,7 @@ import type { StreamEvent } from '@/features/chat/model/protocol'
 import type { MasteryTopic, ObjectiveReport } from '@/lib/learning-api'
 
 const api = vi.hoisted(() => ({
-  acknowledgeTeacherUpdate: vi.fn(),
+  acknowledgeAuthorUpdate: vi.fn(),
   fetchObjectiveReport: vi.fn(),
 }))
 const apiFetch = vi.hoisted(() => vi.fn())
@@ -17,7 +17,7 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'en' },
   }),
 }))
-// TeacherPathBanner reads the learning policy (B3-P15); no policy here.
+// AuthorPathBanner reads the learning policy (B3-P15); no policy here.
 vi.mock('@/hooks/useAuthStatus', () => ({
   useAuthStatus: () => ({ loading: false, learningPolicy: null }),
 }))
@@ -37,10 +37,10 @@ import { ModeSwitch } from '@/components/space/learning/ModeSwitch'
 import { ModuleOutline } from '@/components/space/learning/ModuleOutline'
 import { ObjectiveDetail } from '@/components/space/learning/ObjectiveDetail'
 import { PathTitle } from '@/components/space/learning/PathTitle'
-import { TeacherPathBanner } from '@/components/space/learning/TeacherPathBanner'
+import { AuthorPathBanner } from '@/components/space/learning/AuthorPathBanner'
 import { TopicAtlas } from '@/components/space/learning/TopicAtlas'
 import { MasteryApiError, isCourseUnavailable } from '@/lib/learning-api'
-import { teacherTurnErrorMessage } from '@/lib/teacher-path-messages'
+import { authorTurnErrorMessage } from '@/lib/author-path-messages'
 
 function topic(overrides: Partial<MasteryTopic> = {}): MasteryTopic {
   return {
@@ -102,7 +102,7 @@ function topic(overrides: Partial<MasteryTopic> = {}): MasteryTopic {
   } as MasteryTopic
 }
 
-function teacherTopic(overrides: Partial<MasteryTopic> = {}): MasteryTopic {
+function authorTopic(overrides: Partial<MasteryTopic> = {}): MasteryTopic {
   return topic({
     path_id: 'assigned_tpl1',
     name: 'C15 Waves',
@@ -119,16 +119,16 @@ function teacherTopic(overrides: Partial<MasteryTopic> = {}): MasteryTopic {
 }
 
 beforeEach(() => {
-  api.acknowledgeTeacherUpdate.mockReset().mockResolvedValue({ status: 'ok', acknowledged: true })
+  api.acknowledgeAuthorUpdate.mockReset().mockResolvedValue({ status: 'ok', acknowledged: true })
   apiFetch.mockReset()
   window.history.replaceState(null, '', '/')
 })
 
-describe('TopicAtlas for students', () => {
-  it('groups teacher paths first, opens them straight into Study, and hides creation without permission', () => {
+describe('TopicAtlas for learners', () => {
+  it('groups author paths first, opens them straight into Study, and hides creation without permission', () => {
     render(
       <TopicAtlas
-        topics={[topic(), teacherTopic()]}
+        topics={[topic(), authorTopic()]}
         loading={false}
         error={null}
         onRetry={() => {}}
@@ -171,11 +171,11 @@ describe('TopicAtlas for students', () => {
   })
 })
 
-describe('TeacherPathBanner', () => {
+describe('AuthorPathBanner', () => {
   it('shows provenance, the update notice with counts, and acknowledges it once', async () => {
     render(
-      <TeacherPathBanner
-        topic={teacherTopic({
+      <AuthorPathBanner
+        topic={authorTopic({
           origin: {
             kind: 'teacher_template',
             template_id: 'tpl1',
@@ -202,15 +202,15 @@ describe('TeacherPathBanner', () => {
     expect(notice).not.toHaveTextContent('removed')
     fireEvent.click(within(notice).getByRole('button', { name: /Got it/ }))
     expect(screen.queryByRole('status')).toBeNull()
-    expect(api.acknowledgeTeacherUpdate).toHaveBeenCalledWith('assigned_tpl1')
+    expect(api.acknowledgeAuthorUpdate).toHaveBeenCalledWith('assigned_tpl1')
   })
 
   it('brings the notice back when the acknowledgement fails', async () => {
-    api.acknowledgeTeacherUpdate.mockRejectedValue(new Error('offline'))
+    api.acknowledgeAuthorUpdate.mockRejectedValue(new Error('offline'))
     render(
-      <TeacherPathBanner
+      <AuthorPathBanner
         compact
-        topic={teacherTopic({
+        topic={authorTopic({
           origin: {
             kind: 'teacher_template',
             template_id: 'tpl1',
@@ -235,9 +235,9 @@ describe('TeacherPathBanner', () => {
 
   it('links course books by canonical ref with the path context, and alerts on missing materials', () => {
     render(
-      <TeacherPathBanner
+      <AuthorPathBanner
         compact
-        topic={teacherTopic({
+        topic={authorTopic({
           sources: [
             {
               id: 's1',
@@ -273,7 +273,7 @@ describe('TeacherPathBanner', () => {
   })
 
   it('renders nothing for a path the learner built', () => {
-    const { container } = render(<TeacherPathBanner topic={topic()} />)
+    const { container } = render(<AuthorPathBanner topic={topic()} />)
     expect(container).toBeEmptyDOMElement()
   })
 })
@@ -292,9 +292,9 @@ describe('read-only outline controls', () => {
     expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull()
   })
 
-  it('marks a redefined objective and offers no manual mastery on a teacher path', async () => {
+  it('marks a redefined objective and offers no manual mastery on an author path', async () => {
     api.fetchObjectiveReport.mockResolvedValue(report({ needs_reassessment: true }))
-    const path = teacherTopic()
+    const path = authorTopic()
     path.map.modules[0].knowledge_points[0].needs_reassessment = true
     render(
       <ModuleOutline topic={path} revision={1} selectedId="kp1" zh={false} onSelect={() => {}} />
@@ -374,7 +374,7 @@ describe('ObjectiveDetail voided attempts', () => {
   })
 })
 
-describe("originals inside a teacher path's Study page", () => {
+describe("originals inside an author path's Study page", () => {
   const preview = '/api/knowledge-bases/kb%3Akb1/source-page?source_path=lesson.pdf&page=1'
   const sources: StreamEvent = {
     type: 'sources',
@@ -440,13 +440,13 @@ describe("originals inside a teacher path's Study page", () => {
   })
 })
 
-describe('teacher path refusals are localized by code', () => {
+describe('author path refusals are localized by code', () => {
   it('maps turn error codes and HTTP status, never the English text', async () => {
-    expect(teacherTurnErrorMessage({ error_code: 'teacher_path_unavailable' })?.key).toMatch(
+    expect(authorTurnErrorMessage({ error_code: 'teacher_path_unavailable' })?.key).toMatch(
       /^This course is no longer available/
     )
     expect(
-      teacherTurnErrorMessage({
+      authorTurnErrorMessage({
         error_code: 'teacher_materials_unavailable',
         materials: ['C15 Notes', 'Waves book'],
       })
@@ -454,7 +454,7 @@ describe('teacher path refusals are localized by code', () => {
       key: 'Course materials are temporarily unavailable: {{materials}}. Ask its author to restore them. The tutor will not continue without them.',
       values: { materials: 'C15 Notes · Waves book' },
     })
-    expect(teacherTurnErrorMessage({ error_code: 'internal_error' })).toBeNull()
+    expect(authorTurnErrorMessage({ error_code: 'internal_error' })).toBeNull()
     const closed = new MasteryApiError('x', 403, 'teacher_path_unavailable')
     expect(isCourseUnavailable(closed, 'assigned_tpl1')).toBe(true)
     // Only the code decides: a bare 403 on a teacher path is that route's own error.
@@ -464,7 +464,7 @@ describe('teacher path refusals are localized by code', () => {
   })
 })
 
-describe('a book opened from a teacher path keeps its context', () => {
+describe('a book opened from an author path keeps its context', () => {
   it("carries mastery_template between the book's pages, not to the library", async () => {
     const { bookRoute } = await import('@/lib/learning-routes')
     const { bookErrorMessage } = await import('@/lib/book-errors')

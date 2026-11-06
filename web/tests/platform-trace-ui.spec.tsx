@@ -43,8 +43,8 @@ vi.mock("@/lib/workbench-api", () => ({
 }));
 vi.mock("@/components/practice-sets/TakeSet", () => ({ TakeSet: ({ setId }: { setId: string }) => <p>{`take ${setId}`}</p> }));
 vi.mock("@/components/practice-sets/SetEditor", () => ({ SetEditor: ({ setId }: { setId: string }) => <p>{`edit ${setId}`}</p> }));
-vi.mock("@/components/tasks/StudentTaskDetail", () => ({
-  StudentTaskDetail: ({ task, onChanged }: { task: AssignedTask; onChanged: (next: AssignedTask) => void }) => (
+vi.mock("@/components/tasks/LearnerLessonDetail", () => ({
+  LearnerLessonDetail: ({ task, onChanged }: { task: AssignedTask; onChanged: (next: AssignedTask) => void }) => (
     <div>
       <p>{`open ${task.title}`}</p>
       <button type="button" onClick={() => onChanged({ ...task, state: "completed" })}>{`finish ${task.title}`}</button>

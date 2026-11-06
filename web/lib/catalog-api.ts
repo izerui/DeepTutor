@@ -4,7 +4,7 @@ import type { ScopeUpdate } from "./publish-api";
 import type {
   AttemptTally,
   PracticeSetResult,
-  TeacherPathReport,
+  AuthorPathReport,
 } from "./report-types";
 
 /** The learning market is system-level: never workspace-scoped (platform batch 1 §8). */
@@ -405,7 +405,7 @@ export interface ReportPoints {
 export interface LearnerDetail {
   id: string;
   username: string;
-  paths: TeacherPathReport[];
+  paths: AuthorPathReport[];
   practice_sets: PracticeSetResult[];
   tasks: LearnerTasks | null;
 }

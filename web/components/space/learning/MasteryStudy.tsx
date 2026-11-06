@@ -60,8 +60,8 @@ import { ActivityHeader } from "@/components/activity";
 import { CourseUnavailable } from "./CourseUnavailable";
 import { MasteryTemplateContext } from "./mastery-template-context";
 import { ModeSwitch } from "./ModeSwitch";
-import { TeacherPathBanner } from "./TeacherPathBanner";
-import { isTeacherInstance } from "./teaching";
+import { AuthorPathBanner } from "./AuthorPathBanner";
+import { isAuthorInstance } from "./teaching";
 import { topicDisplayName, type Translate } from "./format";
 import { LevelUpCelebration } from "./LevelUpCelebration";
 import { MasteryComposer } from "./MasteryComposer";
@@ -141,7 +141,7 @@ const STARTERS: Record<
 };
 
 /** A teacher path is studied or reviewed, never redesigned here. */
-const TEACHER_PATH_MODES: readonly MasteryMode[] = ["study", "review"];
+const AUTHOR_PATH_MODES: readonly MasteryMode[] = ["study", "review"];
 
 /**
  * Where the tutor is. The id matters as much as the name: the outline
@@ -547,12 +547,12 @@ export function MasteryStudy({
   // A stale "?mode=outline" link (or a draft opened before the topic loaded)
   // must not start an outline conversation on a teacher's path: the server
   // refuses it, so the draft is moved to study before anything is sent.
-  const teacherPath = topic ? isTeacherInstance(topic) : false;
+  const authorPath = topic ? isAuthorInstance(topic) : false;
   useEffect(() => {
-    if (teacherPath && sessionMode === "outline" && !state.sessionId) {
+    if (authorPath && sessionMode === "outline" && !state.sessionId) {
       setMasterySessionMode("study");
     }
-  }, [sessionMode, setMasterySessionMode, state.sessionId, teacherPath]);
+  }, [sessionMode, setMasterySessionMode, state.sessionId, authorPath]);
 
   const copyAssistantMessage = useCallback(
     (content: string) => copyText(content),
@@ -600,7 +600,7 @@ export function MasteryStudy({
     // R9: originals shown in this transcript are read in the path's context —
     // only while the path is open (a closed one answers 403 to every read).
     <MasteryTemplateContext.Provider
-      value={teacherPath ? (topic.origin?.template_id ?? "") : ""}
+      value={authorPath ? (topic.origin?.template_id ?? "") : ""}
     >
     <main className="mastery-shell flex h-full min-h-0 flex-col overflow-hidden">
       {/* One line, not two: the topic and the waypoint the tutor is on read
@@ -640,7 +640,7 @@ export function MasteryStudy({
             fix that for me" — and that question can only be asked by someone
             who can see the other two exist. */}
         <ModeSwitch
-          modes={teacherPath ? TEACHER_PATH_MODES : undefined}
+          modes={authorPath ? AUTHOR_PATH_MODES : undefined}
           mode={sessionMode}
           onSelect={changeMode}
           disabled={state.isStreaming || modeBusy || sessionLoading}
@@ -679,7 +679,7 @@ export function MasteryStudy({
           </span>
         </div>
       </header>
-      <TeacherPathBanner topic={topic} compact />
+      <AuthorPathBanner topic={topic} compact />
 
       <div className="flex min-h-0 flex-1">
         <aside

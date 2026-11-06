@@ -35,7 +35,7 @@ vi.mock("@/lib/tasks-api", async () => ({
   ...tasks,
 }));
 vi.mock("@/lib/practice-sets-api", () => ({ listMySets: vi.fn(() => Promise.resolve([])) }));
-vi.mock("@/lib/teaching-api", () => ({ listTeacherTemplates: vi.fn(() => Promise.resolve([])) }));
+vi.mock("@/lib/teaching-api", () => ({ listAuthorTemplates: vi.fn(() => Promise.resolve([])) }));
 vi.mock("@/lib/book-api", () => ({ bookApi: { list: vi.fn(() => Promise.resolve({ books: [] })), getSpine: vi.fn() } }));
 vi.mock("@/lib/workbench-api", () => ({
   getWorkbench: vi.fn(() => Promise.resolve({ sent: [] })), getMyAiUsage: vi.fn(() => Promise.resolve(null)),
@@ -123,9 +123,9 @@ it("opens ?task= of a joined lesson with its course open", async () => {
     { id: "c_1", title: "Optics", description: "", provenance: { kind: "shared", name: "tina" }, published_at: 1, tasks: [assigned()] },
   ]);
   render(<TasksHub />);
-  expect(await screen.findByTestId("student-task-detail")).toBeTruthy();
+  expect(await screen.findByTestId("learner-lesson-detail")).toBeTruthy();
   // The course holding it is shown open, the lesson listed in it.
-  const courses = await screen.findByTestId("student-courses");
+  const courses = await screen.findByTestId("learner-courses");
   await waitFor(() => expect(within(courses).getByText("Read chapter 1")).toBeTruthy());
 });
 
@@ -145,7 +145,7 @@ it("looks for ?task= among what one joined when it is not one's own", async () =
   tasks.getTask.mockRejectedValue(new Error("Lesson not found."));
   tasks.getAssignedTask.mockResolvedValue(assigned());
   render(<TasksHub />);
-  expect(await screen.findByTestId("student-task-detail")).toBeTruthy();
+  expect(await screen.findByTestId("learner-lesson-detail")).toBeTruthy();
   expect(screen.getByRole("tab", { name: "Courses tab: learning" }).getAttribute("aria-selected")).toBe("true");
 });
 

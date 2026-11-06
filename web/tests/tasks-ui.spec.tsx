@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSea
 
 import LearnerHome from "@/components/home/LearnerHome";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
+import { LearnerLessonDetail } from "@/components/tasks/LearnerLessonDetail";
 import type { AssignedTask } from "@/lib/tasks-api";
 
 const note: AssignedTask = {
@@ -37,7 +37,7 @@ beforeEach(() => {
 it("marks a note done in place and offers no hand-in form", async () => {
   api.markTaskDone.mockResolvedValue({ ...note, state: "completed", completed_at: 1 });
   const changed = vi.fn();
-  render(<StudentTaskDetail task={note} onChanged={changed} />);
+  render(<LearnerLessonDetail task={note} onChanged={changed} />);
   expect(screen.getByText("Published by tina")).toBeTruthy();
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.queryByRole("button", { name: "Hand in" })).toBeNull();
@@ -65,7 +65,7 @@ it("words notifications and marks them all read", async () => {
   await waitFor(() => expect(notes.markNotificationsRead).toHaveBeenCalledWith());
 });
 
-it("keeps what teachers assigned apart from the student's own learning", async () => {
+it("keeps what authors assigned apart from the learner's own learning", async () => {
   api.getHome.mockResolvedValue({
     assigned: [note], history_count: 0,
     market: [{ kind: "book", id: "b1", title: "School handbook", author: "", author_role: "admin" }],

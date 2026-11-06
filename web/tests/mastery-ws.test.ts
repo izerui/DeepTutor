@@ -131,7 +131,7 @@ test("topic socket reconnects with the latest server revision", () => {
   client.stop();
 });
 
-test("a closed teacher path ends the subscription with its stable code", () => {
+test("a closed author path ends the subscription with its stable code", () => {
   const sockets: FakeSocket[] = [];
   const envelopes: MasterySocketEnvelope[] = [];
   const errors: string[] = [];

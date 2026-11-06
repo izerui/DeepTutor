@@ -7,8 +7,8 @@ import { useTranslation } from "react-i18next";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { getAssignedTask, listAssignedTasks, type AssignedCourse, type AssignedTask } from "@/lib/tasks-api";
 
-import { CourseAuthorView, StudentCourses } from "./Courses";
-import { StudentTaskDetail } from "./StudentTaskDetail";
+import { CourseAuthorView, LearnerCourses } from "./Courses";
+import { LearnerLessonDetail } from "./LearnerLessonDetail";
 import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 /**
@@ -124,8 +124,8 @@ function JoinedView() {
   return (
     <div className="space-y-4">
       {taskError && <p role="alert" className="text-[12px] text-red-600">{taskError}</p>}
-      {selected && <StudentTaskDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); setChanges((n) => n + 1); }} />}
-      <StudentCourses courseId={courseParam} openTaskKey={taskParam} onOpenTask={setSelected} reload={changes} onLoaded={onCourses} />
+      {selected && <LearnerLessonDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); setChanges((n) => n + 1); }} />}
+      <LearnerCourses courseId={courseParam} openTaskKey={taskParam} onOpenTask={setSelected} reload={changes} onLoaded={onCourses} />
       {inCourses !== null && inCourses.size === 0 && loose.length === 0 && (
         <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to do right now.")}</p>
       )}

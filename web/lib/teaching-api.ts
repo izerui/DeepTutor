@@ -6,7 +6,7 @@ const BASE = "/api/mastery-paths/teaching";
 
 export type TemplateStatus = "draft" | "published" | "archived";
 
-export interface TeacherTemplate {
+export interface AuthorTemplate {
   id: string;
   owner_user_id: string;
   owner_name: string;
@@ -96,7 +96,7 @@ export interface PublishWarning {
 }
 
 export interface PublishPreview {
-  template: TeacherTemplate;
+  template: AuthorTemplate;
   draft_revision: number;
   outline_issues: string[];
   source_issues: SourceIssue[];
@@ -165,15 +165,15 @@ function jsonInit(method: string, body?: unknown): RequestInit {
 
 const id = encodeURIComponent;
 
-export async function listTeacherTemplates(): Promise<TeacherTemplate[]> {
-  const result = await teachingJson<{ templates: TeacherTemplate[] }>("/templates", {
+export async function listAuthorTemplates(): Promise<AuthorTemplate[]> {
+  const result = await teachingJson<{ templates: AuthorTemplate[] }>("/templates", {
     cache: "no-store",
   });
   return Array.isArray(result.templates) ? result.templates : [];
 }
 
-export function registerTeacherTemplate(pathId: string, workspaceId: string) {
-  return teachingJson<TeacherTemplate>(
+export function registerAuthorTemplate(pathId: string, workspaceId: string) {
+  return teachingJson<AuthorTemplate>(
     "/templates",
     jsonInit("POST", { path_id: pathId, workspace_id: workspaceId }),
   );
@@ -188,7 +188,7 @@ export function previewPublish(templateId: string) {
 
 export function publishTemplate(templateId: string, input: PublishInput) {
   return teachingJson<{
-    template: TeacherTemplate;
+    template: AuthorTemplate;
     revision: number;
     affected_students: number;
     warnings: PublishWarning[];
@@ -199,7 +199,7 @@ export function publishTemplate(templateId: string, input: PublishInput) {
 }
 
 export function archiveTemplate(templateId: string) {
-  return teachingJson<TeacherTemplate>(`/templates/${id(templateId)}/archive`, jsonInit("POST"));
+  return teachingJson<AuthorTemplate>(`/templates/${id(templateId)}/archive`, jsonInit("POST"));
 }
 
 export function deleteTemplate(templateId: string) {

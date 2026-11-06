@@ -9,8 +9,8 @@ import { markTaskDone, type AssignedTask } from "@/lib/tasks-api";
 
 import { KIND_LABEL, STATE_LABEL, STATE_TONE, targetHref } from "./task-format";
 
-/** One task as the student sees it: what to do and where to do it (spec 2026-11-03 §3–§4). */
-export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onChanged: (next: AssignedTask) => void }) {
+/** One lesson as the learner sees it: what to do and where to do it (spec 2026-11-03 §3–§4). */
+export function LearnerLessonDetail({ task, onChanged }: { task: AssignedTask; onChanged: (next: AssignedTask) => void }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,7 +30,7 @@ export function StudentTaskDetail({ task, onChanged }: { task: AssignedTask; onC
   };
 
   return (
-    <article className="space-y-3 rounded-xl border border-[var(--border)] p-4" data-testid="student-task-detail">
+    <article className="space-y-3 rounded-xl border border-[var(--border)] p-4" data-testid="learner-lesson-detail">
       <header className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <SourceBadge provenance={task.provenance} />

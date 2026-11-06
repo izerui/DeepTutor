@@ -9,13 +9,13 @@ import type { MasteryTopic, PassStandard } from "@/lib/learning-api";
 import {
   previewPublish,
   publishTemplate,
-  registerTeacherTemplate,
+  registerAuthorTemplate,
   type KbChoice,
   type KpDecision,
   type PublishBlockedDetail,
   type PublishPreview,
   type PublishWarning,
-  type TeacherTemplate,
+  type AuthorTemplate,
 } from "@/lib/teaching-api";
 
 import { topicDisplayName, type Translate } from "./format";
@@ -50,10 +50,10 @@ export function PublishTemplateDialog({
 }: {
   topic: MasteryTopic;
   /** Absent the first time: the dialog registers the topic as a template. */
-  template?: TeacherTemplate;
+  template?: AuthorTemplate;
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
-  onPublished: (template: TeacherTemplate) => void;
+  onPublished: (template: AuthorTemplate) => void;
 }) {
   const { t } = useTranslation();
   const say = (message: Message) => t(message.key, message.values);
@@ -68,7 +68,7 @@ export function PublishTemplateDialog({
   const [bookChoices, setBookChoices] = useState<Record<string, KbChoice>>({});
   const [decisions, setDecisions] = useState<Record<string, KpDecision>>({});
   const [published, setPublished] = useState<{
-    template: TeacherTemplate;
+    template: AuthorTemplate;
     warnings: PublishWarning[];
   } | null>(null);
   const dialogRef = useModalDialog(onClose, busy, returnFocusRef);
@@ -96,7 +96,7 @@ export function PublishTemplateDialog({
       try {
         const registered = knownTemplateId
           ? { id: knownTemplateId }
-          : await registerTeacherTemplate(pathId, workspaceId);
+          : await registerAuthorTemplate(pathId, workspaceId);
         const next = await previewPublish(registered.id);
         if (!alive) return;
         setTemplateId(registered.id);

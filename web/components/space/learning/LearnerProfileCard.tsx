@@ -16,7 +16,7 @@ import { TEACH_FIRST_PROFILE_LABEL } from "./next-step-copy";
  * and reshapes the outline when the correction makes it wrong. An edit form
  * here would be a second writer with no way to do that second half.
  */
-export function LearnerProfileCard({ profile, teacherPath }: { profile: LearnerProfile | null; teacherPath?: boolean }) {
+export function LearnerProfileCard({ profile, authorPath }: { profile: LearnerProfile | null; authorPath?: boolean }) {
   const { t, i18n } = useTranslation();
   const teachFirst = profile?.teaching_strategy === "teach_first"
     ? i18n.language?.toLowerCase().startsWith("zh")
@@ -49,7 +49,7 @@ export function LearnerProfileCard({ profile, teacherPath }: { profile: LearnerP
       {rows.length === 0 ? (
         <p className="px-4 py-3.5 text-[12px] leading-5 text-[var(--muted-foreground)]">
           {t(
-            teacherPath
+            authorPath
               ? "The tutor has not asked about you yet. It will at the start of your first session."
               : "The tutor has not asked about you yet. It will before it designs the outline.",
           )}

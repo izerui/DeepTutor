@@ -13,7 +13,7 @@ import {
   storeFailedSubmission,
   clearFailedSubmission,
 } from "@/lib/failed-submissions";
-import { teacherTurnErrorMessage } from "@/lib/teacher-path-messages";
+import { authorTurnErrorMessage } from "@/lib/author-path-messages";
 
 const fixture = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("@/lib/api", () => ({
@@ -74,7 +74,7 @@ describe("annotateFailureCode round-trip", () => {
     expect(records[0].failureDetails?.materials).toEqual(["Physics notes", "Mechanics book"]);
 
     // 4. The localized message must include the material names.
-    const teacher = teacherTurnErrorMessage({
+    const teacher = authorTurnErrorMessage({
       error_code: records[0].failureCode!,
       ...records[0].failureDetails,
     });
@@ -98,7 +98,7 @@ describe("annotateFailureCode round-trip", () => {
     expect(records[0].failureCode).toBe("teacher_path_unavailable");
     expect(records[0].failureDetails).toBeUndefined();
 
-    const teacher = teacherTurnErrorMessage({
+    const teacher = authorTurnErrorMessage({
       error_code: records[0].failureCode!,
     });
     expect(teacher).not.toBeNull();

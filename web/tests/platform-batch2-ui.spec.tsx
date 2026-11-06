@@ -57,7 +57,7 @@ vi.mock("@/lib/tasks-api", async () => ({
 }));
 vi.mock("@/lib/auth", () => auth);
 vi.mock("@/lib/practice-sets-api", () => ({ listMySets: vi.fn(() => Promise.resolve([])) }));
-vi.mock("@/lib/teaching-api", () => ({ listTeacherTemplates: vi.fn(() => Promise.resolve([])) }));
+vi.mock("@/lib/teaching-api", () => ({ listAuthorTemplates: vi.fn(() => Promise.resolve([])) }));
 vi.mock("@/lib/workbench-api", () => ({
   getSchoolAiLimit: vi.fn(() => Promise.resolve(0)), setSchoolAiLimit: vi.fn(), getMyAiUsage: vi.fn(() => Promise.resolve(null)),
   AI_LIMIT_PRESETS: [{ tokens: 0, label: "No limit" }],

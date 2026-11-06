@@ -97,7 +97,7 @@ async function open(search: string) {
   return fixture.reader.mock.lastCall![0] as PageReaderProps;
 }
 
-it("a private book read through a teacher path keeps the reader's own learning controls", async () => {
+it("a private book read through an author path keeps the reader's own learning controls", async () => {
   fixture.book = { visibility: "private" };
   const block = detail().pages[0].blocks[0];
   fixture.fetch.mockImplementation(async (path: string, init?: RequestInit) => {

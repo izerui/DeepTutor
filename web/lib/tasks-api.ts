@@ -187,9 +187,9 @@ export const publishCourse = (courseId: string, scope?: ScopeUpdate) =>
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
 export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
 /** Traceability #5: an administrator gives a course they hold to a teacher. */
-export const handOverCourse = (courseId: string, teacherId: string) =>
-  call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: teacherId }));
+export const handOverCourse = (courseId: string, learnerId: string) =>
+  call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: learnerId }));
 /** The same for a task that is in no course. */
-export const handOverTask = (taskId: string, teacherId: string) =>
-  call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: teacherId }));
+export const handOverTask = (taskId: string, learnerId: string) =>
+  call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: learnerId }));
 

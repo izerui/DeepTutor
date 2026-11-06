@@ -31,7 +31,7 @@ async function failure(run: () => Promise<unknown>): Promise<unknown> {
   throw new Error("expected the request to fail");
 }
 
-describe("a closed teacher path is recognised by its code, not by its id", () => {
+describe("a closed author path is recognised by its code, not by its id", () => {
   beforeEach(() => apiFetch.mockReset());
 
   it.each([
@@ -52,7 +52,7 @@ describe("a closed teacher path is recognised by its code, not by its id", () =>
     expect(isCourseUnavailable(error, "assigned_tpl1")).toBe(true);
   });
 
-  it("keeps any other 403 on a teacher path as its own error", async () => {
+  it("keeps any other 403 on an author path as its own error", async () => {
     apiFetch.mockResolvedValue(
       Response.json({ detail: "Your account cannot use learning paths." }, { status: 403 }),
     );

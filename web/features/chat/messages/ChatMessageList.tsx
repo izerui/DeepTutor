@@ -91,7 +91,7 @@ import {
   type MasteryQuestion,
 } from "@/lib/mastery-question";
 import { SetupCredentialCard } from "@/components/chat/home/SetupCredentialCard";
-import { teacherTurnErrorMessage } from "@/lib/teacher-path-messages";
+import { authorTurnErrorMessage } from "@/lib/author-path-messages";
 import { extractSetupCredential } from "@/lib/setup-signals";
 import { PartnerDraftCard } from "@/components/chat/home/PartnerDraftCard";
 import { extractPartnerDraft } from "@/lib/partner-draft";
@@ -1917,10 +1917,10 @@ export const UserMessage = memo(function UserMessage({
           >
             <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
             {(() => {
-              const teacher = msg.failureCode
-                ? teacherTurnErrorMessage({ error_code: msg.failureCode, ...msg.failureDetails })
+              const refusal = msg.failureCode
+                ? authorTurnErrorMessage({ error_code: msg.failureCode, ...msg.failureDetails })
                 : null;
-              return teacher ? t(teacher.key, teacher.values) : t("Not sent");
+              return refusal ? t(refusal.key, refusal.values) : t("Not sent");
             })()}
             {onRetryFailedSubmission && !msg.failedSubmissionNeedsReview && typeof msg.id === "number" && (
               <button type="button" disabled={editDisabled || retrying} onClick={async () => {
@@ -2356,11 +2356,11 @@ export const ChatMessageList = memo(function ChatMessageList({
                   <AlertCircle className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
                   <span className="min-w-0 flex-1 text-[12px] leading-[1.5] text-[var(--foreground)]">
                     {(() => {
-                      const teacher = orphanedFailure.failure_code
-                        ? teacherTurnErrorMessage({ error_code: orphanedFailure.failure_code })
+                      const refusal = orphanedFailure.failure_code
+                        ? authorTurnErrorMessage({ error_code: orphanedFailure.failure_code })
                         : null;
-                      return teacher
-                        ? t(teacher.key, teacher.values)
+                      return refusal
+                        ? t(refusal.key, refusal.values)
                         : (orphanedFailure.error || t("The turn was interrupted."));
                     })()}
                   </span>
@@ -2477,10 +2477,10 @@ export const ChatMessageList = memo(function ChatMessageList({
                     {(() => {
                       // A teacher path's refusal carries a stable code; its
                       // English sentence is for logs, not for the learner.
-                      const teacher = teacherTurnErrorMessage(
+                      const refusal = authorTurnErrorMessage(
                         terminalError?.metadata as Record<string, unknown> | undefined,
                       );
-                      return teacher ? t(teacher.key, teacher.values) : null;
+                      return refusal ? t(refusal.key, refusal.values) : null;
                     })() || terminalError?.content || (terminalError
                       ? t("The turn was interrupted.")
                       : t("No response was generated. Please try again."))}

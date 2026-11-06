@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { MyListings } from "@/components/catalog/MyListings";
 import { SourceBadge } from "@/components/common/SourceBadge";
-import { StudentTaskDetail } from "@/components/tasks/StudentTaskDetail";
+import { LearnerLessonDetail } from "@/components/tasks/LearnerLessonDetail";
 import { AiUsageNote } from "./AiUsage";
 import { authorTaskHref, isContentKey } from "./task-links";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
@@ -255,7 +255,7 @@ export default function LearnerHome() {
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
       <AiUsageNote />
       {selected && (
-        <StudentTaskDetail
+        <LearnerLessonDetail
           key={selected.key}
           task={selected}
           onChanged={(next) => {

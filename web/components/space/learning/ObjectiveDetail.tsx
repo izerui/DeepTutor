@@ -4,7 +4,7 @@ import { Ban, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { ObjectiveReport } from "@/lib/learning-api";
-import { voidedAttemptLabel } from "@/lib/teacher-path-messages";
+import { voidedAttemptLabel } from "@/lib/author-path-messages";
 
 import { formatAbsolute, formatRelative, type Translate } from "./format";
 

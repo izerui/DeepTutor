@@ -7,10 +7,10 @@ import {
   type PublishBlockedDetail,
   type PublishPreview,
   type SourceIssue,
-  type TeacherTemplate,
+  type AuthorTemplate,
 } from "@/lib/teaching-api";
 
-export function isTeacherInstance(topic: Pick<MasteryTopic, "origin">): boolean {
+export function isAuthorInstance(topic: Pick<MasteryTopic, "origin">): boolean {
   return topic.origin?.kind === "teacher_template";
 }
 
@@ -19,15 +19,15 @@ export function splitAssignedTopics<T extends Pick<MasteryTopic, "origin">>(
 ): { assigned: T[]; own: T[] } {
   const assigned: T[] = [];
   const own: T[] = [];
-  for (const topic of topics) (isTeacherInstance(topic) ? assigned : own).push(topic);
+  for (const topic of topics) (isAuthorInstance(topic) ? assigned : own).push(topic);
   return { assigned, own };
 }
 
 /** The live template whose draft is this topic, in this topic's workspace. */
 export function templateForTopic(
-  templates: TeacherTemplate[],
+  templates: AuthorTemplate[],
   topic: Pick<MasteryTopic, "path_id" | "content_workspace_id">,
-): TeacherTemplate | undefined {
+): AuthorTemplate | undefined {
   const workspace = topic.content_workspace_id ?? "";
   return templates.find(
     (template) =>
@@ -211,7 +211,7 @@ export function teachingErrorMessage(
 }
 
 /** Why a template has no publish control on this page, if it has none. */
-export function unpublishableReason(template: TeacherTemplate): Message {
+export function unpublishableReason(template: AuthorTemplate): Message {
   if (!template.is_owner) {
     return {
       key: "Only {{owner}} can edit and publish this path. You can still manage or archive it.",
@@ -234,9 +234,9 @@ export function unpublishableReason(template: TeacherTemplate): Message {
  * draft is gone. They are managed from a list instead of a card.
  */
 export function unlistedTemplates(
-  templates: TeacherTemplate[],
+  templates: AuthorTemplate[],
   topics: Pick<MasteryTopic, "path_id" | "content_workspace_id">[],
-): TeacherTemplate[] {
+): AuthorTemplate[] {
   return templates.filter(
     (template) =>
       template.status !== "archived" &&

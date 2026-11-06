@@ -14,12 +14,12 @@ import test from "node:test";
 const source = (relative: string) =>
   fs.readFileSync(path.resolve(process.cwd(), relative), "utf8");
 
-// -- Behavioural: teacherTurnErrorMessage localization ----------------------
+// -- Behavioural: authorTurnErrorMessage localization ----------------------
 
-test("teacherTurnErrorMessage returns a localized key for known codes", async () => {
-  const mod = await import("../lib/teacher-path-messages");
+test("authorTurnErrorMessage returns a localized key for known codes", async () => {
+  const mod = await import("../lib/author-path-messages");
 
-  const materials = mod.teacherTurnErrorMessage({
+  const materials = mod.authorTurnErrorMessage({
     error_code: "teacher_materials_unavailable",
     materials: ["Physics notes"],
   });
@@ -28,14 +28,14 @@ test("teacherTurnErrorMessage returns a localized key for known codes", async ()
   assert.match(materials.key, /\{\{materials\}\}/);
   assert.equal(materials.values?.materials, "Physics notes");
 
-  const course = mod.teacherTurnErrorMessage({
+  const course = mod.authorTurnErrorMessage({
     error_code: "teacher_path_unavailable",
   });
   assert.ok(course);
   assert.match(course.key, /This course is no longer available/);
 
   // Generic variant without material names.
-  const generic = mod.teacherTurnErrorMessage({
+  const generic = mod.authorTurnErrorMessage({
     error_code: "teacher_materials_unavailable",
   });
   assert.ok(generic);
@@ -43,17 +43,17 @@ test("teacherTurnErrorMessage returns a localized key for known codes", async ()
   assert.ok(!generic.key.includes("{{materials}}"));
 
   // Unknown codes return null — fall through to generic display.
-  assert.equal(mod.teacherTurnErrorMessage({ error_code: "internal_error" }), null);
+  assert.equal(mod.authorTurnErrorMessage({ error_code: "internal_error" }), null);
 });
 
 // -- Structural: the wiring exists in product code --------------------------
 
-test("ChatMessageList passes failureDetails to teacherTurnErrorMessage", () => {
+test("ChatMessageList passes failureDetails to authorTurnErrorMessage", () => {
   const list = source("features/chat/messages/ChatMessageList.tsx");
   // The "Not sent" path must spread failureDetails into the metadata.
-  assert.match(list, /teacherTurnErrorMessage.*msg\.failureDetails/);
+  assert.match(list, /authorTurnErrorMessage.*msg\.failureDetails/);
   // The orphaned-failure path must use failure_code.
-  assert.match(list, /teacherTurnErrorMessage.*orphanedFailure\.failure_code/);
+  assert.match(list, /authorTurnErrorMessage.*orphanedFailure\.failure_code/);
 });
 
 test("ChatStateAdapter passes event metadata to annotateFailureCode", () => {

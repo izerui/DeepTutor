@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { TeachingApiError, type TeacherTemplate } from "../lib/teaching-api";
+import { TeachingApiError, type AuthorTemplate } from "../lib/teaching-api";
 import {
   publishBlocked,
   publishStepMessage,
@@ -13,7 +13,7 @@ import {
   unpublishableReason,
 } from "../components/space/learning/teaching";
 
-function template(overrides: Partial<TeacherTemplate> = {}): TeacherTemplate {
+function template(overrides: Partial<AuthorTemplate> = {}): AuthorTemplate {
   return {
     id: "tpl_1",
     owner_user_id: "u_tina",

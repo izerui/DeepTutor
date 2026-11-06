@@ -44,7 +44,7 @@ test("registry selections preserve scoped legacy references without matching nam
   assert.equal(knowledgeBaseRef({ name: "notes", id: "account:kb:notes" }), "account:kb:notes");
 });
 
-test("knowledge groups and student policy retain public reads without write sections", () => {
+test("knowledge groups and learner policy retain public reads without write sections", () => {
   const kbs: KnowledgeBase[] = [
     { name: "public", visibility: "public", owned: false },
     { name: "private", visibility: "private" },

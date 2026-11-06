@@ -40,9 +40,9 @@ import {
 } from "@/components/space/learning/format";
 import { PathTitle } from "@/components/space/learning/PathTitle";
 import { CourseUnavailable } from "@/components/space/learning/CourseUnavailable";
-import { TeacherMaterialsNotice } from "@/components/space/learning/TeacherMaterialsNotice";
-import { TeacherPathBanner } from "@/components/space/learning/TeacherPathBanner";
-import { isTeacherInstance } from "@/components/space/learning/teaching";
+import { AuthorMaterialsNotice } from "@/components/space/learning/AuthorMaterialsNotice";
+import { AuthorPathBanner } from "@/components/space/learning/AuthorPathBanner";
+import { isAuthorInstance } from "@/components/space/learning/teaching";
 import { ReviewTrail } from "@/components/space/learning/ReviewTrail";
 import { PassStandardControl } from "@/components/space/learning/PassStandardControl";
 import { SessionCamp } from "@/components/space/learning/SessionCamp";
@@ -310,7 +310,7 @@ export default function MasteryTopicPage() {
 
   // A teacher's outline: study, review and reset are the learner's; editing,
   // renaming, deleting and claiming mastery by hand are not.
-  const teacherLocked = isTeacherInstance(topic);
+  const authorLocked = isAuthorInstance(topic);
   const nextCopy = NEXT_LABELS[topic.next.action] ?? {
     zh: topic.next.reason,
     en: topic.next.reason,
@@ -318,7 +318,7 @@ export default function MasteryTopicPage() {
   const progress = topic.map.counts.total
     ? Math.round((topic.map.counts.mastered / topic.map.counts.total) * 100)
     : 0;
-  const needsRouteRepair = !teacherLocked && topic.map.counts.total === 0;
+  const needsRouteRepair = !authorLocked && topic.map.counts.total === 0;
   const nextCta = NEXT_CTA_LABELS[topic.next.action];
   const pendingSessionId =
     topic.next.session_id ||
@@ -350,7 +350,7 @@ export default function MasteryTopicPage() {
             {t("Learning topics")}
           </Link>
           <div className="flex items-center gap-2">
-            {!teacherLocked && (
+            {!authorLocked && (
               <button
                 type="button"
                 onClick={(event) => openEditor(event.currentTarget)}
@@ -375,7 +375,7 @@ export default function MasteryTopicPage() {
                 >
                   <RotateCcw className="h-3.5 w-3.5" /> {t("Reset progress")}
                 </button>
-                {!teacherLocked && (
+                {!authorLocked && (
                   <button
                     type="button"
                     onClick={(event) =>
@@ -398,7 +398,7 @@ export default function MasteryTopicPage() {
                 <PathTitle
                   displayName={displayName}
                   storedName={topic.name}
-                  onRename={teacherLocked ? undefined : handleRename}
+                  onRename={authorLocked ? undefined : handleRename}
                 />
                 <p className={PAGE_DESCRIPTION_CLASS}>
                   {topic.metadata.description || topic.metadata.goal}
@@ -407,18 +407,18 @@ export default function MasteryTopicPage() {
             </div>
             <PassStandardControl
               topic={topic}
-              locked={teacherLocked}
+              locked={authorLocked}
               onSaved={(next) => {
                 setTopic(next);
                 activity.refresh();
               }}
             />
-            {teacherLocked ? (
+            {authorLocked ? (
               <div className="mt-3">
-                <TeacherPathBanner topic={topic} />
+                <AuthorPathBanner topic={topic} />
               </div>
             ) : (
-              <TeacherMaterialsNotice
+              <AuthorMaterialsNotice
                 topic={topic}
                 revision={Math.max(topic.path_revision, activity.revision)}
               />
@@ -615,7 +615,7 @@ export default function MasteryTopicPage() {
                   selectedId={selectedId}
                   zh={zh}
                   onSelect={setSelectedId}
-                  onOverride={teacherLocked ? undefined : handleOverride}
+                  onOverride={authorLocked ? undefined : handleOverride}
                 />
               ) : board ? (
                 <LearningBoard
@@ -663,7 +663,7 @@ export default function MasteryTopicPage() {
             </div>
           )}
           <div className="flex min-h-0 flex-col gap-5 lg:h-full">
-            <LearnerProfileCard profile={topic.learner_profile} teacherPath={teacherLocked} />
+            <LearnerProfileCard profile={topic.learner_profile} authorPath={authorLocked} />
             <SessionCamp
               pathId={pathId}
               sessions={sessions}
@@ -675,7 +675,7 @@ export default function MasteryTopicPage() {
           </div>
         </div>
       </PageContainer>
-      {editorOpen && !teacherLocked && (
+      {editorOpen && !authorLocked && (
         <EditTopicRouteDialog
           topic={topic}
           returnFocusRef={editorTriggerRef}
@@ -702,7 +702,7 @@ export default function MasteryTopicPage() {
           onClose={() => setConfirmAction(null)}
         />
       )}
-      {confirmAction === "delete" && !teacherLocked && (
+      {confirmAction === "delete" && !authorLocked && (
         <ConfirmDialog
           title={t("Permanently delete this topic?")}
           description={t(

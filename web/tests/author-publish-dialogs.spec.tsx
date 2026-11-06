@@ -3,10 +3,10 @@ import { createRef } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import type { MasteryTopic } from "@/lib/learning-api";
-import type { PublishPreview, TeacherTemplate } from "@/lib/teaching-api";
+import type { PublishPreview, AuthorTemplate } from "@/lib/teaching-api";
 
 const api = vi.hoisted(() => ({
-  registerTeacherTemplate: vi.fn(),
+  registerAuthorTemplate: vi.fn(),
   previewPublish: vi.fn(),
   publishTemplate: vi.fn(),
   archiveTemplate: vi.fn(),
@@ -33,11 +33,11 @@ import { TeachingApiError } from "@/lib/teaching-api";
 import { PublishTemplateDialog } from "@/components/space/learning/PublishTemplateDialog";
 import { ManagePathDialog } from "@/components/space/learning/ManagePathDialog";
 import {
-  TeacherCardActions,
-  UnlistedTeacherTemplates,
-} from "@/components/space/learning/TeacherCardActions";
+  AuthorCardActions,
+  UnlistedAuthorTemplates,
+} from "@/components/space/learning/AuthorCardActions";
 
-function template(overrides: Partial<TeacherTemplate> = {}): TeacherTemplate {
+function template(overrides: Partial<AuthorTemplate> = {}): AuthorTemplate {
   return {
     id: "tpl_1",
     owner_user_id: "u_tina",
@@ -91,7 +91,7 @@ function preview(overrides: Partial<PublishPreview> = {}): PublishPreview {
 
 beforeEach(() => {
   for (const mock of Object.values(api)) mock.mockReset();
-  api.registerTeacherTemplate.mockResolvedValue(template());
+  api.registerAuthorTemplate.mockResolvedValue(template());
 });
 
 it("registers a first publish, defaults private materials to public and sends the choices", async () => {
@@ -117,7 +117,7 @@ it("registers a first publish, defaults private materials to public and sends th
   fireEvent.click(within(kb).getByRole("radio", { name: "Readable through this path only" }));
   // Platform batch 1 §4.4: no students to pick; the path is for the market.
   expect(screen.queryByRole("checkbox", { name: "sara" })).toBeNull();
-  expect(api.registerTeacherTemplate).toHaveBeenCalledWith("topic_waves", "");
+  expect(api.registerAuthorTemplate).toHaveBeenCalledWith("topic_waves", "");
   expect(screen.queryByText("What changed")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
   await waitFor(() => expect(published).toHaveBeenCalled());
@@ -155,7 +155,7 @@ it("localizes blocking source issues by code and keeps publishing disabled", asy
   expect(screen.getByText("Tom's notes is someone else's private book, or cannot be shared.")).toBeVisible();
   expect(screen.queryByText("EN text")).toBeNull();
   expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
-  expect(api.registerTeacherTemplate).not.toHaveBeenCalled();
+  expect(api.registerAuthorTemplate).not.toHaveBeenCalled();
 });
 
 it("drops a slow preview of a topic the dialog no longer shows", async () => {
@@ -205,7 +205,7 @@ it("shows an update's change list with per-point decisions and the affected stud
       onPublished={published}
     />,
   );
-  // Flush the multi-step async chain: registerTeacherTemplate → previewPublish → setState.
+  // Flush the multi-step async chain: registerAuthorTemplate → previewPublish → setState.
   // Two act flushes drain the sequential microtask chains so the dialog exits
   // its loading state without relying on polling under jsdom concurrency.
   await act(async () => {});
@@ -286,7 +286,7 @@ it("manages a path: no learner list, list in the market and archive behind a con
   expect(changed).toHaveBeenCalledTimes(1);
 });
 
-it("lets an administrator withdraw another teacher's path but not list it", async () => {
+it("lets an administrator withdraw another author's path but not list it", async () => {
   render(
     <ManagePathDialog
       template={template({ status: "published", current_revision: 1, is_owner: false })}
@@ -301,17 +301,17 @@ it("lets an administrator withdraw another teacher's path but not list it", asyn
   expect(screen.getByRole("button", { name: "Archive" })).toBeVisible();
 });
 
-it("offers publishing only on an own card; other teachers' paths are manage-only with a reason", () => {
+it("offers publishing only on an own card; other authors' paths are manage-only with a reason", () => {
   const onManage = vi.fn();
   render(
     <>
-      <TeacherCardActions
+      <AuthorCardActions
         topic={topic()}
         template={template({ current_revision: 2, assigned_count: 3, status: "published" })}
         onPublish={vi.fn()}
         onManage={onManage}
       />
-      <UnlistedTeacherTemplates
+      <UnlistedAuthorTemplates
         templates={[template({ id: "tpl_tom", is_owner: false, owner_name: "tom", title: "Optics" })]}
         onManage={onManage}
       />
@@ -326,7 +326,7 @@ it("offers publishing only on an own card; other teachers' paths are manage-only
   expect(onManage.mock.calls[0][0].id).toBe("tpl_tom");
 });
 
-it("keeps the teacher's material and change choices when checking again", async () => {
+it("keeps the author's material and change choices when checking again", async () => {
   const blockedDetail = new TeachingApiError("{}", 422, {
     outline_issues: [],
     source_issues: [{ source_id: "s_notes", label: "My notes", code: "personal_source", message: "EN" }],

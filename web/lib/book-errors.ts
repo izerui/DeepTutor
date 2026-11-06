@@ -10,7 +10,7 @@
 
 import { BookApiError } from "@/lib/book-api";
 import { currentMasteryTemplate } from "@/lib/mastery-template-scope";
-import { COURSE_UNAVAILABLE_KEY } from "@/lib/teacher-path-messages";
+import { COURSE_UNAVAILABLE_KEY } from "@/lib/author-path-messages";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 

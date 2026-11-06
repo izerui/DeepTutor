@@ -70,26 +70,26 @@ export function SetResults({ setId, initiallyOpen = false }: { setId: string; in
                 </tr>
               </thead>
               <tbody>
-                {report.students.map((student) => (
-                  <tr key={student.id} className="border-t border-[var(--border)]">
-                    <td className="px-2 py-1.5 font-medium">{student.username}</td>
-                    <td className="px-2 py-1.5">{student.completed ? `${student.first_score} / ${student.max_score}` : t("Not submitted")}</td>
-                    <td className="px-2 py-1.5">{student.completed ? `${student.best_score} / ${student.best_max_score}` : "—"}</td>
-                    <td className="px-2 py-1.5">{student.attempts}</td>
-                    <td className="px-2 py-1.5">{student.minutes ?? "—"}</td>
+                {report.students.map((learner) => (
+                  <tr key={learner.id} className="border-t border-[var(--border)]">
+                    <td className="px-2 py-1.5 font-medium">{learner.username}</td>
+                    <td className="px-2 py-1.5">{learner.completed ? `${learner.first_score} / ${learner.max_score}` : t("Not submitted")}</td>
+                    <td className="px-2 py-1.5">{learner.completed ? `${learner.best_score} / ${learner.best_max_score}` : "—"}</td>
+                    <td className="px-2 py-1.5">{learner.attempts}</td>
+                    <td className="px-2 py-1.5">{learner.minutes ?? "—"}</td>
                     <td className="px-2 py-1.5">
-                      {formatDate(student.submitted_at) || "—"}
+                      {formatDate(learner.submitted_at) || "—"}
                     </td>
                     <td className="px-2 py-1.5">
-                      {student.latest_submission_id && (
+                      {learner.latest_submission_id && (
                         <button type="button" className="text-[11.5px] text-[var(--primary)] hover:underline"
-                          onClick={() => setReviewing(student.latest_submission_id ?? null)}>
+                          onClick={() => setReviewing(learner.latest_submission_id ?? null)}>
                           {t("Review answers")}
                         </button>
                       )}
-                      {(student.ungraded ?? 0) > 0 && (
+                      {(learner.ungraded ?? 0) > 0 && (
                         <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
-                          {t("{{count}} to grade", { count: student.ungraded })}
+                          {t("{{count}} to grade", { count: learner.ungraded })}
                         </span>
                       )}
                     </td>

@@ -6,8 +6,8 @@
  */
 
 /** Stable codes of a refused mastery turn (`metadata.error_code`). */
-export const TEACHER_PATH_UNAVAILABLE_CODE = 'teacher_path_unavailable'
-export const TEACHER_MATERIALS_UNAVAILABLE_CODE = 'teacher_materials_unavailable'
+export const AUTHOR_PATH_UNAVAILABLE_CODE = 'teacher_path_unavailable'
+export const AUTHOR_MATERIALS_UNAVAILABLE_CODE = 'teacher_materials_unavailable'
 
 /** `QuizAttempt.void_reason` of answers to an objective a teacher redefined. */
 export const OBJECTIVE_REDEFINED_REASON = 'objective_redefined'
@@ -19,7 +19,7 @@ export const MATERIALS_UNAVAILABLE_DETAIL_KEY =
   'Ask its author to restore them. The tutor will not continue without them.'
 
 /** A catalog key plus its interpolation values; callers render `t(key, values)`. */
-export interface TeacherPathMessage {
+export interface AuthorPathMessage {
   key: string
   values?: Record<string, string>
 }
@@ -43,12 +43,12 @@ function materialNames(value: unknown): string[] {
  * The localized message for a turn a teacher path refused, or null when the
  * event is some other failure (its own content is shown as before).
  */
-export function teacherTurnErrorMessage(
+export function authorTurnErrorMessage(
   metadata: Record<string, unknown> | undefined
-): TeacherPathMessage | null {
+): AuthorPathMessage | null {
   const code = String(metadata?.error_code ?? metadata?.code ?? '')
-  if (code === TEACHER_PATH_UNAVAILABLE_CODE) return { key: COURSE_UNAVAILABLE_KEY }
-  if (code === TEACHER_MATERIALS_UNAVAILABLE_CODE) {
+  if (code === AUTHOR_PATH_UNAVAILABLE_CODE) return { key: COURSE_UNAVAILABLE_KEY }
+  if (code === AUTHOR_MATERIALS_UNAVAILABLE_CODE) {
     const names = materialNames(metadata?.materials)
     return names.length
       ? {

@@ -27,7 +27,7 @@ import { activeWorkspaceId } from "@/lib/workspace-scope";
 import { learningLibrary } from "@/lib/learning-library";
 import { useLearningCreation, requestedLearningCreation } from "@/components/learning/LibraryWorkspace";
 import { type MasteryTopic } from "@/lib/learning-api";
-import { listTeacherTemplates, type TeacherTemplate } from "@/lib/teaching-api";
+import { listAuthorTemplates, type AuthorTemplate } from "@/lib/teaching-api";
 import {
   MASTERY_OPENING_SCOPE,
   masteryOpeningMessage,
@@ -48,20 +48,20 @@ function MasteryPathRoute() {
   // narrows the atlas to that course's paths and adopts whatever is built here.
   const scope = useCourseScope();
   const creation = useLearningCreation(() => setWizardOpen(true));
-  const [templates, setTemplates] = useState<TeacherTemplate[]>([]);
+  const [templates, setTemplates] = useState<AuthorTemplate[]>([]);
   const [publishing, setPublishing] = useState<{
     topic: MasteryTopic;
-    template?: TeacherTemplate;
+    template?: AuthorTemplate;
   } | null>(null);
-  const [managing, setManaging] = useState<TeacherTemplate | null>(null);
-  const teacherTriggerRef = useRef<HTMLElement | null>(null);
+  const [managing, setManaging] = useState<AuthorTemplate | null>(null);
+  const authorTriggerRef = useRef<HTMLElement | null>(null);
   const templatesRequest = useRef(0);
 
   const loadTemplates = useCallback(async () => {
     // Overlapping reloads (after each change) settle on the newest.
     const request = ++templatesRequest.current;
     try {
-      const next = await listTeacherTemplates();
+      const next = await listAuthorTemplates();
       if (request === templatesRequest.current) setTemplates(next);
     } catch {
       // The atlas stays usable; the card actions simply show "publish".
@@ -131,14 +131,14 @@ function MasteryPathRoute() {
           setLoading(true);
           void loadTopics();
         }}
-        teacherTemplates={ownTemplates}
+        authorTemplates={ownTemplates}
         unlistedTemplates={otherTemplates}
         onPublish={(topic, template, trigger) => {
-          teacherTriggerRef.current = trigger;
+          authorTriggerRef.current = trigger;
           setPublishing({ topic, template });
         }}
         onManage={(template, trigger) => {
-          teacherTriggerRef.current = trigger;
+          authorTriggerRef.current = trigger;
           setManaging(template);
         }}
       />
@@ -171,7 +171,7 @@ function MasteryPathRoute() {
         <PublishTemplateDialog
           topic={publishing.topic}
           template={publishing.template}
-          returnFocusRef={teacherTriggerRef}
+          returnFocusRef={authorTriggerRef}
           onClose={() => {
             setPublishing(null);
             // Opening the dialog may have registered the path as a template.
@@ -186,7 +186,7 @@ function MasteryPathRoute() {
       {managing && (
         <ManagePathDialog
           template={currentTemplate(templates, managing)}
-          returnFocusRef={teacherTriggerRef}
+          returnFocusRef={authorTriggerRef}
           onClose={() => setManaging(null)}
           onChanged={() => void loadTemplates()}
         />

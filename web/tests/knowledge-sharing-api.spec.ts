@@ -62,7 +62,7 @@ it("reports structured messages and includes creation visibility", async () => {
   expect(result.ref).toBe("kb:new");
 });
 
-it("turns a counts-only teacher-path 409 into a confirmation error and retries with confirm (R1)", async () => {
+it("turns a counts-only author-path 409 into a confirmation error and retries with confirm (R1)", async () => {
   const conflict = () => Response.json({ detail: {
     code: "referenced_by_teacher_paths", requires_confirmation: true,
     affected_paths: 1, affected_students: 4, message: "Confirm",
@@ -70,15 +70,15 @@ it("turns a counts-only teacher-path 409 into a confirmation error and retries w
   fixture.fetch.mockResolvedValueOnce(conflict());
   const visibility = setKnowledgeBaseVisibility("kb:id", "private");
   await expect(visibility).rejects.toBeInstanceOf(WithdrawalConfirmationError);
-  await expect(visibility).rejects.toMatchObject({ impact: { affectedPaths: 1, affectedStudents: 4 } });
+  await expect(visibility).rejects.toMatchObject({ impact: { affectedPaths: 1, affectedLearners: 4 } });
   fixture.fetch.mockResolvedValueOnce(conflict());
   await expect(deleteKnowledgeBase("kb:id")).rejects.toMatchObject({
-    name: "WithdrawalConfirmationError", impact: { affectedPaths: 1, affectedStudents: 4 },
+    name: "WithdrawalConfirmationError", impact: { affectedPaths: 1, affectedLearners: 4 },
   });
   expect(fixture.invalidate).not.toHaveBeenCalled();
 
   fixture.fetch.mockResolvedValueOnce(Response.json({ kb_id: "id", ref: "kb:id", visibility: "private" }));
-  const shown = { affectedPaths: 1, affectedStudents: 4 };
+  const shown = { affectedPaths: 1, affectedLearners: 4 };
   await setKnowledgeBaseVisibility("kb:id", "private", { confirmed: shown });
   expect(fixture.fetch.mock.lastCall?.[1].body).toBe(
     '{"visibility":"private","force":false,"confirm":true,"expected_paths":1,"expected_students":4}',

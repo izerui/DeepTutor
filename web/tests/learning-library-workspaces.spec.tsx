@@ -39,7 +39,7 @@ it('chooses a new destination without treating the library filter as storage sco
   expect(mocks.push).toHaveBeenCalledWith('/learning/books?create=1&dt_workspace=other')
   expect(open).not.toHaveBeenCalled()
 })
-it('opens creation directly for teachers and students, who have no workspaces to choose', () => {
+it('opens creation directly for authors and learners, who have no workspaces to choose', () => {
   // Spec 2026-10-29 D4.
   auth.isAdmin = false
   const open = vi.fn()

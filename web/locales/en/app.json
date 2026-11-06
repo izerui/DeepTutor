@@ -5757,6 +5757,7 @@
   "Lesson": "Lesson",
   "Back to the course": "Back to the course",
   "Other lessons": "Other lessons",
+  "Lessons in no course": "Lessons in no course",
   "{{author}} added a lesson to “{{title}}”": "{{author}} added a lesson to “{{title}}”",
   "Most popular": "Most popular",
   "Highly rated": "Highly rated",
@@ -5764,5 +5765,6 @@
   "Average rating": "Average rating",
   "Not rated yet": "Not rated yet",
   "{{count}} learners on those paths": "{{count}} learners on those paths",
-  "Updating the path's learners": "Updating the path's learners"
+  "Updating the path's learners": "Updating the path's learners",
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Add them to a course from the course editor, or open one to delete or withdraw it."
 }

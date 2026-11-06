@@ -1,6 +1,6 @@
 import type { LearningOrigin } from "@/lib/learning-library";
 import { apiUrl, apiFetch } from "./api";
-import { TEACHER_PATH_UNAVAILABLE_CODE } from "./teacher-path-messages";
+import { AUTHOR_PATH_UNAVAILABLE_CODE } from "./author-path-messages";
 import type { Provenance } from "./provenance";
 
 export interface ModuleInit {
@@ -498,7 +498,7 @@ export interface MasteryReviewSettings {
 }
 
 /** "The author updated this course", until the learner acknowledges it. */
-export interface TeacherUpdateNoticeData {
+export interface AuthorUpdateNoticeData {
   from_revision: number;
   to_revision: number;
   added: number;
@@ -516,7 +516,7 @@ export interface MasteryTopicOrigin {
   teacher_name: string;
   /** Who it comes from now (spec 2026-11-02 §3.1); a transferred path reads "school". */
   provenance?: Provenance;
-  update_notice: TeacherUpdateNoticeData | null;
+  update_notice: AuthorUpdateNoticeData | null;
   /** Null when not checked (lists); false means the tutor will not continue. */
   materials_available: boolean | null;
 }
@@ -678,7 +678,7 @@ export function isCourseUnavailable(error: unknown, _pathId?: string): boolean {
   return (
     error instanceof MasteryApiError &&
     error.status === 403 &&
-    error.code === TEACHER_PATH_UNAVAILABLE_CODE
+    error.code === AUTHOR_PATH_UNAVAILABLE_CODE
   );
 }
 
@@ -879,7 +879,7 @@ export async function fetchMasteryTopicSessions(
 }
 
 /** Hide the one-time "your teacher updated this course" notice. */
-export function acknowledgeTeacherUpdate(
+export function acknowledgeAuthorUpdate(
   pathId: string,
 ): Promise<{ status: string; acknowledged: boolean }> {
   return masteryJson(

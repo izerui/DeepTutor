@@ -23,10 +23,10 @@ import { setPendingPrompt } from '@/lib/pending-prompt'
 
 import { useLibraryFilter } from '@/components/learning/LibraryWorkspace'
 import { libraryItemKey } from '@/lib/learning-library'
-import type { TeacherTemplate } from '@/lib/teaching-api'
+import type { AuthorTemplate } from '@/lib/teaching-api'
 import { topicDisplayName } from './format'
-import { TeacherCardActions, UnlistedTeacherTemplates } from './TeacherCardActions'
-import { isTeacherInstance, splitAssignedTopics, templateForTopic } from './teaching'
+import { AuthorCardActions, UnlistedAuthorTemplates } from './AuthorCardActions'
+import { isAuthorInstance, splitAssignedTopics, templateForTopic } from './teaching'
 import { SourceBadge } from '@/components/common/SourceBadge'
 import { groupByProvenance, provenanceGroupTitle, type Provenance } from '@/lib/provenance'
 
@@ -42,7 +42,7 @@ export function TopicAtlas({
   onCreate,
   onRetry,
   scopeChip,
-  teacherTemplates,
+  authorTemplates,
   unlistedTemplates,
   onPublish,
   onManage,
@@ -56,15 +56,15 @@ export function TopicAtlas({
   /** Rendered beside the eyebrow when this visit belongs to one course. */
   scopeChip?: ReactNode
   /** Present for teachers and admins: their own templates, to decorate their own cards. */
-  teacherTemplates?: TeacherTemplate[]
+  authorTemplates?: AuthorTemplate[]
   /** Templates without a card here (another teacher's, or without a draft): manage only. */
-  unlistedTemplates?: TeacherTemplate[]
+  unlistedTemplates?: AuthorTemplate[]
   onPublish?: (
     topic: MasteryTopic,
-    template: TeacherTemplate | undefined,
+    template: AuthorTemplate | undefined,
     trigger: HTMLButtonElement
   ) => void
-  onManage?: (template: TeacherTemplate, trigger: HTMLButtonElement) => void
+  onManage?: (template: AuthorTemplate, trigger: HTMLButtonElement) => void
 }) {
   const { t } = useTranslation()
   const { rows: topics, control } = useLibraryFilter(allTopics)
@@ -76,11 +76,11 @@ export function TopicAtlas({
   const dueTopics = activeTopics.filter(topic => topic.reviews.some(review => review.due))
   const firstDueTopic = dueTopics[0]
   const { assigned, own } = splitAssignedTopics(activeTopics)
-  const teacherFooter = (topic: MasteryTopic): ReactNode =>
-    teacherTemplates && onPublish && onManage && !isTeacherInstance(topic) ? (
-      <TeacherCardActions
+  const authorFooter = (topic: MasteryTopic): ReactNode =>
+    authorTemplates && onPublish && onManage && !isAuthorInstance(topic) ? (
+      <AuthorCardActions
         topic={topic}
-        template={templateForTopic(teacherTemplates, topic)}
+        template={templateForTopic(authorTemplates, topic)}
         onPublish={onPublish}
         onManage={onManage}
       />
@@ -211,7 +211,7 @@ export function TopicAtlas({
                       <TopicMapCard
                         key={libraryItemKey(topic, topic.path_id)}
                         topic={topic}
-                        footer={teacherFooter(topic)}
+                        footer={authorFooter(topic)}
                       />
                     ))}
                   </div>
@@ -221,7 +221,7 @@ export function TopicAtlas({
                   <TopicMapCard
                     key={libraryItemKey(topic, topic.path_id)}
                     topic={topic}
-                    footer={teacherFooter(topic)}
+                    footer={authorFooter(topic)}
                   />
                 ))
               )}
@@ -255,7 +255,7 @@ export function TopicAtlas({
       ) : null}
       {/* Without the topics, own templates would be misreported as draftless. */}
       {unlistedTemplates && onManage && !loading && !error && (
-        <UnlistedTeacherTemplates templates={unlistedTemplates} onManage={onManage} />
+        <UnlistedAuthorTemplates templates={unlistedTemplates} onManage={onManage} />
       )}
     </LearningShell>
   )

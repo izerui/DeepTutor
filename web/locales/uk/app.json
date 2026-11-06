@@ -5801,6 +5801,7 @@
   "Lesson": "Урок",
   "Back to the course": "Назад до курсу",
   "Other lessons": "Інші уроки",
+  "Lessons in no course": "Уроки поза курсами",
   "{{author}} added a lesson to “{{title}}”": "{{author}} додав(ла) урок до «{{title}}»",
   "Most popular": "Найпопулярніші",
   "Highly rated": "Високо оцінені",
@@ -5808,5 +5809,6 @@
   "Average rating": "Середня оцінка",
   "Not rated yet": "Ще не оцінено",
   "{{count}} learners on those paths": "{{count}} учнів на цих шляхах",
-  "Updating the path's learners": "Оновлення учнів шляху"
+  "Updating the path's learners": "Оновлення учнів шляху",
+  "Add them to a course from the course editor, or open one to delete or withdraw it.": "Додай їх до курсу в редакторі курсу або відкрий один, щоб видалити чи відкликати його."
 }

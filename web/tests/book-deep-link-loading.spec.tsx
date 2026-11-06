@@ -54,7 +54,7 @@ vi.mock("@/lib/book-api", () => ({
     code?: string;
   },
   bookWithdrawalImpact: (error: unknown) =>
-    (error as { impact?: { affectedPaths: number; affectedStudents: number } } | null)?.impact ?? null,
+    (error as { impact?: { affectedPaths: number; affectedLearners: number } } | null)?.impact ?? null,
   bookApi: {
     get: fixture.get,
     list: fixture.list,
@@ -199,9 +199,9 @@ describe("book deep-link loading", () => {
     expect(fixture.references).not.toHaveBeenCalled();
   });
 
-  it("confirms teacher-path impact by counts before deleting a cited book (R1)", async () => {
+  it("confirms author-path impact by counts before deleting a cited book (R1)", async () => {
     fixture.delete.mockRejectedValueOnce(Object.assign(new Error("409"), {
-      impact: { affectedPaths: 2, affectedStudents: 9 },
+      impact: { affectedPaths: 2, affectedLearners: 9 },
     }));
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete cited"));
@@ -210,7 +210,7 @@ describe("book deep-link loading", () => {
     expect(fixture.delete).toHaveBeenCalledWith("book:cited", "local", { confirmed: null });
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
     await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
-      confirmed: { affectedPaths: 2, affectedStudents: 9 },
+      confirmed: { affectedPaths: 2, affectedLearners: 9 },
     }));
     expect(fixture.references).not.toHaveBeenCalled();
     expect(fixture.notify).not.toHaveBeenCalled();
@@ -218,19 +218,19 @@ describe("book deep-link loading", () => {
 
   it("asks again with fresh counts when the impact changed before the confirmed delete (R1)", async () => {
     fixture.delete
-      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 1, affectedStudents: 2 } }))
-      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 3, affectedStudents: 4 } }));
+      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 1, affectedLearners: 2 } }))
+      .mockRejectedValueOnce(Object.assign(new Error("409"), { impact: { affectedPaths: 3, affectedLearners: 4 } }));
     render(<BookPage />);
     fireEvent.click(screen.getByText("Delete cited"));
     expect(await screen.findByText(/1 published paths use this material/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
     expect(await screen.findByText(/3 published paths use this material/)).toBeTruthy();
     expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
-      confirmed: { affectedPaths: 1, affectedStudents: 2 },
+      confirmed: { affectedPaths: 1, affectedLearners: 2 },
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete anyway" }));
     await waitFor(() => expect(fixture.delete).toHaveBeenLastCalledWith("book:cited", "local", {
-      confirmed: { affectedPaths: 3, affectedStudents: 4 },
+      confirmed: { affectedPaths: 3, affectedLearners: 4 },
     }));
     expect(fixture.delete).toHaveBeenCalledTimes(3);
     expect(fixture.notify).not.toHaveBeenCalled();

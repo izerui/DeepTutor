@@ -4,7 +4,7 @@ import {
   type ReconnectingWebSocketOptions,
 } from "@/lib/reconnecting-websocket";
 import type { MasteryEvent } from "@/lib/learning-api";
-import { TEACHER_PATH_UNAVAILABLE_CODE } from "@/lib/teacher-path-messages";
+import { AUTHOR_PATH_UNAVAILABLE_CODE } from "@/lib/author-path-messages";
 
 export const MASTERY_WS_PATH = "/ws/mastery-paths";
 
@@ -158,7 +158,7 @@ export class MasteryTopicSocket {
     const message = parseMasterySocketMessage(data);
     if (!message) return;
     if (message.type === "error") {
-      if (message.code === TEACHER_PATH_UNAVAILABLE_CODE) {
+      if (message.code === AUTHOR_PATH_UNAVAILABLE_CODE) {
         if (message.path_id === undefined || message.path_id === this.pathId) {
           this.handlers.onUnavailable?.();
         }
