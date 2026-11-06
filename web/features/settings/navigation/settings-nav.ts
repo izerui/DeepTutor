@@ -21,7 +21,6 @@ import {
   Palette,
   Paperclip,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   ChartNoAxesCombined,
@@ -79,19 +78,38 @@ export interface SettingsCategory {
   href: string;
   /** Nested anchors (omitted for direct-section categories). */
   children?: SettingsLeaf[];
-  /** Shown only when the backend reports an active learner policy. */
+  /** Shown only to signed-in non-admin accounts (the learner profile). */
   learnerOnly?: boolean;
-  /** Shown only to authenticated standard users who may act as guardians. */
-  guardianOnly?: boolean;
   /** Hidden from non-administrators (a direct-section category). */
   adminOnly?: boolean;
 }
+
+/**
+ * The settings pages every account has (spec 2026-11-06): interface and reply
+ * language, appearance, the learner profile, archived chats, learning
+ * progress, one's own usage, conversation (starting points, reply timeout and
+ * voice playback), the tools one switches on in chat, and About (the version;
+ * update controls stay admin-only on the page). Everything else configures the
+ * whole deployment and is shown to administrators only.
+ */
+export const LEARNER_SETTINGS_PAGES: ReadonlySet<string> = new Set([
+  "general",
+  "appearance",
+  "learner-profile",
+  "archive",
+  "progress",
+  "usage",
+  "starters",
+  "tools",
+  "about",
+]);
 
 export function isSettingsLeafVisible(
   leaf: SettingsLeaf,
   access: SettingsAccess,
 ): boolean {
-  return !(leaf.adminOnly && access.hideAdminOnly);
+  if (!access.hideAdminOnly) return true;
+  return !leaf.adminOnly && LEARNER_SETTINGS_PAGES.has(resolveSettingsKey(leaf.key));
 }
 
 export function isSettingsCategoryVisible(
@@ -100,11 +118,13 @@ export function isSettingsCategoryVisible(
 ): boolean {
   if (category.adminOnly && access.hideAdminOnly) return false;
   if (category.learnerOnly && !access.showLearnerOnly) return false;
-  if (category.guardianOnly && !access.showGuardianOnly) return false;
-  return (
-    !category.children ||
-    category.children.some((leaf) => isSettingsLeafVisible(leaf, access))
-  );
+  if (!category.children) {
+    return (
+      !access.hideAdminOnly ||
+      LEARNER_SETTINGS_PAGES.has(resolveSettingsKey(category.key))
+    );
+  }
+  return category.children.some((leaf) => isSettingsLeafVisible(leaf, access));
 }
 
 export function visibleSettingsChildren(
@@ -531,17 +551,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     },
     icon: UserRound,
     href: "/settings#learner-profile",
-  },
-  {
-    key: "guardian",
-    guardianOnly: true,
-    label: { zh: "监护管理", en: "Guardian" },
-    blurb: {
-      zh: "查看已授权学习者与学习材料。",
-      en: "Review authorized learners and learning materials.",
-    },
-    icon: ShieldCheck,
-    href: "/settings#guardian",
   },
   {
     key: "memory",

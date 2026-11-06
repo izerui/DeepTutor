@@ -97,13 +97,10 @@ def test_failed_atomic_grant_replace_preserves_prior_file(mu_isolated_root, seed
         "{broken",
         "[]",
         '{"enabled_tools": "reason"}',
-        '{"learning_policy": {}}',
-        '{"learning_policy": {"reading": {"allow_upload": "false"}}}',
     ],
 )
 def test_existing_invalid_grant_fails_closed(mu_isolated_root, seed_user, contents):
     from deeptutor.multi_user.grants import GrantStorageError, grant_path, load_grant
-    from deeptutor.multi_user.learning_access import learning_policy_for_user
 
     seed_user("bootstrap-admin")
     learner = seed_user("student-standard")
@@ -113,8 +110,6 @@ def test_existing_invalid_grant_fails_closed(mu_isolated_root, seed_user, conten
 
     with pytest.raises(GrantStorageError):
         load_grant(learner["id"])
-    with pytest.raises(GrantStorageError):
-        learning_policy_for_user(learner["id"])
 
 
 def test_grant_file_lock_serializes_processes(tmp_path):

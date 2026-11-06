@@ -1,4 +1,4 @@
-"""P2: guardians retired, no personal models, no partner lending, admin-only workspaces."""
+"""P2: guardians removed, no personal models, no partner lending, admin-only workspaces."""
 
 from __future__ import annotations
 
@@ -19,14 +19,11 @@ def _refused(coro, status: int):
     return caught.value.detail
 
 
-def test_guardian_routes_are_closed(seed_user):
+def test_guardian_routes_are_gone():
     from deeptutor.api.routers import multi_user as router
 
-    seed_user("boss", role="admin")
-    detail = _refused(router.list_guardian_relationships(), 404)
-    assert detail == router.GUARDIANS_RETIRED
-    _refused(router.my_guardianships(current=None), 404)
-    _refused(router.guardian_report("someone", current=None), 404)
+    paths = {getattr(route, "path", "") for route in router.router.routes}
+    assert not any("guardian" in path or path.startswith("/learners/") for path in paths)
 
 
 def test_only_the_primary_admin_signs_in_to_codex(seed_user, as_user):
@@ -84,17 +81,3 @@ def test_workspace_management_is_admin_only(as_user):
         detail = _refused(workspace.create_workspace(payload), 403)
         assert detail == workspace.WORKSPACES_ADMIN_ONLY
         _refused(workspace.discover_workspace_data(), 403)
-
-
-def test_a_learning_policy_alone_marks_the_restricted_experience(seed_user):
-    from deeptutor.multi_user.learning_access import learning_policy_for_user
-
-    seed_user("boss", role="admin")
-    sam = seed_user("sam", role="student")
-    assert learning_policy_for_user(sam["id"]) is None
-    from deeptutor.multi_user.grants import learner_grant
-
-    grant = load_grant(sam["id"])
-    grant["learning_policy"] = learner_grant(sam["id"])["learning_policy"]
-    save_grant(sam["id"], grant)
-    assert learning_policy_for_user(sam["id"]) is not None

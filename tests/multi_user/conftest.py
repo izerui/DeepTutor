@@ -28,7 +28,6 @@ def mu_isolated_root(tmp_path, monkeypatch) -> Path:
         audit,
         device_credentials,
         grants,
-        guardians,
         identity,
         paths,
     )
@@ -62,7 +61,6 @@ def mu_isolated_root(tmp_path, monkeypatch) -> Path:
     )
 
     monkeypatch.setattr(grants, "GRANTS_DIR", system_root / "grants")
-    monkeypatch.setattr(guardians, "GUARDIANS_FILE", system_root / "guardians.json")
     monkeypatch.setattr(audit, "SYSTEM_ROOT", system_root)
     monkeypatch.setattr(
         device_credentials,

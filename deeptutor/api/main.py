@@ -128,14 +128,6 @@ async def lifespan(app: FastAPI):
         application_container = get_application_container()
         app.state.application_container = application_container
     await application_container.start()
-    try:
-        # Spec 2026-10-29 P2: the retired learner preset moves into grants;
-        # idempotent, so it runs on every start.
-        from deeptutor.multi_user.role_migration import run_role_migration
-
-        await asyncio.to_thread(run_role_migration)
-    except Exception:
-        logger.exception("Role migration failed; learner presets stay readable")
     from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
     from deeptutor.api.utils.task_log_stream import get_task_stream_manager
     from deeptutor.knowledge.progress_events import install_progress_ports
@@ -651,10 +643,9 @@ app.include_router(
 from deeptutor.api.routers.auth import (  # noqa: E402
     require_admin,
     require_auth,
-    require_learning_surface,
 )
 
-_auth = [Depends(require_learning_surface)]
+_auth = [Depends(require_auth)]
 # Partner data is anchored at the admin workspace (data/partners) and shared
 # process-wide, so management is admin-gated in multi-user deployments
 # (single-user local runs are implicitly admin — no behaviour change there).
@@ -678,8 +669,6 @@ app.include_router(imports.router, prefix="/api/imports", tags=["imports"], depe
 app.include_router(
     dashboard.router, prefix="/api/dashboard", tags=["dashboard"], dependencies=_auth
 )
-# Authors' path templates live under the mastery prefix, so learning accounts
-# reach them through the same surface check.
 app.include_router(
     mastery_teaching.router,
     prefix="/api/mastery-paths/teaching",
@@ -711,8 +700,8 @@ app.include_router(
     dependencies=_auth,
 )
 # WebSocket handlers authenticate inside the connection before ``accept``.
-# Keep them off HTTP router dependencies: ``require_learning_surface`` takes a
-# Request, which FastAPI cannot construct for a WebSocket scope.
+# Keep them off HTTP router dependencies: FastAPI cannot run HTTP-only
+# dependencies for a WebSocket scope.
 app.include_router(question.ws_router, prefix="/ws/questions", tags=["question"])
 app.include_router(knowledge.ws_router, prefix="/ws", tags=["knowledge-bases"])
 app.include_router(

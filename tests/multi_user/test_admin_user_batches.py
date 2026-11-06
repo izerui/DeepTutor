@@ -86,14 +86,11 @@ def test_import_rejects_role_column_and_creates_nothing(batch_client):
     assert usernames == {"root"}
 
 
-def test_import_rolls_back_learner_when_grant_initialization_fails(batch_client, monkeypatch):
+def test_import_of_a_learner_preset_row_writes_no_grant(batch_client):
+    """Spec 2026-11-06: the learner preset no longer installs learning restrictions."""
     client, headers = batch_client
-    from deeptutor.multi_user import grants
-
-    def fail_save_grant(*args, **kwargs):
-        raise RuntimeError("grant initialization unavailable")
-
-    monkeypatch.setattr(grants, "save_grant", fail_save_grant)
+    from deeptutor.multi_user.grants import grant_path
+    from deeptutor.multi_user.identity import get_user
 
     response = client.post(
         "/api/auth/users/import",
@@ -108,13 +105,10 @@ def test_import_rolls_back_learner_when_grant_initialization_fails(batch_client,
     )
 
     assert response.status_code == 200
-    result = response.json()["results"][0]
-    assert result["ok"] is False
-    assert result["error"] == "The learner preset could not be initialized."
-    usernames = {
-        item["username"] for item in client.get("/api/auth/users", headers=headers["admin"]).json()
-    }
-    assert usernames == {"root"}
+    assert response.json()["results"][0]["ok"] is True
+    alice = get_user("alice")
+    assert alice is not None
+    assert not grant_path(str(alice["id"])).exists()
 
 
 def test_import_requires_admin(batch_client):

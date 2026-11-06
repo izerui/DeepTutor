@@ -88,16 +88,10 @@ def resolve_reading_sources(
 ) -> list[ResolvedReadingSource]:
     """Resolve canonical references against the active user's reading store."""
 
-    from deeptutor.multi_user.learning_access import learning_material_allowed
-
     active_store = store or ReadingStore()
     resolved: list[ResolvedReadingSource] = []
     for reference in normalize_reading_references(value):
         material_id = reference["material_id"]
-        # A saved turn or historical source may outlive a learner's assignment.
-        # Check the current grant before even opening a stored revision.
-        if not learning_material_allowed(material_id):
-            continue
         revision = reference["revision"]
         try:
             current_manifest = active_store.manifest(material_id)

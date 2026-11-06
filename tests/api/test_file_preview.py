@@ -12,7 +12,6 @@ import pytest
 from starlette.datastructures import QueryParams
 
 from deeptutor.api.routers import file_preview, outputs
-from deeptutor.multi_user import learning_access
 from deeptutor.services import office_preview
 from deeptutor.services.path_service import PathService
 
@@ -191,57 +190,6 @@ def test_get_and_post_return_pdf(monkeypatch, tmp_path: Path) -> None:
             "/api/file-preview/pdf", params={"source": "/files/outputs/report.docx"}
         ).status_code
         == 503
-    )
-
-
-def test_learner_preview_surface_matches_source(monkeypatch, tmp_path: Path) -> None:
-    source = tmp_path / "report.docx"
-    source.write_bytes(b"office")
-    monkeypatch.setattr(
-        file_preview, "_resolve_authorized_file", lambda _path, _query: (source, source.name)
-    )
-    monkeypatch.setattr(file_preview, "_cache_dir", lambda: tmp_path / "cache")
-
-    async def render(_data: bytes, _filename: str, _cache_dir: Path) -> bytes:
-        return b"%PDF-1.7\npreview"
-
-    monkeypatch.setattr(file_preview, "render_office_pdf", render)
-
-    def reading_only(surface: str) -> None:
-        if surface != "reading":
-            raise PermissionError("Chat is not allowed")
-
-    monkeypatch.setattr(learning_access, "assert_learning_surface", reading_only)
-    app = FastAPI()
-    app.include_router(file_preview.router, prefix="/api/file-preview")
-    client = TestClient(app)
-    assert (
-        client.get(
-            "/api/file-preview/pdf",
-            params={"source": "/api/knowledge-bases/kb/files/report.docx"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.get(
-            "/api/file-preview/pdf",
-            params={"source": "/api%2Fknowledge-bases/kb/files/report.docx"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.get(
-            "/api/file-preview/pdf",
-            params={"source": "/files/attachments/session/item/report.docx"},
-        ).status_code
-        == 403
-    )
-    assert (
-        client.post(
-            "/api/file-preview/pdf",
-            files={"file": ("report.docx", b"office")},
-        ).status_code
-        == 403
     )
 
 

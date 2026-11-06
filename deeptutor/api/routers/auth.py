@@ -51,7 +51,6 @@ from deeptutor.multi_user.device_credentials import (
     revoke_device_credential,
 )
 from deeptutor.multi_user.identity import get_user, get_user_by_id
-from deeptutor.multi_user.learning_access import learning_policy_for_user
 from deeptutor.multi_user.models import AccountPreset, role_label
 from deeptutor.multi_user.paths import local_admin_user
 from deeptutor.multi_user.session_handoff import (
@@ -346,7 +345,6 @@ class AuthStatusResponse(BaseModel):
     is_admin: bool = False
     avatar: str = ""
     preset: AccountPreset | None = None
-    learning_policy: dict | None = None
 
 
 class UserInfo(BaseModel):
@@ -617,39 +615,7 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
         reset_current_user(user_token)
         await ws.close(code=4004)
         return ws_auth_failed
-    # The same learning-surface policy the HTTP routes enforce; a socket must
-    # not open what its REST twin refuses (e.g. creating a book over /ws/books).
-    from starlette._utils import get_route_path
-
-    from deeptutor.multi_user.learning_access import assert_learning_surface
-
-    try:
-        assert_learning_surface(_learning_surface_for_socket(get_route_path(ws.scope)))
-    except PermissionError:
-        reset_current_user(user_token)
-        await ws.close(code=4003)
-        return ws_auth_failed
     return user_token
-
-
-#: WebSocket roots and the learning surface their HTTP twins belong to.
-_SOCKET_SURFACES = (
-    ("/ws/books", "books"),
-    ("/ws/questions", "chat"),
-    ("/ws/mastery-paths", "chat"),
-    ("/ws/knowledge-bases", "reading"),
-)
-
-
-def _learning_surface_for_socket(path: str) -> str:
-    normalized = "/" + str(path or "").lstrip("/")
-    if normalized == "/ws":  # the unified chat socket; turns apply the policy again
-        return "chat"
-    for root, surface in _SOCKET_SURFACES:
-        if normalized == root or normalized.startswith(f"{root}/"):
-            return surface
-    # Partners, partner groups and anything new: denied like their REST routes.
-    return ""
 
 
 async def require_admin(
@@ -676,101 +642,6 @@ async def require_admin(
     return payload
 
 
-_LEARNER_KB_READ_ROUTES = frozenset(
-    {
-        "/api/knowledge-bases",
-        "/api/knowledge-bases/list",
-        "/api/knowledge-bases/{kb_name}",
-        "/api/knowledge-bases/{kb_name}/files",
-        "/api/knowledge-bases/{kb_name}/files/{filename:path}",
-        "/api/knowledge-bases/{kb_name}/file-preview-text/{filename:path}",
-        "/api/knowledge-bases/{kb_name}/visual-assets/{asset_id}",
-        "/api/knowledge-bases/{kb_name}/indexing-run",
-        "/api/knowledge-bases/{kb_name}/indexing-readiness",
-        "/api/knowledge-bases/{kb_name}/progress",
-    }
-)
-
-
-_LEARNER_SETTINGS_WRITE_ROUTES = frozenset(
-    {
-        # UI preferences resolve through the per-user path service into the
-        # caller's OWN workspace (interface.json) — saving theme/language is
-        # safe for learning accounts.
-        ("PUT", "/api/settings/ui"),
-        # Per-user settings draft document. Applying a draft to the runtime
-        # catalog stays admin-gated in the endpoint itself.
-        ("PUT", "/api/settings/draft"),
-        ("DELETE", "/api/settings/draft"),
-        # Workspace self-management: the caller's own registrations inside
-        # their own scope directory. Data migration/export/root-migration
-        # routes under the same prefix stay denied — they move data across
-        # scopes and carry no internal admin gate.
-        ("PUT", "/api/settings/workspace"),
-        ("POST", "/api/settings/workspace/validate"),
-        ("POST", "/api/settings/workspace/registrations"),
-        ("PATCH", "/api/settings/workspace/registrations/{workspace_id}"),
-    }
-)
-
-
-def _learning_surface_for_path(
-    path: str, method: str = "GET", *, route_path: str | None = None
-) -> str:
-    normalized = "/" + str(path or "").lstrip("/")
-    for root, surface in (
-        ("/api/reading", "reading"),
-        ("/api/courses", "reading"),
-        ("/api/dashboard/learning-library/materials", "reading"),
-        ("/api/dashboard/learning-library/reading", "reading"),
-        # The Mastery Path list page; same per-user topics as /api/mastery-paths.
-        ("/api/dashboard/learning-library/mastery", "chat"),
-        ("/api/books", "books"),
-        ("/api/dashboard/learning-library/books", "books"),
-        ("/api/chat", "chat"),
-        ("/api/question", "chat"),
-        ("/api/question-notebook", "chat"),
-        ("/api/sessions", "chat"),
-        # Task cards are private to the learner's current content workspace.
-        ("/api/task-board", "chat"),
-        # Mastery Path progress/topics are the learner's own per-user data;
-        # the router already scopes every record to the current account, so
-        # all methods (including progress PATCH/POST) belong to "chat".
-        ("/api/mastery-paths", "chat"),
-        # The learning market: browsing, joining, reviews, announcements, reports.
-        ("/api/catalog", "chat"),
-        # Answering a teacher's practice set (spec 2026-10-29 §8.3).
-        ("/api/practice-sets", "chat"),
-        # Tasks, notifications and the home page (spec 2026-11-03 batch 1).
-        ("/api/tasks", "chat"),
-        ("/api/notifications", "chat"),
-        ("/api/home", "chat"),
-        ("/api/ai-usage", "chat"),
-    ):
-        if normalized == root or normalized.startswith(f"{root}/"):
-            return surface
-    # Match the resolved route template, not just the URL prefix: this keeps
-    # admin diagnostics and engine configuration GETs out of the learner shell.
-    if (
-        method.upper() == "GET"
-        and (normalized == "/api/knowledge-bases" or normalized.startswith("/api/knowledge-bases/"))
-        and route_path in _LEARNER_KB_READ_ROUTES
-    ):
-        return "reading"
-    # Learner-safe settings/workspace writes, matched on the resolved route
-    # template like the KB reads above: the same URL prefixes also host
-    # admin-grade operations (catalog apply, data migration), so a plain
-    # prefix match would open too much.
-    if route_path and (method.upper(), route_path) in _LEARNER_SETTINGS_WRITE_ROUTES:
-        return "chat"
-    # Choosing the model for a chat turn is part of chat. The handler is
-    # already grant-filtered. Match this exact path only: a prefix of
-    # /api/settings would also open catalog writes on the same router (#1222).
-    if method.upper() == "GET" and normalized == "/api/settings/llm-options":
-        return "chat"
-    return ""
-
-
 def _resolved_route_path(request: Request) -> str | None:
     """Keep include-time prefixes across FastAPI's flat and lazy routers."""
     # Lazy router inclusion retains the original route in scope["route"].
@@ -784,44 +655,6 @@ def _resolved_route_path(request: Request) -> str | None:
             return path
     path = getattr(request.scope.get("route"), "path", None)
     return path if isinstance(path, str) else None
-
-
-async def require_learning_surface(
-    request: Request,
-    _: TokenPayload | None = Depends(require_auth),
-) -> None:
-    """Second-stage default-deny guard for configured learning accounts."""
-    from starlette._utils import get_route_path
-
-    from deeptutor.multi_user.learning_access import (
-        assert_learning_surface,
-        learning_surface_allowed,
-    )
-
-    # get_route_path strips root_path, so sub-path deployments (CONTEXT_PATH)
-    # match the same unprefixed paths as root deployments.
-    request_path = get_route_path(request.scope)
-    route_path = _resolved_route_path(request)
-    # The landing page combines independent learning surfaces (#1987). Admit
-    # any granted surface; the handler filters its readers with the same policy.
-    if (
-        request.method == "GET"
-        and request_path == "/api/dashboard/learning-index"
-        and route_path == "/api/dashboard/learning-index"
-        and any(learning_surface_allowed(surface) for surface in ("books", "chat", "reading"))
-    ):
-        return
-
-    try:
-        assert_learning_surface(
-            _learning_surface_for_path(
-                request_path,
-                request.method,
-                route_path=route_path,
-            )
-        )
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 def _local_admin_token_payload() -> TokenPayload:
@@ -896,7 +729,6 @@ async def auth_status(
     payload = decode_token(token) if token else None
     avatar = ""
     preset: AccountPreset | None = None
-    learning_policy = None
     live_role: str | None = payload.role if payload else None
     if payload is not None:
         info = get_user_info(payload.username)
@@ -906,14 +738,9 @@ async def auth_status(
                 from deeptutor.multi_user.models import normalize_role
 
                 live_role = normalize_role(str(info.get("role") or "user"))
-        learning_policy = learning_policy_for_user(
-            payload.user_id,
-            is_admin=payload.role == "admin",
-        )
-        # Spec 2026-10-29 P2: there are no account presets. A student with a
-        # learning policy gets the restricted learning experience; clients
-        # still read it as ``preset == "learner"``.
-        preset = "learner" if learning_policy is not None else "standard"
+        # Spec 2026-11-06: learning restrictions are gone; every account
+        # gets the standard experience.
+        preset = "standard"
     return AuthStatusResponse(
         enabled=True,
         authenticated=payload is not None,
@@ -923,7 +750,6 @@ async def auth_status(
         is_admin=payload.role == "admin" if payload else False,
         avatar=avatar,
         preset=preset,
-        learning_policy=learning_policy,
     )
 
 
@@ -1695,10 +1521,6 @@ def _require_local_learner(current: TokenPayload) -> tuple[str, dict]:
     account = get_user_by_id(current.user_id)
     if account is None or account[0] != current.username:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if learning_policy_for_user(current.user_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Learner profile required"
-        )
     return account
 
 
@@ -1741,11 +1563,7 @@ async def get_learner_profile(username: str, _: TokenPayload = Depends(require_a
     from deeptutor.multi_user.identity import get_user
 
     user = get_user(username)
-    if (
-        user is None
-        or str(user.get("role") or "") == "admin"
-        or learning_policy_for_user(str(user.get("id") or "")) is None
-    ):
+    if user is None or str(user.get("role") or "") == "admin":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return {"learner_profile": user.get("learner_profile")}
 
@@ -1760,11 +1578,7 @@ async def put_learner_profile(
     from deeptutor.multi_user.learner_profile import normalize_profile
 
     user = get_user(username)
-    if (
-        user is None
-        or str(user.get("role") or "") == "admin"
-        or learning_policy_for_user(str(user.get("id") or "")) is None
-    ):
+    if user is None or str(user.get("role") or "") == "admin":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     try:
         profile = normalize_profile(body.model_dump(exclude_none=True))
@@ -1842,30 +1656,6 @@ def _create_admin_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Only non-admin users can be provisioned by this endpoint.",
         )
-
-    if preset == "learner":
-        from deeptutor.multi_user.grants import learner_grant, save_grant
-
-        try:
-            save_grant(user_id, learner_grant(user_id))
-        except Exception as exc:
-            rolled_back = False
-            try:
-                rolled_back = delete_user(body.username)
-            except Exception:
-                logger.exception(
-                    "Failed to roll back user '%s' after learner grant initialization failed",
-                    body.username,
-                )
-            if not rolled_back:
-                logger.error(
-                    "Learner account '%s' may remain after grant initialization failed",
-                    body.username,
-                )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="The learner preset could not be initialized.",
-            ) from exc
 
     logger.info(
         "Admin '%s' created user '%s' (role=%r, preset=%r)",

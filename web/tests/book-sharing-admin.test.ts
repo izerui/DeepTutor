@@ -20,14 +20,3 @@ test("the existing migration notice includes all three book kinds", () => {
     assert.match(notice, new RegExp(`${kind}:`));
   }
 });
-
-test("guardian surfaces retire material selection without changing the stored contract", () => {
-  const page = read("features/settings/sections/GuardianSettingsSection.tsx");
-  const editor = read("features/multi-user/components/GuardianRelationshipsEditor.tsx");
-  assert.doesNotMatch(page, /getGuardianMaterials|setSelectedMaterialIds|can\("assign_materials"\)/);
-  assert.doesNotMatch(editor, /^\s*"assign_materials",$/m);
-  for (const source of [page, editor]) {
-    assert.match(source, /permission !== "assign_materials"/);
-  }
-  assert.doesNotMatch(read("lib/guardian-api.ts"), /GuardianMaterial|getGuardianMaterials|saveGuardianMaterials/);
-});

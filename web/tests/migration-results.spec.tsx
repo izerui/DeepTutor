@@ -137,7 +137,7 @@ it("waits for confirmed admin access and hides results when access is lost", asy
 it("hides data migration from non-admins and makes no admin migration request", async () => {
   auth.isAdmin = false;
   const pages = visibleSettingsPages({
-    resolved: true, hideAdminOnly: true, showLearnerOnly: false, showGuardianOnly: true,
+    resolved: true, hideAdminOnly: true, showLearnerOnly: true,
   });
   // Spec 2026-10-29 D4: moving data between workspaces is an administrator task.
   expect(pages.some(page => page.key === "data-migration")).toBe(false);

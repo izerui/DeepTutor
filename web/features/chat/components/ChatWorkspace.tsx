@@ -266,12 +266,7 @@ export default function ChatWorkspace() {
     isLoading: isCapabilityCatalogLoading,
   } = useCapabilityCatalog();
   const { setActiveSessionId, language: appLanguage } = useAppShell();
-  // Learning accounts cannot reach partners or partner groups (the backend
-  // strips partner_id from their turns and 403s the lists), so the composer
-  // does not offer them (B3-P13). Held back until the account is known so a
-  // learner never sees the entries flash in and out.
-  const { learningPolicy, loading: authStatusLoading, isAdmin } = useAuthStatus();
-  const partnersOffered = !authStatusLoading && learningPolicy === null;
+  const { isAdmin } = useAuthStatus();
 
   const {
     state,
@@ -2723,9 +2718,9 @@ export default function ChatWorkspace() {
                 selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
                 onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}
         selectedPartnerGroup={selectedPartnerGroup}
-        onSelectPartnerGroup={partnersOffered ? handleSelectPartnerGroup : undefined}
+        onSelectPartnerGroup={handleSelectPartnerGroup}
         selectedPartner={selectedPartner}
-        onSelectPartner={partnersOffered ? handleSelectPartner : undefined}
+        onSelectPartner={handleSelectPartner}
                 subagentBudget={subagentBudget}
                 onSubagentBudgetChange={setSubagentBudget}
                 llmOptions={llmOptions}

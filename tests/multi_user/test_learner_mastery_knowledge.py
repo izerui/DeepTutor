@@ -1,10 +1,9 @@
-"""A learning account's Mastery Path turn reads the topic's knowledge bases — only those it may.
+"""A learner's Mastery Path turn reads the topic's knowledge bases — only those it may.
 
-The learning policy strips every turn's ``tools`` and keeps only public (or
-readable own-private) ``knowledge_bases``. A
-mastery turn must not depend on either: the pipeline re-attaches the KBs the
-topic was built from, and ``rag`` mounts because a KB is attached, not because
-the learner toggled it. If that regresses, the learner can pick a KB when
+A mastery turn must not depend on the turn's own ``tools`` or
+``knowledge_bases``: the pipeline re-attaches the KBs the topic was built
+from, and ``rag`` mounts because a KB is attached, not because the learner
+toggled it. If that regresses, the learner can pick a KB when
 creating the goal and the tutor then cannot read a word of it.
 
 The re-attachment goes through ``learning_source_access``, which lifts the
@@ -25,9 +24,7 @@ from deeptutor.capabilities.mastery.pipeline import MasteryLoopPipeline
 from deeptutor.capabilities.mastery.tools import MASTERY_TOOL_NAMES
 from deeptutor.core.context import UnifiedContext
 from deeptutor.learning.models import TopicSource, TopicSourceKind
-from deeptutor.multi_user.grants import learner_grant, save_grant
 from deeptutor.multi_user.knowledge_access import resolve_for_rag, resolve_kb_manifest
-from deeptutor.multi_user.learning_access import apply_learning_policy
 from deeptutor.services.workspace.knowledge import learning_source_kbs
 from deeptutor.tools.rag_tool import rag_search
 
@@ -52,7 +49,6 @@ def learner(mu_isolated_root, seed_user, monkeypatch, make_kb):
 
     admin = seed_user("admin", role="admin")
     user = seed_user("student")
-    save_grant(user["id"], learner_grant(user["id"]))
     for name in ("calculus", "answer-keys"):
         make_kb(admin_kb_manager(), name)
     # Grants no longer hand out KBs; a public admin KB is what every learner reads.
@@ -90,19 +86,9 @@ def _replace_model_loop(monkeypatch, probe) -> None:
 
 async def _run_learner_mastery_turn(as_user, learner) -> None:
     with as_user(learner["id"], username="student"):
-        payload = apply_learning_policy(
-            {
-                "capability": "mastery_path",
-                "tools": ["web_search"],
-                "knowledge_bases": [ASSIGNED, UNASSIGNED],
-            }
-        )
-        assert payload["tools"] == []
-        assert payload["knowledge_bases"] == [ASSIGNED]
-
         context = UnifiedContext(
-            enabled_tools=payload["tools"],
-            knowledge_bases=payload["knowledge_bases"],
+            enabled_tools=[],
+            knowledge_bases=[ASSIGNED],
             metadata={"mastery_mode": True, "mastery_path_id": "p1"},
         )
         await MasteryLoopPipeline(language="zh").run(context, None)
@@ -172,22 +158,10 @@ def test_learner_chat_mounts_rag_without_mastery_enrichment(learner, as_user, re
 
     with as_user(learner["id"], username="student"):
         ref = ASSIGNED if ref_format == "legacy" else registry.resolve_ref(ASSIGNED).ref
-        payload = apply_learning_policy({
-            "capability": "chat",
-            "knowledge_bases": [ref, UNASSIGNED],
-            "tools": ["web_search", "reason"],
-            "enabled_tools": ["web_search", "reason"],
-            "enable_rag": True,
-            "enable_web_search": True,
-        })
-        assert payload["knowledge_bases"] == [ref]
-        assert payload["enable_rag"] is False
-        assert payload["tools"] == payload["enabled_tools"] == []
-        assert payload["enable_web_search"] is False
         context = UnifiedContext(
             active_capability="chat",
-            enabled_tools=payload["enabled_tools"],
-            knowledge_bases=payload["knowledge_bases"],
+            enabled_tools=[],
+            knowledge_bases=[ref],
         )
         pipeline = AgenticLoopPipeline(language="zh")
         tools = pipeline._compose_enabled_tools(context)

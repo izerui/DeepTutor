@@ -10,7 +10,7 @@ import { WithdrawalConfirmationError } from "@/lib/withdrawal-confirmation";
 import type { KnowledgeBase } from "@/lib/knowledge-helpers";
 
 const fixture = vi.hoisted(() => ({
-  auth: { isAdmin: false, allowPrivateKb: true },
+  auth: { isAdmin: false },
   references: vi.fn(),
   files: vi.fn(),
   deleteFile: vi.fn(),
@@ -41,7 +41,7 @@ const owned: KnowledgeBase = {
   read_only: false, can_set_default: true, visibility: "private", created_by: "teacher",
 };
 beforeEach(() => {
-  fixture.auth = { isAdmin: false, allowPrivateKb: true };
+  fixture.auth = { isAdmin: false };
   fixture.references.mockReset().mockResolvedValue({ references: [], other_references: { total: 0, by_kind: {} } });
   fixture.files.mockReset().mockResolvedValue([{ name: "sample.txt", type: "file" }]);
   fixture.deleteFile.mockReset().mockResolvedValue({ was_indexed: false });
@@ -49,10 +49,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it.each([
-  ["foreign public", { ...owned, owned: false, read_only: true, visibility: "public" }, true],
-  ["existing student owned", { ...owned, is_default: true }, false],
-] as const)("hides every settings write action for %s while preserving the default marker", async (_, kb, allowed) => {
-  fixture.auth.allowPrivateKb = allowed;
+  ["foreign public", { ...owned, owned: false, read_only: true, visibility: "public" }],
+  ["foreign public default", { ...owned, owned: false, read_only: true, visibility: "public", is_default: true }],
+] as const)("hides every settings write action for %s while preserving the default marker", async (_, kb) => {
   render(<KbSettingsSection kb={kb} onSetDefault={vi.fn()} onDelete={vi.fn()} onMove={vi.fn()} onVisibilityChange={vi.fn()} />);
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.queryByText("Currently default") !== null).toBe(Boolean(kb.is_default));
@@ -162,9 +161,8 @@ it.each(["account", "inherited_workspace"] as const)(
   },
 );
 
-it.each([true, false])("preserves files without delete, move or folder controls (readOnly=%s)", async (readOnly) => {
-  fixture.auth.allowPrivateKb = readOnly;
-  render(<KbDocumentList kbName="kb:own" readOnly={readOnly} collapsed={false}
+it("preserves a read-only KB's files without delete, move or folder controls", async () => {
+  render(<KbDocumentList kbName="kb:own" readOnly collapsed={false}
     selectedFile={null} onSelect={vi.fn()} onToggleCollapsed={vi.fn()} />);
   expect(await screen.findByRole("button", { name: "sample.txt" })).toBeTruthy();
   for (const name of ["Delete file", "Move to…", "New folder"]) expect(screen.queryByRole("button", { name })).toBeNull();
@@ -220,7 +218,7 @@ it("groups public/private/connectors and removes creation and external connectio
 });
 
 it("lets an admin only withdraw or delete someone else's published KB (spec 2026-10-29 D10)", async () => {
-  fixture.auth = { isAdmin: true, allowPrivateKb: true };
+  fixture.auth = { isAdmin: true };
   const change = vi.fn().mockResolvedValue(undefined);
   render(<KbSettingsSection
     kb={{ ...owned, owned: false, read_only: true, can_retire: true, visibility: "public" }}

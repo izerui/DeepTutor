@@ -118,8 +118,8 @@ export default function KbDocumentList({
   onToggleCollapsed,
 }: KbDocumentListProps) {
   const { t } = useTranslation();
-  const { isAdmin, allowPrivateKb } = useAuthStatus();
-  const canWrite = !readOnly && allowPrivateKb;
+  const { isAdmin } = useAuthStatus();
+  const canWrite = !readOnly;
   const [files, setFiles] = useState<KnowledgeBaseFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

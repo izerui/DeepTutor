@@ -12,7 +12,6 @@ vi.mock("@/hooks/useAuthStatus", () => ({
     userId: null,
     statusAvailable: true,
     loading: false,
-    learningPolicy: null,
   }),
 }));
 

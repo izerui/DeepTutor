@@ -64,12 +64,6 @@ const Learner = dynamic(
   () => import("@/features/settings/sections/LearnerProfileSettingsSection"),
   { loading },
 );
-const Guardian = dynamic(
-  () => import("@/features/settings/sections/GuardianSettingsSection"),
-  {
-    loading,
-  },
-);
 const Connections = dynamic(
   () =>
     import("@/features/settings/sections/models/ConnectionsSettingsSection"),
@@ -183,7 +177,6 @@ const PAGES: Record<string, React.ComponentType> = {
   memory: Memory,
   about: About,
   "learner-profile": Learner,
-  guardian: Guardian,
   connections: Connections,
   llm: Llm,
   "task-models": Task,
@@ -231,9 +224,9 @@ export default function SettingsPageContent({ section }: { section: string }) {
         scroll: false,
       });
   }, [key, section, router]);
-  // Learning accounts are sent to a page they can use instead of an
-  // "unavailable" dead end (B3-P13).
-  const redirectLearner = access.resolved && access.learningShell && !page;
+  // Spec 2026-11-06: a learner opening an admin page (or any page they do
+  // not have) lands on General instead of an "unavailable" dead end.
+  const redirectLearner = access.resolved && access.hideAdminOnly && !page;
   useEffect(() => {
     if (redirectLearner) router.replace("/settings/general");
   }, [redirectLearner, router]);

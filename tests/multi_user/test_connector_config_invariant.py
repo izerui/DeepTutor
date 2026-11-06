@@ -10,7 +10,6 @@ import pytest
 from deeptutor.knowledge import registry
 from deeptutor.knowledge.kb_types import CONNECTED_KB_TYPES, CONNECTOR_CONFIG_FIELDS
 from deeptutor.multi_user.knowledge_access import (
-    chat_readable_kb_refs,
     current_kb_manager,
     list_visible_knowledge_bases,
 )
@@ -169,9 +168,6 @@ def test_stale_uploaded_kind_closes_direct_permissions_and_selection(
             )
     with pytest.raises(registry.KbVisibilityError):
         registry.set_visibility(record.ref, "public")
-    for uid in ("owner", "stranger"):
-        with as_user(uid, role="admin" if uid == "owner" else "user"):
-            assert chat_readable_kb_refs([record.ref, "admin:kb:atlas", "atlas"]) == []
     with as_user("stranger"):
         assert not any(row.get("kb_id") == record.kb_id for row in list_visible_knowledge_bases())
     private = registry.set_visibility(record.ref, "private")
@@ -210,27 +206,18 @@ def test_registry_connector_never_downgraded_by_missing_or_uploaded_config(
     assert not registry.classification_is_consistent(record)
 
 
-@pytest.mark.parametrize("learner", [False, True])
-def test_http_mismatch_hides_config_and_detail_with_actual_learner_surface(
-    as_user, make_kb, seed_user, learner,
+def test_http_mismatch_hides_config_and_detail_from_a_learner(
+    as_user, make_kb, seed_user,
 ):
     from deeptutor.api.routers import auth, knowledge
-    from deeptutor.multi_user.grants import save_grant
-    from deeptutor.multi_user.learning_access import apply_learning_policy
 
     record = _seed(as_user, make_kb)
     seed_user("admin", role="admin")
     reader = seed_user("reader")
-    if learner:
-        save_grant(reader["id"], {"learning_policy": {
-            "age_band": "9-12", "locked_persona": "teacher",
-            "allowed_surfaces": ["chat", "reading"],
-            "allowed_capabilities": ["chat"], "default_capability": "chat",
-        }})
     app = FastAPI()
     app.dependency_overrides[auth.require_auth] = lambda: None
     app.include_router(
-        knowledge.router, prefix="/api", dependencies=[Depends(auth.require_learning_surface)],
+        knowledge.router, prefix="/api", dependencies=[Depends(auth.require_auth)],
     )
     _replace_entry(record, {
         "path": "atlas", "type": "lightrag_server", "rag_provider": "llamaindex",
@@ -241,15 +228,8 @@ def test_http_mismatch_hides_config_and_detail_with_actual_learner_surface(
             detail = client.get(f"/api/knowledge-bases/{ref}")
             config = client.get(f"/api/knowledge-bases/{ref}/config")
             assert detail.status_code in (403, 404)
-            if learner:
-                assert config.status_code == 403
-            else:
-                assert config.status_code in (403, 404)
+            assert config.status_code in (403, 404)
             assert "synthetic" not in detail.text + config.text
-        if learner:
-            assert apply_learning_policy({
-                "capability": "chat", "knowledge_bases": [record.ref, "admin:kb:atlas"],
-            })["knowledge_bases"] == []
     with as_user("owner", role="admin"), TestClient(app) as client:
         assert client.get(f"/api/knowledge-bases/{record.ref}/config").json()["config"]["api_key"] == "synthetic-marker"
         assert client.get(f"/api/knowledge-bases/{record.ref}").status_code == 200

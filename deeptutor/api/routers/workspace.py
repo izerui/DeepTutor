@@ -69,7 +69,7 @@ class KnowledgeMovePayload(BaseModel):
 
 
 async def _data_operation(function, *args, **kwargs):
-    _assert_migration_access()
+    _require_workspace_admin()
     task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
     task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
     try:
@@ -92,16 +92,6 @@ async def move_knowledge_base(payload: KnowledgeMovePayload) -> dict:
     from deeptutor.services.workspace.kb_move import move_kb
 
     return await _data_operation(move_kb, payload.source_id, payload.target_workspace_id)
-
-
-def _assert_migration_access():
-    from deeptutor.multi_user.learning_access import current_learning_policy
-
-    if current_learning_policy() is not None:
-        raise HTTPException(
-            status_code=403,
-            detail="Data migration and export are managed by the guardian for this learning account.",
-        )
 
 
 @settings_router.get("/data/discover")
@@ -147,7 +137,7 @@ async def export_workspace_data(payload: DataMigrationPayload) -> dict:
 
 @settings_router.get("/data/operations")
 async def workspace_data_operations() -> dict:
-    _assert_migration_access()
+    _require_workspace_admin()
     from deeptutor.services.workspace.data_migration import operations
 
     return {"operations": await asyncio.to_thread(operations)}
@@ -163,7 +153,6 @@ async def recover_workspace_migration(operation_id: str) -> dict:
 @settings_router.get("/data/exports/{operation_id}")
 async def download_workspace_export(operation_id: str) -> FileResponse:
     _require_workspace_admin()
-    _assert_migration_access()
     from deeptutor.services.workspace.data_migration import export_path
 
     try:

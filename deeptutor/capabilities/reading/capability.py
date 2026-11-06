@@ -182,14 +182,11 @@ class ReadingCapability:
             return ""
         if workspace is None:
             return ""
-        from deeptutor.multi_user.learning_access import learning_material_allowed
-
         rows = [f"Reading workspace: {workspace.title}. Only one material is bound at a time."]
         rows.extend(
             f"- {tab.material.title} [{tab.material.source_kind.value}; "
             f"{tab.material.status.value}; id={tab.material.material_id}]"
             for tab in workspace.tabs
-            if learning_material_allowed(tab.material.material_id)
         )
         rows.append(
             "For cross-material work, call reading_list_tabs, then reading_switch_tab "
@@ -199,10 +196,6 @@ class ReadingCapability:
 
     def _material_facts(self, material_id: str, *, language: str) -> str:
         """Describe the open document: identity, size, unit word, viewport."""
-        from deeptutor.multi_user.learning_access import learning_material_allowed
-
-        if not learning_material_allowed(material_id):
-            return ""
         try:
             from deeptutor.reading import ReadingStore, material_summary
 
@@ -363,10 +356,6 @@ class ReadingCapability:
         if not resolve_material_id(context):
             return ""
         material_id = resolve_material_id(context)
-        from deeptutor.multi_user.learning_access import learning_material_allowed
-
-        if not learning_material_allowed(material_id):
-            return ""
         viewport = resolve_viewport(context)
         locator = _as_int(viewport.get("locator"))
         selection = str(viewport.get("selection") or "").strip()
@@ -437,11 +426,7 @@ class ReadingCapability:
 
     @staticmethod
     def _locate(material_id: str, question: str) -> list[str]:
-        from deeptutor.multi_user.learning_access import learning_material_allowed
         from deeptutor.reading import ReadingStore, search_material
-
-        if not learning_material_allowed(material_id):
-            return []
 
         store = ReadingStore()
         manifest = store.manifest(material_id)

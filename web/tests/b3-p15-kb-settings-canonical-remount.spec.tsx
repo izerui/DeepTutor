@@ -25,7 +25,7 @@ const fixture = vi.hoisted(() => ({
   params: { kbName: "B2-Extra" } as { kbName?: string },
   search: new URLSearchParams(),
   router: { replace: vi.fn(), push: vi.fn() },
-  auth: { isAdmin: false, allowPrivateKb: true },
+  auth: { isAdmin: false },
   kbs: [] as KnowledgeBase[],
   fetch: vi.fn(),
   references: vi.fn(),

@@ -1,6 +1,5 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 import { invalidateClientCache, withClientCache } from "@/lib/client-cache";
-import { learningShellActive } from "@/lib/learning-shell";
 
 const SUBAGENT_SETTINGS_CACHE_KEY = "subagents:settings";
 
@@ -33,8 +32,6 @@ export async function detectSubagents(): Promise<SubagentBackendInfo[]> {
 }
 
 export async function listSubagentConnections(): Promise<SubagentConnection[]> {
-  // Subagents are outside the learner surface (403); a learner has none.
-  if (await learningShellActive()) return [];
   const res = await apiFetch(apiUrl("/api/subagents/connections"), {
     cache: "no-store",
   });
@@ -209,10 +206,6 @@ export async function getSubagentSettings(options?: {
   return withClientCache<SubagentSettings>(
     SUBAGENT_SETTINGS_CACHE_KEY,
     async () => {
-      // Outside the learner surface: fail locally instead of drawing a 403.
-      if (await learningShellActive()) {
-        throw new Error("Subagent settings are not available to this account.");
-      }
       const res = await apiFetch(apiUrl("/api/subagents/settings"), {
         cache: "no-store",
       });

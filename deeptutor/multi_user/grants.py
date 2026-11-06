@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
 import json
 from pathlib import Path
-import re
 import sys
 import threading
 from typing import Any
@@ -19,32 +17,12 @@ from .paths import SYSTEM_ROOT, ensure_system_dirs
 
 GRANTS_DIR = SYSTEM_ROOT / "grants"
 
-# Mastery Path is open to every learning account: its data routes already
-# ride the ``chat`` surface, and its tutor reads only the topic's own sources.
-LEARNING_CAPABILITIES = {"chat", "immersive_reading", "mastery_path"}
-DEFAULT_LEARNING_CAPABILITIES = ("mastery_path",)
-LEARNING_AGE_BANDS = {"6-8", "9-12", "13-15"}
-LEARNING_PERSONAS = {"teacher"}
-LEARNING_SURFACES = {"books", "chat", "reading"}
-_EXTENSION_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _GRANT_THREAD_LOCKS: dict[Path, threading.Lock] = {}
 _GRANT_THREAD_LOCKS_GUARD = threading.Lock()
 
 
 class GrantStorageError(RuntimeError):
     """An existing grant cannot be read safely."""
-
-
-@dataclass(frozen=True)
-class GrantWriteReceipt:
-    previous_text: str | None
-    written_text: str
-    file_identity: tuple[int, int, int, int]
-
-
-def _file_identity(path: Path) -> tuple[int, int, int, int]:
-    stat = path.stat()
-    return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_size
 
 
 @contextmanager
@@ -110,7 +88,9 @@ def empty_grant(user_id: str) -> dict[str, Any]:
         "mcp_tools": None,
         "cli_apps": None,
         "exec_enabled": None,
-        "learning_policy": None,
+        # ``learning_policy`` (learning restrictions) was retired on
+        # 2026-11-06: a stored value is never read, and is dropped the next
+        # time an admin saves this grant.
         # The learner's own daily AI tokens (batch 3 §8); ``None`` follows the
         # school default, ``0`` is no limit.
         "ai_daily_tokens": None,
@@ -125,66 +105,9 @@ def _normalize_tool_list(value: Any) -> list[str] | None:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
-def _normalize_learning_policy(value: Any) -> dict[str, Any] | None:
-    if value is None:
-        return None
-    if not isinstance(value, dict):
-        return {}
-
-    capabilities = _normalize_tool_list(value.get("allowed_capabilities")) or []
-    has_reading = isinstance(value.get("reading"), dict)
-    raw_reading = value.get("reading") if has_reading else {}
-    material_ids = _normalize_tool_list(raw_reading.get("material_ids")) or (
-        [] if has_reading else ["*"]
-    )
-    extensions = _normalize_tool_list(raw_reading.get("extensions")) or (
-        []
-        if has_reading
-        else ["read_aloud", "guided_learning", "vocabulary", "quiz", "translation"]
-    )
-    # A policy without explicit surfaces/reading keeps the original learner
-    # behavior while persisting the complete contract for API clients.
-    surfaces = _normalize_tool_list(value.get("allowed_surfaces"))
-    normalized: dict[str, Any] = {
-        "age_band": str(value.get("age_band") or "").strip(),
-        "locked_persona": str(value.get("locked_persona") or "").strip(),
-        "allowed_capabilities": capabilities,
-        "default_capability": str(value.get("default_capability") or "chat").strip(),
-    }
-    if surfaces is not None:
-        normalized["allowed_surfaces"] = surfaces
-    normalized["reading"] = {
-        "allow_upload": bool(raw_reading.get("allow_upload", True)),
-        "material_ids": material_ids,
-        "extensions": extensions,
-    }
-    return normalized
-
-
 def grant_path(user_id: str) -> Path:
     ensure_system_dirs()
     return GRANTS_DIR / f"{user_id}.json"
-
-
-def _upstream_learning_policy(value: Any) -> Any:
-    """Project the retired develop v2 policy without rewriting stored grants."""
-    if not isinstance(value, dict) or value.get("policy_version") != 2:
-        return value
-    policy = deepcopy(value)
-    policy.pop("policy_version")
-    policy["allowed_capabilities"] = [
-        item for item in policy.get("allowed_capabilities", [])
-        if item in LEARNING_CAPABILITIES
-    ]
-    policy["allowed_surfaces"] = [
-        item for item in policy.get("allowed_surfaces", [])
-        if item in LEARNING_SURFACES
-    ]
-    if policy.get("default_capability") not in policy["allowed_capabilities"]:
-        policy["default_capability"] = next(iter(policy["allowed_capabilities"]), "chat")
-    if policy.get("locked_persona") in {"peer", "research-assistant"}:
-        policy["locked_persona"] = "teacher"
-    return policy
 
 
 def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -214,9 +137,6 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
         base[key] = _normalize_tool_list(payload.get(key))
     exec_enabled = payload.get("exec_enabled")
     base["exec_enabled"] = bool(exec_enabled) if isinstance(exec_enabled, bool) else None
-    base["learning_policy"] = _normalize_learning_policy(
-        _upstream_learning_policy(payload.get("learning_policy"))
-    )
     from .roles import AI_DAILY_TOKENS, normalize_ai_daily_tokens
 
     tokens = normalize_ai_daily_tokens(payload.get(AI_DAILY_TOKENS))
@@ -227,31 +147,6 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
         tokens = normalize_ai_daily_tokens(legacy.get(AI_DAILY_TOKENS))
     base[AI_DAILY_TOKENS] = tokens
     return base
-
-
-def learner_grant(user_id: str) -> dict[str, Any]:
-    """Return the conservative server-enforced expansion of the learner preset."""
-    return normalize_grant(
-        user_id,
-        {
-            "enabled_tools": [],
-            "mcp_tools": [],
-            "cli_apps": [],
-            "exec_enabled": False,
-            "learning_policy": {
-                "age_band": "9-12",
-                "locked_persona": "teacher",
-                "allowed_capabilities": ["chat", "immersive_reading", "mastery_path"],
-                "default_capability": "immersive_reading",
-                "allowed_surfaces": ["chat", "reading"],
-                "reading": {
-                    "allow_upload": False,
-                    "material_ids": [],
-                    "extensions": [],
-                },
-            },
-        },
-    )
 
 
 def load_grant(user_id: str) -> dict[str, Any]:
@@ -270,23 +165,6 @@ def load_grant(user_id: str) -> dict[str, Any]:
             raise GrantStorageError(f"Grant for user {user_id} has invalid {key}")
     if stored.get("exec_enabled") is not None and not isinstance(stored["exec_enabled"], bool):
         raise GrantStorageError(f"Grant for user {user_id} has invalid exec_enabled")
-    if stored.get("learning_policy") is not None and not isinstance(
-        stored["learning_policy"], dict
-    ):
-        raise GrantStorageError(f"Grant for user {user_id} has invalid learning_policy")
-    policy = stored.get("learning_policy")
-    if isinstance(policy, dict):
-        if "allowed_surfaces" in policy and not isinstance(policy["allowed_surfaces"], list):
-            raise GrantStorageError(f"Grant for user {user_id} has invalid allowed_surfaces")
-        reading = policy.get("reading")
-        if reading is not None and not isinstance(reading, dict):
-            raise GrantStorageError(f"Grant for user {user_id} has invalid reading policy")
-        if (
-            isinstance(reading, dict)
-            and "allow_upload" in reading
-            and not isinstance(reading["allow_upload"], bool)
-        ):
-            raise GrantStorageError(f"Grant for user {user_id} has invalid allow_upload")
     grant = normalize_grant(user_id, stored)
     try:
         validate_grant(grant)
@@ -307,50 +185,12 @@ def _validated_grant(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     return grant
 
 
-def _write_grant(
-    user_id: str, payload: dict[str, Any], *, with_receipt: bool
-) -> tuple[dict[str, Any], GrantWriteReceipt | None]:
+def save_grant(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     grant = _validated_grant(user_id, payload)
     path = grant_path(user_id)
-    written_text = json.dumps(grant, indent=2, ensure_ascii=False)
     with _grant_write_lock(path):
-        previous_text = path.read_text(encoding="utf-8") if with_receipt and path.exists() else None
-        atomic_write_text(path, written_text)
-        receipt = (
-            GrantWriteReceipt(previous_text, written_text, _file_identity(path))
-            if with_receipt
-            else None
-        )
-    return grant, receipt
-
-
-def save_grant(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    grant, _receipt = _write_grant(user_id, payload, with_receipt=False)
+        atomic_write_text(path, json.dumps(grant, indent=2, ensure_ascii=False))
     return grant
-
-
-def save_grant_with_receipt(
-    user_id: str, payload: dict[str, Any]
-) -> tuple[dict[str, Any], GrantWriteReceipt]:
-    """Save a grant and capture the previous state for conditional rollback."""
-    grant, receipt = _write_grant(user_id, payload, with_receipt=True)
-    assert receipt is not None
-    return grant, receipt
-
-
-def restore_grant_if_unchanged(user_id: str, receipt: GrantWriteReceipt) -> bool:
-    """Restore a failed transaction only while its own write is current."""
-    path = grant_path(user_id)
-    with _grant_write_lock(path):
-        if not path.exists() or _file_identity(path) != receipt.file_identity:
-            return False
-        if path.read_text(encoding="utf-8") != receipt.written_text:
-            return False
-        if receipt.previous_text is None:
-            path.unlink()
-        else:
-            atomic_write_text(path, receipt.previous_text)
-    return True
 
 
 def validate_grant(grant: dict[str, Any]) -> None:
@@ -372,56 +212,6 @@ def validate_grant(grant: dict[str, Any]) -> None:
                 walk(child, f"{trail}[{index}]")
 
     walk(grant)
-    policy = grant.get("learning_policy")
-    if policy is None:
-        return
-    if not isinstance(policy, dict):
-        raise ValueError("learning_policy must be an object or null")
-    if policy.get("age_band") not in LEARNING_AGE_BANDS:
-        raise ValueError(
-            f"learning_policy.age_band must be one of: {', '.join(sorted(LEARNING_AGE_BANDS))}"
-        )
-    if policy.get("locked_persona") not in LEARNING_PERSONAS:
-        raise ValueError(
-            f"learning_policy.locked_persona must be one of: {', '.join(sorted(LEARNING_PERSONAS))}"
-        )
-    capabilities = policy.get("allowed_capabilities")
-    if not isinstance(capabilities, list) or not capabilities:
-        raise ValueError("learning_policy.allowed_capabilities cannot be empty")
-    capability_set = set(capabilities)
-    unknown = capability_set - LEARNING_CAPABILITIES
-    if unknown:
-        raise ValueError(
-            "learning_policy.allowed_capabilities contains unsupported values: "
-            f"{', '.join(sorted(unknown))}"
-        )
-    if policy.get("default_capability") not in capability_set:
-        raise ValueError("learning_policy.default_capability must be allowed")
-    surfaces = policy.get("allowed_surfaces", ["chat", "reading"])
-    if not isinstance(surfaces, list) or not surfaces:
-        raise ValueError("learning_policy.allowed_surfaces cannot be empty")
-    unknown_surfaces = set(surfaces) - LEARNING_SURFACES
-    if unknown_surfaces:
-        raise ValueError(
-            "learning_policy.allowed_surfaces contains unsupported values: "
-            f"{', '.join(sorted(unknown_surfaces))}"
-        )
-    reading = policy.get("reading", {})
-    if not isinstance(reading, dict):
-        raise ValueError("learning_policy.reading must be an object")
-    material_ids = reading.get("material_ids") or []
-    if not isinstance(material_ids, list):
-        raise ValueError("learning_policy.reading.material_ids must be an array")
-    invalid_extensions = sorted(
-        extension
-        for extension in set(reading.get("extensions") or [])
-        if not _EXTENSION_ID_RE.fullmatch(str(extension))
-    )
-    if invalid_extensions:
-        raise ValueError(
-            "learning_policy.reading.extensions contains invalid ids: "
-            f"{', '.join(invalid_extensions)}"
-        )
 
 
 def public_grant(user_id: str) -> dict[str, Any]:

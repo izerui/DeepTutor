@@ -14,13 +14,13 @@ afterEach(cleanup);
 const resources: MultiUserResources = {
   models: { llm: [{ profile_id: "model", name: "Profile", models: [{ model_id: "one", name: "Model One" }] }] },
   skills: [{ name: "Skill One" }], partners: [{ partner_id: "partner", name: "Partner One" }],
-  reading_materials: [], reading_extensions: [], tools: [{ name: "reason" }], mcp_tools: [],
+  tools: [{ name: "reason" }], mcp_tools: [],
 };
 const stored: GrantPayload = {
   version: 2, user_id: "student", models: { llm: [] },
   knowledge_bases: [{ resource_id: "old", name: "Retired KB", custom: { preserve: [1, "two"] } }],
   skills: [], partners: [], enabled_tools: null, mcp_tools: null, exec_enabled: null,
-  learning_policy: null, ai_daily_tokens: null,
+  ai_daily_tokens: null,
 };
 
 it("saves other assignments and the daily AI limit without altering stored KB grants", async () => {
@@ -36,7 +36,10 @@ it("saves other assignments and the daily AI limit without altering stored KB gr
   expect(screen.queryByText("Retired KB")).not.toBeInTheDocument();
   // Spec 2026-10-29 D5: partners are not lent through grants, so there is no partner checkbox.
   expect(screen.queryByRole("checkbox", { name: /^Partner One/ })).not.toBeInTheDocument();
-  for (const name of ["Model One", "Skill One", "Enable learning policy"])
+  // Spec 2026-11-06: learning restrictions are gone from the grant editor.
+  expect(screen.queryByText("Learning policy")).not.toBeInTheDocument();
+  expect(screen.queryByRole("checkbox", { name: /Enable learning policy/ })).not.toBeInTheDocument();
+  for (const name of ["Model One", "Skill One"])
     fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${name}`) }));
   fireEvent.change(screen.getByRole("combobox", { name: "Daily AI limit" }), { target: { value: "200000" } });
   fireEvent.click(screen.getByRole("button", { name: "Save assignments" }));
@@ -46,7 +49,7 @@ it("saves other assignments and the daily AI limit without altering stored KB gr
   expect(saved.models.llm).toEqual([{ profile_id: "model", model_ids: ["one"], source: "admin" }]);
   expect(saved.skills).toEqual([{ skill_id: "Skill One", access: "use", source: "admin" }]);
   expect(saved.partners).toEqual([]);
-  expect(saved.learning_policy?.locked_persona).toBe("teacher");
+  expect(saved).not.toHaveProperty("learning_policy");
   expect(saved.ai_daily_tokens).toBe(200000);
   expect(saved).not.toHaveProperty("student_policy");
   expect(saved.enabled_tools).toBeNull();

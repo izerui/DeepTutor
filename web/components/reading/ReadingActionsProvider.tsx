@@ -75,8 +75,8 @@ export function ReadingActionsProvider({
   useEffect(() => {
     let active = true;
     void fetchAuthStatus().then(async (status) => {
-      const learnerMode =
-        status?.preset === "learner" || Boolean(status?.learning_policy);
+      // Spec 2026-11-06: every signed-in non-admin has a learner profile.
+      const learnerMode = Boolean(status?.authenticated && !status?.is_admin && status?.enabled);
       if (!learnerMode) return;
       const profile = await getOwnLearnerProfile().catch(() => null);
       if (active) {
@@ -84,7 +84,6 @@ export function ReadingActionsProvider({
           resolveReadingAgeMode({
             learnerMode,
             profileAge: profile?.age,
-            policyAgeBand: status?.learning_policy?.age_band,
           }),
         );
       }

@@ -79,9 +79,6 @@ export default function AdminUsersPage() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [createUsername, setCreateUsername] = useState("");
   const [createPassword, setCreatePassword] = useState("");
-  // Spec 2026-11-05: a new account is a learner, who may start with learning
-  // restrictions (the retired "learner" preset).
-  const [createRestricted, setCreateRestricted] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -120,7 +117,6 @@ export default function AdminUsersPage() {
   function openCreateDialog() {
     setCreateUsername("");
     setCreatePassword("");
-    setCreateRestricted(false);
     setCreateError("");
     setShowCreateDialog(true);
   }
@@ -158,7 +154,7 @@ export default function AdminUsersPage() {
     }
     setCreateSubmitting(true);
     try {
-      await createUser(username, createPassword, createRestricted);
+      await createUser(username, createPassword);
       setShowCreateDialog(false);
       await load();
     } catch (e) {
@@ -688,7 +684,7 @@ export default function AdminUsersPage() {
                                 userId={user.id}
                               />
                               <BookPermissionEditor userId={user.id} />
-                              {user.preset === "learner" && (
+                              {user.role !== "admin" && (
                                 <LearnerProfileEditor
                                   username={user.username}
                                 />
@@ -852,23 +848,6 @@ export default function AdminUsersPage() {
                 autoComplete="new-password"
                 className="mt-1 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm text-[var(--foreground)] outline-none focus:border-[var(--ring)]"
               />
-            </label>
-
-            {/* Spec 2026-11-05: new accounts are learners; promote one afterwards. */}
-            <label className="mb-4 flex items-start gap-2 text-xs text-[var(--foreground)]">
-              <input
-                type="checkbox"
-                checked={createRestricted}
-                disabled={createSubmitting}
-                onChange={(event) => setCreateRestricted(event.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                {t("Learning restrictions")}
-                <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--muted-foreground)]">
-                  {t("Chat and Immersive Reading only, with uploads and tools disabled until assigned.")}
-                </span>
-              </span>
             </label>
 
             {createError && (

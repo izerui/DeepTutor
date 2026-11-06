@@ -38,11 +38,6 @@ def profile_client(mu_isolated_root, monkeypatch):
     alice = save_user("alice", "$2b$12$placeholder", role="admin")
     bob = save_user("bob", "$2b$12$placeholder", role="user", preset="learner")
     standard = save_user("sam", "$2b$12$placeholder", role="user")
-    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
-    from deeptutor.multi_user.role_migration import run_role_migration
-
-    run_role_migration()
-
     tokens = {
         "admin-token": TokenPayload(username="alice", role="admin", user_id=alice["id"]),
         "user-token": TokenPayload(username="bob", role="user", user_id=bob["id"]),
@@ -115,7 +110,8 @@ def test_learner_profile_endpoints_are_self_service(profile_client):
     assert client.get(url).status_code == 401
     assert client.get(url, headers=_auth("user-token")).json() == {"learner_profile": None}
     assert client.get(url, headers=_auth("admin-token")).status_code == 403
-    assert client.get(url, headers=_auth("standard-token")).status_code == 403
+    # Spec 2026-11-06: every non-admin account owns a learner profile.
+    assert client.get(url, headers=_auth("standard-token")).json() == {"learner_profile": None}
     assert client.get(url, headers=_auth("ghost-token")).status_code == 404
 
     response = client.put(

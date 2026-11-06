@@ -25,11 +25,6 @@ export interface NavEntry {
   defaultCollapsed?: boolean
   /** Model capability this feature needs; locked when the user lacks it. */
   requires?: Capability
-  /**
-   * Learning-account surfaces that may see this entry. Absent means the
-   * entry is hidden whenever a learning policy is in effect (#1222).
-   */
-  surfaces?: readonly string[]
 }
 
 /**
@@ -43,16 +38,15 @@ export interface NavEntry {
  */
 export const PRIMARY_NAV: NavEntry[] = [
   // Spec 2026-11-03 batch 1 §2: what came from one's courses, what is new in the market, what is one's own.
-  { href: '/start', label: 'Home', icon: House, tooltipKey: 'Home page tooltip', surfaces: ['chat'] },
+  { href: '/start', label: 'Home', icon: House, tooltipKey: 'Home page tooltip' },
   // Platform batch 1 §5.1: the learning market, for everyone.
-  { href: '/market', label: 'Learning market', icon: Store, tooltipKey: 'Learning market tooltip', surfaces: ['chat'] },
+  { href: '/market', label: 'Learning market', icon: Store, tooltipKey: 'Learning market tooltip' },
   {
     href: '/chat',
     label: 'Chat',
     icon: MessagesSquare,
     tooltipKey: 'Home tooltip',
     requires: 'llm',
-    surfaces: ['chat'],
   },
   {
     href: '/partners',
@@ -66,7 +60,6 @@ export const PRIMARY_NAV: NavEntry[] = [
     label: 'Personalized Learning',
     icon: GraduationCap,
     tooltipKey: 'One tutor, your own way to learn.',
-    surfaces: ['reading', 'chat', 'books'],
   },
   { href: '/space', label: 'Learning Space', icon: LayoutGrid, tooltipKey: 'Space tooltip' },
   // Spec 2026-11-05: every learner writes practice sets and answers the ones
@@ -76,17 +69,15 @@ export const PRIMARY_NAV: NavEntry[] = [
     label: 'Practice sets',
     icon: ClipboardList,
     tooltipKey: 'Practice sets tooltip',
-    surfaces: ['chat'],
   },
   // Spec 2026-11-06 §1: the courses one joined and made (the route keeps its old name).
-  { href: '/tasks', label: 'My courses', icon: ClipboardCheck, tooltipKey: 'Courses tooltip', surfaces: ['chat'] },
+  { href: '/tasks', label: 'My courses', icon: ClipboardCheck, tooltipKey: 'Courses tooltip' },
   // Spec 2026-11-03 batch 2 §7: openings and deadlines by month.
   {
     href: '/kanban',
     label: 'Task Board',
     icon: ListTodo,
     tooltipKey: 'kanban.intro',
-    surfaces: ['chat'],
   },
   {
     href: '/co-writer',
@@ -119,20 +110,4 @@ export const NAV_BY_HREF = new Map(
 
 export function isNavActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
-}
-
-/**
- * A learning policy hides every feature the account cannot call. Settings
- * stays, because the redacted page (theme, language) is still theirs.
- * ``allowedSurfaces === null`` means no policy: the full sidebar.
- */
-export function navVisibleUnderPolicy(
-  href: string,
-  allowedSurfaces: readonly string[] | null,
-): boolean {
-  if (allowedSurfaces === null) return true
-  if (href === '/settings') return true
-  const surfaces = NAV_BY_HREF.get(href)?.surfaces
-  if (!surfaces?.length) return false
-  return surfaces.some(surface => allowedSurfaces.includes(surface))
 }

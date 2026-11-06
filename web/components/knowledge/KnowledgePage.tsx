@@ -1,7 +1,6 @@
 "use client";
 
 import { KB_DETAIL_SECTIONS, knowledgeBaseMatches, knowledgeBaseRef, type KbDetailSection, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
-import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
 import type { ScopeUpdate } from "@/lib/publish-api";
 import {
@@ -56,7 +55,6 @@ const ConnectKiwixModal = dynamic(() => import("./ConnectKiwixModal"));
 
 export default function KnowledgePage() {
   const { t } = useTranslation();
-  const { allowPrivateKb } = useAuthStatus();
   const router = useRouter();
   const routeParams = useParams<{ kbName?: string }>();
   const searchParams = useSearchParams();
@@ -105,9 +103,8 @@ export default function KnowledgePage() {
   // composer can select them, but they are agents, not knowledge bases — keep
   // them out of the Knowledge Center entirely.
   const kbs = useMemo(
-    () => allKbs.filter((kb) => kb.metadata?.type !== "subagent").map((kb) =>
-      allowPrivateKb ? kb : { ...kb, read_only: true, can_set_default: false }),
-    [allKbs, allowPrivateKb],
+    () => allKbs.filter((kb) => kb.metadata?.type !== "subagent"),
+    [allKbs],
   );
 
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
@@ -122,10 +119,8 @@ export default function KnowledgePage() {
     if (directDetail?.requestedRef !== explicitSelection || directDetail?.catalog !== allKbs) {
       return null;
     }
-    return allowPrivateKb
-      ? directDetail.kb
-      : { ...directDetail.kb, read_only: true, can_set_default: false };
-  }, [directDetail, explicitSelection, allKbs, allowPrivateKb]);
+    return directDetail.kb;
+  }, [directDetail, explicitSelection, allKbs]);
   const [selectedEngineId, setSelectedEngineId] = useState<string | null>(
     initialEngine,
   );
@@ -499,13 +494,13 @@ export default function KnowledgePage() {
               kbs={kbs}
               providers={providers}
               onOpenKb={openKb}
-              onOpenEngine={allowPrivateKb ? openEngine : undefined}
-              onOpenSource={allowPrivateKb ? openSource : undefined}
-              onCreate={allowPrivateKb ? openCreate : undefined}
+              onOpenEngine={openEngine}
+              onOpenSource={openSource}
+              onCreate={openCreate}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
-          ) : view === "engine" && selectedProvider && allowPrivateKb ? (
+          ) : view === "engine" && selectedProvider ? (
             <EngineDetail
               provider={selectedProvider}
               kbs={kbs}
@@ -524,9 +519,9 @@ export default function KnowledgePage() {
               kbs={kbs}
               providers={providers}
               onOpenKb={openKb}
-              onOpenEngine={allowPrivateKb ? openEngine : undefined}
-              onOpenSource={allowPrivateKb ? openSource : undefined}
-              onCreate={allowPrivateKb ? openCreate : undefined}
+              onOpenEngine={openEngine}
+              onOpenSource={openSource}
+              onCreate={openCreate}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
@@ -544,7 +539,7 @@ export default function KnowledgePage() {
                   ? (historyByKb[knowledgeBaseRef(selectedKb)] ?? [])
                   : []
               }
-              onCreate={allowPrivateKb ? openCreate : undefined}
+              onCreate={openCreate}
               onUpload={handleUpload}
               onLinkFolder={handleLinkFolder}
               onUnlinkFolder={handleUnlinkFolder}
@@ -565,7 +560,7 @@ export default function KnowledgePage() {
         </div>
       )}
 
-      {createOpen && allowPrivateKb ? (
+      {createOpen ? (
         <CreateKbModal
           isOpen
           onClose={() => setCreateOpen(false)}
@@ -586,7 +581,7 @@ export default function KnowledgePage() {
           }}
         />
       ) : null}
-      {kiwixOpen && allowPrivateKb ? (
+      {kiwixOpen ? (
         <ConnectKiwixModal
           onClose={() => setKiwixOpen(false)}
           onConnect={async (params) => {

@@ -456,7 +456,11 @@ async def get_memory_usage():
     }
 
 
-@router.post("/test/llm", response_model=TestResponse)
+@router.post(
+    "/test/llm",
+    response_model=TestResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def test_llm_connection():
     """
     Test LLM model connection by sending a simple completion request
@@ -524,7 +528,11 @@ async def test_llm_connection():
         )
 
 
-@router.post("/test/embeddings", response_model=TestResponse)
+@router.post(
+    "/test/embeddings",
+    response_model=TestResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def test_embeddings_connection():
     """
     Test Embeddings model connection by sending a simple embedding request
@@ -581,7 +589,11 @@ async def test_embeddings_connection():
         )
 
 
-@router.post("/test/search", response_model=TestResponse)
+@router.post(
+    "/test/search",
+    response_model=TestResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def test_search_connection():
     start_time = time.time()
 

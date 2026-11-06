@@ -6,7 +6,7 @@ accounts, the activity tail must stay bounded to the most recent entries,
 and the auth/workspace guards must answer bad input with 4xx instead of
 crashing or falling back to another workspace.
 
-These tests drive the real router through ``require_learning_surface`` (the
+These tests drive the real router through ``require_auth`` (the
 same dependency stack ``main.py`` mounts) with ``AUTH_ENABLED=true`` so the
 request → ``require_auth`` → user ContextVar → ``LearningStore`` chain is
 exercised end to end, mirroring how the web client calls the endpoint.
@@ -46,12 +46,12 @@ def records_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClien
 
     Isolates every persisted root under ``tmp_path`` the same way
     ``tests/api/test_book_permission_api.py`` does, then mounts
-    ``mastery_path.router`` with ``require_learning_surface`` — the exact
+    ``mastery_path.router`` with ``require_auth`` — the exact
     dependencies ``main.py`` puts in front of ``/api/mastery-paths``.
     """
     from deeptutor.api.routers import auth as auth_router
     from deeptutor.api.routers import mastery_path
-    from deeptutor.api.routers.auth import require_learning_surface
+    from deeptutor.api.routers.auth import require_auth
     from deeptutor.multi_user import grants, identity
     from deeptutor.multi_user import paths as mu_paths
 
@@ -83,7 +83,7 @@ def records_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClien
     app.include_router(
         mastery_path.router,
         prefix="/api/mastery-paths",
-        dependencies=[Depends(require_learning_surface)],
+        dependencies=[Depends(require_auth)],
     )
     with TestClient(app) as client:
         yield client

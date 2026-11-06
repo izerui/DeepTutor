@@ -3,64 +3,25 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-const adminApi = readFileSync(
-  path.resolve(process.cwd(), "lib/admin-api.ts"),
-  "utf8",
-);
-const usersPage = readFileSync(
-  path.resolve(process.cwd(), "app/(admin)/admin/users/page.tsx"),
-  "utf8",
-);
-const grantEditor = readFileSync(
-  path.resolve(process.cwd(), "features/multi-user/components/GrantEditor.tsx"),
-  "utf8",
-);
-const en = JSON.parse(
-  readFileSync(path.resolve(process.cwd(), "locales/en/app.json"), "utf8"),
-) as Record<string, string>;
-const zh = JSON.parse(
-  readFileSync(path.resolve(process.cwd(), "locales/zh/app.json"), "utf8"),
-) as Record<string, string>;
+const read = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
+const adminApi = read("lib/admin-api.ts");
+const usersPage = read("app/(admin)/admin/users/page.tsx");
+const grantEditor = read("features/multi-user/components/GrantEditor.tsx");
 
-test("admin user creation makes a learner with optional learning restrictions", () => {
-  // Spec 2026-11-05: an administrator creates learners only; the "learner"
-  // preset is just a learner's starting learning restrictions.
+test("admin user creation always makes a standard learner", () => {
+  // Spec 2026-11-06: no "learning restrictions" when an administrator adds someone.
   assert.match(
     adminApi,
     /body: JSON\.stringify\(\{ username, password, role: "learner", preset \}\)/,
   );
-  assert.match(adminApi, /const preset: AccountPreset = restricted \? "learner" : "standard";/);
+  assert.match(adminApi, /const preset: AccountPreset = "standard";/);
   assert.doesNotMatch(usersPage, /"teacher"|"student"/);
-  assert.match(usersPage, /setCreateRestricted\(event\.target\.checked\)/);
+  assert.doesNotMatch(usersPage, /Learning restrictions|createRestricted/);
 });
 
-test("grant editing exposes the server-enforced learning policy controls", () => {
-  assert.match(grantEditor, /learning_policy: conservativeLearningPolicy\(\)/);
-  assert.match(grantEditor, /allowed_surfaces: \["chat", "reading"\]/);
-  assert.match(grantEditor, /toggleReadingMaterial/);
-  assert.match(grantEditor, /toggleReadingExtension/);
-  assert.match(
+test("grant editing has no learning policy controls", () => {
+  assert.doesNotMatch(
     grantEditor,
-    /checked=\{grant\.learning_policy\.reading\.allow_upload\}/,
+    /learning_policy|LearningPolicy|toggleReadingMaterial|toggleReadingExtension|lockLearningPolicy/,
   );
-});
-
-test("account preset copy is present in both supported locales", () => {
-  const keys = [
-    "Account preset",
-    "Learner",
-    "Preset: {{preset}}",
-    "Learning policy",
-    "Enable learning policy",
-    "Age band",
-    "Assigned reading materials",
-    "Allow learner uploads",
-    "Reading extensions",
-  ];
-  for (const key of keys) {
-    assert.ok(key in en, `missing English key: ${key}`);
-    assert.ok(key in zh, `missing Chinese key: ${key}`);
-    assert.notEqual(en[key], "");
-    assert.notEqual(zh[key], "");
-  }
 });

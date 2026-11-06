@@ -64,28 +64,22 @@ beforeEach(() => {
   vi.mocked(fetchAuthStatus).mockResolvedValue({
     enabled: true,
     authenticated: true,
-    preset: "learner",
-    learning_policy: {
-      age_band: "9-12",
-      locked_persona: "",
-      allowed_capabilities: [],
-      default_capability: "chat",
-    },
+    is_admin: false,
+    preset: "standard",
   });
   vi.mocked(getOwnLearnerProfile).mockResolvedValue({ age: 8 });
 });
 
 describe("host-owned Reading age presentation", () => {
-  it("uses exact profile ages and a conservative policy fallback only in learner mode", () => {
-    expect(resolveReadingAgeMode({ learnerMode: false, profileAge: 5, policyAgeBand: "6-8" })).toBe("default");
+  it("uses exact profile ages only in learner mode", () => {
+    expect(resolveReadingAgeMode({ learnerMode: false, profileAge: 5 })).toBe("default");
     expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 5 })).toBe("early");
     expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 6 })).toBe("early");
     expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 8 })).toBe("young");
     expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 12 })).toBe("older");
     expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 13 })).toBe("default");
-    expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 2, policyAgeBand: "6-8" })).toBe("young");
-    expect(resolveReadingAgeMode({ learnerMode: true, profileAge: null, policyAgeBand: "9-12" })).toBe("older");
-    expect(resolveReadingAgeMode({ learnerMode: true, profileAge: null, policyAgeBand: "13-15" })).toBe("default");
+    expect(resolveReadingAgeMode({ learnerMode: true, profileAge: 2 })).toBe("default");
+    expect(resolveReadingAgeMode({ learnerMode: true, profileAge: null })).toBe("default");
   });
 
   it.each([
@@ -128,12 +122,13 @@ describe("host-owned Reading age presentation", () => {
     }
   });
 
-  it("keeps adult styling for a standard account and never fetches its learner profile", async () => {
+  it("keeps adult styling for an admin and never fetches a learner profile", async () => {
     vi.mocked(fetchAuthStatus).mockResolvedValue({
       enabled: true,
       authenticated: true,
+      is_admin: true,
+      role: "admin",
       preset: "standard",
-      learning_policy: null,
     });
     const { container } = render(
       <ReadingExtensionBar materialId="material-1" locator={4} onError={vi.fn()} />,

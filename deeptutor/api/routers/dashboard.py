@@ -82,7 +82,6 @@ async def get_learning_index():
     from deeptutor.api.routers.book import list_books
     from deeptutor.api.routers.mastery_path import list_topics
     from deeptutor.api.routers.reading import list_workspaces
-    from deeptutor.multi_user.learning_access import learning_surface_allowed
     from deeptutor.services.workspace.navigation import read_workspace_indexes
 
     async def books():
@@ -107,17 +106,12 @@ async def get_learning_index():
 
     result = {}
     failed = []
-    for kind, surface, reader in (
-        ("books", "books", books),
-        ("mastery", "chat", mastery),
-        ("reading", "reading", reading),
-        ("watching", "reading", watching),
+    for kind, reader in (
+        ("books", books),
+        ("mastery", mastery),
+        ("reading", reading),
+        ("watching", watching),
     ):
-        # Calling a route function directly bypasses its HTTP dependencies.
-        # Never load a source that the learner could not open individually.
-        result[kind] = []
-        if not learning_surface_allowed(surface):
-            continue
         result[kind], unavailable = await read_workspace_indexes(reader)
         if kind == "books":
             from deeptutor.multi_user.book_access import dedupe_account_book_rows

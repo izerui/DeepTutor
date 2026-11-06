@@ -17,10 +17,6 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'en' },
   }),
 }))
-// AuthorPathBanner reads the learning policy (B3-P15); no policy here.
-vi.mock('@/hooks/useAuthStatus', () => ({
-  useAuthStatus: () => ({ loading: false, learningPolicy: null }),
-}))
 vi.mock('@/lib/learning-api', async original => ({
   ...(await original<typeof import('@/lib/learning-api')>()),
   ...api,

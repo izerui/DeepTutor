@@ -455,7 +455,7 @@ class TestRegenerateLastTurn:
         remaining = asyncio.run(store.get_messages(sid))
         assert [message["id"] for message in remaining] == [user_id, assistant_id]
 
-    @pytest.mark.parametrize("rejected_at", ["capability", "workspace", "llm"])
+    @pytest.mark.parametrize("rejected_at", ["workspace", "llm"])
     @pytest.mark.parametrize("replay_snapshot", [False, True])
     def test_admission_rejection_preserves_existing_assistant_message(
         self,
@@ -471,11 +471,7 @@ class TestRegenerateLastTurn:
         def reject(*_args: Any, **_kwargs: Any) -> None:
             raise PermissionError(f"{rejected_at} access revoked")
 
-        if rejected_at == "capability":
-            monkeypatch.setattr(
-                "deeptutor.multi_user.learning_access.apply_learning_policy", reject
-            )
-        elif rejected_at == "workspace":
+        if rejected_at == "workspace":
             asyncio.run(store.update_session_preferences(sid, {"workspace_id": "revoked"}))
             monkeypatch.setattr(
                 "deeptutor.services.workspace.get_content_workspace_service", reject

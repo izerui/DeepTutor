@@ -1,7 +1,7 @@
 """WebSocket routes must not inherit HTTP-only application dependencies."""
 
 from deeptutor.api.main import app
-from deeptutor.api.routers.auth import require_learning_surface
+from deeptutor.api.routers.auth import require_auth
 from tests.api.route_introspection import iter_effective_websocket_routes
 
 
@@ -22,6 +22,6 @@ def test_websocket_routes_share_one_canonical_namespace() -> None:
     assert set(websocket_routes) == expected_paths
     for route in websocket_routes.values():
         assert all(
-            dependency.call is not require_learning_surface
+            dependency.call is not require_auth
             for dependency in route.dependant.dependencies
         )

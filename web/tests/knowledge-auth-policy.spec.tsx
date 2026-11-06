@@ -6,25 +6,19 @@ const fixture = vi.hoisted(() => ({ status: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ fetchAuthStatus: fixture.status }));
 afterEach(() => cleanup());
 
-it.each([
-  ["admin", null, true],
-  ["learner", null, true],
-  // Only a learning policy (the restricted learning shell) makes knowledge bases read-only.
-  ["learner", { allowed_surfaces: ["chat", "reading"] }, false],
-] as const)("derives KB write access for %s (learning policy: %j)", async (role, learningPolicy, allowed) => {
-  // Spec 2026-11-05: no feature switches; every learner writes their own knowledge bases.
-  fixture.status.mockResolvedValue({ role, learning_policy: learningPolicy });
+it.each(["admin", "learner"] as const)("derives the admin flag for %s", async (role) => {
+  // Spec 2026-11-06: no learning restrictions; every learner writes their own knowledge bases.
+  fixture.status.mockResolvedValue({ role });
   const { result } = renderHook(() => useAuthStatus());
-  expect(result.current.allowPrivateKb).toBe(false);
   await waitFor(() => expect(result.current.loading).toBe(false));
-  expect(result.current.allowPrivateKb).toBe(allowed);
   expect(result.current.isAdmin).toBe(role === "admin");
+  expect(result.current).not.toHaveProperty("allowPrivateKb");
+  expect(result.current).not.toHaveProperty("learningPolicy");
 });
 
-it("retains the documented non-learner fallback if runtime status is unavailable", async () => {
+it("reports an unavailable runtime status", async () => {
   fixture.status.mockResolvedValue(null);
   const { result } = renderHook(() => useAuthStatus());
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.statusAvailable).toBe(false);
-  expect(result.current.allowPrivateKb).toBe(true);
 });

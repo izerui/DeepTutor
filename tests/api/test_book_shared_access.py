@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
@@ -24,7 +25,6 @@ def shared_env(tmp_path, monkeypatch):
     from deeptutor.book import engine as engine_module
     from deeptutor.book import storage as storage_module
     from deeptutor.multi_user import audit, grants, identity, paths
-    from deeptutor.multi_user.grants import learner_grant, save_grant
     from deeptutor.multi_user.identity import save_user, set_book_permission
     from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
     from deeptutor.services import auth as auth_service
@@ -70,14 +70,11 @@ def shared_env(tmp_path, monkeypatch):
     set_book_permission("default-learner", BookPermission(create=False))
     set_book_permission("books-without-acl", BookPermission(create=False))
     set_book_permission("reader", BookPermission(create=False))
-    books_grant = deepcopy(learner_grant(reader["id"]))
-    books_grant["learning_policy"]["allowed_surfaces"] = ["chat", "reading", "books"]
-    save_grant(books_without_acl["id"], deepcopy(books_grant))
-    save_grant(reader["id"], books_grant)
-    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
-    from deeptutor.multi_user.role_migration import run_role_migration
-
-    run_role_migration()
+    # Spec 2026-11-06: a legacy stored learning policy is never read.
+    legacy_policy = {"learning_policy": {"allowed_surfaces": ["chat", "reading"]}}
+    for account in (default_learner, books_without_acl, reader):
+        grant_file = grants.grant_path(account["id"])
+        grant_file.write_text(json.dumps(legacy_policy), encoding="utf-8")
 
     tokens = {
         "root": TokenPayload(username="root", role="admin", user_id=root["id"]),
@@ -127,21 +124,17 @@ def shared_env(tmp_path, monkeypatch):
         prefix="/api",
         dependencies=[
             Depends(auth_router.require_auth),
-            Depends(auth_router.require_learning_surface),
         ],
     )
     app.include_router(book_router.ws_router, prefix="/ws")
     return TestClient(app), shared
 
 
-def test_learner_books_surface_requires_explicit_grant(shared_env) -> None:
+def test_legacy_learning_policy_no_longer_closes_books(shared_env) -> None:
     client, _ = shared_env
 
-    denied = client.get("/api/books", headers=_headers("default-learner"))
-    allowed = client.get("/api/books", headers=_headers("reader"))
-
-    assert denied.status_code == 403
-    assert allowed.status_code == 200
+    for account in ("default-learner", "reader"):
+        assert client.get("/api/books", headers=_headers(account)).status_code == 200
 
 
 def test_learner_with_books_surface_sees_public_books_without_legacy_acl(shared_env) -> None:

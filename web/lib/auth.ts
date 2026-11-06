@@ -22,18 +22,6 @@ export interface AuthStatus {
   preset?: "standard" | "learner" | "custom" | null;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */
   avatar?: string;
-  learning_policy?: {
-    age_band: string;
-    locked_persona: string;
-    allowed_capabilities: string[];
-    default_capability: string;
-    allowed_surfaces?: string[];
-    reading?: {
-      allow_upload: boolean;
-      material_ids: string[];
-      extensions: string[];
-    };
-  } | null;
 }
 
 const AUTH_STATUS_CACHE_MS = 5_000;

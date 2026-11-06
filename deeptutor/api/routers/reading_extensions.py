@@ -13,10 +13,6 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from deeptutor.learning.storage import LearningStore
-from deeptutor.multi_user.learning_access import (
-    allowed_reading_extensions,
-    assert_learning_material,
-)
 from deeptutor.reading import ReadingStore
 from deeptutor.reading.extensions import (
     ReadingContext,
@@ -140,28 +136,14 @@ def _record_reading_activity(
 
 @router.get("/extensions")
 async def list_extensions() -> list[dict[str, Any]]:
-    allowed = allowed_reading_extensions()
     return [
-        extension.manifest.model_dump()
-        for extension in get_reading_extension_registry().all()
-        if allowed is None or extension.manifest.id in allowed
+        extension.manifest.model_dump() for extension in get_reading_extension_registry().all()
     ]
 
 
 @router.post("/materials/{material_id}/read-aloud")
 async def read_material_aloud(material_id: str, payload: ReadAloudAudioPayload) -> Response:
-    """Synthesize one assigned material unit with the active server voice."""
-    try:
-        assert_learning_material(material_id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-
-    allowed = allowed_reading_extensions()
-    if allowed is not None and "read_aloud" not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="This reading extension is not allowed."
-        )
-
+    """Synthesize one material unit with the active server voice."""
     extension = get_reading_extension_registry().get("read_aloud")
     if extension is None:
         raise HTTPException(
@@ -199,15 +181,6 @@ async def run_extension_action(
     action: str,
     payload: ActionPayload,
 ) -> dict[str, Any]:
-    try:
-        assert_learning_material(material_id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    allowed = allowed_reading_extensions()
-    if allowed is not None and extension_id not in allowed:
-        raise HTTPException(status_code=403, detail="This reading extension is not allowed.")
-
     registry = get_reading_extension_registry()
     extension = registry.get(extension_id)
     if extension is None:
@@ -338,12 +311,6 @@ def _material_title(material_id: str) -> str:
     return str(getattr(manifest, "title", "") or getattr(manifest, "filename", "") or "")
 
 
-def _assert_quiz_extension_allowed() -> None:
-    allowed = allowed_reading_extensions()
-    if allowed is not None and "quiz" not in allowed:
-        raise HTTPException(status_code=403, detail="This reading extension is not allowed.")
-
-
 async def _persist_reading_quiz_pending(
     material_id: str, locator: int, payload: dict[str, Any]
 ) -> None:
@@ -362,12 +329,6 @@ async def _persist_reading_quiz_pending(
 
 @router.post("/materials/{material_id}/extensions/quiz/answers")
 async def submit_quiz_answers(material_id: str, payload: QuizAnswersPayload) -> dict[str, Any]:
-    try:
-        assert_learning_material(material_id)
-        _assert_quiz_extension_allowed()
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
     from deeptutor.learning.assessment import (
         AssessmentRecord,
         RecordAssessmentError,
@@ -483,12 +444,6 @@ async def submit_quiz_answers(material_id: str, payload: QuizAnswersPayload) -> 
 
 @router.get("/materials/{material_id}/quiz/rewards")
 async def list_quiz_rewards(material_id: str) -> dict[str, Any]:
-    try:
-        assert_learning_material(material_id)
-        _assert_quiz_extension_allowed()
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
     from deeptutor.services.session import get_sqlite_session_store
 
     rewards = await get_sqlite_session_store().list_reading_quiz_rewards(material_id)

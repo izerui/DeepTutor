@@ -88,11 +88,7 @@ class ReadingListTabsTool(_ReadingToolBase):
         workspace = await asyncio.to_thread(self._catalog().get_workspace, workspace_id)
         if workspace is None:
             return self._failure("The reading workspace is unavailable.")
-        from deeptutor.multi_user.learning_access import learning_material_allowed
-
-        visible_tabs = [
-            tab for tab in workspace.tabs if learning_material_allowed(tab.material.material_id)
-        ]
+        visible_tabs = list(workspace.tabs)
         lines = [f"Reading table “{workspace.title}” has {len(visible_tabs)} material(s):"]
         tabs: list[dict[str, Any]] = []
         for tab in visible_tabs:
@@ -146,9 +142,6 @@ class ReadingSwitchTabTool(_ReadingToolBase):
             return self._failure("No reading workspace is open.")
         if not material_id:
             return self._failure("reading_switch_tab needs a material id.")
-        from deeptutor.multi_user.learning_access import assert_learning_material
-
-        assert_learning_material(material_id)
         workspace = await asyncio.to_thread(
             self._catalog().set_active_material, workspace_id, material_id
         )

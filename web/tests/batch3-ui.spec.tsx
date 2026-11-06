@@ -22,7 +22,7 @@ import { AiUsageNote } from "@/components/home/AiUsage";
 import { SentOut } from "@/components/home/LearnerHome";
 import { SimilarQuestionsButton } from "@/components/learning/practice/SimilarQuestions";
 import { AttemptReview, OptionBars } from "@/components/practice-sets/SetReview";
-import { navVisibleUnderPolicy, PRIMARY_NAV } from "@/components/sidebar/nav-entries";
+import { PRIMARY_NAV } from "@/components/sidebar/nav-entries";
 
 beforeEach(() => {
   [practice, workbench].forEach((group) =>
@@ -75,7 +75,6 @@ it("shows every account the same entries, with no feature switches", () => {
   const hrefs = PRIMARY_NAV.map((entry) => entry.href);
   for (const href of ["/practice-sets", "/tasks", "/partners", "/agents", "/co-writer"]) {
     expect(hrefs).toContain(href);
-    expect(navVisibleUnderPolicy(href, null)).toBe(true);
   }
   expect(hrefs).not.toContain("/grading");
 });

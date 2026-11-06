@@ -70,7 +70,6 @@ def _source_path(source: str, request: Request) -> tuple[Path, str, Path]:
     else:
         context = nullcontext()
     canonical_path = unquote(parsed.path)
-    _assert_surface("reading" if canonical_path.startswith("/api/knowledge-bases/") else "chat")
     try:
         with context:
             target, filename = _resolve_authorized_file(canonical_path, query)
@@ -149,15 +148,6 @@ def _read_bounded(path: Path) -> bytes:
         raise HTTPException(status_code=404, detail="Preview source not found") from exc
 
 
-def _assert_surface(surface: str) -> None:
-    from deeptutor.multi_user.learning_access import assert_learning_surface
-
-    try:
-        assert_learning_surface(surface)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-
 async def _pdf_response(data: bytes, filename: str, cache_dir: Path) -> Response:
     if Path(filename).suffix.lower() not in OFFICE_SUFFIXES:
         raise HTTPException(status_code=415, detail="Unsupported Office file type")
@@ -194,7 +184,6 @@ async def preview_office_source(source: str, request: Request) -> Response:
 @router.post("/pdf")
 async def preview_office_upload(file: UploadFile = File(...)) -> Response:
     """Render a bounded pending Blob/data attachment that has no file URL."""
-    _assert_surface("chat")
     filename = file.filename or ""
     if Path(filename).suffix.lower() not in OFFICE_SUFFIXES:
         raise HTTPException(status_code=415, detail="Unsupported Office file type")

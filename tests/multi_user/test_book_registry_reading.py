@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import nullcontext
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -195,7 +196,7 @@ async def test_learner_preparer_executor_composition_and_rag(
 ):
     from deeptutor.agents.loop.pipeline import AgenticLoopPipeline
     from deeptutor.core.stream import StreamEvent, StreamEventType
-    from deeptutor.multi_user.grants import save_grant
+    from deeptutor.multi_user.grants import grant_path
     from deeptutor.multi_user.paths import get_admin_path_service
     from deeptutor.services.session.sqlite_store import SQLiteSessionStore
     from deeptutor.services.session.turn_runtime import TurnRuntimeManager
@@ -204,12 +205,13 @@ async def test_learner_preparer_executor_composition_and_rag(
 
     seed_user("admin", role="admin")
     learner = seed_user("learner", role="student")
-    save_grant(learner["id"], {
-        "learning_policy": {
-            "age_band": "9-12", "locked_persona": "teacher",
-            "allowed_capabilities": ["chat"], "allowed_surfaces": ["chat", "reading"],
-        },
-    })
+    # A legacy stored learning policy is never read (spec 2026-11-06).
+    legacy = grant_path(learner["id"])
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(json.dumps({"learning_policy": {
+        "age_band": "9-12", "locked_persona": "teacher",
+        "allowed_capabilities": ["chat"], "allowed_surfaces": ["chat", "reading"],
+    }}), encoding="utf-8")
     persona_dir = get_admin_path_service().get_workspace_dir() / "personas" / "teacher"
     persona_dir.mkdir(parents=True, exist_ok=True)
     (persona_dir / "PERSONA.md").write_text("Synthetic teacher.", encoding="utf-8")
@@ -300,7 +302,7 @@ async def test_learner_preparer_executor_composition_and_rag(
         original_run = runtime._run_turn
 
         async def observed_run(execution):
-            # Real request_preparer has already applied the ordinary policy.
+            # The real request_preparer has already run.
             captured["filtered"] = list(execution.payload["knowledge_bases"])
             if case == "revoked":
                 with as_user("teacher", role="teacher"):
@@ -317,7 +319,10 @@ async def test_learner_preparer_executor_composition_and_rag(
         try:
             session, turn = await runtime.start_turn({
                 "content": "Explain waves", "capability": "chat", "language": "en",
-                "tools": ["web_search"], "knowledge_bases": [shared_book.ref, unrelated.ref],
+                # Spec 2026-11-06: nothing strips a learner's own selection any
+                # more; this learner selected no tools and no KBs, so only the
+                # cited book can reach the turn.
+                "tools": [], "knowledge_bases": [],
                 "book_references": references, "attachments": [], "config": {},
                 "llm_selection": {"profile_id": "synthetic", "model_id": "synthetic"},
             })

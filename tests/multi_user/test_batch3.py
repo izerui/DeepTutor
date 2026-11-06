@@ -122,7 +122,7 @@ def features_http(teaching_users, monkeypatch):
     stub.add_api_route("/api/courses", lambda: {"ok": True}, methods=["POST"])
     stub.add_api_route("/api/task-board/cards", lambda: {"ok": True}, methods=["POST"])
     app = FastAPI()
-    app.include_router(stub, dependencies=[Depends(auth_router.require_learning_surface)])
+    app.include_router(stub, dependencies=[Depends(auth_router.require_auth)])
     client = TestClient(app)
 
     def call(name, method, path):

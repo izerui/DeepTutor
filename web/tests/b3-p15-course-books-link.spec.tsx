@@ -1,13 +1,9 @@
-// B3-P15 item 2: a learner whose learning_policy has no `books` surface must
-// not be offered the "Course books" link (the library answers 403 there).
+// B3-P15 item 2, spec 2026-11-06: every learner is offered the "Course books"
+// link; learning restrictions no longer hide it.
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import type { MasteryTopic } from '@/lib/learning-api'
-
-const auth = vi.hoisted(() => ({
-  state: { loading: false, learningPolicy: null as { allowedSurfaces: string[] } | null },
-}))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -15,7 +11,6 @@ vi.mock('react-i18next', () => ({
       key.replace(/{{(\w+)}}/g, (_match, name: string) => String(values?.[name] ?? '')),
   }),
 }))
-vi.mock('@/hooks/useAuthStatus', () => ({ useAuthStatus: () => auth.state }))
 
 import { AuthorPathBanner } from '@/components/space/learning/AuthorPathBanner'
 
@@ -42,42 +37,12 @@ function authorTopic(): MasteryTopic {
   } as unknown as MasteryTopic
 }
 
-beforeEach(() => {
-  auth.state = { loading: false, learningPolicy: null }
-})
 afterEach(() => cleanup())
 
-it('hides the Course books link when the learning policy excludes books', () => {
-  auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat', 'reading'] } }
-  render(<AuthorPathBanner topic={authorTopic()} />)
-  expect(screen.queryByText(/Course books/)).toBeNull()
-  expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
-  // The provenance line is unaffected.
-  expect(screen.getByText('Published by tina')).toBeTruthy()
-})
-
-it('renders nothing in compact mode when the only content was the hidden books', () => {
-  auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat'] } }
-  const { container } = render(<AuthorPathBanner compact topic={authorTopic()} />)
-  expect(container).toBeEmptyDOMElement()
-})
-
-it('keeps the link for a learner whose policy grants books', () => {
-  auth.state = { loading: false, learningPolicy: { allowedSurfaces: ['chat', 'books'] } }
+it('links the course books for every learner', () => {
   render(<AuthorPathBanner topic={authorTopic()} />)
   expect(screen.getByRole('link', { name: 'Waves book' }).getAttribute('href')).toBe(
     '/learning/books/book%3Abk_waves?mastery_template=tpl1'
   )
-})
-
-it('offers no link before the auth status is known (no flash for learners)', () => {
-  auth.state = { loading: true, learningPolicy: null }
-  render(<AuthorPathBanner topic={authorTopic()} />)
-  expect(screen.queryByText(/Course books/)).toBeNull()
-  expect(screen.queryByRole('link', { name: 'Waves book' })).toBeNull()
-})
-
-it('keeps the link for accounts without a learning policy', () => {
-  render(<AuthorPathBanner topic={authorTopic()} />)
-  expect(screen.getByRole('link', { name: 'Waves book' })).toBeTruthy()
+  expect(screen.getByText('Published by tina')).toBeTruthy()
 })

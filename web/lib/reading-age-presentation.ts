@@ -3,14 +3,12 @@ export type ReadingAgeMode = "early" | "young" | "older" | "default";
 type ReadingAgeInput = {
   learnerMode: boolean;
   profileAge?: number | null;
-  policyAgeBand?: string | null;
 };
 
 /** Keep a profile age private to the host; extensions only see their usual action input. */
 export function resolveReadingAgeMode({
   learnerMode,
   profileAge,
-  policyAgeBand,
 }: ReadingAgeInput): ReadingAgeMode {
   if (!learnerMode) return "default";
   if (
@@ -24,10 +22,6 @@ export function resolveReadingAgeMode({
     if (profileAge <= 12) return "older";
     return "default";
   }
-  // Policy bands are coarser than profile ages. Never guess the 3–6 style
-  // from a 6–8 band, which also includes older learners.
-  if (policyAgeBand === "6-8") return "young";
-  if (policyAgeBand === "9-12") return "older";
   return "default";
 }
 

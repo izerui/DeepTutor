@@ -183,11 +183,9 @@ export interface CreatedUser {
 export async function createUser(
   username: string,
   password: string,
-  restricted = false,
 ): Promise<CreatedUser> {
-  // The "learner" preset is only a learner's starting learning restrictions
-  // (spec 2026-10-29 P2), not the role.
-  const preset: AccountPreset = restricted ? "learner" : "standard";
+  // Spec 2026-11-06: learning restrictions are gone; every account is standard.
+  const preset: AccountPreset = "standard";
   const res = await apiFetch(apiUrl("/api/auth/users"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },

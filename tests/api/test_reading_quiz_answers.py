@@ -49,10 +49,6 @@ def _build_app(store: SQLiteSessionStore) -> FastAPI:
 def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SQLiteSessionStore:
     instance = SQLiteSessionStore(db_path=tmp_path / "reading-quiz.db")
     monkeypatch.setattr(
-        "deeptutor.api.routers.reading_extensions.assert_learning_material",
-        lambda material_id: None,
-    )
-    monkeypatch.setattr(
         "deeptutor.services.session.get_sqlite_session_store",
         lambda: instance,
     )
@@ -247,31 +243,10 @@ def test_regenerated_quiz_does_not_remove_a_previous_reward(
     assert rewards["total_stars"] == 2
 
 
-def test_quiz_rewards_require_material_and_extension_access(
-    store: SQLiteSessionStore,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_quiz_rewards_are_readable(store: SQLiteSessionStore) -> None:
     asyncio.run(store.upsert_reading_quiz_reward(MATERIAL_ID, LOCATOR, 2))
     with TestClient(_build_app(store)) as client:
         assert client.get(f"/api/reading/materials/{MATERIAL_ID}/quiz/rewards").status_code == 200
-
-    monkeypatch.setattr(
-        "deeptutor.api.routers.reading_extensions.assert_learning_material",
-        lambda material_id: (_ for _ in ()).throw(PermissionError("not assigned")),
-    )
-    with TestClient(_build_app(store)) as client:
-        assert client.get(f"/api/reading/materials/{MATERIAL_ID}/quiz/rewards").status_code == 403
-
-    monkeypatch.setattr(
-        "deeptutor.api.routers.reading_extensions.assert_learning_material",
-        lambda material_id: None,
-    )
-    monkeypatch.setattr(
-        "deeptutor.api.routers.reading_extensions.allowed_reading_extensions",
-        lambda: {"read_aloud"},
-    )
-    with TestClient(_build_app(store)) as client:
-        assert client.get(f"/api/reading/materials/{MATERIAL_ID}/quiz/rewards").status_code == 403
 
 
 def test_repeat_submission_is_idempotent(store: SQLiteSessionStore) -> None:

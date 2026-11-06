@@ -284,7 +284,6 @@ async def test_reading_import_stores_only_selected_text_and_checks_kb_scope(
         return catalog
 
     monkeypatch.setattr(reading, "_catalog", scoped_catalog)
-    monkeypatch.setattr(reading, "assert_learning_material", lambda *_args, **_kwargs: None)
     resource = SimpleNamespace(id="account:kb:offline-music", name="offline-music")
     monkeypatch.setattr(
         workspace_resources, "current_resources", lambda: SimpleNamespace(knowledge_bases=[])

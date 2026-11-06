@@ -10,7 +10,6 @@ import {
   subscribeAppUpdateStatus,
   type AppUpdateStatus,
 } from "@/lib/app-update";
-import { learningShellActive } from "@/lib/learning-shell";
 
 interface VersionBadgeProps {
   onNavigate?: MouseEventHandler<HTMLAnchorElement>;
@@ -20,9 +19,6 @@ export function VersionBadge({ onNavigate }: VersionBadgeProps) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<AppUpdateStatus | null>(null);
   const [error, setError] = useState("");
-  // Update checks are outside the learner surface (403), so a learning
-  // account gets no badge rather than a permanent "Status check failed".
-  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -33,18 +29,11 @@ export function VersionBadge({ onNavigate }: VersionBadgeProps) {
       setError(signal.error);
     });
 
-    void learningShellActive().then((learner) => {
-      if (!active) return;
-      if (learner) {
-        setHidden(true);
-        return;
-      }
-      return fetchAppUpdateStatus(controller.signal).catch((cause) => {
-        if (!active || controller.signal.aborted) return;
-        setError(
-          cause instanceof Error ? cause.message : "Unable to check for updates",
-        );
-      });
+    void fetchAppUpdateStatus(controller.signal).catch((cause) => {
+      if (!active || controller.signal.aborted) return;
+      setError(
+        cause instanceof Error ? cause.message : "Unable to check for updates",
+      );
     });
 
     return () => {
@@ -54,7 +43,6 @@ export function VersionBadge({ onNavigate }: VersionBadgeProps) {
     };
   }, []);
 
-  if (hidden) return null;
 
   const state = error
     ? { dot: "bg-red-500", label: t("Status check failed") }

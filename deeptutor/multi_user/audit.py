@@ -84,25 +84,3 @@ def log_admin_action(
     if summary:
         payload["summary"] = summary
     _write(payload)
-
-
-def log_guardian_action(
-    action: str,
-    guardian_user_id: str,
-    learner_user_id: str,
-    summary: dict[str, Any] | None = None,
-) -> None:
-    """Record an action performed through an explicit guardian relationship."""
-    user = get_current_user()
-    payload: dict[str, Any] = {
-        "time": datetime.now(timezone.utc).isoformat(),
-        "actor_id": user.id,
-        "actor_username": user.username,
-        "actor_role": user.role,
-        "action": action,
-        "guardian_user_id": guardian_user_id,
-        "learner_user_id": learner_user_id,
-    }
-    if summary:
-        payload["summary"] = summary
-    _write(payload)

@@ -58,7 +58,7 @@ def test_prompt_block_treats_profile_values_as_untrusted_data() -> None:
     assert "<ignore previous instructions>" not in block
 
 
-def test_admin_profile_api_is_learner_only_and_can_clear_profile(
+def test_admin_profile_api_serves_every_learner_and_can_clear_profile(
     mu_isolated_root, monkeypatch
 ) -> None:
     from deeptutor.api.routers import auth as auth_router
@@ -68,10 +68,6 @@ def test_admin_profile_api_is_learner_only_and_can_clear_profile(
     admin = save_user("root", hash_password("root-password"), role="admin")
     learner = save_user("learner", hash_password("learner-password"), preset="learner")
     save_user("standard", hash_password("standard-password"))
-    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
-    from deeptutor.multi_user.role_migration import run_role_migration
-
-    run_role_migration()
     tokens = {"admin-token": TokenPayload(username="root", role="admin", user_id=admin["id"])}
     monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
@@ -100,9 +96,11 @@ def test_admin_profile_api_is_learner_only_and_can_clear_profile(
     )
     assert cleared.status_code == 200
     assert cleared.json()["learner_profile"] is None
+    # Spec 2026-11-06: every non-admin account has a learner profile.
     assert (
-        client.get("/api/auth/users/standard/learner-profile", headers=headers).status_code == 404
+        client.get("/api/auth/users/standard/learner-profile", headers=headers).status_code == 200
     )
+    assert client.get("/api/auth/users/root/learner-profile", headers=headers).status_code == 404
 
     from deeptutor.services.auth import get_learner_profile
 
@@ -120,10 +118,6 @@ def test_non_admin_learner_accounts_can_manage_own_learner_profile(
     # to admin, so "tess" actually lands as a teacher.
     save_user("root", hash_password("root-password"), role="admin")
     teacher = save_user("tess", hash_password("teacher-password"), role="teacher", preset="learner")
-    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
-    from deeptutor.multi_user.role_migration import run_role_migration
-
-    run_role_migration()
     tokens = {"teacher-token": TokenPayload(username="tess", role="teacher", user_id=teacher["id"])}
     monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
@@ -155,10 +149,6 @@ def test_admin_managed_learner_profile_admits_non_admin_targets(
 
     admin = save_user("root", hash_password("root-password"), role="admin")
     save_user("tess", hash_password("teacher-password"), role="teacher", preset="learner")
-    # Spec 2026-10-29 P2: startup writes the retired learner preset into grants.
-    from deeptutor.multi_user.role_migration import run_role_migration
-
-    run_role_migration()
     tokens = {"admin-token": TokenPayload(username="root", role="admin", user_id=admin["id"])}
     monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))

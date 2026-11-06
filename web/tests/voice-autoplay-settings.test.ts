@@ -6,9 +6,12 @@ import test from "node:test";
 const readWebFile = (...parts: string[]) =>
   readFileSync(path.join(process.cwd(), ...parts), "utf8");
 
-test("voice settings expose the persisted reply auto-play preference", () => {
+test("the conversation page exposes the persisted reply auto-play preference", () => {
   const control = readWebFile(
-    "features", "settings", "sections", "models", "VoicePlaybackPrefs.tsx",
+    "features", "settings", "sections", "VoicePlaybackPrefs.tsx",
+  );
+  const conversation = readWebFile(
+    "features", "settings", "sections", "StartersSettingsSection.tsx",
   );
   const general = readWebFile("components", "settings", "SettingsOverview.tsx");
   const voice = readWebFile(
@@ -24,7 +27,10 @@ test("voice settings expose the persisted reply auto-play preference", () => {
   assert.ok(control.includes("onChange={autoplay.setValue}"));
   assert.ok(!general.includes("VoiceAutoplaySetting"));
   assert.ok(!voice.includes("VoiceAutoplaySetting"));
-  assert.ok(voice.includes("<VoicePlaybackPrefs />"));
+  // Spec 2026-11-06: playback is a personal preference on the Conversation
+  // page; the voice service page is admin-only.
+  assert.ok(!voice.includes("VoicePlaybackPrefs"));
+  assert.ok(conversation.includes("<VoicePlaybackPrefs />"));
   const store = readWebFile("features", "settings", "store", "SettingsStore.tsx");
   assert.ok(!store.includes("voice_autoplay"));
   assert.ok(!store.includes("updateVoiceAutoplay"));

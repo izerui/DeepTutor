@@ -34,9 +34,6 @@ class _ReadingToolBase(BaseTool):
         material_id = str(bound_id or kwargs.get(MATERIAL_KWARG) or "").strip()
         if not material_id:
             raise _NoMaterial()
-        from deeptutor.multi_user.learning_access import assert_learning_material
-
-        assert_learning_material(material_id)
         return material_id
 
     @staticmethod

@@ -8,7 +8,8 @@ Mirrors the pattern used by ``/api/memory/settings``:
 
 * ``GET  /settings``  → returns the full schema with defaults merged in.
 * ``PUT  /settings``  → merges payload back into both YAML files and
-                        returns the new state.
+                        returns the new state. Admin only: the files are
+                        shared by the whole deployment.
 
 Validation lives in
 :mod:`deeptutor.services.config.capabilities_settings` so the API stays
@@ -19,7 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from deeptutor.api.routers.auth import require_admin
 
 router = APIRouter()
 
@@ -31,7 +34,7 @@ async def get_capabilities_settings_endpoint() -> dict[str, Any]:
     return capabilities_settings_dict()
 
 
-@router.put("/settings")
+@router.put("/settings", dependencies=[Depends(require_admin)])
 async def put_capabilities_settings(payload: dict[str, Any]) -> dict[str, Any]:
     from deeptutor.services.config.capabilities_settings import save_capabilities_settings
 

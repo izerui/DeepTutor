@@ -71,25 +71,6 @@ def test_a_password_change_voids_a_pending_session_handoff(teaching_users):
     assert auth_router._credentials_version("nobody") is None
 
 
-def test_sockets_follow_the_learning_surfaces_of_their_rest_routes(monkeypatch):
-    from deeptutor.api.routers.auth import _learning_surface_for_socket
-    from deeptutor.multi_user import learning_access
-    from deeptutor.multi_user.learning_access import assert_learning_surface
-
-    assert _learning_surface_for_socket("/ws/books") == "books"
-    assert _learning_surface_for_socket("/ws") == "chat"
-    assert _learning_surface_for_socket("/ws/mastery-paths") == "chat"
-    assert _learning_surface_for_socket("/ws/questions/judge") == "chat"
-    assert _learning_surface_for_socket("/ws/knowledge-bases/kb/progress") == "reading"
-    assert _learning_surface_for_socket("/ws/partners/p1") == ""
-    # A learner whose policy leaves out books (the default learner surfaces).
-    monkeypatch.setattr(learning_access, "current_learning_policy",
-                        lambda: {"allowed_surfaces": ["chat", "reading"]})
-    with pytest.raises(PermissionError):
-        assert_learning_surface(_learning_surface_for_socket("/ws/books"))
-    assert_learning_surface(_learning_surface_for_socket("/ws"))
-
-
 # ── scopes ─────────────────────────────────────────────────
 
 

@@ -32,18 +32,9 @@ def test_legacy_and_new_standard_users_default_to_standard(seed_user):
     assert user["preset"] == "standard"
 
 
-def test_learning_surface_routing_matches_complete_path_segments():
-    from deeptutor.api.routers.auth import _learning_surface_for_path
-
-    assert _learning_surface_for_path("/api/reading/materials") == "reading"
-    assert _learning_surface_for_path("/api/courses/course/state") == "reading"
-    assert _learning_surface_for_path("/api/question-notebook/entries") == "chat"
-    assert _learning_surface_for_path("/api/reading-private") == ""
-    assert _learning_surface_for_path("/api/questions") == ""
-
-
-@pytest.mark.parametrize("preset", ["standard", "custom"])
-def test_non_learner_presets_do_not_install_a_learning_grant(preset_client, preset):
+@pytest.mark.parametrize("preset", ["standard", "learner", "custom"])
+def test_no_preset_installs_learning_restrictions(preset_client, preset):
+    """Spec 2026-11-06: the learner preset no longer adds a learning policy."""
     client, _admin, _tokens = preset_client
 
     response = client.post(
@@ -58,100 +49,11 @@ def test_non_learner_presets_do_not_install_a_learning_grant(preset_client, pres
 
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["preset"] == preset
-    from deeptutor.multi_user.grants import load_grant
-
-    assert load_grant(body["user_id"])["learning_policy"] is None
-
-
-def test_learner_preset_expands_to_a_conservative_grant(preset_client):
-    from deeptutor.multi_user.grants import load_grant
-
-    client, _admin, _tokens = preset_client
-
-    response = client.post(
-        "/api/auth/users",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "username": "student",
-            "password": "reading-password-1",
-            "preset": "learner",
-        },
-    )
-
-    assert response.status_code == 201, response.text
-    body = response.json()
-    # Spec 2026-11-05: a restricted learner is a learner with a learning policy.
     assert body["role"] == "learner"
-    assert body["preset"] == "learner"
+    from deeptutor.multi_user.grants import grant_path, load_grant
 
-    grant = load_grant(body["user_id"])
-    assert grant["enabled_tools"] == []
-    assert grant["mcp_tools"] == []
-    assert grant["cli_apps"] == []
-    assert grant["exec_enabled"] is False
-    assert grant["learning_policy"] == {
-        "age_band": "9-12",
-        "locked_persona": "teacher",
-        "allowed_capabilities": ["chat", "immersive_reading", "mastery_path"],
-        "default_capability": "immersive_reading",
-        "allowed_surfaces": ["chat", "reading"],
-        "reading": {
-            "allow_upload": False,
-            "material_ids": [],
-            "extensions": [],
-        },
-    }
-
-
-def test_learner_creation_rolls_back_when_grant_initialization_fails(preset_client, monkeypatch):
-    from deeptutor.multi_user import grants
-    from deeptutor.multi_user.identity import get_user
-
-    client, _admin, _tokens = preset_client
-
-    def fail_save_grant(*args, **kwargs):
-        raise RuntimeError("grant store unavailable")
-
-    monkeypatch.setattr(grants, "save_grant", fail_save_grant)
-    response = client.post(
-        "/api/auth/users",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "username": "student",
-            "password": "reading-password-1",
-            "preset": "learner",
-        },
-    )
-
-    assert response.status_code == 500
-    assert response.json()["detail"] == "The learner preset could not be initialized."
-    assert get_user("student") is None
-
-
-def test_an_admin_may_lift_a_students_learning_restrictions(preset_client):
-    """Spec 2026-10-29 P2: restrictions are student permissions, not an account type."""
-    from deeptutor.multi_user.grants import load_grant
-
-    client, _admin, _tokens = preset_client
-    created = client.post(
-        "/api/auth/users",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "username": "student",
-            "password": "reading-password-1",
-            "preset": "learner",
-        },
-    ).json()
-
-    response = client.put(
-        f"/api/multi-user/users/{created['user_id']}/grants",
-        headers={"Authorization": "Bearer admin-token"},
-        json={"grant": {"learning_policy": None}},
-    )
-
-    assert response.status_code == 200, response.text
-    assert load_grant(created["user_id"]).get("learning_policy") is None
+    assert not grant_path(body["user_id"]).exists()
+    assert "learning_policy" not in load_grant(body["user_id"])
 
 
 @pytest.mark.parametrize("preset", ["learner", "custom"])
@@ -174,126 +76,31 @@ def test_pocketbase_rejects_presets_it_cannot_enforce(preset_client, monkeypatch
     assert "standard preset" in response.json()["detail"]
 
 
-def test_auth_status_returns_the_effective_learning_policy(preset_client):
+def test_auth_status_ignores_a_stored_learning_policy(preset_client):
+    """A legacy grant with ``learning_policy`` reads as an ordinary learner."""
+    import json
+
+    from deeptutor.multi_user.grants import grant_path
+    from deeptutor.services.auth import TokenPayload
+
     client, _admin, tokens = preset_client
     created = client.post(
         "/api/auth/users",
         headers={"Authorization": "Bearer admin-token"},
-        json={
-            "username": "student",
-            "password": "reading-password-1",
-            "preset": "learner",
-        },
+        json={"username": "student", "password": "reading-password-1", "preset": "learner"},
     ).json()
-    from deeptutor.services.auth import TokenPayload
-
+    path = grant_path(created["user_id"])
+    path.write_text(
+        json.dumps({"learning_policy": {"allowed_surfaces": ["chat"], "locked_persona": "teacher"}}),
+        encoding="utf-8",
+    )
     tokens["learner-token"] = TokenPayload(
         username="student", role="user", user_id=created["user_id"]
     )
-    response = client.get(
-        "/api/auth/status",
-        headers={"Authorization": "Bearer learner-token"},
-    )
+    response = client.get("/api/auth/status", headers={"Authorization": "Bearer learner-token"})
 
     assert response.status_code == 200
-    assert response.json()["preset"] == "learner"
-    assert response.json()["learning_policy"]["default_capability"] == ("immersive_reading")
-
-
-@pytest.mark.parametrize("preset", ["standard", "custom"])
-def test_auth_status_derives_learner_from_an_active_policy(preset_client, preset):
-    from deeptutor.services.auth import TokenPayload
-
-    client, _admin, tokens = preset_client
-    username = f"policy-{preset}"
-    created = client.post(
-        "/api/auth/users",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "username": username,
-            "password": "reading-password-1",
-            "preset": preset,
-        },
-    ).json()
-    tokens["learner-token"] = TokenPayload(
-        username=username, role="user", user_id=created["user_id"]
-    )
-    response = client.put(
-        f"/api/multi-user/users/{created['user_id']}/grants",
-        headers={"Authorization": "Bearer admin-token"},
-        json={
-            "grant": {
-                "enabled_tools": [],
-                "mcp_tools": [],
-                "cli_apps": [],
-                "exec_enabled": False,
-                "learning_policy": {
-                    "age_band": "9-12",
-                    "locked_persona": "teacher",
-                    "allowed_capabilities": ["chat", "immersive_reading"],
-                    "default_capability": "immersive_reading",
-                    "allowed_surfaces": ["chat", "reading"],
-                    "reading": {
-                        "allow_upload": False,
-                        "material_ids": [],
-                        "extensions": [],
-                    },
-                },
-            }
-        },
-    )
-    assert response.status_code == 200, response.text
-
-    status = client.get(
-        "/api/auth/status",
-        headers={"Authorization": "Bearer learner-token"},
-    )
-
-    assert status.status_code == 200
-    assert status.json()["preset"] == "learner"
-    assert status.json()["learning_policy"]["default_capability"] == "immersive_reading"
-
-
-def test_assigning_a_material_copies_the_admin_material_once(
-    preset_client, as_user, seed_user, tmp_path
-):
-    from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
-    from deeptutor.reading import ReadingStore
-
-    client, admin, _tokens = preset_client
-    learner = seed_user("student")
-    source = tmp_path / "lesson.txt"
-    source.write_text("Assigned reading passage.", encoding="utf-8")
-    with as_user(admin["id"], role="admin", username="admin"):
-        material = ReadingStore().ingest(source)
-
-    grant = {
-        "enabled_tools": [],
-        "mcp_tools": [],
-        "cli_apps": [],
-        "exec_enabled": False,
-        "learning_policy": {
-            "age_band": "9-12",
-            "locked_persona": "teacher",
-            "allowed_capabilities": ["chat", "immersive_reading"],
-            "default_capability": "immersive_reading",
-            "allowed_surfaces": ["chat", "reading"],
-            "reading": {
-                "allow_upload": False,
-                "material_ids": [material.material_id],
-                "extensions": [],
-            },
-        },
-    }
-    response = client.put(
-        f"/api/multi-user/users/{learner['id']}/grants",
-        headers={"Authorization": "Bearer admin-token"},
-        json={"grant": grant},
-    )
-
-    assert response.status_code == 200, response.text
-    user_root = get_path_service_for_scope(
-        scope_for_user(learner["id"], is_admin=False)
-    ).get_workspace_feature_dir("reading")
-    staged = user_root / material.material_id
-    assert staged.is_dir()
+    assert response.json()["preset"] == "standard"
+    assert "learning_policy" not in response.json()
+    # The stored value is left in place, unread.
+    assert "learning_policy" in json.loads(path.read_text(encoding="utf-8"))

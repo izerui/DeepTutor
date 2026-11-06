@@ -15,6 +15,8 @@ import {
 import { useSettings } from "@/features/settings/store/SettingsStore";
 import { apiFetch, apiUrl } from "@/lib/api";
 import { EXTENSION_ENDPOINTS } from "@/lib/settings-extensions";
+import { useSettingsAccess } from "@/features/settings/navigation/SettingsAccessProvider";
+import { VoicePlaybackPrefs } from "./VoicePlaybackPrefs";
 
 type StarterSettings = { trace_count: number };
 
@@ -25,6 +27,7 @@ type StarterSettingsPayload = {
 
 export default function StarterSettingsPage() {
   const { t } = useTranslation();
+  const access = useSettingsAccess();
   const { registerExtension, pendingExtensionPayload, draftRevision } =
     useSettings();
   const [payload, setPayload] = useState<StarterSettingsPayload | null>(null);
@@ -126,11 +129,14 @@ export default function StarterSettingsPage() {
       <SettingsPageHeader
         title={t("Conversation")}
         description={t(
-          "Manage home suggestions and how long DeepTutor waits for replies.",
+          "Manage home suggestions, how long DeepTutor waits for replies, and spoken replies.",
         )}
       />
 
       <ChatResponseTimeoutSection />
+
+      {/* Spec 2026-11-06: personal playback preferences, moved out of the admin voice page. */}
+      <VoicePlaybackPrefs />
 
       {loading && (
         <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
@@ -177,7 +183,8 @@ export default function StarterSettingsPage() {
         </SettingSection>
       )}
 
-      {!loading && payload && (
+      {/* The task-model page configures the whole deployment: admins only. */}
+      {!loading && payload && !access.hideAdminOnly && (
         <p className="mt-5 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
           {t("These lines are written by the active model unless you pin one.")}{" "}
           <Link

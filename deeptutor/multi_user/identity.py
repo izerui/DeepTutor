@@ -327,9 +327,9 @@ def get_user_by_id(user_id: str) -> tuple[str, dict[str, Any]] | None:
 
 
 def get_learner_profile(username: str) -> dict[str, Any] | None:
-    """Return a learner account's structured profile, if present."""
+    """Return a non-admin account's structured learner profile, if present."""
     record = get_user(username)
-    if record is None or str(record.get("preset") or "standard") != "learner":
+    if record is None or str(record.get("role") or "user") == "admin":
         return None
     return normalize_profile(record.get("learner_profile"))
 
@@ -339,11 +339,7 @@ def set_learner_profile(username: str, profile: dict[str, Any] | None) -> dict[s
     with _USERS_WRITE_LOCK:
         users = load_users()
         record = users.get(username)
-        if (
-            record is None
-            or str(record.get("role") or "user") == "admin"
-            or str(record.get("preset") or "standard") != "learner"
-        ):
+        if record is None or str(record.get("role") or "user") == "admin":
             return None
         record["learner_profile"] = normalize_profile(profile)
         _write_users(users)
@@ -375,17 +371,8 @@ def delete_user(username: str) -> bool:
         record = users.get(username)
         if record is None:
             return False
-        user_id = str(record.get("id") or "")
         users.pop(username, None)
         _write_users(users)
-    try:
-        from .guardians import revoke_relationships_for_user
-
-        # Route guards also revalidate both accounts, so a rare cleanup failure
-        # can never make a deleted-user relationship usable.
-        revoke_relationships_for_user(user_id, reason="user_deleted")
-    except Exception:
-        logger.exception("Could not revoke guardian relationships after user deletion")
     return True
 
 
@@ -474,28 +461,6 @@ def set_role(username: str, role: Role) -> bool:
         if username not in users:
             return False
         users[username]["role"] = role
-        _write_users(users)
-    return True
-
-
-def set_preset(
-    username: str, preset: AccountPreset, *, expected_user_id: str | None = None
-) -> bool:
-    """Update an account's configuration preset without changing its role."""
-    if preset not in {"standard", "learner", "custom"}:
-        raise ValueError("preset must be 'standard', 'learner', or 'custom'")
-    if not USERS_FILE.exists():
-        return False
-    with _USERS_WRITE_LOCK:
-        users = load_users()
-        if username not in users:
-            return False
-        if (
-            expected_user_id is not None
-            and str(users[username].get("id") or "") != expected_user_id
-        ):
-            return False
-        users[username]["preset"] = preset
         _write_users(users)
     return True
 

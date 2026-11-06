@@ -16,7 +16,6 @@ const admin = {
   resolved: true,
   hideAdminOnly: false,
   showLearnerOnly: false,
-  showGuardianOnly: false,
 };
 
 test("legacy settings bookmarks resolve to independent pages, preserving profile links", () => {
@@ -54,7 +53,6 @@ test("every available setting is reachable through a navigation family", () => {
   for (const page of visibleSettingsPages({
     ...admin,
     showLearnerOnly: true,
-    showGuardianOnly: true,
   })) {
     assert.ok(reachable.has(page.key), page.key);
   }
@@ -68,6 +66,9 @@ test("restricted pages stay hidden, including when searched or linked directly",
   }).map(page => page.key);
   assert.ok(keys.includes("learner-profile"));
   assert.ok(!keys.includes("guardian"));
+  assert.ok(!keys.includes("memory"));
+  assert.ok(!keys.includes("capabilities"));
+  assert.ok(!keys.includes("llm"));
   assert.ok(!keys.includes("attachments"));
   assert.ok(!keys.includes("agent-codex"));
 });

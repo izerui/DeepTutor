@@ -54,12 +54,9 @@ export async function applyExtensionPayload(
     await updateSubagentSettings({ backends: { [key.slice(9)]: payload } });
     return;
   }
-  const guardian = /^guardian:(materials|restrictions):(.+)$/.exec(key);
-  const endpoint = guardian
-    ? `/api/multi-user/learners/${encodeURIComponent(guardian[2])}/${guardian[1]}`
-    : isExtensionKey(key) ? EXTENSION_ENDPOINTS[key] : null;
+  const endpoint = isExtensionKey(key) ? EXTENSION_ENDPOINTS[key] : null;
   if (!endpoint) throw new Error(`Unknown settings section: ${key}`);
-  let body = guardian?.[1] === "materials" ? { book_ids: payload } : payload;
+  let body = payload;
   if (key === "document-parsing") {
     const { engine, engines, image_description_model } = payload as {
       engine: string;

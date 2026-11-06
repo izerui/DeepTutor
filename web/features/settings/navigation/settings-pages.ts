@@ -1,5 +1,6 @@
 import { Activity, Archive, BarChart3, Bot, Settings2 } from 'lucide-react'
 import {
+  LEARNER_SETTINGS_PAGES,
   SETTINGS_CATEGORIES,
   isSettingsCategoryVisible,
   isSettingsLeafVisible,
@@ -18,7 +19,7 @@ export const SETTINGS_PAGE_GROUPS: { label: Lang; keys: string[] }[] = [
   },
   {
     label: { en: 'Learning & conversation', zh: '学习与对话' },
-    keys: ['starters', 'attachments', 'video-learning', 'learner-profile', 'progress', 'guardian', 'memory'],
+    keys: ['starters', 'attachments', 'video-learning', 'learner-profile', 'progress', 'memory'],
   },
   {
     label: { en: 'Features & integrations', zh: '功能与集成' },
@@ -121,21 +122,10 @@ const extraPages: SettingsLeaf[] = [
   },
 ]
 
-/**
- * The settings pages a learning account can actually use: interface/response
- * language and appearance (saved through PUT /api/settings/ui, the one
- * settings write on the learner surface), the self-service learner profile
- * (/api/auth) and archived chats (/api/sessions). Every other page reads or
- * writes routes the backend denies to learners (B3-P13).
- */
-export const LEARNER_SETTINGS_PAGES = new Set(['general', 'appearance', 'learner-profile', 'archive'])
+export { LEARNER_SETTINGS_PAGES }
 
+/** Admins see every page; everyone else sees ``LEARNER_SETTINGS_PAGES``. */
 export function visibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
-  const pages = allVisibleSettingsPages(access)
-  return access.learningShell ? pages.filter(page => LEARNER_SETTINGS_PAGES.has(page.key)) : pages
-}
-
-function allVisibleSettingsPages(access: SettingsAccess): SettingsLeaf[] {
   return [
     ...extraPages.filter(leaf => isSettingsLeafVisible(leaf, access)),
     ...SETTINGS_CATEGORIES.filter(category => isSettingsCategoryVisible(category, access))

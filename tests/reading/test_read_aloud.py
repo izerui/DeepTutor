@@ -164,18 +164,6 @@ def test_read_aloud_audio_rejects_invalid_locator(monkeypatch, tmp_path):
     assert response.status_code == 400
 
 
-def test_read_aloud_audio_requires_the_extension_grant(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        reading_extensions,
-        "allowed_reading_extensions",
-        lambda: {"vocabulary"},
-    )
-    client = _audio_client(monkeypatch, lambda *_: None)
-    response = client.post("/api/reading/materials/mat/read-aloud", json={"locator": 1})
-    assert response.status_code == 403
-    assert "not allowed" in response.json()["detail"]
-
-
 @pytest.mark.parametrize(
     ("error", "status_code"),
     [

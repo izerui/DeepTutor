@@ -59,8 +59,8 @@ export default function KbSettingsSection({
     : moveSourceId.startsWith("workspace:")
       ? moveSourceId.slice("workspace:".length).split(":kb:")[0]
       : null;
-  const { allowPrivateKb, isAdmin } = useAuthStatus();
-  const canWrite = !kb.read_only && allowPrivateKb;
+  const { isAdmin } = useAuthStatus();
+  const canWrite = !kb.read_only;
   const canManage = Boolean(kb.kb_id) && canWrite;
   // D10: an administrator withdraws or deletes someone else's published KB, nothing more.
   const canRetire = !canWrite && isAdmin && Boolean(kb.can_retire) && kb.visibility === "public";

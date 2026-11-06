@@ -8,7 +8,7 @@ const fixture = vi.hoisted(() => ({
   params: { kbName: "kb:private" },
   search: new URLSearchParams(),
   router: { replace: vi.fn() },
-  auth: { isAdmin: true, allowPrivateKb: true },
+  auth: { isAdmin: true },
   kbs: [] as KnowledgeBase[],
   fetch: vi.fn(), deleteKb: vi.fn(), refresh: vi.fn(), references: vi.fn(),
 }));
@@ -46,7 +46,7 @@ const detail: KnowledgeBase = {
 };
 beforeEach(() => {
   fixture.params = { kbName: "kb:private" };
-  fixture.auth = { isAdmin: true, allowPrivateKb: true };
+  fixture.auth = { isAdmin: true };
   fixture.kbs = [];
   fixture.router.replace.mockReset();
   fixture.fetch.mockReset().mockResolvedValue(Response.json(detail));
@@ -84,11 +84,12 @@ it("deletes a KB cited by author paths only after confirming the counts (R1)", a
   expect(String(confirm.mock.calls[1][0])).toContain("published paths use this material");
 });
 
-it("applies the effective learner policy to fetched details too", async () => {
-  fixture.auth = { isAdmin: false, allowPrivateKb: false };
+it("keeps a learner's fetched detail as the server describes it", async () => {
+  // Spec 2026-11-06: no learning restrictions force a read-only viewer.
+  fixture.auth = { isAdmin: false };
   render(<KnowledgePage />);
   expect(await screen.findByText("Authorized private")).toBeTruthy();
-  expect(screen.getByTestId("read-only").textContent).toBe("true");
+  expect(screen.getByTestId("read-only").textContent).toBe("false");
 });
 
 it("does not substitute a listed namesake when detail access is denied", async () => {

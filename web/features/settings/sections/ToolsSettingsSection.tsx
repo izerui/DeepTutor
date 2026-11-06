@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 
 import { useSettings } from "@/features/settings/store/SettingsStore";
 import { SettingsPageHeader } from "@/components/settings/shared";
+import { useSettingsAccess } from "@/features/settings/navigation/SettingsAccessProvider";
 import { apiFetch, apiUrl } from "@/lib/api";
 import {
   toolAvailabilityCopy,
@@ -77,6 +78,7 @@ const CAPABILITY_LABELS: Record<string, { zh: string; en: string }> = {
 
 export default function ToolsSettingsPage() {
   const { t } = useTranslation();
+  const access = useSettingsAccess();
   const { language, draftRevision } = useSettings();
   const hintLanguage = language === "zh" ? "zh" : "en";
   const [tools, setTools] = useState<BuiltinTool[] | null>(null);
@@ -397,7 +399,8 @@ export default function ToolsSettingsPage() {
                               {availability && !isComingSoon && (
                                 <p className="mt-1 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                                   {availability.detail}{" "}
-                                  {availability.href && (
+                                  {/* Service pages are admin-only (spec 2026-11-06). */}
+                                  {availability.href && !access.hideAdminOnly && (
                                     <Link
                                       href={availability.href}
                                       className="font-medium underline underline-offset-2"
