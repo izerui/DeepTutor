@@ -43,9 +43,7 @@ import {
   DEFAULT_COLLAPSED_NAV,
   PRIMARY_NAV_HREFS,
   isNavActive,
-  navHrefsFor,
 } from "@/components/sidebar/nav-entries";
-import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { Tooltip } from "@/shared/ui/Tooltip";
 import { useDragSort, type DragSort } from "@/hooks/useDragSort";
 import { placeMenu, type FloatingMenuPosition } from "@/lib/floating-menu";
@@ -95,7 +93,6 @@ export function SidebarNav({
   const pathname = usePathname();
   const { t } = useTranslation();
   const { has } = useCapabilityAccess();
-  const { isAdmin } = useAuthStatus();
 
   const [layout, setLayout] = useState<SidebarNavLayout | null>(null);
   const [moreExpanded, setMoreExpanded] = useState(false);
@@ -113,10 +110,10 @@ export function SidebarNav({
     setMoreExpanded(browserStorage.readRaw("local", MORE_EXPANDED_KEY) === "1");
   }, []);
 
-  // Spec 2026-11-05: one sidebar for every account, less administrators' entries for learners (audit fix B §3).
+  // Spec 2026-11-05: one sidebar for every account.
   const resolved = useMemo(
-    () => resolveNavLayout(navHrefsFor(MODULE_NAV_HREFS, isAdmin), layout, DEFAULT_COLLAPSED_NAV),
-    [layout, isAdmin],
+    () => resolveNavLayout(MODULE_NAV_HREFS, layout, DEFAULT_COLLAPSED_NAV),
+    [layout],
   );
   /** Always edit the resolved order: the stored one may still be empty. */
   const editable = useMemo<SidebarNavLayout>(
@@ -532,7 +529,6 @@ export function SidebarHome({
   const { t } = useTranslation();
   const pathname = usePathname();
   const { has } = useCapabilityAccess();
-  const { isAdmin } = useAuthStatus();
   const entry = NAV_BY_HREF.get("/chat")!;
   const active = isNavActive(pathname, entry.href);
   const locked = entry.requires ? !has(entry.requires) : false;

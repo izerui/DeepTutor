@@ -1,8 +1,8 @@
 """Audit fixes, batch B (spec docs/superpowers/specs/2026-11-07-audit-fixes-b.md).
 
 §1 reports of content and reviews, §2 telling the people in content that it
-went, §3 partners for administrators only, §5 courses in use, §7 the
-connection of connected knowledge bases.
+went, §5 courses in use, §7 the connection of connected knowledge bases
+(§3, partners for administrators only, was reverted on 2026-11-07).
 """
 
 from __future__ import annotations
@@ -255,53 +255,6 @@ def test_a_taken_down_course_stays_among_what_one_learns(as_account, teaching_us
         [kept] = assigned_courses()
     assert kept["id"] == course["id"] and kept["unavailable"] == "taken_down"
     assert [t["state"] for t in kept["tasks"]] == ["completed"]  # her record stays
-
-
-# ── §3 partners ────────────────────────────────────────────
-
-
-def test_partners_are_for_administrators_only():
-    import inspect
-
-    from deeptutor.api.main import app
-    from deeptutor.api.routers import partner_groups, partners
-    from deeptutor.api.routers.auth import require_admin
-
-    prefixes = ("/api/partners", "/api/partner-groups")
-    checked = set()
-    for route in app.router.routes:
-        context = getattr(route, "include_context", None)
-        if getattr(route, "original_router", None) is not None and context is not None:
-            # Newer FastAPI includes routers lazily: the dependencies sit on the inclusion.
-            prefix = str(getattr(context, "prefix", "") or "")
-            if prefix in prefixes:
-                assert any(d.dependency is require_admin for d in context.dependencies or []), prefix
-                checked.add(prefix)
-        elif getattr(route, "path", "").startswith(prefixes) and hasattr(route, "dependant"):
-            assert any(d.call is require_admin for d in route.dependant.dependencies), route.path
-            checked.add(next(p for p in prefixes if route.path.startswith(p)))
-    assert checked == set(prefixes)
-    # The sockets cannot take a dependency: they check the role by hand.
-    assert "is_admin" in inspect.getsource(partners.partner_chat_ws)
-    assert "is_admin" in inspect.getsource(partner_groups.partner_group_ws)
-
-
-def test_a_learner_gets_403_from_the_partner_api(teaching_users, monkeypatch):
-    from fastapi import Depends, FastAPI
-    from fastapi.testclient import TestClient
-
-    import deeptutor.api.routers.auth as auth_router
-    from deeptutor.api.routers import partners
-    from deeptutor.services.auth import TokenPayload
-
-    tokens = {n: TokenPayload(username=n, role=r["role"], user_id=r["id"]) for n, r in teaching_users.items()}
-    monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
-    monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
-    app = FastAPI()
-    app.include_router(partners.router, prefix="/api/partners", dependencies=[Depends(auth_router.require_admin)])
-    client = TestClient(app)
-    assert client.get("/api/partners", headers={"Authorization": "Bearer sara"}).status_code == 403
-    assert client.post("/api/partners/p1/start", headers={"Authorization": "Bearer sara"}).status_code == 403
 
 
 # ── §5 courses in use ──────────────────────────────────────

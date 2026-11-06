@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-// Audit fixes, batch B: reports (§1), content that went (§2), partners for
-// administrators (§3), courses in use (§5), connected knowledge bases (§7).
+// Audit fixes, batch B: reports (§1), content that went (§2), courses in use
+// (§5), connected knowledge bases (§7). Partners stay open to learners.
 const { api, tasks, auth, search, t } = vi.hoisted(() => ({
   api: {
     getTaxonomy: vi.fn(),
@@ -45,10 +45,8 @@ import ItemIntro from "@/components/catalog/ItemIntro";
 import { JoinButton } from "@/components/catalog/JoinButton";
 import { ReviewsSection } from "@/components/catalog/Reviews";
 import { notificationText } from "@/components/notifications/NotificationBell";
-import { navHrefsFor, PRIMARY_NAV_HREFS } from "@/components/sidebar/nav-entries";
 import { LearnerCourses } from "@/components/tasks/Courses";
 import { LearnerLessonDetail } from "@/components/tasks/LearnerLessonDetail";
-import PartnersLayout from "@/app/(workspace)/partners/layout";
 import { resetTaxonomyCache } from "@/components/catalog/useTaxonomy";
 import type { CatalogItemDetail, FlagGroup, ItemReviews } from "@/lib/catalog-api";
 import type { AppNotification } from "@/lib/notifications-api";
@@ -216,22 +214,6 @@ it("a taken-down course stays under Learning, marked, with the learner's records
   expect(await screen.findByTestId("course-unavailable")).toBeTruthy();
   expect(screen.getByText("This course was taken down. Your learning records are kept.")).toBeTruthy();
   expect(screen.getByText("Week 1")).toBeTruthy();
-});
-
-// ── §3 partners ────────────────────────────────────────────
-
-it("learners are not offered partners; administrators are", () => {
-  expect(navHrefsFor(PRIMARY_NAV_HREFS, false)).not.toContain("/partners");
-  expect(navHrefsFor(PRIMARY_NAV_HREFS, true)).toContain("/partners");
-});
-
-it("an old partners link tells a learner it is for administrators", () => {
-  const { rerender } = render(<PartnersLayout><p>partner list</p></PartnersLayout>);
-  expect(screen.getByTestId("partners-admin-only")).toBeTruthy();
-  expect(screen.queryByText("partner list")).toBeNull();
-  auth.isAdmin = true;
-  rerender(<PartnersLayout><p>partner list</p></PartnersLayout>);
-  expect(screen.getByText("partner list")).toBeTruthy();
 });
 
 // ── §5 courses in use ──────────────────────────────────────
