@@ -704,7 +704,7 @@ data/
 └── system/                  # auth · grants · audit · user-secrets/<owner> (OAuth tokens)
 ```
 
-**最初に登録したユーザーが管理者**になり、モデルカタログ、プロバイダー認証情報、共有知識ベース、スキル、共有Bookの正本、ユーザー単位グラントを所有します。管理者が作成するローカルユーザーはStandard、Learner、Customから選べます。Learnerは学習機能と教材ポリシーを固定し、適応型プロフィールを追加し、有効期限と1日の利用上限を持つ取り消し可能なデバイス認証情報を利用できます。認可されたGuardianはレポートの閲覧、教材の承認、認証情報のリセットを行えます。その他のユーザーには、生のAPIキーを渡すことなく、分離されたワークスペースとスコープ付きのモデル、KB、スキル、Partners、共有Bookアクセスが与えられます。`auth.json`にすでに`username` + `password_hash`がある場合、そのアカウントが管理者です。`/register`は閉じたままで、`/admin/users`から作成したアカウントは昇格するまで常に`role=user`です。
+**最初に登録したユーザーが管理者**になり、モデルカタログ、プロバイダー認証情報、共有知識ベース、スキル、共有Bookの正本、ユーザー単位グラントを所有します。管理者が作成するローカルユーザーはStandard、Learner、Customから選べます。Learnerは学習機能と教材ポリシーを固定し、適応型プロフィールを追加します。認可されたGuardianはレポートの閲覧、教材の承認、認証情報のリセットを行えます。その他のユーザーには、生のAPIキーを渡すことなく、分離されたワークスペースとスコープ付きのモデル、KB、スキル、Partners、共有Bookアクセスが与えられます。`auth.json`にすでに`username` + `password_hash`がある場合、そのアカウントが管理者です。`/register`は閉じたままで、`/admin/users`から作成したアカウントは昇格するまで常に`role=user`です。
 
 **有効化：** `data/user/settings/auth.json`で認証をオンにし、`deeptutor start`を再起動し、`/register`で最初の管理者を登録し、`/admin/users`からユーザーを追加し、グラントを通じてモデル、KB、スキル、Partner、ツール/MCP/CLIアプリポリシー、コード実行アクセスを割り当てます。各ユーザーの**Book access**パネルで共有Bookを設定してください。
 

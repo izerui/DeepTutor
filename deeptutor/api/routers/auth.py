@@ -3,7 +3,6 @@
 import asyncio
 from contextvars import Token as _CtxToken
 import csv
-from datetime import datetime, timedelta, timezone
 import io
 import ipaddress
 import logging
@@ -44,12 +43,6 @@ from deeptutor.multi_user.context import (
     set_current_user,
     user_from_token_payload,
 )
-from deeptutor.multi_user.device_credentials import (
-    heartbeat_device_credential,
-    issue_device_credential,
-    list_device_credentials,
-    revoke_device_credential,
-)
 from deeptutor.multi_user.identity import get_user, get_user_by_id
 from deeptutor.multi_user.models import AccountPreset, role_label
 from deeptutor.multi_user.paths import local_admin_user
@@ -74,7 +67,6 @@ from deeptutor.services.auth import (
     TokenPayload,
     add_user,
     authenticate,
-    authenticate_device,
     authenticate_pb,
     create_token,
     decode_token,
@@ -219,22 +211,6 @@ class LoginRequest(BaseModel):
 
     username: str
     password: str
-
-
-class DeviceLoginRequest(BaseModel):
-    """Payload for the built-in device-credential login endpoint."""
-
-    pairing_code: str = Field(min_length=8, max_length=128)
-    pin: str = Field(min_length=6, max_length=6)
-
-
-class DeviceCredentialCreateRequest(BaseModel):
-    """Admin payload for issuing a local ordinary-user device credential."""
-
-    user_id: str = Field(min_length=1, max_length=64)
-    device_name: str = Field(min_length=1, max_length=80)
-    expires_in_days: int = Field(ge=1, le=365)
-    daily_limit_minutes: int = Field(ge=5, le=1440)
 
 
 class RegisterRequest(BaseModel):
@@ -812,50 +788,6 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     }
 
 
-def _require_builtin_device_auth() -> None:
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device credentials require built-in authentication.",
-        )
-    if POCKETBASE_ENABLED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device credentials are not supported in PocketBase mode.",
-        )
-
-
-@router.post("/device-login")
-async def device_login(body: DeviceLoginRequest, response: Response) -> dict:
-    """Exchange a device pairing code and PIN for the account's normal cookie."""
-
-    _require_builtin_device_auth()
-    payload = authenticate_device(body.pairing_code, body.pin)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect device credentials",
-        )
-
-    token = create_token(
-        payload.username,
-        payload.role,
-        payload.user_id,
-        device_credential_id=payload.device_credential_id,
-        device_session_nonce=payload.device_session_nonce,
-    )
-    response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
-    logger.info(f"User '{payload.username}' logged in with a device credential")
-    return {
-        "ok": True,
-        "user_id": payload.user_id,
-        "username": payload.username,
-        "role": role_label(payload.role),
-        "is_admin": payload.role == "admin",
-        "device_credential_id": payload.device_credential_id,
-    }
-
-
 def _credentials_version(username: str) -> int | None:
     """The account's password version; ``None`` for a missing or disabled account."""
     record = get_user(username)
@@ -905,8 +837,6 @@ async def create_session_handoff(
                     "username": payload.username,
                     "role": payload.role,
                     "user_id": payload.user_id,
-                    "device_credential_id": payload.device_credential_id,
-                    "device_session_nonce": payload.device_session_nonce,
                     # A password change before the handoff completes voids it.
                     "credentials_version": _credentials_version(payload.username),
                 }
@@ -1017,12 +947,14 @@ async def complete_session_handoff(
                 "credentials_version", 0
             ):
                 raise HandoffRejected("Invalid handoff ticket")
+            # A ticket minted for a device-credential session (feature removed
+            # 2026-11-06) must not turn into an unrestricted normal session.
+            if claims.get("device_credential_id"):
+                raise HandoffRejected("Invalid handoff ticket")
             token = create_token(
                 str(claims.get("username") or ""),
                 str(claims.get("role") or "user"),
                 str(claims.get("user_id") or ""),
-                device_credential_id=str(claims.get("device_credential_id") or ""),
-                device_session_nonce=str(claims.get("device_session_nonce") or ""),
             )
         else:
             raise HandoffRejected("Invalid handoff ticket")
@@ -1040,38 +972,6 @@ async def complete_session_handoff(
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
     logger.info("Completed session handoff for host=%s", host)
     return {"ok": True}
-
-
-@router.post("/device/heartbeat")
-async def device_heartbeat(
-    response: Response,
-    payload: TokenPayload | None = Depends(require_auth),
-) -> dict:
-    """Refresh a device lease and account bounded daily usage."""
-
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Device credentials require built-in authentication.",
-        )
-    if payload is None or not payload.device_credential_id or not payload.device_session_nonce:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This session does not use a device credential.",
-        )
-    try:
-        device = heartbeat_device_credential(
-            payload.device_credential_id,
-            user_id=payload.user_id,
-            session_nonce=payload.device_session_nonce,
-        )
-    except ValueError:
-        response.delete_cookie(**_cookie_attrs())
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Device session is no longer active",
-        ) from None
-    return {"ok": not device.pop("limit_reached"), **device}
 
 
 @router.post("/logout")
@@ -1277,15 +1177,14 @@ async def change_own_password(
 ) -> dict:
     """Change one's own password (e.g. after an administrator or teacher reset it).
 
-    Every other session and paired device ends; this browser gets a fresh
-    session so the person stays signed in here.
+    Every other session ends (tokens carry the password version); this browser
+    gets a fresh session so the person stays signed in here.
     """
     current = _require_profile_identity(payload)
     if POCKETBASE_ENABLED or not AUTH_ENABLED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not available in this deployment.")
     if authenticate(current.username, body.current_password) is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect.")
-    from deeptutor.multi_user.accounts import end_other_sessions
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
@@ -1293,7 +1192,6 @@ async def change_own_password(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     user_id = str(record.get("id") or "")
-    await asyncio.to_thread(end_other_sessions, user_id, revoked_by=user_id)
     token = create_token(current.username, str(record.get("role") or current.role), user_id)
     response.set_cookie(value=token, max_age=_COOKIE_MAX_AGE, **_cookie_attrs())
     _no_store(response)
@@ -1422,87 +1320,6 @@ async def get_avatar_image(
 # ---------------------------------------------------------------------------
 # Admin-only endpoints
 # ---------------------------------------------------------------------------
-
-
-@router.get("/devices")
-async def list_devices(
-    user_id: str | None = None,
-    include_revoked: bool = False,
-    _: TokenPayload = Depends(require_admin),
-) -> dict:
-    """List local device credential metadata without credential secrets."""
-
-    _require_builtin_device_auth()
-    credentials = list_device_credentials(user_id=user_id, include_revoked=include_revoked)
-    users = {str(user.get("id") or ""): str(user.get("username") or "") for user in list_users()}
-    return {
-        "devices": [
-            {**device, "username": users.get(device["user_id"], "")} for device in credentials
-        ]
-    }
-
-
-@router.post("/devices", status_code=status.HTTP_201_CREATED)
-async def issue_device(
-    body: DeviceCredentialCreateRequest,
-    current: TokenPayload = Depends(require_admin),
-) -> dict:
-    """Issue a revocable device credential for an ordinary local account."""
-
-    _require_builtin_device_auth()
-    if get_user_by_id(body.user_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    try:
-        device, pairing_code, pin = issue_device_credential(
-            user_id=body.user_id,
-            device_name=body.device_name,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=body.expires_in_days),
-            daily_limit_minutes=body.daily_limit_minutes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    log_admin_action(
-        "device_credential_issue",
-        target_user_id=body.user_id,
-        summary={
-            "device_credential_id": device["id"],
-            "device_name": device["device_name"],
-            "expires_at": device["expires_at"],
-            "daily_limit_minutes": device["daily_limit_minutes"],
-        },
-    )
-    logger.info(
-        f"Admin '{current.username if current else 'local'}' issued device "
-        f"credential {device['id']} for user id '{body.user_id}'"
-    )
-    return {
-        "device": device,
-        "pairing_code": pairing_code,
-        "pin": pin,
-    }
-
-
-@router.delete("/devices/{device_credential_id}")
-async def revoke_device(
-    device_credential_id: str,
-    current: TokenPayload = Depends(require_admin),
-) -> dict:
-    _require_builtin_device_auth()
-    device = revoke_device_credential(
-        device_credential_id,
-        revoked_by=str(current.user_id if current else ""),
-    )
-    if device is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device credential not found",
-        )
-    log_admin_action(
-        "device_credential_revoke",
-        target_user_id=device["user_id"],
-        summary={"device_credential_id": device["id"]},
-    )
-    return {"device": device, "ok": True}
 
 
 @router.get("/users", response_model=list[UserInfo])
@@ -1959,9 +1776,8 @@ async def admin_reset_password(
 ) -> dict:
     """Spec 2026-10-29 D20: an administrator resets any account's forgotten password.
 
-    Sessions and paired devices signed in with the old password stop working.
+    Sessions signed in with the old password stop working.
     """
-    from deeptutor.multi_user.accounts import end_other_sessions
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
@@ -1970,9 +1786,6 @@ async def admin_reset_password(
     record = await asyncio.to_thread(set_password, username, hash_password(body.new_password))
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    await asyncio.to_thread(
-        end_other_sessions, str(record.get("id") or ""), revoked_by=current.user_id or current.username
-    )
     logger.info("Admin '%s' reset the password of '%s'", current.username, username)
     return {"ok": True, "username": username}
 

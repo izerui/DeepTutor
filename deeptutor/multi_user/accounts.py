@@ -39,14 +39,4 @@ def live_role(user: CurrentUser) -> str:
     return account["role"] if account else user.role
 
 
-def end_other_sessions(user_id: str, *, revoked_by: str) -> None:
-    """After a password reset: paired devices stop working too (tokens end via the store)."""
-    try:
-        from deeptutor.multi_user.device_credentials import revoke_device_credentials_for_user
-
-        revoke_device_credentials_for_user(user_id, revoked_by=revoked_by)
-    except Exception:
-        logger.exception("Could not revoke the device credentials of %s", user_id)
-
-
-__all__ = ["accounts", "end_other_sessions", "live_role"]
+__all__ = ["accounts", "live_role"]

@@ -283,3 +283,44 @@ def test_pairing_ticket_rejects_completion_after_its_exchange_window(tmp_path, m
     exchanged = store.exchange(code=record.code, public_host="app.example", now=2299)
     with pytest.raises(session_handoff.HandoffRejected):
         store.consume_ticket(ticket=exchanged, public_host="app.example", now=2419)
+
+
+def test_handoff_ticket_from_a_device_session_is_rejected(tmp_path, monkeypatch) -> None:
+    """Device credentials were removed (2026-11-06); an in-flight ticket minted
+    for a device session must not complete into an unrestricted session."""
+    client, _bearer = _handoff_client(tmp_path, monkeypatch)
+    from deeptutor.multi_user.identity import get_user
+
+    alice = get_user("alice")
+    ticket = session_handoff.encrypt_ticket_payload(
+        {
+            "nonce": "n",
+            "host": "app.example",
+            "exp": 4_000_000_000,
+            "mode": "builtin",
+            "username": "alice",
+            "role": "student",
+            "user_id": alice["id"],
+            "device_credential_id": "dc_old",
+            "device_session_nonce": "old-nonce",
+            "credentials_version": int(alice.get("credentials_version") or 0),
+        }
+    )
+    record = session_handoff.get_session_handoff_store().create(
+        encrypted_ticket=ticket,
+        ticket_hash=session_handoff.hash_secret(ticket),
+        public_host="app.example",
+    )
+    exchanged = client.post(
+        "/api/auth/session-handoff/exchange",
+        headers={"x-deeptutor-frontend-host": "app.example"},
+        json={"code": record.code},
+    )
+    assert exchanged.status_code == 200
+    completed = client.post(
+        "/api/auth/session-handoff/complete",
+        headers={"x-deeptutor-frontend-host": "app.example"},
+        json={"ticket": exchanged.json()["ticket"]},
+    )
+    assert completed.status_code == 400
+    assert "dt_token" not in completed.cookies

@@ -710,7 +710,7 @@ data/
 └── system/                  # auth · grants · audit · user-secrets/<owner> (OAuth tokens)
 ```
 
-**第一个注册用户成为管理员**，拥有模型目录、提供商凭证、共享知识库、技能、共享书籍主副本和用户授权的管理权。由管理员创建的本地用户可选择 Standard、Learner 或 Custom。Learner 会锁定学习能力与素材策略，加入自适应档案，并支持带有效期和每日限额、可撤销的设备凭证；获授权的监护人可以查看报告、批准素材和重置凭证。其他用户拥有隔离工作区，以及受作用域约束的模型、知识库、技能、Partners 和共享书籍访问权，但不会获得原始 API Key。如果 `auth.json` 已包含 `username` + `password_hash`，该账号就是管理员：`/register` 会保持关闭，而从 `/admin/users` 创建的账号始终为 `role=user`，直至你将其提升。
+**第一个注册用户成为管理员**，拥有模型目录、提供商凭证、共享知识库、技能、共享书籍主副本和用户授权的管理权。由管理员创建的本地用户可选择 Standard、Learner 或 Custom。Learner 会锁定学习能力与素材策略，并加入自适应档案；获授权的监护人可以查看报告、批准素材和重置凭证。其他用户拥有隔离工作区，以及受作用域约束的模型、知识库、技能、Partners 和共享书籍访问权，但不会获得原始 API Key。如果 `auth.json` 已包含 `username` + `password_hash`，该账号就是管理员：`/register` 会保持关闭，而从 `/admin/users` 创建的账号始终为 `role=user`，直至你将其提升。
 
 **启用方式：** 在 `data/user/settings/auth.json` 中开启认证，重启 `deeptutor start`，在 `/register` 注册第一个管理员，然后从 `/admin/users` 添加用户，并通过授权分配模型、知识库、技能、Partner、工具/MCP/CLI 应用策略和代码执行权限；在每个用户的 **Book access** 面板中配置共享书籍。
 

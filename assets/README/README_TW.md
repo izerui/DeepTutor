@@ -705,7 +705,7 @@ data/
 └── system/                  # auth · grants · audit · user-secrets/<owner> (OAuth tokens)
 ```
 
-**第一位註冊的使用者會成為管理員**，並擁有模型型錄、供應商憑證、共享知識庫、技能、作為主版本的共享書籍與每位使用者的授權。管理員建立的本機使用者可選擇 Standard、Learner 或 Custom。Learner 會鎖定學習能力與教材政策、加入可調適的個人檔案，並支援可撤銷、具到期時間與每日上限的裝置憑證；已授權的 Guardians 可檢視報告、核准教材及重設憑證。其他使用者會取得隔離的工作區，以及範圍受限的模型、知識庫、技能、Partners 與共享書籍存取權，而不會收到原始 API key。如果 `auth.json` 已包含 `username` + `password_hash`，該帳號就是管理員：`/register` 會維持關閉，從 `/admin/users` 建立的帳號在升級前一律為 `role=user`。
+**第一位註冊的使用者會成為管理員**，並擁有模型型錄、供應商憑證、共享知識庫、技能、作為主版本的共享書籍與每位使用者的授權。管理員建立的本機使用者可選擇 Standard、Learner 或 Custom。Learner 會鎖定學習能力與教材政策，並加入可調適的個人檔案；已授權的 Guardians 可檢視報告、核准教材及重設憑證。其他使用者會取得隔離的工作區，以及範圍受限的模型、知識庫、技能、Partners 與共享書籍存取權，而不會收到原始 API key。如果 `auth.json` 已包含 `username` + `password_hash`，該帳號就是管理員：`/register` 會維持關閉，從 `/admin/users` 建立的帳號在升級前一律為 `role=user`。
 
 **啟用方式：** 在 `data/user/settings/auth.json` 開啟驗證、重新啟動 `deeptutor start`、到 `/register` 註冊第一位管理員，接著從 `/admin/users` 新增使用者，並透過授權指派模型、知識庫、技能、partners、工具／MCP／CLI app 政策與程式碼執行權限；再從每位使用者的 **Book access** 面板設定共享書籍。
 

@@ -166,87 +166,6 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
-  readonly "/api/auth/device-login": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    /**
-     * Device Login
-     * @description Exchange a device pairing code and PIN for the account's normal cookie.
-     */
-    readonly post: operations["device_login_api_auth_device_login_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/auth/device/heartbeat": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    /**
-     * Device Heartbeat
-     * @description Refresh a device lease and account bounded daily usage.
-     */
-    readonly post: operations["device_heartbeat_api_auth_device_heartbeat_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/auth/devices": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    /**
-     * List Devices
-     * @description List local device credential metadata without credential secrets.
-     */
-    readonly get: operations["list_devices_api_auth_devices_get"];
-    readonly put?: never;
-    /**
-     * Issue Device
-     * @description Issue a revocable device credential for an ordinary local account.
-     */
-    readonly post: operations["issue_device_api_auth_devices_post"];
-    readonly delete?: never;
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
-  readonly "/api/auth/devices/{device_credential_id}": {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly get?: never;
-    readonly put?: never;
-    readonly post?: never;
-    /** Revoke Device */
-    readonly delete: operations["revoke_device_api_auth_devices__device_credential_id__delete"];
-    readonly options?: never;
-    readonly head?: never;
-    readonly patch?: never;
-    readonly trace?: never;
-  };
   readonly "/api/auth/is_first_user": {
     readonly parameters: {
       readonly query?: never;
@@ -418,8 +337,8 @@ export interface paths {
      * Change Own Password
      * @description Change one's own password (e.g. after an administrator or teacher reset it).
      *
-     *     Every other session and paired device ends; this browser gets a fresh
-     *     session so the person stays signed in here.
+     *     Every other session ends (tokens carry the password version); this browser
+     *     gets a fresh session so the person stays signed in here.
      */
     readonly put: operations["change_own_password_api_auth_profile_password_put"];
     readonly post?: never;
@@ -633,7 +552,7 @@ export interface paths {
      * Admin Reset Password
      * @description Spec 2026-10-29 D20: an administrator resets any account's forgotten password.
      *
-     *     Sessions and paired devices signed in with the old password stop working.
+     *     Sessions signed in with the old password stop working.
      */
     readonly put: operations["admin_reset_password_api_auth_users__username__password_put"];
     readonly post?: never;
@@ -14215,20 +14134,6 @@ export interface components {
       /** Name */
       readonly name: string;
     };
-    /**
-     * DeviceCredentialCreateRequest
-     * @description Admin payload for issuing a local ordinary-user device credential.
-     */
-    readonly DeviceCredentialCreateRequest: {
-      /** Daily Limit Minutes */
-      readonly daily_limit_minutes: number;
-      /** Device Name */
-      readonly device_name: string;
-      /** Expires In Days */
-      readonly expires_in_days: number;
-      /** User Id */
-      readonly user_id: string;
-    };
     /** DeviceInfo */
     readonly DeviceInfo: {
       /** Active */
@@ -14243,16 +14148,6 @@ export interface components {
       readonly last_seen: string;
       /** Paired At */
       readonly paired_at: string;
-    };
-    /**
-     * DeviceLoginRequest
-     * @description Payload for the built-in device-credential login endpoint.
-     */
-    readonly DeviceLoginRequest: {
-      /** Pairing Code */
-      readonly pairing_code: string;
-      /** Pin */
-      readonly pin: string;
     };
     /**
      * DoclingRemoteTest
@@ -19425,11 +19320,7 @@ export type SchemaDeleteBlockRequest =
   components["schemas"]["DeleteBlockRequest"];
 export type SchemaDeleteKnowledgeBaseRequest =
   components["schemas"]["DeleteKnowledgeBaseRequest"];
-export type SchemaDeviceCredentialCreateRequest =
-  components["schemas"]["DeviceCredentialCreateRequest"];
 export type SchemaDeviceInfo = components["schemas"]["DeviceInfo"];
-export type SchemaDeviceLoginRequest =
-  components["schemas"]["DeviceLoginRequest"];
 export type SchemaDoclingRemoteTest =
   components["schemas"]["DoclingRemoteTest"];
 export type SchemaDocumentParsingInstall =
@@ -20170,190 +20061,6 @@ export interface operations {
         };
         content: {
           readonly "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly device_login_api_auth_device_login_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: never;
-      readonly path?: never;
-      readonly cookie?: never;
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["DeviceLoginRequest"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": {
-            readonly [key: string]: unknown;
-          };
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly device_heartbeat_api_auth_device_heartbeat_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": {
-            readonly [key: string]: unknown;
-          };
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly list_devices_api_auth_devices_get: {
-    readonly parameters: {
-      readonly query?: {
-        readonly include_revoked?: boolean;
-        readonly user_id?: string | null;
-      };
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": {
-            readonly [key: string]: unknown;
-          };
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly issue_device_api_auth_devices_post: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path?: never;
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody: {
-      readonly content: {
-        readonly "application/json": components["schemas"]["DeviceCredentialCreateRequest"];
-      };
-    };
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 201: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": {
-            readonly [key: string]: unknown;
-          };
-        };
-      };
-      /** @description Validation Error */
-      readonly 422: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  readonly revoke_device_api_auth_devices__device_credential_id__delete: {
-    readonly parameters: {
-      readonly query?: never;
-      readonly header?: {
-        readonly Authorization?: string | null;
-      };
-      readonly path: {
-        readonly device_credential_id: string;
-      };
-      readonly cookie?: {
-        readonly dt_token?: string | null;
-      };
-    };
-    readonly requestBody?: never;
-    readonly responses: {
-      /** @description Successful Response */
-      readonly 200: {
-        headers: {
-          readonly [name: string]: unknown;
-        };
-        content: {
-          readonly "application/json": {
-            readonly [key: string]: unknown;
-          };
         };
       };
       /** @description Validation Error */
