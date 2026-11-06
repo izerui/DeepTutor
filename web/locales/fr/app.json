@@ -5448,5 +5448,7 @@
   "{{count}} learners on those paths": "{{count}} apprenants sur ces parcours",
   "Updating the path's learners": "Mise à jour des apprenants du parcours",
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "Ajoute-les à un cours depuis l’éditeur de cours, ou ouvre-en une pour la supprimer ou la retirer.",
-  "{{count}} not graded": "{{count}} non notée(s)"
+  "{{count}} not graded": "{{count}} non notée(s)",
+  "AI couldn't grade this question yet; it will be graded automatically later.": "L’IA n’a pas encore pu noter cette question ; elle sera notée automatiquement plus tard.",
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "Les réponses que l’IA n’a pas pu noter sont notées à nouveau automatiquement à l’ouverture de cette page ou de la série."
 }

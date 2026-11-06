@@ -5807,5 +5807,7 @@
   "{{count}} learners on those paths": "{{count}} учнів на цих шляхах",
   "Updating the path's learners": "Оновлення учнів шляху",
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "Додай їх до курсу в редакторі курсу або відкрий один, щоб видалити чи відкликати його.",
-  "{{count}} not graded": "{{count}} не оцінено"
+  "{{count}} not graded": "{{count}} не оцінено",
+  "AI couldn't grade this question yet; it will be graded automatically later.": "ШІ ще не змогло оцінити це запитання; його буде оцінено автоматично пізніше.",
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "Відповіді, які ШІ не змогло оцінити, автоматично оцінюються знову, коли відкривають цю сторінку або набір."
 }

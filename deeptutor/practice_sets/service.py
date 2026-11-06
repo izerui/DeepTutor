@@ -722,7 +722,8 @@ class PracticeSetService:
             for question, _ in pending:
                 results[question["question_id"]] = judged.get(
                     question["question_id"],
-                    {"result": "ungraded", "feedback": "Automatic grading was unavailable; ask its author."},
+                    # Graded again when the set is next opened (:func:`judge_ungraded`).
+                    {"result": "ungraded", "feedback": ""},
                 )
         now = _now()
         rows = [
@@ -1002,6 +1003,90 @@ class PracticeSetService:
             ],
         }
 
+async def _bank_answer(set_id: str, revision: int, question_id: str) -> str | None:
+    """The current learner's own answer, from their question bank."""
+    from deeptutor.services.session.sqlite_store import get_sqlite_session_store
+
+    entry = await get_sqlite_session_store().find_notebook_entry_by_origin(
+        "practice_set", f"practice_set:{set_id}", question_id, turn_id=f"rev{revision}",
+    )
+    return str((entry or {}).get("user_answer") or "") or None
+
+
+#: Attempts graded again per opening, so one opening never waits on many AI calls.
+REJUDGE_LIMIT = 20
+
+
+async def judge_ungraded(set_id: str, *, student_id: str | None = None, from_bank: bool = False) -> int:
+    """Grade again the answers the AI could not grade when they were submitted.
+
+    Called when a learner opens the set (their own attempts) or its author or
+    an administrator opens its results (everyone's), after the caller checked
+    access. The answer is the one kept with the attempt; with *from_bank* (the
+    learner themself) their own question bank supplies one that was not kept.
+    An answer still not graded stays as it is for the next time.
+    No attempt is used up. Returns how many attempts changed.
+    """
+    import asyncio
+
+    def load():
+        with store.read() as conn:
+            if conn is None:
+                return []
+            sql = ("SELECT * FROM practice_submissions WHERE set_id = ? AND results_json LIKE '%\"ungraded\"%'"
+                   + (" AND student_id = ?" if student_id else "") + " ORDER BY submitted_at LIMIT ?")
+            params = (set_id, student_id, REJUDGE_LIMIT) if student_id else (set_id, REJUDGE_LIMIT)
+            submissions = conn.execute(sql, params).fetchall()
+            revisions = {
+                number: conn.execute(
+                    "SELECT questions_json FROM practice_set_revisions WHERE set_id = ? AND revision = ?",
+                    (set_id, number),
+                ).fetchone()
+                for number in {sub["revision"] for sub in submissions}
+            }
+        return [(sub, revisions.get(sub["revision"])) for sub in submissions]
+
+    changed = 0
+    for submission, revision in await asyncio.to_thread(load):
+        if revision is None:
+            continue
+        questions = {q["question_id"]: q for q in json.loads(revision["questions_json"])}
+        kept = json.loads(_col(submission, "answers_json", "{}") or "{}")
+        rows = json.loads(submission["results_json"])
+        pending = []
+        for row in rows:
+            question = questions.get(row["question_id"])
+            if row["result"] != "ungraded" or question is None:
+                continue
+            answer = kept.get(row["question_id"])
+            if answer is None and from_bank:
+                answer = await _bank_answer(set_id, submission["revision"], row["question_id"])
+            if answer:
+                pending.append((question, str(answer)))
+        if not pending:
+            continue
+        judged = await _judge(pending)
+        if not judged:
+            continue
+        for row in rows:
+            verdict = judged.get(row["question_id"])
+            if verdict and row["result"] == "ungraded":
+                row["result"] = verdict["result"]
+                row["points"] = _points(questions[row["question_id"]], verdict["result"])
+        score = sum(float(r["points"] or 0) for r in rows)
+
+        def save(submission=submission, rows=rows, score=score) -> int:
+            with store.write() as conn:
+                # Only over the results it read: nothing else changed them meanwhile.
+                return int(conn.execute(
+                    "UPDATE practice_submissions SET results_json = ?, score = ? WHERE id = ? AND results_json = ?",
+                    (json.dumps(rows), score, submission["id"], submission["results_json"]),
+                ).rowcount)
+
+        changed += await asyncio.to_thread(save)
+    return changed
+
+
 async def generate_questions(
     *, session_id: str, topic: str, count: int, kb_ref: str | None = None,
     question_types: list[str] | None = None, difficulty: str = "", language: str = "zh",
@@ -1105,6 +1190,7 @@ __all__ = [
     "PracticeNotFound",
     "PracticeSetService",
     "exact_result",
+    "judge_ungraded",
     "normalize_question",
     "normalize_questions",
 ]

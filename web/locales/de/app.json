@@ -5763,5 +5763,7 @@
   "{{count}} learners on those paths": "{{count}} Lernende auf diesen Pfaden",
   "Updating the path's learners": "Lernende des Pfads aktualisieren",
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "Füge sie im Kurseditor einem Kurs hinzu, oder öffne eine, um sie zu löschen oder zurückzuziehen.",
-  "{{count}} not graded": "{{count}} nicht bewertet"
+  "{{count}} not graded": "{{count}} nicht bewertet",
+  "AI couldn't grade this question yet; it will be graded automatically later.": "Die KI konnte diese Frage noch nicht bewerten; sie wird später automatisch bewertet.",
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "Antworten, die die KI nicht bewerten konnte, werden automatisch erneut bewertet, wenn diese Seite oder das Übungsset geöffnet wird."
 }

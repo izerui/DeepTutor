@@ -64,3 +64,18 @@ it("reopening a set shows the last attempt with its score and answers, never a d
   expect(screen.queryByText(/deadline|Due /)).toBeNull();
   expect(screen.getByRole("button", { name: "Answer again" })).toBeTruthy();
 });
+
+it("tells the learner an answer the AI could not grade will be graded later", async () => {
+  api.submitSet.mockResolvedValue({
+    submission_id: "s1", score: 1, max_score: 3, answers_revealed: true,
+    results: [
+      { question_id: "q1", result: "correct", points: 1, max_points: 1, feedback: "", correct_answer: "B" },
+      { question_id: "q2", result: "ungraded", points: 0, max_points: 2, feedback: "", correct_answer: "Mass" },
+    ],
+  });
+  render(<TakeSet setId="ps1" />);
+  fireEvent.click(await screen.findByLabelText(/4/));
+  fireEvent.change(screen.getByLabelText("Your answer"), { target: { value: "Things fall" } });
+  fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+  expect(await screen.findByText("AI couldn't grade this question yet; it will be graded automatically later.")).toBeTruthy();
+});

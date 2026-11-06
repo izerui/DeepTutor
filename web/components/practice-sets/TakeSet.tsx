@@ -152,6 +152,11 @@ export function TakeSet({ setId }: { setId: string }) {
                     {t(RESULT_LABEL[graded.result])}
                     {graded.points !== null && ` · ${graded.points} / ${graded.max_points}`}
                   </p>
+                  {graded.result === "ungraded" && (
+                    <p className="text-[var(--muted-foreground)]">
+                      {t("AI couldn't grade this question yet; it will be graded automatically later.")}
+                    </p>
+                  )}
                   {graded.feedback && <p className="text-[var(--muted-foreground)]">{graded.feedback}</p>}
                   {graded.correct_answer !== undefined && (
                     <p>

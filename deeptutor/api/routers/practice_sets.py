@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from deeptutor.api.routers.publishing import ScopeChoice, chosen
 from deeptutor.publishing.scope import ScopeError
 
-from deeptutor.practice_sets.service import PracticeError, PracticeSetService
+from deeptutor.practice_sets.service import PracticeError, PracticeSetService, judge_ungraded
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -164,7 +164,15 @@ async def questions_from_bank(body: FromBankRequest):
 
 @router.get("/{set_id}/report")
 async def set_report(set_id: str):
-    return await _call(PracticeSetService().report, set_id)
+    service = PracticeSetService()
+    report = await _call(service.report, set_id)
+    # The author or an administrator opening the results grades again what the AI could not (spec 2026-11-06).
+    try:
+        if await judge_ungraded(set_id):
+            report = await _call(service.report, set_id)
+    except Exception:
+        logger.exception("Could not grade practice set %s answers again", set_id)
+    return report
 
 
 # ── the author's review (batch 3 §6.1) ─────────────────────
@@ -198,6 +206,13 @@ async def review_attempt(set_id: str, submission_id: str):
 async def take_set(set_id: str):
     service = PracticeSetService()
     view = await _call(service.take, set_id)
+    if view["submissions"]:
+        # Answers the AI could not grade when submitted are graded again (spec 2026-11-06).
+        try:
+            if await judge_ungraded(set_id, student_id=service.actor.id, from_bank=True):
+                view = await _call(service.take, set_id)
+        except Exception:
+            logger.exception("Could not grade practice set %s answers again", set_id)
     try:
         view = await service.with_my_answers(view)
     except Exception:

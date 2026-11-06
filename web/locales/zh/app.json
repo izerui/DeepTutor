@@ -5763,5 +5763,7 @@
   "{{count}} learners on those paths": "这些路线上有 {{count}} 名学习者",
   "Updating the path's learners": "更新路线上的学习者",
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "可以在课程编辑里把它们加进课程，或者点开删除（已发布的是撤回）。",
-  "{{count}} not graded": "{{count}} 题未判分"
+  "{{count}} not graded": "{{count}} 题未判分",
+  "AI couldn't grade this question yet; it will be graded automatically later.": "AI 暂时没能判这道题，稍后会自动补判。",
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "AI 没能判分的题，会在打开这个页面或学习者打开练习集时自动补判。"
 }

@@ -121,6 +121,9 @@ export function SetResults({ setId, initiallyOpen = false }: { setId: string; in
             </ol>
           </div>
           <p className={hintClass}>{t("Answers to short-answer questions and the options picked are shown only to the author and administrators.")}</p>
+          {report.students.some((learner) => (learner.ungraded ?? 0) > 0) && (
+            <p className={hintClass}>{t("Answers the AI could not grade are graded again automatically when this page or the set is opened.")}</p>
+          )}
         </div>
       )}
     </section>

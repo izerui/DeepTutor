@@ -493,3 +493,51 @@ def test_the_workbench_lists_what_was_sent(as_account, teaching_users):
     assert set(board) == {"role", "sent"}
     with as_account("adam"):
         assert workbench() == {"role": "admin"}  # administrators see no students
+
+
+def test_answers_the_ai_could_not_grade_are_graded_when_the_set_is_opened_again(as_account, monkeypatch):
+    """Spec 2026-11-06: no attempt is used up; the learner's or the author's next opening grades them."""
+    import asyncio
+
+    from deeptutor.practice_sets import store
+    from deeptutor.practice_sets.service import PracticeSetService, judge_ungraded
+
+    set_id = _published_set(as_account, attempts_limit=1)
+    result, ids = _answer(as_account, "sara", set_id, choice="B", truth="yes", blank="Paris")
+    assert result["score"] == 3.0  # the short answer (4 points) was left ungraded
+    assert next(r for r in result["results"] if r["question_id"] == ids[2])["result"] == "ungraded"
+
+    async def judge_online(pending):
+        return {q["question_id"]: {"result": "correct", "feedback": ""} for q, _answer in pending}
+
+    monkeypatch.setattr("deeptutor.practice_sets.service._judge", judge_online)
+    # The author opening the results grades it; nobody else's attempt is touched.
+    assert asyncio.run(judge_ungraded(set_id)) == 1
+    with store.read() as conn:
+        row = conn.execute("SELECT score, results_json FROM practice_submissions WHERE id = ?",
+                           (result["submission_id"],)).fetchone()
+    assert row["score"] == 7.0 and '"ungraded"' not in row["results_json"]
+    with as_account("tina"):
+        assert _row(PracticeSetService().report(set_id), "sara")["ungraded"] == 0
+    with as_account("sara"):
+        view = PracticeSetService().take(set_id)
+    assert len(view["submissions"]) == 1  # still one attempt of one
+    assert asyncio.run(judge_ungraded(set_id)) == 0  # nothing left
+
+
+def test_a_learner_opening_the_set_gets_the_ungraded_answer_graded(as_account, monkeypatch):
+    import asyncio
+
+    from deeptutor.api.routers import practice_sets as router
+
+    set_id = _published_set(as_account)
+    result, ids = _answer(as_account, "sara", set_id, choice="B", truth="yes", blank="Paris")
+
+    async def judge_online(pending):
+        return {q["question_id"]: {"result": "partial", "feedback": ""} for q, _answer in pending}
+
+    monkeypatch.setattr("deeptutor.practice_sets.service._judge", judge_online)
+    with as_account("sara"):
+        view = asyncio.run(router.take_set(set_id))["set"]
+    graded = next(r for r in view["latest_results"] if r["question_id"] == ids[2])
+    assert graded["result"] == "partial" and view["submissions"][-1]["score"] == 5.0

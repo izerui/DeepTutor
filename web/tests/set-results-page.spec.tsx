@@ -35,3 +35,15 @@ it("opens the results at once, read only, with a way back to the report", async 
   expect(screen.queryByRole("spinbutton")).toBeNull();
   expect(screen.getByRole("link", { name: "Learning report" }).getAttribute("href")).toBe("/reports?kind=course&id=crs_1");
 });
+
+it("says an answer the AI could not grade is graded again automatically", async () => {
+  practice.getReport.mockResolvedValue({
+    set_id: "ps_1", title: "Week 1 quiz",
+    students: [{ id: "u_sara", username: "sara", completed: true, attempts: 1, first_score: 2, best_score: 2,
+      best_max_score: 6, max_score: 6, minutes: null, submitted_at: 1, latest_submission_id: "sub_1", ungraded: 1 }],
+    questions: [],
+  });
+  render(<SetResultsPage />);
+  expect(await screen.findByText("1 not graded")).toBeTruthy();
+  expect(screen.getByText("Answers the AI could not grade are graded again automatically when this page or the set is opened.")).toBeTruthy();
+});
