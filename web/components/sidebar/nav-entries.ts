@@ -79,7 +79,7 @@ export const PRIMARY_NAV: NavEntry[] = [
     surfaces: ['chat'],
   },
   // Spec 2026-11-06 §1: the courses one joined and made (the route keeps its old name).
-  { href: '/tasks', label: 'Courses', icon: ClipboardCheck, tooltipKey: 'Courses tooltip', surfaces: ['chat'] },
+  { href: '/tasks', label: 'My courses', icon: ClipboardCheck, tooltipKey: 'Courses tooltip', surfaces: ['chat'] },
   // Spec 2026-11-03 batch 2 §7: openings and deadlines by month.
   {
     href: '/kanban',

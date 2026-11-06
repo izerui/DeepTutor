@@ -53,6 +53,8 @@ import { NAV_BY_HREF } from "@/components/sidebar/nav-entries";
 import TasksHub from "@/components/tasks/TasksHub";
 import type { AuthorPage, CatalogEntry } from "@/lib/catalog-api";
 import type { AssignedTask, TaskDetail } from "@/lib/tasks-api";
+import en from "../locales/en/app.json";
+import zh from "../locales/zh/app.json";
 
 const entry = (over: Partial<CatalogEntry> = {}): CatalogEntry => ({
   kind: "practice_set", id: "set_1", owner_id: "u_t", status: "listed", title: "Waves", summary: "",
@@ -89,9 +91,9 @@ beforeEach(() => {
   tasks.listMyTasks.mockResolvedValue([]);
 });
 
-it("names the sidebar entry Courses and keeps its route", () => {
+it("names the sidebar entry My courses and keeps its route", () => {
   const entryOf = NAV_BY_HREF.get("/tasks");
-  expect(entryOf?.label).toBe("Courses");
+  expect(entryOf?.label).toBe("My courses");
   expect(entryOf?.tooltipKey).toBe("Courses tooltip");
   expect(NAV_BY_HREF.get("/kanban")?.label).toBe("Task Board");
 });
@@ -102,8 +104,11 @@ it("shows only the two course tabs and lists joined lessons inside their course"
     { id: "c_1", title: "Optics", description: "", provenance: { kind: "shared", name: "tina" }, published_at: 1, tasks: [assigned()] },
   ]);
   render(<TasksHub />);
-  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Courses I joined", "Courses I made"]);
-  expect(screen.getByRole("tab", { name: "Courses I joined" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Courses tab: learning", "Courses tab: created"]);
+  // Spec 2026-11-06 (scheme 3): the tabs read Learning / Created (zh 在学 / 创作).
+  expect([en["Courses tab: learning"], en["Courses tab: created"]]).toEqual(["Learning", "Created"]);
+  expect([zh["Courses tab: learning"], zh["Courses tab: created"]]).toEqual(["在学", "创作"]);
+  expect(screen.getByRole("tab", { name: "Courses tab: learning" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByText("Optics")).toBeTruthy();
   // The lesson is in its course, not repeated in a flat list.
   await waitFor(() => expect(screen.queryByText("Other lessons")).toBeNull());
@@ -129,7 +134,7 @@ it("opens ?task= of one's own lesson beside its course", async () => {
   tasks.listMyCourses.mockResolvedValue([{ id: "c_1", title: "Optics", status: "draft", task_count: 1, updated_at: 1 }]);
   tasks.getTask.mockResolvedValue(lesson());
   render(<TasksHub />);
-  expect(screen.getByRole("tab", { name: "Courses I made" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("tab", { name: "Courses tab: created" }).getAttribute("aria-selected")).toBe("true");
   const pane = await screen.findByTestId("lesson-in-course");
   expect(await within(pane).findByDisplayValue("Lab report")).toBeTruthy();
   expect(await within(pane).findByRole("button", { name: "Back to the course" })).toBeTruthy();
@@ -141,7 +146,7 @@ it("looks for ?task= among what one joined when it is not one's own", async () =
   tasks.getAssignedTask.mockResolvedValue(assigned());
   render(<TasksHub />);
   expect(await screen.findByTestId("student-task-detail")).toBeTruthy();
-  expect(screen.getByRole("tab", { name: "Courses I joined" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("tab", { name: "Courses tab: learning" }).getAttribute("aria-selected")).toBe("true");
 });
 
 it("shows how many items an author has, their average rating and learners", async () => {

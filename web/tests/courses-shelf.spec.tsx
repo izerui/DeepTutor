@@ -29,7 +29,7 @@ describe("courses shelf", () => {
       "This learning account cannot use the reading surface."
     );
     expect(
-      screen.queryByRole("button", { name: "Create your first course" })
+      screen.queryByRole("button", { name: "Create your first subject" })
     ).not.toBeInTheDocument();
   });
 });

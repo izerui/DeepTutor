@@ -315,7 +315,7 @@ class CourseService:
     def _clean_name(value: str) -> str:
         name = " ".join(str(value or "").split()).strip()
         if not name:
-            raise ValueError("Course name is required.")
+            raise ValueError("Subject name is required.")
         return name[:60]
 
     @staticmethod
@@ -405,7 +405,7 @@ class CourseService:
     def _assert_unique(courses: list[StudyCourse], name: str, except_id: str = "") -> None:
         folded = name.casefold()
         if any(course.id != except_id and course.name.casefold() == folded for course in courses):
-            raise CourseNameConflictError(f"A course named {name!r} already exists.")
+            raise CourseNameConflictError(f"A subject named {name!r} already exists.")
 
     def list_courses(self) -> list[StudyCourse]:
         with self._lock:
@@ -649,7 +649,7 @@ class CourseService:
         """
         clean = str(status or "").strip()
         if clean not in COURSE_STATUSES:
-            raise ValueError(f"Unknown course status {clean!r}; expected active or archived.")
+            raise ValueError(f"Unknown subject status {clean!r}; expected active or archived.")
         target = str(course_id or "").strip()
         with self._lock:
             courses = self._load()

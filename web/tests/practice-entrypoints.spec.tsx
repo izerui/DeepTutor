@@ -84,7 +84,7 @@ it("keeps Learning Space in its own collection route with scoped imports and no 
     "/space/questions?course=course-a&workspace=work-a&view=bank",
     { scroll: false }
   );
-  fireEvent.click(screen.getByRole("button", { name: "Show every course" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show every subject" }));
   expect(replace).toHaveBeenLastCalledWith("/space/questions?workspace=work-a&view=mistakes");
 });
 
@@ -123,7 +123,7 @@ it("starts manual practice from the collection and returns to the same course an
   fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
   expect(await screen.findByText("Stored mistakes")).toBeVisible();
   expect(screen.getByRole("tab", { name: "Mistakes42" })).toHaveAttribute("aria-selected", "true");
-  expect(screen.getByText("This course")).toBeVisible();
+  expect(screen.getByText("This subject")).toBeVisible();
   expect(replace).not.toHaveBeenCalled();
   expect(api.getPracticeSummary).toHaveBeenLastCalledWith("course-a");
 });

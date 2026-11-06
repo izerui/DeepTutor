@@ -113,12 +113,12 @@ export default function QuestionBankSection({
                     className="inline-flex items-center gap-1 transition-colors hover:text-[var(--foreground)]"
                   >
                     <School size={11} strokeWidth={1.8} />
-                    {course?.name || t("This course")}
+                    {course?.name || t("This subject")}
                   </Link>
                   <button
                     type="button"
                     onClick={() => router.replace("/space/questions")}
-                    aria-label={t("Show every course")}
+                    aria-label={t("Show every subject")}
                     className="rounded-full p-0.5 transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                   >
                     <X size={11} />
@@ -231,8 +231,8 @@ export default function QuestionBankSection({
           courseId ? (
             <EmptyState
               icon={ClipboardList}
-              title={t("No questions from this course yet")}
-              hint={t("Questions you answer in this course's conversations collect here.")}
+              title={t("No questions from this subject yet")}
+              hint={t("Questions you answer in this subject's conversations collect here.")}
             />
           ) : (
             <EmptyState

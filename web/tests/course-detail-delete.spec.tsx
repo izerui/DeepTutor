@@ -51,8 +51,8 @@ function makeCourse(): StudyCourse {
 }
 
 async function openDeleteDialog() {
-  fireEvent.click(screen.getByRole("button", { name: "Course actions" }));
-  fireEvent.click(screen.getByRole("button", { name: "Delete course" }));
+  fireEvent.click(screen.getByRole("button", { name: "Subject actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete subject" }));
   return screen.findByRole("alertdialog");
 }
 
@@ -74,7 +74,7 @@ it("shows a visible error and stays on the course page when deletion fails", asy
 
   const dialog = await openDeleteDialog();
   fireEvent.click(
-    within(dialog).getByRole("button", { name: "Delete course" }),
+    within(dialog).getByRole("button", { name: "Delete subject" }),
   );
 
   const alert = await screen.findByRole("alert");
@@ -90,7 +90,7 @@ it("navigates back to the course list only after a successful deletion", async (
 
   const dialog = await openDeleteDialog();
   fireEvent.click(
-    within(dialog).getByRole("button", { name: "Delete course" }),
+    within(dialog).getByRole("button", { name: "Delete subject" }),
   );
 
   await waitFor(() =>

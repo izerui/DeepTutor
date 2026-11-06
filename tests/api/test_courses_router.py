@@ -267,7 +267,7 @@ def test_invalid_course_status_returns_400(course_service: CourseService) -> Non
         )
 
     assert response.status_code == 400
-    assert "Unknown course status" in response.json()["detail"]
+    assert "Unknown subject status" in response.json()["detail"]
 
 
 def test_put_syllabus_replaces_drops_blanks_and_renumbers(

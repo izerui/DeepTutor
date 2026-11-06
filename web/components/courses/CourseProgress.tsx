@@ -129,7 +129,7 @@ export default function CourseProgress({
         detail={
           notebooks.length > 0
             ? notebooks[0].label
-            : t("Attach a notebook to keep this course's notes together")
+            : t("Attach a notebook to keep this subject's notes together")
         }
       />
     </div>

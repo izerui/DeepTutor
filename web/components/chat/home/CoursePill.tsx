@@ -108,7 +108,7 @@ export function CoursePill({
           <School size={15} strokeWidth={1.7} className="shrink-0" />
         )}
         <span className="max-w-[150px] truncate">
-          {active?.name ?? t("Pick a course")}
+          {active ? t("Subject: {{name}}", { name: active.name }) : t("Pick a subject")}
         </span>
         <ChevronDown
           size={12}
@@ -126,7 +126,7 @@ export function CoursePill({
           <div className="max-h-[280px] overflow-y-auto">
             {selectable.length === 0 ? (
               <p className="px-3 py-2.5 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
-                {t("No courses yet — make one to group a subject's material.")}
+                {t("No subjects yet — make one to keep its material together.")}
               </p>
             ) : (
               selectable.map((course) => (
@@ -164,7 +164,7 @@ export function CoursePill({
               }}
               className="mt-1 flex w-full items-center gap-2 border-t border-[var(--border)]/70 px-3 py-1.5 pt-2 text-left text-[12px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/60 hover:text-[var(--foreground)]"
             >
-              {t("Not in a course")}
+              {t("Not in a subject")}
             </button>
           ) : null}
 
@@ -173,7 +173,7 @@ export function CoursePill({
             onClick={() => setOpen(false)}
             className="flex w-full items-center gap-2 border-t border-[var(--border)]/70 px-3 py-1.5 pt-2 text-[12px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/60 hover:text-[var(--foreground)]"
           >
-            {t("Manage courses")}
+            {t("Manage subjects")}
           </Link>
         </div>
       )}

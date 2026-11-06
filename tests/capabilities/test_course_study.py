@@ -284,11 +284,11 @@ def test_prompt_uses_active_and_no_course_variants() -> None:
     )
     assert active is not None
     assert "do not teach, explain, solve, quiz, summarize, or lecture" in active.content
-    assert "Course id: course-1" in active.content
+    assert "Subject id: course-1" in active.content
 
     no_course = capability.system_block(_context(), language="en", prompts={})
     assert no_course is not None
-    assert "no course is bound" in no_course.content
+    assert "no subject is bound" in no_course.content
     assert "Do not invent" in no_course.content
     assert "do not teach, explain, solve, quiz, summarize, or lecture" in no_course.content
 
@@ -351,7 +351,7 @@ async def test_mode_injects_no_course_prompt_without_mounting_loop(
 
     assert context.active_capability == "course_study"
     assert not CourseStudyLoopCapability().is_active(context)
-    assert "no course is bound" in observed["context"].sidebar_context
+    assert "no subject is bound" in observed["context"].sidebar_context
     assert "do not teach, explain, solve, quiz, summarize, or lecture" in (
         observed["context"].sidebar_context
     )

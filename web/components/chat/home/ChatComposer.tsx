@@ -1331,7 +1331,7 @@ export default memo(function ChatComposer({
                 {onSelectCourse ? (
                   <RailSlot
                     onClear={courseId ? () => onSelectCourse("") : undefined}
-                    clearLabel={t("Clear course")}
+                    clearLabel={t("Clear subject")}
                   >
                     <CoursePill
                       courses={courses}

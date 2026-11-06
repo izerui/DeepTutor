@@ -172,7 +172,7 @@ export default function CourseResources({
           </h2>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
             {t(
-              "Everything this course studies with. Conversations here start with these already in hand.",
+              "Everything this subject studies with. Conversations here start with these already in hand.",
             )}
           </p>
         </div>
@@ -189,7 +189,7 @@ export default function CourseResources({
       {resources.length === 0 ? (
         <p className="mt-3 rounded-xl border border-dashed border-[var(--border)] px-3 py-4 text-center text-[11.5px] text-[var(--muted-foreground)]">
           {t(
-            "Nothing attached yet. Add a textbook or knowledge base and this course starts knowing what it is about.",
+            "Nothing attached yet. Add a textbook or knowledge base and this subject starts knowing what it is about.",
           )}
         </p>
       ) : (
@@ -253,7 +253,7 @@ export default function CourseResources({
                 <button
                   type="button"
                   onClick={() => void onDetach(resource.id)}
-                  aria-label={t("Remove from course")}
+                  aria-label={t("Remove from subject")}
                   className="shrink-0 rounded-md p-1 text-[var(--muted-foreground)] opacity-0 transition-opacity hover:text-[var(--destructive)] focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   <X size={13} />
@@ -275,7 +275,7 @@ export default function CourseResources({
               {candidateCount === 0 ? (
                 <p className="text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
                   {t(
-                    "Nothing made yet to attach. Start one below and it joins this course as soon as it exists.",
+                    "Nothing made yet to attach. Start one below and it joins this subject as soon as it exists.",
                   )}
                 </p>
               ) : null}

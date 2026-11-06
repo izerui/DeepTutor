@@ -198,7 +198,7 @@ export default function CourseDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4" aria-label={t("Loading course")}>
+      <div className="space-y-4" aria-label={t("Loading subject")}>
         <div className="h-10 w-64 animate-pulse rounded bg-[var(--muted)]" />
         <div className="h-48 animate-pulse rounded-2xl bg-[var(--card)]" />
       </div>
@@ -210,13 +210,13 @@ export default function CourseDetailPage() {
       <div className="py-16 text-center">
         <BookOpen className="mx-auto text-[var(--muted-foreground)]" />
         <h1 className="mt-4 font-serif text-xl font-semibold">
-          {t("Course not found")}
+          {t("Subject not found")}
         </h1>
         <Link
           href="/courses"
           className="mt-3 inline-block text-sm text-[var(--primary)]"
         >
-          {t("Back to Courses")}
+          {t("Back to my subjects")}
         </Link>
       </div>
     );
@@ -238,7 +238,7 @@ export default function CourseDetailPage() {
             strokeWidth={1.8}
             className="transition-transform group-hover:-translate-x-0.5"
           />
-          {t("Courses")}
+          {t("My subjects")}
         </Link>
       </div>
       <PageHeader
@@ -252,13 +252,13 @@ export default function CourseDetailPage() {
               className={pageActionClass()}
             >
               <Signpost size={14} />
-              {t("Start course study")}
+              {t("Start subject study")}
             </Link>
             <button
               type="button"
               onClick={() => setMenuOpen((open) => !open)}
               className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-              aria-label={t("Course actions")}
+              aria-label={t("Subject actions")}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
@@ -278,7 +278,7 @@ export default function CourseDetailPage() {
                   onClick={() => setMenuOpen(false)}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--muted)]"
                 >
-                  <MessageSquarePlus size={13} /> {t("New course chat")}
+                  <MessageSquarePlus size={13} /> {t("New subject chat")}
                 </Link>
                 <button
                   type="button"
@@ -288,7 +288,7 @@ export default function CourseDetailPage() {
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--muted)]"
                 >
-                  <Pencil size={13} /> {t("Edit course")}
+                  <Pencil size={13} /> {t("Edit subject")}
                 </button>
                 <button
                   type="button"
@@ -300,8 +300,8 @@ export default function CourseDetailPage() {
                 >
                   <Archive size={13} />{" "}
                   {course.status === "archived"
-                    ? t("Restore course")
-                    : t("Archive course")}
+                    ? t("Restore subject")
+                    : t("Archive subject")}
                 </button>
                 <button
                   type="button"
@@ -312,7 +312,7 @@ export default function CourseDetailPage() {
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[var(--destructive)] hover:bg-[var(--muted)]"
                 >
-                  <Trash2 size={13} /> {t("Delete course")}
+                  <Trash2 size={13} /> {t("Delete subject")}
                 </button>
               </div>
             ) : null}
@@ -370,7 +370,7 @@ export default function CourseDetailPage() {
           sessions={activeSessions}
           courses={courses}
           activeSessionId={null}
-          emptyLabel={t("No conversations in this course")}
+          emptyLabel={t("No conversations in this subject")}
           onSelect={(sessionId) => router.push(`/chat/${sessionId}`)}
           onRename={renameSession}
           onDelete={removeSession}
@@ -413,8 +413,8 @@ export default function CourseDetailPage() {
       />
       <ConfirmDialog
         open={deleteOpen}
-        title={t("Delete course?")}
-        confirmLabel={t("Delete course")}
+        title={t("Delete subject?")}
+        confirmLabel={t("Delete subject")}
         tone="danger"
         busy={deleteBusy}
         busyLabel={t("Deleting…")}

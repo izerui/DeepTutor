@@ -109,7 +109,7 @@ export function LearnerReportView({ kind, itemId }: { kind: ReportKind; itemId: 
     <Link href={backHref(kind, itemId, isAdmin)}
       className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
       <ArrowLeft size={14} aria-hidden />
-      {kind === "course" && !isAdmin ? t("Courses") : t("Learning market")}
+      {kind === "course" && !isAdmin ? t("My courses") : t("Learning market")}
     </Link>
   );
   if (error && !report) {

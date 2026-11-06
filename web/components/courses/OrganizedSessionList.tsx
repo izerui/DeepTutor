@@ -498,7 +498,7 @@ export default function OrganizedSessionList({
                   <>
                     <div className="my-1 border-t border-[var(--border)]/70" />
                     <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]/65">
-                      {t("Move to course")}
+                      {t("Move to subject")}
                     </div>
                     <MenuButton
                       icon={GraduationCap}

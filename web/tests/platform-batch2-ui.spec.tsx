@@ -149,9 +149,9 @@ it("shows courses only: what one joined and what one made, with no separate list
   // Spec 2026-11-06: the older ``?tab=tasks`` lands on one's own courses.
   search.value = "tab=tasks";
   render(<TasksHub />);
-  expect(screen.getByRole("heading", { name: "Courses" })).toBeTruthy();
-  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Courses I joined", "Courses I made"]);
-  expect(screen.getByRole("tab", { name: "Courses I made" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("heading", { name: "My courses" })).toBeTruthy();
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Courses tab: learning", "Courses tab: created"]);
+  expect(screen.getByRole("tab", { name: "Courses tab: created" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByText("Waves")).toBeTruthy();
   expect(screen.getByText("Draft · 1 lessons")).toBeTruthy();
   expect(screen.queryByText("Essay")).toBeNull();

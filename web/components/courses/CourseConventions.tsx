@@ -57,11 +57,11 @@ export default function CourseConventions({
       <div className="flex items-baseline justify-between gap-4">
         <div className="min-w-0">
           <h2 className="font-serif text-[16px] font-semibold text-[var(--foreground)]">
-            {t("Course conventions")}
+            {t("Subject conventions")}
           </h2>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">
             {t(
-              "Notation, the teacher's angle, how you want to be taught. Every conversation in this course starts knowing this.",
+              "Notation, the teacher's angle, how you want to be taught. Every conversation in this subject starts knowing this.",
             )}
           </p>
         </div>

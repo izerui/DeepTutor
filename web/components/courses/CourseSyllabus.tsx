@@ -126,7 +126,7 @@ export default function CourseSyllabus({
                   total: syllabus.total,
                 })
               : t(
-                  "What this course should cover. Without it, progress has no denominator.",
+                  "What this subject should cover. Without it, progress has no denominator.",
                 )}
           </p>
         </div>
@@ -180,7 +180,7 @@ export default function CourseSyllabus({
       ) : units.length === 0 ? (
         <p className="mt-3 rounded-xl border border-dashed border-[var(--border)] px-3 py-4 text-center text-[11.5px] text-[var(--muted-foreground)]">
           {t(
-            "Paste the course outline and every number on this page gains a denominator.",
+            "Paste the subject outline and every number on this page gains a denominator.",
           )}
         </p>
       ) : (

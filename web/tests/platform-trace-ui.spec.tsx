@@ -281,7 +281,7 @@ it("opens the task of a joined course from ?tab=joined&task=", async () => {
   tasks.listAssignedTasks.mockResolvedValue([]);
   tasks.getAssignedTask.mockResolvedValue({ key: "t_other", title: "Lab report" } as AssignedTask);
   render(<TasksHub />);
-  expect(screen.getByRole("tab", { name: "Courses I joined" }).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("tab", { name: "Courses tab: learning" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByText("open Lab report")).toBeTruthy();
   expect(tasks.getAssignedTask).toHaveBeenCalledWith("t_other");
 });

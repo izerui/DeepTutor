@@ -120,10 +120,10 @@ function ScopedPracticePage({ mode, initialImport }: { mode: "practice" | "libra
       scopeChip={
         courseId && (
           <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-            {t("This course")}
+            {t("This subject")}
             <button
               type="button"
-              aria-label={t("Show every course")}
+              aria-label={t("Show every subject")}
               onClick={() => {
                 const next = new URLSearchParams(search.toString());
                 next.delete("course");

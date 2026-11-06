@@ -137,8 +137,8 @@ export const CHAT_CAPABILITIES: ChatCapabilityDef[] = [
   },
   {
     value: "course_study",
-    label: "Course Study",
-    description: "See where a course stands and what to do next",
+    label: "Subject Study",
+    description: "See where a subject stands and what to do next",
     icon: Signpost,
     allowedTools: ["web_search", "exec", "reason"],
     defaultTools: [],

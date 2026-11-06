@@ -575,7 +575,7 @@ async def update_session_organization(
             try:
                 get_course_service().get(course_id)
             except CourseNotFoundError as exc:
-                raise HTTPException(status_code=404, detail="Course not found") from exc
+                raise HTTPException(status_code=404, detail="Subject not found") from exc
         updates["course_id"] = course_id
     if "parent_session_id" in fields:
         parent_id = str(payload.parent_session_id or "").strip()

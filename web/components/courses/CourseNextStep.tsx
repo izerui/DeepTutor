@@ -43,7 +43,7 @@ function decide(
 ): NextStep {
   if (!state || state.resources.length === 0) {
     return {
-      headline: t("This course has nothing to work with yet"),
+      headline: t("This subject has nothing to work with yet"),
       detail: t(
         "Attach its textbook or knowledge base and DeepTutor can start planning from the material itself.",
       ),
@@ -125,11 +125,11 @@ function decide(
       "Nothing has been built from it yet — a mastery path turns it into something you can practise.",
     ),
     action: {
-      label: t("Plan this course"),
+      label: t("Plan this subject"),
       href: `/chat?course=${encodeURIComponent(courseId)}&capability=course_study`,
       scope: "chat",
       prompt: t(
-        "Look at what this course has and plan what I should do first.",
+        "Look at what this subject has and plan what I should do first.",
       ),
     },
   };

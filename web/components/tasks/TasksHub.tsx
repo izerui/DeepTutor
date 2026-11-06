@@ -23,9 +23,9 @@ export default function TasksHub() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("Courses")}</h1>
+        <h1 className="font-serif text-[27px] text-[var(--foreground)]">{t("My courses")}</h1>
         <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-          {t("The courses you joined, and the courses you made.")}
+          {t("The courses you are learning and the courses you created.")}
         </p>
       </header>
       <CourseTabs isAdmin={isAdmin} />
@@ -70,10 +70,10 @@ function CourseTabs({ isAdmin }: { isAdmin: boolean }) {
     <div className="space-y-4">
       <div role="tablist" className="flex gap-1">
         <button type="button" role="tab" aria-selected={tab === "joined"} className={tabClass(tab === "joined")} onClick={() => setTab("joined")}>
-          {t("Courses I joined")}
+          {t("Courses tab: learning")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "courses"} className={tabClass(tab === "courses")} onClick={() => setTab("courses")}>
-          {t("Courses I made")}
+          {t("Courses tab: created")}
         </button>
       </div>
       {tab === "courses" ? (

@@ -80,7 +80,7 @@ export function AdminHome() {
       {/* Traceability #5: what administrators hold can go on to a learner. */}
       <p className="text-[12px] text-[var(--muted-foreground)]" data-testid="admin-hand-over-hint">
         {t("Courses and lessons you hold can be handed to a learner.")}{" "}
-        <Link href="/tasks?tab=courses" className="text-[var(--primary)] hover:underline">{t("Courses")}</Link>
+        <Link href="/tasks?tab=courses" className="text-[var(--primary)] hover:underline">{t("My courses")}</Link>
       </p>
       <AiLimitSetting />
       <MyListings />

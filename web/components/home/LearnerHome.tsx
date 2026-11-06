@@ -315,7 +315,7 @@ export default function LearnerHome() {
                 {(home.mine_courses ?? []).map((course) => (
                   <Link key={course.id} href={`/courses/${encodeURIComponent(course.id)}`} className={card}>
                     <span className="block truncate text-[14px] font-medium">{course.name}</span>
-                    <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Course")}</span>
+                    <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("Personal subject label")}</span>
                   </Link>
                 ))}
                 {home.mine.map((path) => (

@@ -121,7 +121,7 @@ export default function CoursesShelf() {
     <section aria-labelledby="courses-shelf-title">
       <PageHeader
         titleId="courses-shelf-title"
-        title={t("My courses")}
+        title={t("My subjects")}
         description={t("One subject's material, paths, notes and conversations, all in one place.")}
       />
       <TeacherCoursesLink />
@@ -143,10 +143,10 @@ export default function CoursesShelf() {
           <CircleAlert size={16} strokeWidth={1.8} aria-hidden />
           <span>
             <span className="block font-medium text-[var(--foreground)]">
-              {t("Courses could not load")}
+              {t("Subjects could not load")}
             </span>
             <span className="mt-1 block leading-relaxed">
-              {loadError || t("Courses could not load")}
+              {loadError || t("Subjects could not load")}
             </span>
           </span>
         </div>
@@ -222,8 +222,8 @@ export default function CoursesShelf() {
             </span>
             <span className="text-[13px] font-medium text-[var(--foreground)]">
               {courses.length === 0
-                ? t("Create your first course")
-                : t("New course")}
+                ? t("Create your first subject")
+                : t("New subject")}
             </span>
             <span className="text-[11px] leading-relaxed text-[var(--muted-foreground)]">
               {courses.length === 0
@@ -240,7 +240,7 @@ export default function CoursesShelf() {
         <details className="mt-4">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
             <Archive size={13} strokeWidth={1.7} />
-            {t("Archived courses")}
+            {t("Archived subjects")}
             <span className="text-[11px] text-[var(--muted-foreground)]/70">
               {archived.length}
             </span>

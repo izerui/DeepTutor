@@ -336,7 +336,7 @@ export default function NotebookConsole({
                 href={`/courses/${courseScope.id}`}
                 className="min-w-0 flex-1 truncate transition-colors hover:text-[var(--foreground)]"
               >
-                {courseScope.name || t("This course")}
+                {courseScope.name || t("This subject")}
               </Link>
               <Link
                 href="/notebooks"
@@ -554,14 +554,14 @@ export default function NotebookConsole({
               library.detailError
                 ? t("This notebook could not be opened")
                 : courseScope && scopedNotebooks.length === 0
-                  ? t("This course has no notebook yet")
+                  ? t("This subject has no notebook yet")
                   : t("No notebook selected")
             }
             detail={
               library.detailError ??
               (courseScope && scopedNotebooks.length === 0
                 ? t(
-                    "Make one here and it joins this course — its notes then travel with everything else in it.",
+                    "Make one here and it joins this subject — its notes then travel with everything else in it.",
                   )
                 : t(
                     "Pick a notebook on the left, or create one to get started.",

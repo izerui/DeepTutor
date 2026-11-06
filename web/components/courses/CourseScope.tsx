@@ -127,12 +127,12 @@ export function CourseScopeChip({ scope }: { scope: CourseScope }) {
         className="inline-flex items-center gap-1 transition-colors hover:text-[var(--foreground)]"
       >
         <School size={11} strokeWidth={1.8} />
-        {scope.course?.name || t("This course")}
+        {scope.course?.name || t("This subject")}
       </Link>
       <button
         type="button"
         onClick={() => router.replace(pathname)}
-        aria-label={t("Show every course")}
+        aria-label={t("Show every subject")}
         className="rounded-full p-0.5 transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
       >
         <X size={11} />

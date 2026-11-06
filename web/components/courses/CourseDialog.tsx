@@ -28,7 +28,7 @@ interface CourseDialogProps {
  */
 const DEFAULT_CAPABILITIES: { value: string; label: string }[] = [
   { value: "", label: "Chat" },
-  { value: "course_study", label: "Course Study" },
+  { value: "course_study", label: "Subject Study" },
   { value: "deep_solve", label: "Guided Solving" },
   { value: "deep_question", label: "Quiz" },
 ];
@@ -77,7 +77,7 @@ export default function CourseDialog({
       setError(
         reason instanceof Error
           ? reason.message
-          : t("Couldn't save this course."),
+          : t("Couldn't save this subject."),
       );
     } finally {
       setBusy(false);
@@ -88,7 +88,7 @@ export default function CourseDialog({
     <Modal
       isOpen={open}
       onClose={onClose}
-      title={course ? t("Edit course") : t("Create a course")}
+      title={course ? t("Edit subject") : t("Create a subject")}
       titleIcon={<BookOpen size={18} strokeWidth={1.7} />}
       width="sm"
       closeOnBackdrop={!busy}
@@ -97,7 +97,7 @@ export default function CourseDialog({
       <form onSubmit={submit} className="space-y-5 p-5">
         <label className="block">
           <span className="mb-1.5 block text-[12px] font-medium text-[var(--foreground)]">
-            {t("Course name")}
+            {t("Subject name")}
           </span>
           <input
             data-autofocus
@@ -118,7 +118,7 @@ export default function CourseDialog({
             maxLength={300}
             rows={3}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder={t("What are you learning in this course?")}
+            placeholder={t("What are you learning in this subject?")}
             className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2.5 text-[13px] leading-relaxed outline-none transition-colors focus:border-[var(--ring)]"
           />
         </label>
@@ -186,7 +186,7 @@ export default function CourseDialog({
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
             {t(
-              "Applied when a conversation opens from this course, along with its knowledge bases. You can change any of it once inside.",
+              "Applied when a conversation opens from this subject, along with its knowledge bases. You can change any of it once inside.",
             )}
           </p>
         </fieldset>
@@ -215,7 +215,7 @@ export default function CourseDialog({
               ? t("Saving...")
               : course
                 ? t("Save changes")
-                : t("Create course")}
+                : t("Create subject")}
           </button>
         </div>
       </form>

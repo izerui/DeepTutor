@@ -387,7 +387,7 @@ export function TeacherCoursesLink() {
   if (!courses.length) return null;
   return (
     <section className="space-y-2" data-testid="teacher-courses">
-      <h2 className="text-[13px] font-semibold">{t("Courses I joined")}</h2>
+      <h2 className="text-[13px] font-semibold">{t("Courses I am learning")}</h2>
       <ul className="flex flex-wrap gap-2">
         {courses.map((course) => (
           <li key={course.id}>
