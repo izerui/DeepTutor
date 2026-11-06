@@ -60,9 +60,10 @@
 
 DeepTutor 是代理程式原生的學習工作區，在同一個可擴充系統中串聯教學、解題、測驗生成、研究、視覺化與精熟練習。
 
-- **所有模式共用一套執行階段** — Chat、Ask Questions、Quiz、Research、Visualize、Solve、Course Study、Mastery Path、Immersive Reading 與 Audio Overview 共用同一套能力執行階段與工作階段情境，同時保有針對各自用途設計的迴圈與管線。
+- **所有模式共用一套執行階段** — Chat、Ask Questions、Quiz、Research、Visualize、Solve、Subject Study、Mastery Path、Immersive Reading 與 Audio Overview 共用同一套能力執行階段與工作階段情境，同時保有針對各自用途設計的迴圈與管線。
 - **Task Board** — 以待辦、進行中與已完成追蹤學習任務，並可加入備註、透過拖放或支援鍵盤操作的移動按鈕調整狀態，也能從封存中還原任務。卡片會保留在目前的工作區，沿用既有的外觀與語言設定；無須設定模型。
-- **相互連結的學習情境** — 知識庫、書籍、Co-Writer 草稿、筆記本、題庫、角色設定與 Memory 可在支援這些內容的工作流程中重複使用，但仍受帳號授權與學習政策限制。
+- **相互連結的學習情境** — 知識庫、書籍、Co-Writer 草稿、筆記本、題庫、角色設定與 Memory 可在支援這些內容的工作流程中重複使用，但仍受帳號授權限制。
+- **Learning market（學習市集）** — 在多使用者部署中，每位學習者既能學習也能創作：建立課程（依序排列的課時，可包含練習集、Mastery Path、書籍章節與筆記）、自動評分的練習集（主觀題由 AI 評分，AI 無法使用時會自動補評）、Mastery Path、書籍與知識庫，再提交至 **Learning market**；首次上架由管理員審核，管理員也可下架內容。學習者從市集加入內容，可評分、評論與收藏，瀏覽作者頁面以及 Most popular／Highly rated 推薦，並在 **My courses**（Learning／Created）中追蹤；作者可向加入者發布公告，作者與管理員可檢視加入者的唯讀學習報告。
 - **沉浸式影片學習** — 將 YouTube 或 Bilibili 連結加入 Reading，即可使用原生播放、逐字稿搜尋、以時間戳為依據的教學、已儲存的筆記與可續接的學習進度；YouTube 字幕與瀏覽功能可使用管理員設定的 Invidious 執行個體。
 - **子代理程式與 Partners** — 可從 Chat 諮詢即時代理程式執行框架（Claude Code、Codex、Grok CLI、Antigravity、Kimi、opencode、MiMo、Hermes、OpenClaw 或 DeepSeek）或 Partner、匯入過往對話，並讓持續運作的 IM 夥伴共用同一套核心。
 - **多引擎知識系統** — 透過 LlamaIndex、PageIndex、GraphRAG、LightRAG、遠端 LightRAG Server、自架 WeKnora 知識庫、Tencent IMA 或 MarginNote 4 知識庫、連接的 Kiwix ZIM 封存檔，或連結的 Obsidian vault 建立版本化 RAG 知識庫，並支援可插拔的文件解析。請參閱[原生 LightRAG 角色模型](../../deeptutor/services/rag/pipelines/lightrag/README.md)，了解獨立的擷取、查詢與視覺設定、僅預設建立，以及確認後的重建。
@@ -488,7 +489,7 @@ Chat 是預設能力，也是大多數工作的起點。單一對話可以進行
 
 情境分成兩類：**固定的工作階段情境**（能力、工作區或課程、工具、知識庫、角色設定、模型，以及 Reading／Mastery 狀態）會延續到後續回合；**單次參照**（檔案、聊天記錄、書籍、閱讀章節、筆記本、選定的題庫題目、匯入的代理程式）則從 `+` 選單加入，只用於單一回合。語音按鈕只會轉錄目前的訊息。
 
-Home 讓 **Chat**、**Ask Questions**、**Quiz** 與 **Visualize** 一鍵可達；用於建立附引用報告的 **Research** 與提供完整推理解題的 **Solve**，則位於 *More Capabilities* 之下。**Personalized Learning** 集合 Book、**Mastery Path**、**Immersive Reading** 與 **Practice**。Reading 整合文件、影片與音訊，提供經驗證的引用、已儲存的筆記、透過來源段落／學習指南／詞彙／測驗／翻譯動作進行自然朗讀，以及擷取至筆記本的功能；Course Study 則保有自己的課程情境。
+Home 讓 **Chat**、**Ask Questions**、**Quiz** 與 **Visualize** 一鍵可達；用於建立附引用報告的 **Research** 與提供完整推理解題的 **Solve**，則位於 *More Capabilities* 之下。**Personalized Learning** 集合 Book、**Mastery Path**、**Immersive Reading** 與 **Practice**。Reading 整合文件、影片與音訊，提供經驗證的引用、已儲存的筆記、透過來源段落／學習指南／詞彙／測驗／翻譯動作進行自然朗讀，以及擷取至筆記本的功能；Subject Study 則保有自己的科目情境。
 
 </details>
 
@@ -614,7 +615,7 @@ Book 會將選定來源轉換成互動式**活書**；它不是靜態 PDF，而�
 <img src="../../assets/figs/web-1.4.6+/learning-space/00-overview.png" alt="DeepTutor Learning Space 中心" width="900">
 </div>
 
-Learning Space 是資源庫、組織與個人化層。**Conversations & Materials** 包含 Chat History、支援搬移紀錄與匯出 Markdown 的筆記本，以及含答案與解說的題庫。從選定的題庫題目或 Personalized Learning 啟動 **Practice**，即可進行複習工作階段、錯題追蹤與定期複習。**Personalization** 包含角色設定、技能（`SKILL.md` 操作手冊）、一鍵安裝的 **MCP Services**，以及來自 [CLI-Anything](https://github.com/HKUDS/CLI-Anything) 型錄的 **CLI Apps**，每個應用程式的使用指南會按需載入。獨立的 **My Courses** 工作區會依科目歸納對話與導師討論串；每項資產只會出現在支援它的工作流程中。
+Learning Space 是資源庫、組織與個人化層。**Conversations & Materials** 包含 Chat History、支援搬移紀錄與匯出 Markdown 的筆記本，以及含答案與解說的題庫。從選定的題庫題目或 Personalized Learning 啟動 **Practice**，即可進行複習工作階段、錯題追蹤與定期複習。**Personalization** 包含角色設定、技能（`SKILL.md` 操作手冊）、一鍵安裝的 **MCP Services**，以及來自 [CLI-Anything](https://github.com/HKUDS/CLI-Anything) 型錄的 **CLI Apps**，每個應用程式的使用指南會按需載入。獨立的 **My subjects** 工作區會依科目歸納對話與導師討論串；每項資產只會出現在支援它的工作流程中。
 
 <div align="center">
 <img src="../../assets/figs/web-1.4.6+/learning-space/07-%20download%20skills%20from%20eduhub.png" alt="從 EduHub 匯入技能" width="900">
@@ -648,7 +649,7 @@ Memory Graph 會呈現完整金字塔：L3 綜整位於中央、L2 位於中圈�
 <img src="../../assets/figs/web-1.4.6+/settings/00-setting%20overview.png" alt="DeepTutor Settings 中心" width="900">
 </div>
 
-Settings 是操作控制中心，開啟時會顯示用於設定介面與模型輸出語言的 **General** 頁面。可搜尋的導覽選單連結至各個獨立頁面：**Personal** 包含 Workspaces、Data migration、Appearance 與 Usage statistics；**Learning & conversation** 包含起始提示、附件、Video Learning、學習者與監護人控制、Learning progress，以及 Memory；**Models & services** 包含 Providers、Language models、Task models、Embedding、Search、Voice 與 Multimodal generation；**Features & integrations** 包含工具、能力參數、Partners & agents，以及 Knowledge & documents。**System** 包含 Network、Runtime status 與 About；**Archived chats** 可搜尋、還原或永久刪除已封存的對話。Runtime status 包含後端健康狀況、常駐記憶體，以及評估各項能力阻礙、警告與建議的 **Readiness** 矩陣。Workspaces 讓不同主題的檔案與學習狀態保持獨立，Data migration 則提供經驗證的遷移與匯出功能。**供應商（provider）**保存廠商位址與憑證，供其服務模型重複使用；模型頁面可選擇已儲存的供應商，並設定模型名稱與能力。**任務模型**可為命名對話、撰寫起始提示等背景工作指定小型快速模型；留空時則使用目前的預設模型。Voice 集合語音合成與轉錄；Multimodal generation 集合影像與影片模型。Partners & agents 可設定本機代理程式執行框架與遠端 Hermes gateway。
+Settings 是操作控制中心，開啟時會顯示用於設定介面與模型輸出語言的 **General** 頁面。可搜尋的導覽選單連結至各個獨立頁面：**Personal** 包含 Workspaces、Data migration、Appearance 與 Usage statistics；**Learning & conversation** 包含起始提示、附件、Video Learning、Learner profile、Learning progress，以及 Memory；**Models & services** 包含 Providers、Language models、Task models、Embedding、Search、Voice 與 Multimodal generation；**Features & integrations** 包含工具、能力參數、Partners & agents，以及 Knowledge & documents。**System** 包含 Network、Runtime status 與 About；**Archived chats** 可搜尋、還原或永久刪除已封存的對話。Runtime status 包含後端健康狀況、常駐記憶體，以及評估各項能力阻礙、警告與建議的 **Readiness** 矩陣。Workspaces 讓不同主題的檔案與學習狀態保持獨立，Data migration 則提供經驗證的遷移與匯出功能。**供應商（provider）**保存廠商位址與憑證，供其服務模型重複使用；模型頁面可選擇已儲存的供應商，並設定模型名稱與能力。**任務模型**可為命名對話、撰寫起始提示等背景工作指定小型快速模型；留空時則使用目前的預設模型。Voice 集合語音合成與轉錄；Multimodal generation 集合影像與影片模型。Partners & agents 可設定本機代理程式執行框架與遠端 Hermes gateway。在多使用者部署中，一般學習者只會看到個人設定（General、Appearance、Learner profile、Conversation、Tools、Usage、Learning progress、Archived chats 與 About）；Models & services、Knowledge & documents、System 底下的所有內容，以及 memory 與能力參數，僅供管理員使用。
 
 **Xiaomi MiMo 語音。** 新增 Xiaomi MiMo 供應商，輸入 `https://api.xiaomimimo.com/v1` 與其 API 金鑰，再到 Settings → Voice 新增 `mimo-v2.5-tts`。選擇 `mimo_default`、`冰糖` 或 `苏打` 等預設音色，使用 `wav` 或 `pcm16` 輸出，並在套用前試聽。語音指示可控制風格與語速。此介接器只支援預設音色的語音合成；音色設計與聲音複製需要獨立模型，目前不受支援。若舊的 MiMo 語音模型是透過通用的 OpenAI 相容介接器設定，請使用 Xiaomi MiMo 供應商重新建立語音項目，以採用 chat-completions 協定。請參閱 [MiMo 官方語音指南](https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5)。
 
@@ -705,7 +706,7 @@ data/
 └── system/                  # auth · grants · audit · user-secrets/<owner> (OAuth tokens)
 ```
 
-**第一位註冊的使用者會成為管理員**，並擁有模型型錄、供應商憑證、共享知識庫、技能、作為主版本的共享書籍與每位使用者的授權。管理員建立的本機使用者可選擇 Standard、Learner 或 Custom。Learner 會鎖定學習能力與教材政策，並加入可調適的個人檔案；已授權的 Guardians 可檢視報告、核准教材及重設憑證。其他使用者會取得隔離的工作區，以及範圍受限的模型、知識庫、技能、Partners 與共享書籍存取權，而不會收到原始 API key。如果 `auth.json` 已包含 `username` + `password_hash`，該帳號就是管理員：`/register` 會維持關閉，從 `/admin/users` 建立的帳號在升級前一律為 `role=user`。
+**第一位註冊的使用者會成為管理員**，並擁有模型型錄、供應商憑證、共享知識庫、技能、作為主版本的共享書籍與每位使用者的授權。其他人都是擁有隔離工作區的學習者，既學習也創作：學習者可建立課程、練習集、Mastery Path、書籍與知識庫，提交至 **Learning market** 由管理員審核，並加入及評價他人的內容；作者與管理員可檢視加入者的唯讀學習報告。授權仍會限定每位學習者可用的模型、知識庫、技能、Partners、工具與 AI 每日用量，而不會暴露原始 API key。如果 `auth.json` 已包含 `username` + `password_hash`，該帳號就是管理員：`/register` 會維持關閉，從 `/admin/users` 建立的帳號在升級前都是學習者。
 
 **啟用方式：** 在 `data/user/settings/auth.json` 開啟驗證、重新啟動 `deeptutor start`、到 `/register` 註冊第一位管理員，接著從 `/admin/users` 新增使用者，並透過授權指派模型、知識庫、技能、partners、工具／MCP／CLI app 政策與程式碼執行權限；再從每位使用者的 **Book access** 面板設定共享書籍。
 

@@ -60,9 +60,10 @@
 
 DeepTutor 是一个智能体原生的学习工作区，将辅导、解题、测验生成、研究、可视化和掌握度练习整合在一个可扩展的系统中。
 
-- **统一的运行时** — Chat、Ask Questions、Quiz、Research、Visualize、Solve、Course Study、Mastery Path、Immersive Reading 和 Audio Overview 共享同一套能力运行时与会话上下文，同时保留各自为特定用途设计的循环和流水线。
+- **统一的运行时** — Chat、Ask Questions、Quiz、Research、Visualize、Solve、Subject Study、Mastery Path、Immersive Reading 和 Audio Overview 共享同一套能力运行时与会话上下文，同时保留各自为特定用途设计的循环和流水线。
 - **Task Board** — 在待办、进行中和已完成三个状态中追踪学习任务，支持添加备注、拖放或使用键盘可操作的移动按钮，并可从归档中恢复任务。卡片保留在当前工作区，沿用现有的外观和语言设置，无需配置模型。
-- **互联的学习上下文** — 知识库、书籍、Co-Writer 草稿、笔记本、题库、人格预设和 Memory 可在支持它们的工作流中复用，并受账号授权与学习策略约束。
+- **互联的学习上下文** — 知识库、书籍、Co-Writer 草稿、笔记本、题库、人格预设和 Memory 可在支持它们的工作流中复用，并受账号授权约束。
+- **学习市场** — 在多用户部署中，每位学习者既能学习也能创作：搭建课程（按顺序排列的课时，可包含练习集、Mastery Path、书籍章节和笔记）、自动判分的练习集（主观题由 AI 判分，AI 不可用时会自动补判）、Mastery Path、书籍和知识库，并提交到**学习市场**；首次上架由管理员审核，管理员也可下架内容。学习者从市场加入内容，可以评分、评论和收藏，浏览作者主页以及「最受欢迎」「好评」推荐，并在**我的课程**（在学 / 创作）中跟进；作者可以向加入者发布公告，作者和管理员可以查看加入者的只读学习报告。
 - **沉浸式视频学习** — 将 YouTube 或 Bilibili 链接添加到 Reading，即可使用原生播放、转录搜索、基于时间戳的辅导、已保存的笔记和可续接的进度；YouTube 字幕和浏览功能可以使用由管理员配置的 Invidious 实例。
 - **子智能体与 Partners** — 在 Chat 中调用实时智能体运行框架（Claude Code、Codex、Grok CLI、Antigravity、Kimi、opencode、MiMo、Hermes、OpenClaw 或 DeepSeek）或 Partner、导入历史对话，并让持久化 IM 伴侣运行在同一套大脑之上。
 - **多引擎知识库** — 跨 LlamaIndex、PageIndex、GraphRAG、LightRAG、远程 LightRAG Server、自托管的 WeKnora 知识库、Tencent IMA 或 MarginNote 4 知识库、已连接的 Kiwix ZIM 归档，或链接的 Obsidian vault 的版本化 RAG 知识库，支持可插拔的文档解析。详见[原生 LightRAG 角色模型](../../deeptutor/services/rag/pipelines/lightrag/README.md)，了解独立的抽取、查询与视觉设置、仅默认创建以及确认后的重建。
@@ -494,7 +495,7 @@ Chat 是默认能力，也是大多数工作的起点。单个对话线程可以
 
 上下文分为两类：**粘性会话上下文**（能力、工作区或课程、工具、知识库、人格预设、模型，以及 Reading / Mastery 状态）会在各轮次间持续保留；**一次性引用**（文件、聊天历史、书籍、阅读章节、笔记本、选中的题库条目、导入的智能体）通过 `+` 菜单添加，仅用于单次对话轮次。语音按钮只会转录当前消息。
 
-主页让 **Chat**、**Ask Questions**、**Quiz** 和 **Visualize** 一键可达；用于生成引用报告的 **Research** 和用于展示完整推理过程的 **Solve** 位于 *更多能力* 之下。**个性化学习**汇集 Book、**Mastery Path**、**Immersive Reading** 和**练习**；Reading 将文档、视频和音频整合在一起，提供经过验证的引用、已保存的笔记、来源段落 / 学习指导 / 词汇 / 测验 / 翻译操作的自然朗读，以及笔记本摘录，而 Course Study 则保留与课程绑定的上下文。
+主页让 **Chat**、**Ask Questions**、**Quiz** 和 **Visualize** 一键可达；用于生成引用报告的 **Research** 和用于展示完整推理过程的 **Solve** 位于 *更多能力* 之下。**个性化学习**汇集 Book、**Mastery Path**、**Immersive Reading** 和**练习**；Reading 将文档、视频和音频整合在一起，提供经过验证的引用、已保存的笔记、来源段落 / 学习指导 / 词汇 / 测验 / 翻译操作的自然朗读，以及笔记本摘录，而 Subject Study 则保留与科目绑定的上下文。
 
 </details>
 
@@ -620,7 +621,7 @@ Book 将选定的来源转化为交互式**活书** — 不是静态 PDF，而�
 <img src="../../assets/figs/web-1.4.6+/learning-space/00-overview.png" alt="DeepTutor 学习空间中心" width="900">
 </div>
 
-学习空间是内容库、组织与个性化层。**对话与素材**包含聊天历史、支持移动记录和 Markdown 导出的笔记本，以及保存答案与解析的题库。可以从题库选区或个性化学习启动**练习**，进行复习会话、错题追踪和定期复习。**个性化**包含人格预设、技能（`SKILL.md` 剧本）、一键安装的 **MCP 服务**，以及来自 [CLI-Anything](https://github.com/HKUDS/CLI-Anything) 目录的 **CLI 应用**，每个应用的使用指南按需加载。独立的**我的课程**工作区按学科归拢对话与导师线程；每项素材只会出现在支持它的工作流中。
+学习空间是内容库、组织与个性化层。**对话与素材**包含聊天历史、支持移动记录和 Markdown 导出的笔记本，以及保存答案与解析的题库。可以从题库选区或个性化学习启动**练习**，进行复习会话、错题追踪和定期复习。**个性化**包含人格预设、技能（`SKILL.md` 剧本）、一键安装的 **MCP 服务**，以及来自 [CLI-Anything](https://github.com/HKUDS/CLI-Anything) 目录的 **CLI 应用**，每个应用的使用指南按需加载。独立的**我的科目**工作区按科目归拢对话与导师线程；每项素材只会出现在支持它的工作流中。
 
 <div align="center">
 <img src="../../assets/figs/web-1.4.6+/learning-space/07-%20download%20skills%20from%20eduhub.png" alt="从 EduHub 导入技能" width="900">
@@ -654,7 +655,7 @@ Memory Graph 展示整个金字塔 — L3 综合位于中心，L2 在中间圆�
 <img src="../../assets/figs/web-1.4.6+/settings/00-setting%20overview.png" alt="DeepTutor 设置中心" width="900">
 </div>
 
-Settings 是操作控制面板，首页**通用**用于设置界面与模型输出语言。可搜索的导航栏链接到各个独立页面：**个人**包括工作区、数据迁移、外观和用量统计；**学习与对话**包括起始建议、附件、Video Learning、学习者与监护人控制、学习进度，以及 Memory；**模型与服务**包括提供商、语言模型、任务模型、嵌入、搜索、语音和多模态生成；**功能与集成**包括工具、能力参数、Partners 与智能体以及知识与文档。**系统**包括网络、运行状态和关于；**已归档对话**支持搜索、恢复或永久删除归档的对话。运行状态展示后端健康状况、常驻内存占用，以及评估能力阻断项、警告和建议的**就绪度**（Readiness）矩阵。工作区将主题文件和学习状态分开，数据迁移提供经过验证的迁移和导出。**提供商**保存厂商地址和凭证，供其服务模型复用；模型页面选择已保存的提供商，并配置模型名称和能力。**任务模型**为后台工作（如给会话命名、撰写起始建议）指定一个小而快的模型，留空时则回退到当前默认模型。语音汇集语音合成与转录；多模态生成汇集图像与视频模型。Partners 与智能体用于配置本地智能体运行框架和远程 Hermes 网关。
+Settings 是操作控制面板，首页**通用**用于设置界面与模型输出语言。可搜索的导航栏链接到各个独立页面：**个人**包括工作区、数据迁移、外观和用量统计；**学习与对话**包括起始建议、附件、Video Learning、学习者档案、学习进度，以及 Memory；**模型与服务**包括提供商、语言模型、任务模型、嵌入、搜索、语音和多模态生成；**功能与集成**包括工具、能力参数、Partners 与智能体以及知识与文档。**系统**包括网络、运行状态和关于；**已归档对话**支持搜索、恢复或永久删除归档的对话。运行状态展示后端健康状况、常驻内存占用，以及评估能力阻断项、警告和建议的**就绪度**（Readiness）矩阵。工作区将主题文件和学习状态分开，数据迁移提供经过验证的迁移和导出。**提供商**保存厂商地址和凭证，供其服务模型复用；模型页面选择已保存的提供商，并配置模型名称和能力。**任务模型**为后台工作（如给会话命名、撰写起始建议）指定一个小而快的模型，留空时则回退到当前默认模型。语音汇集语音合成与转录；多模态生成汇集图像与视频模型。Partners 与智能体用于配置本地智能体运行框架和远程 Hermes 网关。在多用户部署中，普通学习者只能看到个人设置（通用、外观、学习者档案、对话、工具、用量、学习进度、已归档对话和关于）；模型与服务、知识与文档、系统下的全部内容，以及记忆和能力参数，仅供管理员使用。
 
 **Xiaomi MiMo 语音。** 添加 Xiaomi MiMo 提供商，填写 `https://api.xiaomimimo.com/v1` 和 API Key，然后在 Settings → Voice 中添加 `mimo-v2.5-tts`。选择 `mimo_default`、`冰糖` 或 `苏打` 等预设音色，使用 `wav` 或 `pcm16` 输出，并在应用前试听。语音指令可控制风格和语速。该适配器仅支持预设语音；声音设计与声音克隆需要独立模型，目前不受支持。如果旧的 MiMo 语音模型通过通用的 OpenAI 兼容适配器配置，请使用 Xiaomi MiMo 提供商重新创建语音条目，使其采用 chat-completions 协议。详见 [MiMo 官方语音指南](https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5)。
 
@@ -710,7 +711,7 @@ data/
 └── system/                  # auth · grants · audit · user-secrets/<owner> (OAuth tokens)
 ```
 
-**第一个注册用户成为管理员**，拥有模型目录、提供商凭证、共享知识库、技能、共享书籍主副本和用户授权的管理权。由管理员创建的本地用户可选择 Standard、Learner 或 Custom。Learner 会锁定学习能力与素材策略，并加入自适应档案；获授权的监护人可以查看报告、批准素材和重置凭证。其他用户拥有隔离工作区，以及受作用域约束的模型、知识库、技能、Partners 和共享书籍访问权，但不会获得原始 API Key。如果 `auth.json` 已包含 `username` + `password_hash`，该账号就是管理员：`/register` 会保持关闭，而从 `/admin/users` 创建的账号始终为 `role=user`，直至你将其提升。
+**第一个注册用户成为管理员**，拥有模型目录、提供商凭证、共享知识库、技能、共享书籍主副本和用户授权的管理权。其他人都是拥有隔离工作区的学习者，既学习也创作：学习者可以搭建课程、练习集、Mastery Path、书籍和知识库，提交到**学习市场**由管理员审核，加入并评价他人的内容；作者和管理员可以查看加入者的只读学习报告。授权仍然限定每位学习者可用的模型、知识库、技能、Partners、工具和 AI 每日用量，且不会暴露原始 API Key。如果 `auth.json` 已包含 `username` + `password_hash`，该账号就是管理员：`/register` 会保持关闭，而从 `/admin/users` 创建的账号都是学习者，直至你将其提升。
 
 **启用方式：** 在 `data/user/settings/auth.json` 中开启认证，重启 `deeptutor start`，在 `/register` 注册第一个管理员，然后从 `/admin/users` 添加用户，并通过授权分配模型、知识库、技能、Partner、工具/MCP/CLI 应用策略和代码执行权限；在每个用户的 **Book access** 面板中配置共享书籍。
 
