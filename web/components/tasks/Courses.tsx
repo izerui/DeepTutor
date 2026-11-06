@@ -30,12 +30,15 @@ import {
   type TaskKind,
 } from "@/lib/tasks-api";
 
+import { serverMessage } from "@/lib/server-message";
+
 import { HandOverPanel } from "./HandOver";
 import { LessonEditor } from "./LessonEditor";
 import { KIND_LABEL, STATE_LABEL, STATE_TONE } from "./task-format";
 
 const STATUS_LABEL = { draft: "Draft", published: "Published", archived: "Withdrawn" } as const;
-const errorText = (err: unknown, t: (key: string) => string) => (err instanceof Error ? t(err.message) : String(err));
+const errorText = (err: unknown, t: (key: string, values?: Record<string, unknown>) => string) =>
+  err instanceof Error ? serverMessage(err.message, t) : String(err);
 
 /**
  * One's own courses: lessons in an order (spec 2026-11-03 batch 2 §5); a

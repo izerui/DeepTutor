@@ -133,7 +133,7 @@ class BookWithdrawalNeedsConfirmation(BookVisibilityError):
     def __init__(self, referrer_ids: Sequence[str]) -> None:
         self.referrer_ids = tuple(sorted(set(referrer_ids)))
         super().__init__(
-            f"Withdrawing this book affects {len(self.referrer_ids)} teacher path(s); "
+            f"Withdrawing this book affects {len(self.referrer_ids)} Mastery Path(s); "
             "confirm to proceed."
         )
 

@@ -291,7 +291,9 @@ export default function CreateKbModal({
     );
     // P1c: only sources that need no server folder can be linked.
     setLinkSource(
-      initialSource === IMA_PROVIDER || initialSource === MARGINNOTE4_SOURCE
+      (initialSource === IMA_PROVIDER &&
+        providers.some((p) => p.id === IMA_PROVIDER)) ||
+        initialSource === MARGINNOTE4_SOURCE
         ? initialSource
         : providers.some((p) => p.id === IMA_PROVIDER) ? IMA_PROVIDER : MARGINNOTE4_SOURCE,
     );

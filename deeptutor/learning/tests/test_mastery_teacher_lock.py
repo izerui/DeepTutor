@@ -65,7 +65,7 @@ async def test_build_is_refused_on_a_teacher_path(instance, store):
     )
 
     assert result.success is False
-    assert "teacher" in result.content
+    assert "author" in result.content and "teacher" not in result.content
     assert [p.id for p in store.load(instance).modules[0].knowledge_points] == ["kp0"]
 
 
@@ -79,7 +79,7 @@ async def test_revise_is_refused_on_a_teacher_path(instance, store):
     )
 
     assert result.success is False
-    assert "teacher" in result.content
+    assert "author" in result.content and "teacher" not in result.content
     assert [p.id for p in store.load(instance).modules[0].knowledge_points] == ["kp0"]
 
 
@@ -93,7 +93,7 @@ async def test_mode_tool_refuses_outline_but_allows_review(instance):
     )
 
     assert refused.success is False
-    assert "teacher" in refused.content
+    assert "author" in refused.content and "teacher" not in refused.content
     assert allowed.success is True
 
 
@@ -109,7 +109,8 @@ async def test_learners_own_paths_still_build(store):
     assert result.success is True
 
 
-def test_admission_error_names_the_teacher_only_for_locked_outlines():
-    assert "teacher" in admission_error("outline", has_outline=True, outline_locked=True)
+def test_admission_error_names_the_author_only_for_locked_outlines():
+    locked = admission_error("outline", has_outline=True, outline_locked=True)
+    assert "author" in locked and "teacher" not in locked
     assert admission_error("study", has_outline=True, outline_locked=True) == ""
     assert admission_error("outline", has_outline=True) == ""

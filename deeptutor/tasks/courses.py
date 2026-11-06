@@ -142,11 +142,12 @@ class CourseService:
         if row["status"] == "published" and task_ids is not None:
             # Tasks added to a published course reach its learners (§5.1).
             from deeptutor.catalog.enrollment import refresh_course
-            from deeptutor.catalog.items import _course_foreign_books
+            from deeptutor.catalog.items import _course_unreadable_books
 
-            refused = _course_foreign_books(course_id, row["owner_user_id"])
+            refused = _course_unreadable_books(course_id, row["owner_user_id"], task_ids=set(added))
             if refused:
-                # Review H1: someone else's book out of the market is not handed to a course's learners.
+                # Review H1: someone else's book out of the market is not handed to a course's learners;
+                # audit fix A: nor is a private book, the author's own included.
                 with db.write() as conn:
                     conn.executemany(
                         "DELETE FROM course_items WHERE course_id = ? AND task_id = ?", [(course_id, t) for t in added]
@@ -244,6 +245,12 @@ class CourseService:
             raise TaskConflict("This course was already published.")
         if not items:
             raise TaskError("Add at least one lesson before publishing.")
+        from deeptutor.catalog.items import _course_unreadable_books
+
+        # Audit fix A: every book a lesson reads must be one the course's learners can open.
+        refused = _course_unreadable_books(course_id, row["owner_user_id"])
+        if refused:
+            raise TaskError(refused)
         had_scope = scopes.get_scope(scopes.COURSE, course_id) is not None
         scopes.default_scope_on_publish(scopes.COURSE, course_id)
         scope = scopes.get_scope(scopes.COURSE, course_id)

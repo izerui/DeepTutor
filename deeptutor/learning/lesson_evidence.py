@@ -242,7 +242,7 @@ def _document_key(source: Any, kb: str) -> str:
     if Path(captured).suffix.lower() != ".pdf":
         return captured  # never a visual-PDF claim; the text route reports it
     raise LessonUnavailable(
-        "A selected document is no longer available. Ask your teacher to restore it."
+        "A selected document is no longer available. Ask the author of this path to restore it."
     )
 
 

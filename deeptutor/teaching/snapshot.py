@@ -204,7 +204,7 @@ def plan_sources(
                     source,
                     "personal_source",
                     f"{source.label} is a personal {source.kind.value} source and cannot be "
-                    "shared with students. Upload it to a knowledge base and reference "
+                    "shared with learners. Upload it to a knowledge base and reference "
                     "that knowledge base instead.",
                 )
             )

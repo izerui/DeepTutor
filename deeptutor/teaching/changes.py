@@ -29,7 +29,7 @@ _TIMEOUT_SECONDS = 20.0
 _MAX_REASON_LEN = 200
 
 _SYSTEM_PROMPT = (
-    "You compare two versions of a course outline written by a teacher. "
+    "You compare two versions of a course outline written by its author. "
     "Some knowledge points disappeared and some appeared; decide which new point "
     "continues which removed one. 'reworded' means the same learning objective in "
     "new words; 'redefined' means the learner must now be able to do something "

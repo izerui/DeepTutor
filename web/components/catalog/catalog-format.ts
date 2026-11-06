@@ -1,6 +1,7 @@
 import { BOOKS_HOME, bookRoute, masteryTopicRoute, MASTERY_HOME } from "@/lib/learning-routes";
 import { knowledgeBaseRoute } from "@/lib/resource-routes";
 import type { CatalogEntry, ListingStatus, StudyTarget } from "@/lib/catalog-api";
+import { serverMessage } from "@/lib/server-message";
 
 type Translate = (key: string, values?: Record<string, unknown>) => string;
 
@@ -87,5 +88,5 @@ export const formatDay = (seconds: number | null | undefined) =>
 /** The server's message (English, as an i18n key) in the reader's language. */
 export function catalogError(err: unknown, t: Translate): string {
   const message = err instanceof Error ? err.message : String(err);
-  return t(message);
+  return serverMessage(message, t);
 }

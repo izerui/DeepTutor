@@ -1595,7 +1595,7 @@ async def run_upload_processing_task(
             task_stream_manager.emit_failed(task_id, error_msg, **failure_metadata)
 
 
-@router.get("/knowledge-bases/health")
+@router.get("/knowledge-bases/health", dependencies=[Depends(require_admin)])
 async def health_check():
     """Count registered KBs without constructing/probing the catalog (#1711)."""
     return await asyncio.to_thread(_knowledge_health)
@@ -1707,7 +1707,7 @@ async def get_pageindex_pipeline_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/knowledge-bases/rag-pipelines/pageindex/config")
+@router.put("/knowledge-bases/rag-pipelines/pageindex/config", dependencies=[Depends(require_admin)])
 async def update_pageindex_pipeline_config(payload: PageIndexConfigUpdate):
     """Persist the deployment-level PageIndex Cloud credential."""
     try:
@@ -1750,7 +1750,7 @@ def _ima_config_payload() -> dict:
     }
 
 
-@router.get("/knowledge-bases/rag-pipelines/ima/config")
+@router.get("/knowledge-bases/rag-pipelines/ima/config", dependencies=[Depends(require_admin)])
 async def get_ima_pipeline_config():
     """Read the account-level IMA credentials (key redacted to a boolean)."""
     try:
@@ -1760,7 +1760,7 @@ async def get_ima_pipeline_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/knowledge-bases/rag-pipelines/ima/config")
+@router.put("/knowledge-bases/rag-pipelines/ima/config", dependencies=[Depends(require_admin)])
 async def update_ima_pipeline_config(payload: ImaConfigUpdate):
     """Persist the account-level IMA Client ID / API key."""
     try:
@@ -1830,7 +1830,7 @@ async def get_llamaindex_pipeline_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/knowledge-bases/rag-pipelines/llamaindex/config")
+@router.put("/knowledge-bases/rag-pipelines/llamaindex/config", dependencies=[Depends(require_admin)])
 async def update_llamaindex_pipeline_config(payload: LlamaIndexConfigUpdate):
     """Persist the LlamaIndex engine knobs.
 
@@ -1870,7 +1870,7 @@ async def get_graphrag_pipeline_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/knowledge-bases/rag-pipelines/graphrag/config")
+@router.put("/knowledge-bases/rag-pipelines/graphrag/config", dependencies=[Depends(require_admin)])
 async def update_graphrag_pipeline_config(payload: GraphRagConfigUpdate):
     """Persist GraphRAG's query knobs. Takes effect on the next query."""
     try:
@@ -2006,7 +2006,7 @@ def _lightrag_server_config_payload() -> dict:
     }
 
 
-@router.get("/knowledge-bases/rag-pipelines/lightrag-server/config")
+@router.get("/knowledge-bases/rag-pipelines/lightrag-server/config", dependencies=[Depends(require_admin)])
 async def get_lightrag_server_pipeline_config():
     """Read reusable server defaults with the API key redacted."""
     try:
@@ -2016,7 +2016,7 @@ async def get_lightrag_server_pipeline_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/knowledge-bases/rag-pipelines/lightrag-server/config")
+@router.put("/knowledge-bases/rag-pipelines/lightrag-server/config", dependencies=[Depends(require_admin)])
 async def update_lightrag_server_pipeline_config(payload: LightRagServerConfigUpdate):
     """Persist reusable defaults without changing existing KB bindings."""
     try:
@@ -2175,7 +2175,7 @@ async def _probe_graphrag_model_compatibility(profile_id: str, model_id: str) ->
     return await probe_configured_completion_model(profile_id, model_id)
 
 
-@router.post("/knowledge-bases/rag-pipelines/graphrag/model-compatibility")
+@router.post("/knowledge-bases/rag-pipelines/graphrag/model-compatibility", dependencies=[Depends(require_admin)])
 async def test_graphrag_model_compatibility(payload: GraphRagModelCompatibilityRequest):
     """Test GraphRAG structured output without changing the active chat model."""
     try:
@@ -2198,7 +2198,7 @@ class ActiveModelUpdate(BaseModel):
     model_id: str
 
 
-@router.put("/knowledge-bases/rag-pipelines/active-model")
+@router.put("/knowledge-bases/rag-pipelines/active-model", dependencies=[Depends(require_admin)])
 async def set_rag_active_model(payload: ActiveModelUpdate):
     """Set the active model for an engine's required kind, applied immediately.
 
@@ -2589,7 +2589,7 @@ class ConnectWeKnoraRequest(BaseModel):
     knowledge_base_id: str
 
 
-@router.post("/knowledge-bases/probe-lightrag-server")
+@router.post("/knowledge-bases/probe-lightrag-server", dependencies=[Depends(require_admin)])
 async def probe_lightrag_server_route(payload: ProbeLightRagServerRequest):
     """Test-connect to an external LightRAG server before binding a KB to it.
 
@@ -2613,7 +2613,7 @@ async def probe_lightrag_server_route(payload: ProbeLightRagServerRequest):
     return result.to_dict()
 
 
-@router.post("/knowledge-bases/connect-lightrag-server")
+@router.post("/knowledge-bases/connect-lightrag-server", dependencies=[Depends(require_admin)])
 async def connect_lightrag_server_route(payload: ConnectLightRagServerRequest):
     """Connect an external LightRAG server as a retrieval-only knowledge base.
 
@@ -2778,7 +2778,7 @@ def _resolve_ima_credentials(client_id: str, api_key: str) -> ImaCredentials:
     return get_account_credentials()
 
 
-@router.post("/knowledge-bases/list-ima", response_model=ListImaResponse)
+@router.post("/knowledge-bases/list-ima", response_model=ListImaResponse, dependencies=[Depends(require_admin)])
 async def list_ima_route(payload: ListImaRequest):
     """List IMA knowledge bases without storing or echoing credentials."""
     credentials = _resolve_ima_credentials(payload.client_id, payload.api_key)
@@ -2914,7 +2914,7 @@ async def search_kiwix_articles(
     }
 
 
-@router.post("/knowledge-bases/probe-ima")
+@router.post("/knowledge-bases/probe-ima", dependencies=[Depends(require_admin)])
 async def probe_ima_route(payload: ProbeImaRequest):
     """Test-connect to a Tencent IMA knowledge base before binding a KB to it.
 
@@ -2933,7 +2933,7 @@ async def probe_ima_route(payload: ProbeImaRequest):
     return result.to_dict()
 
 
-@router.post("/knowledge-bases/connect-ima")
+@router.post("/knowledge-bases/connect-ima", dependencies=[Depends(require_admin)])
 async def connect_ima_route(payload: ConnectImaRequest):
     """Connect a Tencent IMA knowledge base as a retrieval-only knowledge base.
 

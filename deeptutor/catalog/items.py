@@ -197,22 +197,41 @@ def _course(item_id: str) -> ItemInfo | None:
     elif not count:
         not_ready = "The course has no item yet."
     else:
-        not_ready = _course_foreign_books(item_id, row["owner_user_id"])
+        not_ready = _course_unreadable_books(item_id, row["owner_user_id"])
     return ItemInfo(
         scopes.COURSE, item_id, row["owner_user_id"], row["title"], row["description"],
         closed=row["status"] == "archived", not_ready=not_ready,
     )
 
 
-def _course_foreign_books(course_id: str, owner: str) -> str:
-    """Platform batch 1 §4.3: a course cites listed content or its author's own."""
+PRIVATE_COURSE_BOOK = "Make the book “{title}” public first: learners of this course cannot open it."
+
+
+def private_course_book(title: str) -> str:
+    """Audit fix A: a course lesson's book must be one its learners can open."""
+    return PRIVATE_COURSE_BOOK.format(title=title)
+
+
+def _course_unreadable_books(course_id: str, owner: str, *, task_ids: set[str] | None = None) -> str:
+    """Why the course's book lessons are not readable by its learners; empty when they are.
+
+    A book must be public (its author's own included), and someone else's must
+    also be in the market (platform batch 1 §4.3). *task_ids* limits the check
+    to those lessons.
+    """
     from deeptutor.catalog import listings
 
     for task in course_tasks(course_id):
         if task["kind"] != "book" or not task["target_id"]:
             continue
+        if task_ids is not None and task["id"] not in task_ids:
+            continue
         book = info(scopes.BOOK, task["target_id"])
-        if book is None or book.owner == owner:
+        if book is None:
+            continue
+        if book.closed:
+            return private_course_book(book.title)
+        if book.owner == owner:
             continue
         if listings.status(scopes.BOOK, task["target_id"]) != "listed":
             return "The course reads a book of someone else that is not in the market."

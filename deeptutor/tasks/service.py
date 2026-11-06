@@ -310,6 +310,11 @@ class TaskService:
             record = book_registry.get_book(target_id)
             if record is None or not book_registry.can_read_book(record, self.actor):
                 raise TaskError("Choose a book you can read.")
+            if record.visibility != "public":
+                # Audit fix A: the author may read their private book; the course's learners may not.
+                from deeptutor.catalog.items import private_course_book
+
+                raise TaskError(private_course_book(record.title))
             spine = engine_for(record).load_spine(target_id)
             chapters = {c.id: c for c in (spine.chapters if spine else [])}
             chosen = [c for c in dict.fromkeys(settings.get("chapter_ids") or []) if c in chapters]

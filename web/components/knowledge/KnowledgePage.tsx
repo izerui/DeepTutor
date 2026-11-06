@@ -1,6 +1,6 @@
 "use client";
 
-import { KB_DETAIL_SECTIONS, knowledgeBaseMatches, knowledgeBaseRef, type KbDetailSection, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
+import { ADMIN_ONLY_KB_CONNECTORS, KB_DETAIL_SECTIONS, knowledgeBaseMatches, knowledgeBaseRef, type KbDetailSection, type KnowledgeBase, type KnowledgeBaseVisibility } from "@/lib/knowledge-helpers";
 import { listKnowledgeBaseReferences, setKnowledgeBaseVisibility } from "@/features/knowledge/api/catalog";
 import type { ScopeUpdate } from "@/lib/publish-api";
 import {
@@ -18,6 +18,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { useKnowledgeBases } from "@/hooks/useKnowledgeBases";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { updateRagProviderMode } from "@/features/knowledge/api/engines";
 import KnowledgeHome, { type KnowledgeHomeSection } from "./KnowledgeHome";
 import {
@@ -105,6 +106,20 @@ export default function KnowledgePage() {
   const kbs = useMemo(
     () => allKbs.filter((kb) => kb.metadata?.type !== "subagent"),
     [allKbs],
+  );
+
+  // Remote connectors (LightRAG Server, WeKnora, IMA, Kiwix) are
+  // administrator-only on the server; learners create KBs on the engines
+  // the administrator configured.
+  const auth = useAuthStatus();
+  const canConnectRemote =
+    auth.statusAvailable && (!auth.enabled || auth.isAdmin);
+  const creatableProviders = useMemo(
+    () =>
+      canConnectRemote
+        ? providers
+        : providers.filter((p) => !ADMIN_ONLY_KB_CONNECTORS.has(p.id)),
+    [providers, canConnectRemote],
   );
 
   const [explicitSelection, setExplicitSelection] = useState<string | null>(
@@ -497,6 +512,7 @@ export default function KnowledgePage() {
               onOpenEngine={openEngine}
               onOpenSource={openSource}
               onCreate={openCreate}
+              canConnectRemote={canConnectRemote}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
@@ -522,6 +538,7 @@ export default function KnowledgePage() {
               onOpenEngine={openEngine}
               onOpenSource={openSource}
               onCreate={openCreate}
+              canConnectRemote={canConnectRemote}
               activeSection={homeSection}
               onSectionChange={setHomeSection}
             />
@@ -564,7 +581,7 @@ export default function KnowledgePage() {
         <CreateKbModal
           isOpen
           onClose={() => setCreateOpen(false)}
-          providers={providers}
+          providers={creatableProviders}
           uploadPolicy={uploadPolicy}
           onCreate={handleCreate}
           onConnectLinkedFolder={connectLinkedFolder}

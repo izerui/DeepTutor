@@ -81,14 +81,14 @@ TOOL_MODES: dict[str, frozenset[str]] = {
     "mastery_diagnose": frozenset({STUDY, REVIEW}),
 }
 
-#: What the tutor is told when anything would change a teacher's outline. It
+#: What the tutor is told when anything would change an author's outline. It
 #: names the move the learner can still make, so the refusal is not retried.
 TEACHER_OUTLINE_LOCKED = (
-    "This path's outline was set by the learner's teacher and is read-only: no "
-    "module or knowledge point can be added, removed, renamed or reordered, and "
-    "the 'outline' mode is closed. Tell the learner the outline comes from their "
-    "teacher and suggest they send the change to the teacher. You can still "
-    "adapt how you explain and how hard the practice is."
+    "This path's outline was set by the author of this path and is read-only: "
+    "no module or knowledge point can be added, removed, renamed or reordered, "
+    "and the 'outline' mode is closed. Tell the learner the outline comes from "
+    "the author of this path and cannot be changed here. You can still adapt "
+    "how you explain and how hard the practice is."
 )
 
 

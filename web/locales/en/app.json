@@ -5724,5 +5724,7 @@
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "Add them to a course from the course editor, or open one to delete or withdraw it.",
   "{{count}} not graded": "{{count}} not graded",
   "AI couldn't grade this question yet; it will be graded automatically later.": "AI couldn't grade this question yet; it will be graded automatically later.",
-  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "Answers the AI could not grade are graded again automatically when this page or the set is opened."
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "Answers the AI could not grade are graded again automatically when this page or the set is opened.",
+  "Make the book “{{title}}” public first: learners of this course cannot open it.": "Make the book “{{title}}” public first: learners of this course cannot open it.",
+  "Only administrators can change engine settings.": "Only administrators can change engine settings."
 }

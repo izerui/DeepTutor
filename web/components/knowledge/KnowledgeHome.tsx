@@ -51,6 +51,8 @@ interface KnowledgeHomeProps {
   onOpenEngine?: (id: string) => void;
   onOpenSource?: (id: "obsidian" | "marginnote4" | "kiwix") => void;
   onCreate?: () => void;
+  /** Offer the remote sources only administrators may connect (Kiwix). */
+  canConnectRemote?: boolean;
   activeSection: KnowledgeHomeSection;
   onSectionChange: (section: KnowledgeHomeSection) => void;
 }
@@ -109,6 +111,7 @@ export default function KnowledgeHome({
   onOpenEngine,
   onOpenSource,
   onCreate,
+  canConnectRemote = true,
   activeSection,
   onSectionChange,
 }: KnowledgeHomeProps) {
@@ -165,8 +168,8 @@ export default function KnowledgeHome({
         action: t("Connect archive"),
         count: kbs.filter((kb) => kb.metadata?.type === "kiwix").length,
       },
-    ],
-    [kbs, t],
+    ].filter((source) => canConnectRemote || source.id !== "kiwix"),
+    [kbs, t, canConnectRemote],
   );
 
   const renderProvider = (provider: RagProviderSummary) => {

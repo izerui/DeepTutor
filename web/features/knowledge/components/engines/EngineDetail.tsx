@@ -1861,6 +1861,10 @@ export default function EngineDetail({
   onError,
 }: EngineDetailProps) {
   const { t } = useTranslation();
+  const auth = useAuthStatus();
+  // Engine settings, credentials and the active models are deployment-wide;
+  // the server only lets administrators change them.
+  const canManage = auth.statusAvailable && (!auth.enabled || auth.isAdmin);
   const status = providerConnectionStatus(provider);
   const installHint = INSTALL_HINTS[provider.id];
   const hasModes = (provider.modes?.length ?? 0) > 0;
@@ -1911,7 +1915,13 @@ export default function EngineDetail({
           onError={onError}
         />
 
-        {provider.id === "lightrag-server" && (
+        {!auth.loading && !canManage && (
+          <p className="mt-4 text-xs text-[var(--muted-foreground)]">
+            {t("Only administrators can change engine settings.")}
+          </p>
+        )}
+
+        {canManage && provider.id === "lightrag-server" && (
           <Section label={t("Connection defaults")} icon={Server}>
             <LightRagServerForm onChanged={onChanged} onError={onError} />
           </Section>
@@ -1930,46 +1940,48 @@ export default function EngineDetail({
         )}
 
         {/* LlamaIndex tuning */}
-        {provider.id === "llamaindex" && (
+        {canManage && provider.id === "llamaindex" && (
           <Section label={t("Retrieval & chunking")} icon={Settings2}>
             <LlamaIndexForm onChanged={onChanged} onError={onError} />
           </Section>
         )}
 
         {/* GraphRAG query knobs */}
-        {provider.id === "graphrag" && (
+        {canManage && provider.id === "graphrag" && (
           <Section label={t("Retrieval parameters")} icon={Settings2}>
             <GraphRagForm onChanged={onChanged} onError={onError} />
           </Section>
         )}
 
         {/* LightRAG query knobs */}
-        {provider.id === "lightrag" && (
+        {canManage && provider.id === "lightrag" && (
           <Section label={t("Retrieval parameters")} icon={Settings2}>
             <LightRagForm onChanged={onChanged} onError={onError} />
           </Section>
         )}
 
         {/* PageIndex credentials */}
-        {provider.id === "pageindex" && (
+        {canManage && provider.id === "pageindex" && (
           <Section label={t("Credentials")} icon={KeyRound}>
             <PageIndexConfigForm onChanged={onChanged} onError={onError} />
           </Section>
         )}
 
         {/* Tencent IMA credentials */}
-        {provider.id === "ima" && (
+        {canManage && provider.id === "ima" && (
           <Section label={t("Credentials")} icon={KeyRound}>
             <ImaForm onChanged={onChanged} onError={onError} />
           </Section>
         )}
 
         {/* Models — in-place pickers for the kinds this engine needs */}
-        <ModelsSection
-          providerId={provider.id}
-          onChanged={onChanged}
-          onError={onError}
-        />
+        {canManage && (
+          <ModelsSection
+            providerId={provider.id}
+            onChanged={onChanged}
+            onError={onError}
+          />
+        )}
 
         {/* Knowledge bases on this engine */}
         <Section

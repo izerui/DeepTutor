@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
+import { serverMessage } from "@/lib/server-message";
 import {
   CatalogApiError,
   getListing,
@@ -239,7 +240,7 @@ export function ListingPanel({
         <p className="text-[12px] text-[var(--muted-foreground)]">
           {t("It is still private. It becomes public when you submit; only people who join it can read it.")}
         </p>
-      ) : listing.not_ready && <p className="text-[12px] text-amber-700 dark:text-amber-300">{t(listing.not_ready)}</p>}
+      ) : listing.not_ready && <p className="text-[12px] text-amber-700 dark:text-amber-300">{serverMessage(listing.not_ready, t)}</p>}
       {(!listing.not_ready || privateItem) && missing && buttons.includes("submit") && (
         <p className="text-[12px] text-[var(--muted-foreground)]">{missing}</p>
       )}

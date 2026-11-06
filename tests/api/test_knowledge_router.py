@@ -3270,3 +3270,166 @@ async def test_health_counts_registry_without_constructing_index_manager(tmp_pat
     result = await knowledge_router_module.health_check()
     assert result["status"] == "ok"
     assert result["knowledge_bases_count"] == 2
+
+
+# Audit fix A (2026-11-07): deployment-wide engine settings and the probes /
+# connectors that reach remote servers or the shared IMA account are
+# administrator-only. Learners still read the secret-free settings.
+_ADMIN_ONLY_KNOWLEDGE_ROUTES = [
+    ("get", "/api/knowledge-bases/health", None),
+    ("put", "/api/knowledge-bases/rag-pipelines/pageindex/config", {"api_key": "k"}),
+    ("get", "/api/knowledge-bases/rag-pipelines/ima/config", None),
+    ("put", "/api/knowledge-bases/rag-pipelines/ima/config", {"client_id": "c", "api_key": "k"}),
+    ("put", "/api/knowledge-bases/rag-pipelines/llamaindex/config", {"top_k": 7}),
+    ("put", "/api/knowledge-bases/rag-pipelines/graphrag/config", {"community_level": 3}),
+    ("put", "/api/knowledge-bases/rag-pipelines/lightrag/config", {"top_k": 31}),
+    ("get", "/api/knowledge-bases/rag-pipelines/lightrag-server/config", None),
+    (
+        "put",
+        "/api/knowledge-bases/rag-pipelines/lightrag-server/config",
+        {"server_url": "http://127.0.0.1:9621", "api_key": "k"},
+    ),
+    (
+        "post",
+        "/api/knowledge-bases/rag-pipelines/graphrag/model-compatibility",
+        {"profile_id": "p", "model_id": "m"},
+    ),
+    (
+        "put",
+        "/api/knowledge-bases/rag-pipelines/active-model",
+        {"kind": "llm", "profile_id": "p", "model_id": "m"},
+    ),
+    ("post", "/api/knowledge-bases/probe-lightrag-server", {"server_url": "http://169.254.169.254"}),
+    (
+        "post",
+        "/api/knowledge-bases/connect-lightrag-server",
+        {"name": "x", "server_url": "http://169.254.169.254"},
+    ),
+    ("post", "/api/knowledge-bases/list-ima", {}),
+    ("post", "/api/knowledge-bases/probe-ima", {"knowledge_base_id": "kb"}),
+    ("post", "/api/knowledge-bases/connect-ima", {"name": "x", "knowledge_base_id": "kb"}),
+    (
+        "post",
+        "/api/knowledge-bases/probe-weknora",
+        {"server_url": "http://x", "api_key": "k", "knowledge_base_id": "kb"},
+    ),
+    (
+        "post",
+        "/api/knowledge-bases/connect-weknora",
+        {"name": "x", "server_url": "http://x", "api_key": "k", "knowledge_base_id": "kb"},
+    ),
+    ("get", "/api/knowledge-bases/kiwix-catalog?server_url=http://x", None),
+    ("post", "/api/knowledge-bases/probe-kiwix", {"server_url": "http://x", "zim_name": "z"}),
+    (
+        "post",
+        "/api/knowledge-bases/connect-kiwix",
+        {"name": "x", "server_url": "http://x", "zim_name": "z"},
+    ),
+]
+
+
+def _app_as(monkeypatch, tmp_path, role: str):
+    auth = importlib.import_module("deeptutor.api.routers.auth")
+    service = RuntimeSettingsService(tmp_path, process_env={})
+    monkeypatch.setattr(config_module, "get_runtime_settings_service", lambda: service)
+    monkeypatch.setattr(auth, "AUTH_ENABLED", True)
+    app = _build_app()
+
+    async def authenticated():
+        return SimpleNamespace(role=role)
+
+    app.dependency_overrides[auth.require_auth] = authenticated
+    return app, service
+
+
+@pytest.mark.parametrize("method, path, body", _ADMIN_ONLY_KNOWLEDGE_ROUTES)
+def test_learner_gets_403_on_engine_settings_and_remote_connectors(
+    monkeypatch, tmp_path, method, path, body
+):
+    app, service = _app_as(monkeypatch, tmp_path, "user")
+    before = {
+        "pageindex": service.load_pageindex(),
+        "ima": service.load_ima(),
+        "llamaindex": service.load_llamaindex(),
+        "graphrag": service.load_graphrag(),
+        "lightrag_server": service.load_lightrag_server(),
+    }
+    client = TestClient(app)
+    kwargs = {} if body is None else {"json": body}
+    response = getattr(client, method)(path, **kwargs)
+    assert response.status_code == 403
+    assert service.load_pageindex() == before["pageindex"]
+    assert service.load_ima() == before["ima"]
+    assert service.load_llamaindex() == before["llamaindex"]
+    assert service.load_graphrag() == before["graphrag"]
+    assert service.load_lightrag_server() == before["lightrag_server"]
+
+
+def test_admin_only_knowledge_routes_declare_require_admin() -> None:
+    from deeptutor.api.routers.auth import require_admin
+
+    wanted = {(m.upper(), p.split("?")[0].removeprefix("/api")) for m, p, _ in _ADMIN_ONLY_KNOWLEDGE_ROUTES}
+    found = set()
+    for route in knowledge_router_module.router.routes:
+        for method in getattr(route, "methods", set()) or set():
+            key = (method, getattr(route, "path", ""))
+            if key in wanted:
+                assert any(
+                    dependency.call is require_admin for dependency in route.dependant.dependencies
+                ), key
+                found.add(key)
+    assert found == wanted
+
+
+@pytest.mark.parametrize(
+    "path, body, check",
+    [
+        (
+            "/api/knowledge-bases/rag-pipelines/pageindex/config",
+            {"api_key": "admin-key"},
+            lambda s: s.load_pageindex()["api_key"] == "admin-key",
+        ),
+        (
+            "/api/knowledge-bases/rag-pipelines/ima/config",
+            {"client_id": "cid", "api_key": "admin-key"},
+            lambda s: s.load_ima()["client_id"] == "cid",
+        ),
+        (
+            "/api/knowledge-bases/rag-pipelines/llamaindex/config",
+            {"top_k": 7},
+            lambda s: s.load_llamaindex()["top_k"] == 7,
+        ),
+        (
+            "/api/knowledge-bases/rag-pipelines/graphrag/config",
+            {"community_level": 3},
+            lambda s: s.load_graphrag()["community_level"] == 3,
+        ),
+        (
+            "/api/knowledge-bases/rag-pipelines/lightrag-server/config",
+            {"server_url": "http://127.0.0.1:9621"},
+            lambda s: s.load_lightrag_server()["server_url"].startswith("http://127.0.0.1:9621"),
+        ),
+    ],
+)
+def test_admin_can_write_engine_settings(monkeypatch, tmp_path, path, body, check):
+    app, service = _app_as(monkeypatch, tmp_path, "admin")
+    response = TestClient(app).put(path, json=body)
+    assert response.status_code == 200, response.text
+    assert check(service)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/knowledge-bases/rag-pipelines/pageindex/config",
+        "/api/knowledge-bases/rag-pipelines/llamaindex/config",
+        "/api/knowledge-bases/rag-pipelines/graphrag/config",
+        "/api/knowledge-bases/rag-pipelines/lightrag/config",
+    ],
+)
+def test_learner_can_read_secret_free_engine_settings(monkeypatch, tmp_path, path):
+    app, service = _app_as(monkeypatch, tmp_path, "user")
+    service.save_pageindex({"api_key": "deployment-secret"})
+    response = TestClient(app).get(path)
+    assert response.status_code == 200
+    assert "deployment-secret" not in response.text

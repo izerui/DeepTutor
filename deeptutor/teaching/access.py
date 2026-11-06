@@ -142,7 +142,7 @@ def withdrawal_confirmation_detail(
         "affected_paths": paths,
         "affected_students": students,
         "message": (
-            f"{paths} published teacher path(s) with {students} assigned student(s) cite this "
+            f"{paths} published Mastery Path(s) with {students} learner(s) cite this "
             f"{resource}; they will show it as unavailable. Confirm to continue."
         ),
     }
@@ -234,7 +234,7 @@ def withdrawal_unsettled(
         "resource": resource,
         "affected_paths": int(last["affected_paths"]) if last else 0,
         "affected_students": int(last["affected_students"]) if last else 0,
-        "message": f"The teacher paths citing this {resource} keep changing; try again.",
+        "message": f"The Mastery Paths citing this {resource} keep changing; try again.",
     }
 
 

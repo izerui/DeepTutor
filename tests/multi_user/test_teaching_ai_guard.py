@@ -324,7 +324,7 @@ async def test_rag_search_with_an_explicit_base_dir_obeys_the_allowlist(
     seen: dict = {}
 
     async def body(_context):
-        with pytest.raises(ValueError, match="teacher's materials only"):
+        with pytest.raises(ValueError, match="author's materials only"):
             await rag_search(
                 "q", libraries.history.name, kb_base_dir=libraries.history.base_dir
             )

@@ -16,6 +16,17 @@ export const DEFAULT_UPLOAD_POLICY: KnowledgeUploadPolicy = {
   allow_any_extension: false,
 };
 
+/**
+ * Connectors that bind a knowledge base to a remote server or to the
+ * deployment's shared account. The server only lets administrators probe or
+ * connect them, so learners are not offered them.
+ */
+export const ADMIN_ONLY_KB_CONNECTORS: ReadonlySet<string> = new Set([
+  "lightrag-server",
+  "weknora",
+  "ima",
+]);
+
 const PAGEINDEX_UPLOAD_EXTENSIONS: Record<string, string[]> = {
   pageindex: [
     ".pdf",

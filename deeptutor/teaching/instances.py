@@ -32,7 +32,7 @@ from deeptutor.teaching.store import TeachingStore
 logger = logging.getLogger(__name__)
 
 INSTANCE_UNAVAILABLE = (
-    "This course is no longer available to you. Ask your teacher if you think "
+    "This course is no longer available to you. Ask its author if you think "
     "this is a mistake."
 )
 #: Stable code of anything refused because the teacher path closed for this
@@ -346,9 +346,8 @@ def closed_instance_ids(progresses: Iterable[LearningProgress]) -> set[str]:
 
 
 OUTLINE_LOCKED = (
-    "This outline is set by your teacher and cannot be changed here. You can "
-    "still study, review or reset your own progress; send outline feedback to "
-    "your teacher."
+    "This outline is set by the author of this path and cannot be changed "
+    "here. You can still study, review or reset your own progress."
 )
 
 
@@ -389,8 +388,8 @@ def describe_instance_materials(
 # ---- the path's materials (spec 7.4, R8) -------------------------------------
 
 MATERIALS_UNAVAILABLE = (
-    "The course materials for this path are temporarily unavailable. Ask your "
-    "teacher to restore them; the tutor will not continue without them."
+    "The course materials for this path are temporarily unavailable. Ask the "
+    "author of this path to restore them; the tutor will not continue without them."
 )
 #: Stable code of a turn or switch refused because the materials are gone.
 MATERIALS_UNAVAILABLE_CODE = "teacher_materials_unavailable"

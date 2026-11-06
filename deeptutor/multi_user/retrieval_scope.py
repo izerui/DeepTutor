@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 #: What a refused retrieval reports. Stable English; the model relays it.
 TEACHER_PATH_RETRIEVAL_DENIED = (
-    "This course is taught from its teacher's materials only, and that "
+    "This course is taught from its author's materials only, and that "
     "knowledge base is not one of them. Retrieve from the course's own "
     "knowledge bases instead."
 )

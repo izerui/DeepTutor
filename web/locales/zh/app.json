@@ -5724,5 +5724,7 @@
   "Add them to a course from the course editor, or open one to delete or withdraw it.": "可以在课程编辑里把它们加进课程，或者点开删除（已发布的是撤回）。",
   "{{count}} not graded": "{{count}} 题未判分",
   "AI couldn't grade this question yet; it will be graded automatically later.": "AI 暂时没能判这道题，稍后会自动补判。",
-  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "AI 没能判分的题，会在打开这个页面或学习者打开练习集时自动补判。"
+  "Answers the AI could not grade are graded again automatically when this page or the set is opened.": "AI 没能判分的题，会在打开这个页面或学习者打开练习集时自动补判。",
+  "Make the book “{{title}}” public first: learners of this course cannot open it.": "请先公开书籍《{{title}}》：这门课程的学习者还打不开它。",
+  "Only administrators can change engine settings.": "只有管理员可以修改引擎设置。"
 }

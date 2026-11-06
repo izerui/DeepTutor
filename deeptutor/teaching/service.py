@@ -331,13 +331,13 @@ class TeachingService:
     def get(self, template_id: str, *, owner_only: bool = False) -> MasteryTemplate:
         template = self.store.get_template(template_id)
         if template is None:
-            raise TemplateNotFound("Teacher path not found")
+            raise TemplateNotFound("Mastery Path not found")
         user_id, is_admin = self._actor()
         if template.owner_user_id == user_id:
             return template
         if not is_admin:
             # Another author's template is not theirs to know about.
-            raise TemplateNotFound("Teacher path not found")
+            raise TemplateNotFound("Mastery Path not found")
         if owner_only:
             raise TemplateForbidden(
                 "Only the author of this path can edit and publish it (its "
@@ -348,7 +348,7 @@ class TeachingService:
     @staticmethod
     def _ensure_not_archived(template: MasteryTemplate) -> None:
         if template.status == "archived":
-            raise TemplateConflict("This teacher path is archived.")
+            raise TemplateConflict("This Mastery Path is archived.")
 
     # ---- reading ----------------------------------------------------------
 
@@ -369,7 +369,7 @@ class TeachingService:
         if progress is None or topic is None:
             raise TemplateNotFound("Mastery path not found")
         if progress.origin is not None:
-            raise TemplateConflict("A path assigned by a teacher cannot be published again.")
+            raise TemplateConflict("A path you joined from someone else cannot be published again.")
         from deeptutor.learning import policy as learning_policy
 
         try:
@@ -452,7 +452,7 @@ class TeachingService:
     def _load_draft(self, template: MasteryTemplate) -> tuple[LearningProgress, MasteryTopic]:
         if not template.draft_path_id:
             raise TemplateConflict(
-                "This teacher path has no editable draft any more (its teacher's "
+                "This Mastery Path has no editable draft any more (its author's "
                 "account was removed). Its learners keep it; it can still be archived."
             )
         with _scope(template.draft_workspace_id):
@@ -460,7 +460,7 @@ class TeachingService:
             progress = store.load(template.draft_path_id)
             topic = store.get_topic(template.draft_path_id, progress=progress) if progress else None
         if progress is None or topic is None:
-            raise TemplateConflict("The draft path of this teacher path was deleted.")
+            raise TemplateConflict("The draft of this Mastery Path was deleted.")
         return progress, topic
 
     def _plan(self, template: MasteryTemplate, topic: MasteryTopic) -> SourcePlan:
@@ -879,7 +879,7 @@ class TeachingService:
     def _current_revision(self, template: MasteryTemplate) -> TemplateRevision:
         previous = self.store.get_revision(template.id, template.current_revision)
         if previous is None:
-            raise TemplateConflict("The current revision of this teacher path is missing.")
+            raise TemplateConflict("The current revision of this Mastery Path is missing.")
         return previous
 
     def _describe_with_count(self, template: MasteryTemplate) -> tuple[dict, int]:
@@ -910,7 +910,7 @@ class TeachingService:
         template = self.get(template_id)
         if template.current_revision > 0 or self.store.has_assignments(template.id):
             raise TemplateConflict(
-                "Published or assigned teacher paths cannot be deleted; archive them instead."
+                "Published Mastery Paths or paths with learners cannot be deleted; archive them instead."
             )
         self.store.delete_template(template.id)
         self._release_references(template)
