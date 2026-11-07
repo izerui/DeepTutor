@@ -1,8 +1,8 @@
-"""Teacher-side operations on mastery templates.
+"""Author-side operations on mastery templates.
 
-Teachers manage their own templates; admins archive and delete anyone's but
-never publish another teacher's template (D17): its draft lives in that
-teacher's workspace, so the owner is the only one who can read it. Preview and publication also refuse to plan sources under any
+Authors manage their own templates; admins archive and delete anyone's but
+never publish another author's template (D17): its draft lives in that
+author's workspace, so the owner is the only one who can read it. Preview and publication also refuse to plan sources under any
 identity but the owner's own request, so a bare book id is never lazily
 registered under someone else's account.
 
@@ -15,7 +15,7 @@ durable visibility intent. Defaults (including an earlier revision's choice)
 and previews record nothing.
 
 Material protection follows applied revisions (preflight item 6): while an
-active student's instance is still on an older revision (for example with a
+active learner's instance is still on an older revision (for example with a
 pending old-revision question), the references that revision needs stay in
 place. :func:`sync_material_references` is the hook that releases them once
 that instance's migration commits (Task 10); a learner leaving and archive
@@ -149,7 +149,7 @@ class _References:
 def _retained_revisions(
     store: TeachingStore, template_id: str, latest: int
 ) -> list[TemplateRevision]:
-    """Older revisions an active student's instance is still on.
+    """Older revisions an active learner's instance is still on.
 
     ``applied_revision`` is 0 until the instance exists (it then starts on the
     latest revision) and moves forward only when a migration commits, so an
@@ -394,7 +394,7 @@ class TeachingService:
         return revision.sources if revision is not None else None
 
     def _unavailable_materials(self, template: MasteryTemplate) -> list[str]:
-        """Labels of published materials students can no longer read (spec 7.4).
+        """Labels of published materials learners can no longer read (spec 7.4).
 
         Gone from the registries, or revoked by an admin: plans B and D move a
         reference they force-revoke (made private, deleted) to a separate list
@@ -412,7 +412,7 @@ class TeachingService:
             revoked.book_id for revoked in book_access.unavailable_references(template.id)
         }
         # A cited book whose own KB bindings are missing, revoked or unshared
-        # (preflight item 5): its students' tutor stops too.
+        # (preflight item 5): its learners' tutor stops too.
         for ref in sources.book_refs:
             if ref.book_id in gone_books:
                 continue
@@ -478,7 +478,7 @@ class TeachingService:
     # ---- publishing -------------------------------------------------------
 
     async def preview_publish(self, template_id: str) -> dict:
-        """Everything the teacher confirms before publishing; writes nothing."""
+        """Everything the author confirms before publishing; writes nothing."""
         # Every synchronous store/registry section runs off the event loop:
         # the teaching store's writer lock can be held by another thread.
         template = await asyncio.to_thread(self._publishable, template_id)
@@ -489,7 +489,7 @@ class TeachingService:
             "first_publish": template.current_revision == 0,
             "items": [],
             "removed": [],
-            # How strict the scored gate is for students, and what it was.
+            # How strict the scored gate is for learners, and what it was.
             "pass_standard": progress.pass_standard,
             "previous_pass_standard": None,
         }
@@ -532,7 +532,7 @@ class TeachingService:
             "knowledge_point_count": sum(len(m.knowledge_points) for m in progress.modules),
             "affected_students": affected,
             "can_publish": not issues and not plan.issues,
-            # Spec 2026-11-02 §4.6: other people's materials students cannot use.
+            # Spec 2026-11-02 §4.6: other people's materials learners cannot use.
             "material_warnings": await asyncio.to_thread(self._material_reach, template, plan),
         }
 
@@ -541,7 +541,7 @@ class TeachingService:
 
         Recipients are the path's current learners (and those an older path
         named); before a first publication nobody has joined yet. Only a
-        warning: the teacher may still publish, or replace the material with
+        warning: the author may still publish, or replace the material with
         their own.
         """
         from deeptutor.book import registry as book_registry
@@ -564,7 +564,7 @@ class TeachingService:
         warnings = []
         for kind, item_id, name, created_by, visibility in cited:
             if created_by == owner:
-                continue  # the teacher's own material reaches the path's students (D8)
+                continue  # the author's own material reaches the path's learners (D8)
             scope = scopes.get_scope(kind, item_id)
             if visibility == "public" and scope is None:
                 continue  # an unscoped public item reaches everyone
@@ -611,7 +611,7 @@ class TeachingService:
             try:
                 run()
             except Exception as exc:
-                logger.exception("Publishing teacher path %s failed at %s", template.id, step)
+                logger.exception("Publishing author path %s failed at %s", template.id, step)
                 raise _StepFailed(step, str(exc)) from exc
             done.append(step)
 
@@ -670,7 +670,7 @@ class TeachingService:
 
         def warn(step: str, error: BaseException) -> None:
             logger.error(
-                "Teacher path %s published, but %s failed", template.id, step, exc_info=error
+                "Author path %s published, but %s failed", template.id, step, exc_info=error
             )
             warnings.append({"step": step, "message": str(error)})
 
@@ -841,7 +841,7 @@ class TeachingService:
             )
         except ValueError as exc:
             logger.exception(
-                "Teacher path %s: revision %s could not be written", template.id, revision.revision
+                "Author path %s: revision %s could not be written", template.id, revision.revision
             )
             raise TemplateConflict(
                 "This path changed while publishing (another publish finished first, or it "
@@ -883,10 +883,10 @@ class TeachingService:
             try:
                 run(template.id)
             except Exception:
-                logger.exception("Could not release %s of teacher path %s", step, template.id)
+                logger.exception("Could not release %s of author path %s", step, template.id)
 
     def archive(self, template_id: str) -> MasteryTemplate:
-        """Stop offering the path; students keep their records but cannot enter."""
+        """Stop offering the path; learners keep their records but cannot enter."""
         template = self.get(template_id)
         updated = self.store.update_template(template.id, status="archived")
         from deeptutor.catalog.listings import content_closed
@@ -927,18 +927,18 @@ def handle_account_deleted(
 ) -> list[str]:
     """Keep teaching data alive when an account goes (spec §7.4).
 
-    A deleted teacher's paths move to the admin who deleted them, together
-    with their active KB/book reference ownership, so assigned students keep
+    A deleted author's paths move to the admin who deleted them, together
+    with their active KB/book reference ownership, so assigned learners keep
     learning; the draft is detached, so the path can be archived but never
-    republished (D17). A deleted student's assignments are
-    revoked so the counts teachers see stay true, and the old-revision
+    republished (D17). A deleted learner's assignments are
+    revoked so the counts authors see stay true, and the old-revision
     materials nobody needs any more are released.
 
     Runs only the requested *stages* and returns those that failed (B2-9), so
     a pending account hand-over can retry exactly them. Every stage is safe to
     run again: a second transfer finds no paths left, a second revocation no
     active assignment, and a material release only ever reduces — which is
-    why it covers every path the student was ever assigned, not just the ones
+    why it covers every path the learner was ever assigned, not just the ones
     revoked now (a crash may have struck between revocation and release). A
     failure's ``stage: error`` line is appended to *errors* when given; with
     *quiet* (retries) its traceback is logged at DEBUG only.
@@ -960,20 +960,20 @@ def handle_account_deleted(
             moved = store.transfer_owner(user_id, successor_id)
             if moved:
                 logger.info(
-                    "Transferred %d teacher path(s) of %s to %s", moved, user_id, successor_id
+                    "Transferred %d author path(s) of %s to %s", moved, user_id, successor_id
                 )
         except Exception as exc:
-            _failure("teacher_paths", exc, "Could not transfer teacher paths of deleted user %s",
+            _failure("teacher_paths", exc, "Could not transfer author paths of deleted user %s",
                      user_id)
             failed.append("teacher_paths")
     if "student_assignments" in stages:
         try:
             revoked = {
                 assignment.template_id
-                for assignment in store.assignments_for_student(user_id)
+                for assignment in store.assignments_for_learner(user_id)
                 if assignment.status == "active"
             }
-            store.revoke_all_for_student(user_id)
+            store.revoke_all_for_learner(user_id)
         except Exception as exc:
             _failure("student_assignments", exc,
                      "Could not revoke assignments of deleted user %s", user_id)
@@ -984,9 +984,9 @@ def handle_account_deleted(
     if "path_materials" not in stages:
         return failed
     try:
-        # Every path the student was on: release is reduce-only, so paths
+        # Every path the learner was on: release is reduce-only, so paths
         # released earlier stay as they are.
-        release = {a.template_id for a in store.assignments_for_student(user_id)}
+        release = {a.template_id for a in store.assignments_for_learner(user_id)}
     except Exception as exc:
         _failure("path_materials", exc, "Could not read assignments of deleted user %s", user_id)
         return [*failed, "path_materials"]
@@ -997,7 +997,7 @@ def handle_account_deleted(
             sync_material_references(template_id, store=store)
         except Exception as exc:
             _failure(f"path_materials ({template_id})", exc,
-                     "Could not release old materials of teacher path %s", template_id)
+                     "Could not release old materials of author path %s", template_id)
             released = False
     if not released:
         failed.append("path_materials")

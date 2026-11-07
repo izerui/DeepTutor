@@ -1,4 +1,4 @@
-"""A student's remedial practice from their own mistakes (spec 2026-11-03 batch 3 §3.2)."""
+"""A learner's remedial practice from their own mistakes (spec 2026-11-03 batch 3 §3.2)."""
 
 from __future__ import annotations
 

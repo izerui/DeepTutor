@@ -115,7 +115,7 @@ it("registers a first publish, defaults private materials to public and sends th
   expect(within(book).getByRole("radio", { name: "Make the book public" })).toBeChecked();
   const kb = screen.getByRole("group", { name: "Answers" });
   fireEvent.click(within(kb).getByRole("radio", { name: "Readable through this path only" }));
-  // Platform batch 1 §4.4: no students to pick; the path is for the market.
+  // Platform batch 1 §4.4: no learners to pick; the path is for the market.
   expect(screen.queryByRole("checkbox", { name: "sara" })).toBeNull();
   expect(api.registerAuthorTemplate).toHaveBeenCalledWith("topic_waves", "");
   expect(screen.queryByText("What changed")).toBeNull();
@@ -172,7 +172,7 @@ it("drops a slow preview of a topic the dialog no longer shows", async () => {
   expect(screen.queryByRole("group", { name: "Waves book" })).toBeNull();
 });
 
-it("shows an update's change list with per-point decisions and the affected students", async () => {
+it("shows an update's change list with per-point decisions and the affected learners", async () => {
   api.previewPublish.mockResolvedValue(
     preview({
       private_kbs: [],
@@ -218,7 +218,7 @@ it("shows an update's change list with per-point decisions and the affected stud
   fireEvent.click(screen.getByRole("button", { name: "Publish" }));
   // Flush the publishTemplate mock resolution and the resulting state update.
   await act(async () => {});
-  // Publication succeeded with a post-version warning: said explicitly, then closed by the teacher.
+  // Publication succeeded with a post-version warning: said explicitly, then closed by the author.
   expect(screen.getByText("Published, but some steps need attention")).toBeVisible();
   expect(screen.getByText("Updating the path's learners did not complete.")).toBeVisible();
   expect(published).not.toHaveBeenCalled();

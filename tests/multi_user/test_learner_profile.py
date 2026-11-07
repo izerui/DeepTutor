@@ -115,10 +115,10 @@ def test_non_admin_learner_accounts_can_manage_own_learner_profile(
     from deeptutor.services.auth import TokenPayload, hash_password
 
     # A non-empty store keeps save_user from bootstrapping the first account
-    # to admin, so "tess" actually lands as a teacher.
+    # to admin, so "tess" actually lands as an author.
     save_user("root", hash_password("root-password"), role="admin")
-    teacher = save_user("tess", hash_password("teacher-password"), role="teacher", preset="learner")
-    tokens = {"teacher-token": TokenPayload(username="tess", role="teacher", user_id=teacher["id"])}
+    author = save_user("tess", hash_password("teacher-password"), role="teacher", preset="learner")
+    tokens = {"teacher-token": TokenPayload(username="tess", role="teacher", user_id=author["id"])}
     monkeypatch.setattr(auth_router, "AUTH_ENABLED", True)
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
 

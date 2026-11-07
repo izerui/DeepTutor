@@ -76,7 +76,7 @@ export default function MasteryTopicPage() {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A teacher path revoked or archived while this page was open.
+  // An author path revoked or archived while this page was open.
   const [closed, setClosed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -308,7 +308,7 @@ export default function MasteryTopicPage() {
     );
   }
 
-  // A teacher's outline: study, review and reset are the learner's; editing,
+  // An author's outline: study, review and reset are the learner's; editing,
   // renaming, deleting and claiming mastery by hand are not.
   const authorLocked = isAuthorInstance(topic);
   const nextCopy = NEXT_LABELS[topic.next.action] ?? {

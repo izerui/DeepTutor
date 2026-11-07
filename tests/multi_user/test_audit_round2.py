@@ -3,7 +3,7 @@
 Spec 2026-10-29: the first administrator is fixed; sockets follow the same
 learning surfaces as REST; citing a knowledge base never widens its scope;
 administrators withdraw or delete others' content and never re-target it (D10);
-practice answers (and right/wrong) wait until the student has submitted.
+practice answers (and right/wrong) wait until the learner has submitted.
 """
 
 from __future__ import annotations
@@ -122,10 +122,10 @@ def test_a_lost_scope_store_fails_closed(teaching_books, teaching_users, as_acco
 # ── mastery paths ──────────────────────────────────────────
 
 
-def test_admins_withdraw_teacher_paths(teacher_draft, publish_template, as_account):
+def test_admins_withdraw_author_paths(author_draft, publish_template, as_account):
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     with as_account("adam"):
         assert TeachingService().archive(template_id).status == "archived"

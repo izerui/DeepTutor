@@ -1,4 +1,4 @@
-"""P5: teacher practice sets (spec 2026-10-29 §8)."""
+"""P5: author practice sets (spec 2026-10-29 §8)."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def test_exact_grading_rules():
     assert exact_result(written, "anything") is None and exact_result(written, " ") == "incorrect"
 
 
-def test_a_student_answers_and_the_teacher_sees_results_not_answers(
+def test_a_learner_answers_and_the_author_sees_results_not_answers(
     published_set, as_account, fake_judge
 ):
     with as_account("sara"):
@@ -92,7 +92,7 @@ def test_a_student_answers_and_the_teacher_sees_results_not_answers(
     assert "SECRET" not in repr(report)
 
 
-def test_outsiders_and_other_teachers_are_refused(published_set, as_account):
+def test_outsiders_and_other_authors_are_refused(published_set, as_account):
     with as_account("uma"):
         with pytest.raises(PracticeNotFound):
             PracticeSetService().take(published_set)

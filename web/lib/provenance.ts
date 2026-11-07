@@ -16,7 +16,7 @@ export const PROVENANCE_ORDER: readonly ProvenanceKind[] = ["shared", "school", 
 
 /**
  * The label for an item. What a learner published reads "Published by tina"
- * for everyone (follow-ups §7; spec 2026-11-05: no teacher label); an
+ * for everyone (follow-ups §7; spec 2026-11-05: no author label); an
  * administrator's, "Published by the platform".
  */
 export function provenanceLabel(provenance: Provenance | null | undefined, t: Translate): string {

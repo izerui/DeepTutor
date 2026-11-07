@@ -391,7 +391,7 @@ def _sanitize(raw: str, language: str, last_answer: str = "") -> str:
         return ""
     # Deliberately NOT requiring a first-person pronoun. "In the learner's own
     # voice" is about stance, not grammar: "为什么说当前的系统是「断裂」的？" is
-    # exactly what a student asks, and demanding a 我 in it would force the
+    # exactly what a learner asks, and demanding a 我 in it would force the
     # stilted "我想问……" instead. Requiring the pronoun rejected essentially
     # every real generation, which made this whole feature silently dead.
     if (_META_ZH if zh else _META_EN).search(text):

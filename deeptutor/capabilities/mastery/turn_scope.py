@@ -1,6 +1,6 @@
 """Admission and materials scope of every turn on a mastery path.
 
-A turn whose active path is a teacher's path is gated and narrowed the same
+A turn whose active path is an author's path is gated and narrowed the same
 way whichever action runs it — the tutor loop, a chat / ask-questions /
 deep-solve action in the mastery workspace, or a standalone pipeline. So the
 gate does not live in any one pipeline: the turn runtime opens a
@@ -8,7 +8,7 @@ gate does not live in any one pipeline: the turn runtime opens a
 path's materials, and the tutor pipeline reuses that turn (or opens one
 itself for CLI / SDK callers that bypass the runtime).
 
-One gate, :func:`teacher_instance_gate`, admits the turn and every path switch
+One gate, :func:`author_instance_gate`, admits the turn and every path switch
 the turn makes (``mastery_switch`` / ``mastery_leave`` reach it through
 :func:`~deeptutor.capabilities.mastery.binding.turn_path_gate`). Every
 admission step — assignment, revision, material availability — belongs there.
@@ -32,7 +32,7 @@ from deeptutor.capabilities.mastery.mode import OUTLINE, STUDY, normalize_mode
 logger = logging.getLogger(__name__)
 
 #: Stable code of a turn or switch refused because the course is closed.
-TEACHER_PATH_UNAVAILABLE_CODE = "teacher_path_unavailable"
+AUTHOR_PATH_UNAVAILABLE_CODE = "teacher_path_unavailable"
 
 
 class MasteryPathUnavailable(RuntimeError):
@@ -47,20 +47,20 @@ class MasteryPathUnavailable(RuntimeError):
         self,
         message: str,
         *,
-        error_code: str = TEACHER_PATH_UNAVAILABLE_CODE,
+        error_code: str = AUTHOR_PATH_UNAVAILABLE_CODE,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
-        self.error_code = error_code or TEACHER_PATH_UNAVAILABLE_CODE
+        self.error_code = error_code or AUTHOR_PATH_UNAVAILABLE_CODE
         #: Extra fields of the terminal error event (``materials``, ...).
         self.error_details = dict(details or {})
 
 
-async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | None:
+async def author_instance_gate(stream: Any, store: Any, path_id: str) -> str | None:
     """Admit a turn (or a switch) onto ``path_id``, or close it.
 
     Returns ``""`` for a path the learner owns, the template id for an open
-    teacher path, and ``None`` when the path may not be entered — an error
+    author path, and ``None`` when the path may not be entered — an error
     has then already been sent to ``stream``. The single gate: later admission
     steps are added here, and apply to turn starts and switches alike.
     """
@@ -82,10 +82,10 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
         await stream.error(
             INSTANCE_UNAVAILABLE,
             source="mastery_path",
-            metadata={"code": TEACHER_PATH_UNAVAILABLE_CODE},
+            metadata={"code": AUTHOR_PATH_UNAVAILABLE_CODE},
         )
         return None
-    # Revision admission: a newer teacher revision is applied before the turn
+    # Revision admission: a newer author revision is applied before the turn
     # reads the path, unless a question is still open (the copy then stays on
     # its applied revision and that revision's materials) or another turn
     # holds the path's lease. The admitted turn's own lease does not block it.
@@ -98,7 +98,7 @@ async def teacher_instance_gate(stream: Any, store: Any, path_id: str) -> str | 
         lease_turn_id=turn.turn_id if turn is not None else "",
     )
     # Material availability, for the revision the copy is on now: never teach
-    # a teacher's course from the model's own knowledge (spec 7.4).
+    # an author's course from the model's own knowledge (spec 7.4).
     missing = await asyncio.to_thread(_unavailable_materials, origin.template_id, path_id, store)
     if missing:
         await stream.error(
@@ -192,7 +192,7 @@ def _material_manifest(path_id: str) -> tuple[str, dict[str, str]]:
 
 
 def _book_bindings(template_id: str, book_ids: list[str]) -> tuple:
-    """Plan D reading bindings of a teacher path's books, as its student."""
+    """Plan D reading bindings of an author path's books, as its learner."""
     from deeptutor.book.registry import reading_bindings
     from deeptutor.teaching.access import studying_template
 
@@ -206,7 +206,7 @@ class _Admission:
     template_id: str
     refs: list[str]
     allowed: frozenset[str] | None
-    #: Plan D reading bindings of the path's books (teacher paths only).
+    #: Plan D reading bindings of the path's books (author paths only).
     books: tuple = ()
 
 
@@ -246,7 +246,7 @@ class MasteryTurn:
 
     async def admit(self, stream: Any, store: Any, path_id: str) -> _Admission | None:
         # Module global on purpose: one gate, also for tests that stand it in.
-        template_id = await teacher_instance_gate(stream, store, path_id)
+        template_id = await author_instance_gate(stream, store, path_id)
         if template_id is None:
             return None
         topic = (
@@ -261,7 +261,7 @@ class MasteryTurn:
             from deeptutor.multi_user.retrieval_scope import canonical_kb_ids
             from deeptutor.teaching.instances import path_book_ids, path_book_kb_refs
 
-            # R8: a teacher path is taught from its own materials only — the
+            # R8: an author path is taught from its own materials only — the
             # KBs it cites and the KBs its books are bound to.
             book_ids = path_book_ids(topic)
             refs = list(
@@ -280,7 +280,7 @@ class MasteryTurn:
         self.template_id = admission.template_id
         self.refs = list(admission.refs)
         if admission.allowed is not None:
-            # R8: a teacher path is taught from its own libraries only; the
+            # R8: an author path is taught from its own libraries only; the
             # scope also names the template the turn studies now.
             self.scope.restrict(admission.allowed, template_id=admission.template_id)
         else:
@@ -318,7 +318,7 @@ class MasteryTurn:
         """Whether the turn-start history may follow a switch onto ``admission``.
 
         Scope only narrows (R8): an archive carries no record of which
-        libraries it quoted, so it may enter a teacher path's allowlist only
+        libraries it quoted, so it may enter an author path's allowlist only
         when it was admitted under that same course's scope or a narrower one.
         A learner-owned path has no allowlist and keeps it.
         """
@@ -419,12 +419,12 @@ async def open_mastery_turn(
 
 
 __all__ = [
-    "TEACHER_PATH_UNAVAILABLE_CODE",
+    "AUTHOR_PATH_UNAVAILABLE_CODE",
     "MasteryPathUnavailable",
     "MasteryTurn",
     "RefusalRecorder",
     "current_mastery_turn",
     "open_mastery_turn",
     "path_kb_refs",
-    "teacher_instance_gate",
+    "author_instance_gate",
 ]

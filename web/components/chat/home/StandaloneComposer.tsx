@@ -207,7 +207,7 @@ interface StandaloneComposerProps {
   onResourceSelectionChange?: (selection: ResourceSelection) => void;
   /**
    * Fallback display names for knowledge-base refs the fetched catalog does
-   * not list (e.g. teacher-path `kb:<id>` references). Threaded to
+   * not list (e.g. author-path `kb:<id>` references). Threaded to
    * ChatComposer's context-tree label resolution.
    */
   knowledgeBaseLabels?: Record<string, string>;

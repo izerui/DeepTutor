@@ -81,11 +81,11 @@ def test_a_token_from_the_same_second_as_a_password_reset_also_ends(teaching_use
 
 
 def test_a_learner_made_administrator_leaves_their_assignments(
-    teacher_draft, publish_template, teaching_users, as_account
+    author_draft, publish_template, teaching_users, as_account
 ):
     from deeptutor.teaching.store import TeachingStore
 
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     # Older data: the path named Sara and Sam; named receivers are learners only.
     scopes._store_scope(scopes.MASTERY_PATH, template_id,
@@ -232,7 +232,7 @@ def test_no_answers_before_submitting_even_after_an_older_deadline(practice_set,
     assert not taken["answers_revealed"] and "correct_answer" not in taken["questions"][0]
 
 
-def test_reports_keep_students_who_left(practice_set, as_account, teaching_users):
+def test_reports_keep_learners_who_left(practice_set, as_account, teaching_users):
     set_id, _ = practice_set
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
@@ -244,7 +244,7 @@ def test_reports_keep_students_who_left(practice_set, as_account, teaching_users
     assert left["completed"] and left["in_scope"] is False
 
 
-def test_answers_are_graded_against_the_version_the_student_opened(practice_set, as_account):
+def test_answers_are_graded_against_the_version_the_learner_opened(practice_set, as_account):
     from deeptutor.practice_sets import store as practice_store
     from deeptutor.practice_sets.service import PracticeError
 
@@ -252,7 +252,7 @@ def test_answers_are_graded_against_the_version_the_student_opened(practice_set,
     with as_account("sara"):
         opened = PracticeSetService().take(set_id)
     qid = opened["questions"][0]["question_id"]
-    # The teacher changes the key and republishes while Sara is answering.
+    # The author changes the key and republishes while Sara is answering.
     with as_account("tina"):
         PracticeSetService().update(set_id, questions=[{**QUESTIONS[0], "correct_answer": "A"}])
         PracticeSetService().publish(set_id)

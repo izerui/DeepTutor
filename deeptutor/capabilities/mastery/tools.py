@@ -643,19 +643,19 @@ def _wrong_mode_result(tool_name: str, kwargs: dict[str, Any]) -> ToolResult | N
 
 
 def _outline_locked_result(service: LearningService, path_id: str) -> ToolResult | None:
-    """Refuse an outline change on a path whose outline belongs to a teacher.
+    """Refuse an outline change on a path whose outline belongs to an author.
 
     Reads one stored member (the path's origin) and never the teaching
     database, so a learner's own path pays nothing for the check. Synchronous
     storage access: async callers hand it to a worker thread.
     """
-    from deeptutor.capabilities.mastery.mode import TEACHER_OUTLINE_LOCKED
+    from deeptutor.capabilities.mastery.mode import AUTHOR_OUTLINE_LOCKED
     from deeptutor.teaching.instances import OutlineLockedError, ensure_outline_mutable
 
     try:
         ensure_outline_mutable(path_id, service.store)
     except OutlineLockedError:
-        return ToolResult(content=TEACHER_OUTLINE_LOCKED, success=False)
+        return ToolResult(content=AUTHOR_OUTLINE_LOCKED, success=False)
     return None
 
 

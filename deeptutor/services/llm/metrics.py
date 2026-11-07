@@ -78,7 +78,7 @@ class CallMeasurement:
         self.call_id = uuid.uuid4().hex
         self.started_at = time.time()
         self.ledger = None
-        # Batch 3 §8: a student over today's AI limit is refused before the call.
+        # Batch 3 §8: a learner over today's AI limit is refused before the call.
         self.exempt = False
         if self.enabled:
             from .usage_limit import admit_call, is_exempt

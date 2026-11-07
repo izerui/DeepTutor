@@ -1,17 +1,17 @@
-"""What a teacher may read of a learner's study (spec 2026-10-29 D17, option B).
+"""What an author may read of a learner's study (spec 2026-10-29 D17, option B).
 
-For the learners of a teacher's course or Mastery Path:
+For the learners of an author's course or Mastery Path:
 
-* progress, scores and mistakes on the Mastery Paths *this teacher* published
-  and assigned (titles and knowledge points are the teacher's own text), and
-* an overall summary of the student's learning, self-study included: study
+* progress, scores and mistakes on the Mastery Paths *this author* published
+  and assigned (titles and knowledge points are the author's own text), and
+* an overall summary of the learner's learning, self-study included: study
   time, how many knowledge points are mastered, quiz and question-bank tallies.
 
-Only numbers, timestamps and teacher-authored names leave the student's
-storage. Conversation text, the student's own answers, notes, self-study path
+Only numbers, timestamps and author-written names leave the learner's
+storage. Conversation text, the learner's own answers, notes, self-study path
 titles and AI feedback are never read into a report. Every store is opened
-read-only; a student who never studied has nothing created for them. Reports
-cover the student's default space (where assigned paths live).
+read-only; a learner who never studied has nothing created for them. Reports
+cover the learner's default space (where assigned paths live).
 """
 
 from __future__ import annotations
@@ -31,10 +31,10 @@ _TURN_CAP_SECONDS = 30 * 60
 _WEEK_SECONDS = 7 * 86400
 
 
-def _student_paths(student_id: str):
+def _learner_paths(learner_id: str):
     from deeptutor.multi_user.paths import get_path_service_for_scope, scope_for_user
 
-    return get_path_service_for_scope(scope_for_user(student_id, is_admin=False))
+    return get_path_service_for_scope(scope_for_user(learner_id, is_admin=False))
 
 
 def _read_only(path: Path) -> sqlite3.Connection | None:
@@ -45,12 +45,12 @@ def _read_only(path: Path) -> sqlite3.Connection | None:
     return conn
 
 
-def _snapshots(student_id: str) -> list[tuple[Any, Any]]:
-    """(progress, topic) of the student's active paths, without creating a store."""
+def _snapshots(learner_id: str) -> list[tuple[Any, Any]]:
+    """(progress, topic) of the learner's active paths, without creating a store."""
     from deeptutor.learning.migration import mastery_v2_root
     from deeptutor.learning.storage import LearningStore
 
-    learning_root = _student_paths(student_id).get_workspace_dir() / "learning"
+    learning_root = _learner_paths(learner_id).get_workspace_dir() / "learning"
     root = mastery_v2_root(learning_root)
     if not (root / LearningStore._DB_FILENAME).is_file():
         return []
@@ -80,8 +80,8 @@ def _path_numbers(progress) -> dict[str, Any]:
     }
 
 
-def _question_bank(student_id: str) -> dict[str, Any]:
-    db = _student_paths(student_id).get_chat_history_db()
+def _question_bank(learner_id: str) -> dict[str, Any]:
+    db = _learner_paths(learner_id).get_chat_history_db()
     conn = _read_only(db)
     tally = {"total": 0, "correct": 0, "partial": 0, "incorrect": 0}
     study = {"study_minutes_total": 0, "study_minutes_7d": 0}
@@ -117,9 +117,9 @@ TREND_WEEKS = 8
 PERIODS = (7, 30)
 
 
-def _turn_spans(student_id: str, since: float) -> list[tuple[float, float]]:
-    """(started, seconds) of the student's chat turns since *since*; times only."""
-    conn = _read_only(_student_paths(student_id).get_chat_history_db())
+def _turn_spans(learner_id: str, since: float) -> list[tuple[float, float]]:
+    """(started, seconds) of the learner's chat turns since *since*; times only."""
+    conn = _read_only(_learner_paths(learner_id).get_chat_history_db())
     if conn is None:
         return []
     with closing(conn):
@@ -136,12 +136,12 @@ def _turn_spans(student_id: str, since: float) -> list[tuple[float, float]]:
             return []
 
 
-def _activity(student_id: str, snapshots, *, days: int | None) -> dict[str, Any]:
+def _activity(learner_id: str, snapshots, *, days: int | None) -> dict[str, Any]:
     """Study minutes and answers in the period, and the last 8 weeks week by week (batch 3 §6.3)."""
     now = time.time()
     trend_start = now - TREND_WEEKS * _WEEK_SECONDS
     since = now - days * 86400 if days else 0.0
-    spans = _turn_spans(student_id, min(since, trend_start) if days else 0.0)
+    spans = _turn_spans(learner_id, min(since, trend_start) if days else 0.0)
     answers = [
         float(a.timestamp) for progress, _ in snapshots for a in progress.quiz_attempts
         if not getattr(a, "voided", False) and getattr(a, "timestamp", None)
@@ -162,7 +162,7 @@ def _activity(student_id: str, snapshots, *, days: int | None) -> dict[str, Any]
 
 
 def _point_stats(progress, kp) -> dict[str, Any]:
-    """How a student has fared on one knowledge point (batch 3 §6.2): times and counts only."""
+    """How a learner has fared on one knowledge point (batch 3 §6.2): times and counts only."""
     from deeptutor.learning.policy import is_mastered
 
     tried = [
@@ -193,13 +193,13 @@ class LearnerData:
         #: administrator reads the report of (spec 2026-11-05 §2).
         self.author_id = self.actor.id
 
-    def _my_practice_results(self, student_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    def _my_practice_results(self, learner_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
         """D17: each learner's results on the author's practice sets (scores only)."""
         from deeptutor.practice_sets import store as practice_store
 
-        if not student_ids:
+        if not learner_ids:
             return {}
-        marks = ",".join("?" for _ in student_ids)
+        marks = ",".join("?" for _ in learner_ids)
         with practice_store.read() as conn:
             if conn is None:
                 return {}
@@ -208,7 +208,7 @@ class LearnerData:
                 f"FROM practice_submissions s JOIN practice_sets p ON p.id = s.set_id "
                 f"WHERE p.owner_user_id = ? AND s.student_id IN ({marks}) "
                 f"ORDER BY s.submitted_at",
-                (self.author_id, *student_ids),
+                (self.author_id, *learner_ids),
             ).fetchall()
         grouped: dict[tuple[str, str], list] = {}
         for row in rows:
@@ -216,10 +216,10 @@ class LearnerData:
         results: dict[str, list[dict[str, Any]]] = {}
         from deeptutor.practice_sets.service import best_submission
 
-        for (student_id, set_id), mine in grouped.items():
+        for (learner_id, set_id), mine in grouped.items():
             first = mine[0]
             best = best_submission(mine)
-            results.setdefault(student_id, []).append({
+            results.setdefault(learner_id, []).append({
                 "set_id": set_id,
                 "title": first["title"],
                 "attempts": len(mine),
@@ -240,11 +240,11 @@ class LearnerData:
             for template in TeachingStore().list_templates(owner_user_id=self.author_id)
         }
 
-    def _student_report(
-        self, student_id: str, my_templates: dict[str, str], *, detail: bool, days: int | None = None,
+    def _learner_report(
+        self, learner_id: str, my_templates: dict[str, str], *, detail: bool, days: int | None = None,
     ) -> dict[str, Any]:
-        snapshots = _snapshots(student_id)
-        teacher_paths: list[dict[str, Any]] = []
+        snapshots = _snapshots(learner_id)
+        author_paths: list[dict[str, Any]] = []
         overall = {"path_count": len(snapshots), "self_study_path_count": 0, "kp_total": 0, "kp_mastered": 0,
                    "attempts": {"correct": 0, "partial": 0, "incorrect": 0}, "last_activity": None}
         for progress, _topic in snapshots:
@@ -278,10 +278,10 @@ class LearnerData:
                      "mastered": is_mastered(progress, kp), **_point_stats(progress, kp)}
                     for kp in points
                 ]
-            teacher_paths.append(entry)
-        overall.update(_question_bank(student_id))
-        overall.update(_activity(student_id, snapshots, days=days))
-        return {"teacher_paths": teacher_paths, "overall": overall}
+            author_paths.append(entry)
+        overall.update(_question_bank(learner_id))
+        overall.update(_activity(learner_id, snapshots, days=days))
+        return {"teacher_paths": author_paths, "overall": overall}
 
 
 __all__ = ["LearnerData", "PERIODS"]

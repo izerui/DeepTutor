@@ -262,7 +262,7 @@ def test_withdrawal_checks_reference_committed_by_other_worker(process_library):
     process = start(root, "withdraw", book.book_id)
     try:
         result = finish(process, root, "withdraw")
-        # Rule R1: a teacher-path reference committed by another worker is seen
+        # Rule R1: an author-path reference committed by another worker is seen
         # by the withdrawal, which then asks for confirmation and changes nothing.
         assert result["status"] == "error"
         assert result["error"] == "BookWithdrawalNeedsConfirmation"

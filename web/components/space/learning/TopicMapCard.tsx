@@ -22,7 +22,7 @@ export function TopicMapCard({
   topic: MasteryTopic
   /** Where the card opens; the topic dashboard by default. */
   href?: string
-  /** Shown beside the workspace label, e.g. the assigning teacher. */
+  /** Shown beside the workspace label, e.g. the assigning author. */
   badge?: ReactNode
   /** Rendered below the link, outside it, so it may hold its own buttons. */
   footer?: ReactNode

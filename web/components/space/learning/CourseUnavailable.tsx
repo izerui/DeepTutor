@@ -9,7 +9,7 @@ import { COURSE_UNAVAILABLE_KEY } from '@/lib/author-path-messages'
 import { scopedUrl } from '@/lib/workspace-scope'
 
 /**
- * A teacher path the learner can no longer open: the teacher removed their
+ * An author path the learner can no longer open: the author removed their
  * access or archived it. Shown instead of a page that would 403 on every read.
  */
 export function CourseUnavailable() {

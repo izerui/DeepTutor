@@ -142,7 +142,7 @@ def normalize_grant(user_id: str, payload: dict[str, Any] | None) -> dict[str, A
     tokens = normalize_ai_daily_tokens(payload.get(AI_DAILY_TOKENS))
     legacy = payload.get("student_policy")
     if tokens is None and isinstance(legacy, dict):
-        # Spec 2026-11-05 §3: the retired student policy is no longer read,
+        # Spec 2026-11-05 §3: the retired learner policy is no longer read,
         # except the personal AI limit it used to carry.
         tokens = normalize_ai_daily_tokens(legacy.get(AI_DAILY_TOKENS))
     base[AI_DAILY_TOKENS] = tokens

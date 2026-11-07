@@ -31,7 +31,7 @@ WORKSPACES_ADMIN_ONLY = "Workspaces are managed by an administrator."
 
 
 def _require_workspace_admin() -> None:
-    """Spec 2026-10-29 D4: teachers and students have one space; no workspace management."""
+    """Spec 2026-10-29 D4: authors and learners have one space; no workspace management."""
     from deeptutor.multi_user.context import get_current_user
 
     if not get_current_user().is_admin:

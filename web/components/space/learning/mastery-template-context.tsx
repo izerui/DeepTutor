@@ -3,7 +3,7 @@
 import { createContext, useContext } from 'react'
 
 /**
- * The teacher path a Study page is showing, or "". Source previews inside the
+ * The author path a Study page is showing, or "". Source previews inside the
  * transcript add it to their knowledge-base requests so a reference-only
  * library opens for exactly those reads (the server checks the assignment).
  * Only an open path provides it: a closed one would turn every read into 403,

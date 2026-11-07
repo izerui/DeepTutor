@@ -1,7 +1,7 @@
 """Account deletion never runs its blocking hand-overs on the event loop.
 
 ``_delete_admin_user`` deletes the account and then hands knowledge bases,
-books and teacher paths to the deleting admin (each through blocking SQLite
+books and author paths to the deleting admin (each through blocking SQLite
 writers with process locks and long busy timeouts). The HTTP handlers must run
 that work in a worker thread under a copy of the request context, so the
 current-user ContextVar (the deleting admin) still reaches the stages that

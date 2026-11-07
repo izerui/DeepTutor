@@ -129,7 +129,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   const [booksError, setBooksError] = useState<string | null>(null)
   const { isAdmin } = useAuthStatus()
   const [sharingBook, setSharingBook] = useState<Book | null>(null)
-  // Rule R1: published teacher paths cite the book; confirm with counts only.
+  // Rule R1: published author paths cite the book; confirm with counts only.
   const [referencedDelete, setReferencedDelete] = useState<{ book: Book; impact: WithdrawalImpact } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const alive = useRef(true)
@@ -301,7 +301,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
         if (!alive.current) return
         setLearningCaptures(captures)
       } catch (err) {
-        // A book read through a teacher path (R9) opens its originals only;
+        // A book read through an author path (R9) opens its originals only;
         // the reader's own captures there are simply empty, not an error.
         if (err instanceof BookApiError && err.status === 404 && currentMasteryTemplate()) {
           setLearningCaptures([])
@@ -433,7 +433,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
 
   const canEditBook = detail?.book.can_edit !== false
   /**
-   * Someone else's private book opened from Study through a teacher path
+   * Someone else's private book opened from Study through an author path
    * (R9). The path opens its content and the reader's own progress,
    * bookmarks, quiz answers and captures (B2-17: kept in the reader's own
    * store, like any shared book's). Editor surfaces such as the health
@@ -569,7 +569,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
     await refreshBooks()
   }
 
-  // Rule R1: other references never block; teacher paths need consent to the
+  // Rule R1: other references never block; author paths need consent to the
   // counts shown. Changed counts come back as a fresh confirmation.
   const deleteBook = async (book: Book, confirmed: WithdrawalImpact | null = null) =>
     guard('Delete book', async () => {

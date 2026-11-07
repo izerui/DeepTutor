@@ -1,6 +1,6 @@
 """Publishing records explicit reference-only intent against pending migrations.
 
-A legacy grant still waiting for its migration retry would make the teacher's
+A legacy grant still waiting for its migration retry would make the author's
 material public. An explicit "share by reference only" choice in the publish
 request must win over that retry, for a KB the path cites directly and for a
 book it cites directly; a preview (or no explicit choice) records nothing, so

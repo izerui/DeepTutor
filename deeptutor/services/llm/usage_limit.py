@@ -40,7 +40,7 @@ class AiLimitReached(LLMError):
 
 @contextmanager
 def exempt() -> Iterator[None]:
-    """Calls made inside are not counted against the student's limit."""
+    """Calls made inside are not counted against the learner's limit."""
     token = _exempt.set(True)
     try:
         yield
@@ -116,7 +116,7 @@ def used_today(path: Path) -> int:
     return total
 
 
-def _student() -> str | None:
+def _learner() -> str | None:
     """The acting learner's id, or ``None`` for anyone who is not limited.
 
     Spec 2026-11-05 §2: every learner is limited, whatever their stored role;
@@ -137,14 +137,14 @@ def _student() -> str | None:
 
 def status_for_current_user() -> dict[str, int | None]:
     """``{limit, used, remaining_percent}``; ``limit`` is ``0`` when there is none."""
-    student = _student()
-    if student is None:
+    learner = _learner()
+    if learner is None:
         return {"limit": 0, "used": 0, "remaining_percent": None}
     from deeptutor.multi_user.roles import effective_ai_daily_tokens
 
     from .usage_ledger import ledger_path
 
-    limit = effective_ai_daily_tokens(student)
+    limit = effective_ai_daily_tokens(learner)
     used = used_today(ledger_path())
     if not limit:
         return {"limit": 0, "used": used, "remaining_percent": None}
@@ -152,7 +152,7 @@ def status_for_current_user() -> dict[str, int | None]:
 
 
 def admit_call(collector: object | None) -> None:
-    """Refuse a student's call once today's tokens reached their limit.
+    """Refuse a learner's call once today's tokens reached their limit.
 
     Within a turn (``collector``) only the first call is checked, so an
     answer that started is never cut off halfway.
@@ -161,13 +161,13 @@ def admit_call(collector: object | None) -> None:
         return
     if collector is not None and getattr(collector, "ai_limit_admitted", False):
         return
-    student = _student()
-    if student is not None:
+    learner = _learner()
+    if learner is not None:
         from deeptutor.multi_user.roles import effective_ai_daily_tokens
 
         from .usage_ledger import ledger_path
 
-        limit = effective_ai_daily_tokens(student)
+        limit = effective_ai_daily_tokens(learner)
         if limit and used_today(ledger_path()) >= limit:
             raise AiLimitReached()
     if collector is not None:

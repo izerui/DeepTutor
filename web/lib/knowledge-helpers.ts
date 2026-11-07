@@ -634,7 +634,7 @@ export function groupKnowledgeBases<T extends Pick<KnowledgeBase, "visibility" |
  * Resolve the display label for a knowledge-base ref.
  *
  * Priority: catalog name (the user's own KB list) → caller-supplied label map
- * (e.g. teacher-path source labels a student cannot look up) → raw ref as-is.
+ * (e.g. author-path source labels a learner cannot look up) → raw ref as-is.
  */
 export function resolveKnowledgeBaseLabel(
   id: string,

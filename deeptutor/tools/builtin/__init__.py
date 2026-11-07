@@ -287,12 +287,12 @@ class RAGTool(_PromptHintsMixin, BaseTool):
         if not kb_name:
             raise ValueError("RAG requires an explicit kb_name.")
         from deeptutor.multi_user.retrieval_scope import (
-            TEACHER_PATH_SCOPE_CODE,
+            AUTHOR_PATH_SCOPE_CODE,
             current_retrieval_scope,
             retrieval_refusal,
         )
 
-        # R8: a teacher path's turn retrieves (text or visuals) from the path's
+        # R8: an author path's turn retrieves (text or visuals) from the path's
         # own libraries only. ``resolve_for_rag`` enforces the same allowlist;
         # this states the refusal as a result the tutor can act on.
         scope = current_retrieval_scope()
@@ -305,7 +305,7 @@ class RAGTool(_PromptHintsMixin, BaseTool):
             return ToolResult(
                 content=refusal,
                 success=False,
-                metadata={"error_type": TEACHER_PATH_SCOPE_CODE, "kb_name": kb_name},
+                metadata={"error_type": AUTHOR_PATH_SCOPE_CODE, "kb_name": kb_name},
             )
         event_sink = None if kwargs.get("_mastery_source_context") else kwargs.get("event_sink")
         vision_supported = bool(kwargs.get("_vision_supported", False))

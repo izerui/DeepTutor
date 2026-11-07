@@ -342,7 +342,7 @@ function CourseEditor({
         )}
       </div>
       {/* Traceability #5: what an administrator holds goes to a learner. */}
-      {isAdmin && <HandOverPanel handOver={(learnerId) => handOverCourse(course.id, learnerId)} onDone={onDeleted} />}
+      {isAdmin && <HandOverPanel handOver={(recipientId) => handOverCourse(course.id, recipientId)} onDone={onDeleted} />}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
     </fieldset>
   );

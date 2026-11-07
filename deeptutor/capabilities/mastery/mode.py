@@ -83,7 +83,7 @@ TOOL_MODES: dict[str, frozenset[str]] = {
 
 #: What the tutor is told when anything would change an author's outline. It
 #: names the move the learner can still make, so the refusal is not retried.
-TEACHER_OUTLINE_LOCKED = (
+AUTHOR_OUTLINE_LOCKED = (
     "This path's outline was set by the author of this path and is read-only: "
     "no module or knowledge point can be added, removed, renamed or reordered, "
     "and the 'outline' mode is closed. Tell the learner the outline comes from "
@@ -133,7 +133,7 @@ def tool_is_allowed(tool_name: str, mode: Any) -> bool:
 def admission_error(mode: Any, *, has_outline: bool, outline_locked: bool = False) -> str:
     """Why this mode cannot be entered, or ``""``.
 
-    Two refusals exist. A teacher's path never opens the outline mode, because
+    Two refusals exist. An author's path never opens the outline mode, because
     its outline is not the learner's to redesign. And there is nothing to
     study until an outline is agreed. Reviewing is deliberately *not* gated on
     anything being due — a due date is a reminder, not a permission.
@@ -142,7 +142,7 @@ def admission_error(mode: Any, *, has_outline: bool, outline_locked: bool = Fals
     tutor and the learner cannot be told different things about the same move.
     """
     if outline_locked and normalize_mode(mode) == OUTLINE:
-        return TEACHER_OUTLINE_LOCKED
+        return AUTHOR_OUTLINE_LOCKED
     if normalize_mode(mode) == STUDY and not has_outline:
         return (
             "There is no outline to study yet. Stay in 'outline' and design "
@@ -182,7 +182,7 @@ __all__ = [
     "OUTLINE",
     "REVIEW",
     "STUDY",
-    "TEACHER_OUTLINE_LOCKED",
+    "AUTHOR_OUTLINE_LOCKED",
     "TOOL_MODES",
     "admission_error",
     "enforced_mode",

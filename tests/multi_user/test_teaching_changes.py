@@ -1,4 +1,4 @@
-"""Change detection between two revisions of a teacher's outline."""
+"""Change detection between two revisions of an author's outline."""
 
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def test_unchanged_outline_never_asks_the_model(monkeypatch):
     ] * 3
 
 
-def test_build_change_log_follows_the_teachers_decisions():
+def test_build_change_log_follows_the_authors_decisions():
     log, aliases = build_change_log(
         diff_outlines(OLD, NEW),
         {

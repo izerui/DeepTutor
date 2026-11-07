@@ -9,7 +9,7 @@ may still name accounts or say "everyone": both are read, never written anew
   ``private`` reaches nobody but the owner. A public item without a scope row
   reaches everyone, as before; with one, only its audience.
 * A Mastery Path's audience is turned into assignments: :func:`reconcile_template`
-  when its receivers change, :func:`reconcile_student` when a learner opens
+  when its receivers change, :func:`reconcile_learner` when a learner opens
   their learning list. An unmanaged path keeps its old hand-made assignments.
 * An item an administrator took down reaches nobody but its owner.
 
@@ -52,7 +52,7 @@ class ScopeNotFound(ScopeError):
 class Scope:
     #: Content from before the market only; new content reaches everyone through the market.
     everyone: bool = False
-    #: Accounts named by older content (e.g. a teacher's remedial set); read, never added.
+    #: Accounts named by older content (e.g. an author's remedial set); read, never added.
     users: list[str] = field(default_factory=list)
     #: False when the item has never had a scope (the old rule applies).
     managed: bool = True
@@ -249,14 +249,14 @@ def _apply_assignments(template, add: set[str], remove: set[str]) -> None:
     teaching = TeachingStore()
     if add:
         teaching.assign(template.id, sorted(add), assigned_by=template.owner_user_id)
-    for student_id in remove:
-        teaching.revoke(template.id, student_id)
+    for learner_id in remove:
+        teaching.revoke(template.id, learner_id)
     if remove:
         notify_instance_closed(template.id)
     try:
         sync_material_references(template.id, store=teaching, restore=bool(add))
     except Exception:
-        logger.exception("Could not sync the materials of teacher path %s", template.id)
+        logger.exception("Could not sync the materials of author path %s", template.id)
 
 
 def reconcile_template(template_id: str) -> None:
@@ -273,19 +273,19 @@ def reconcile_template(template_id: str) -> None:
     _apply_assignments(template, wanted - active, active - wanted)
 
 
-def reconcile_student(student_id: str) -> None:
+def reconcile_learner(learner_id: str) -> None:
     """Bring one learner's assignments in line with every scoped path."""
     from deeptutor.teaching.store import TeachingStore
 
     templates = managed_items(MASTERY_PATH)
     if not templates:
         return
-    account = _accounts().get(student_id)
+    account = _accounts().get(learner_id)
     active = bool(account) and not account["disabled"]
-    is_student = active and account["role"] != "admin"
+    is_learner = active and account["role"] != "admin"
     teaching = TeachingStore()
     assigned = {
-        a.template_id for a in teaching.assignments_for_student(student_id) if a.status == "active"
+        a.template_id for a in teaching.assignments_for_learner(learner_id) if a.status == "active"
     }
     try:
         from deeptutor.catalog.enrollment import access_states
@@ -304,21 +304,21 @@ def reconcile_student(student_id: str) -> None:
             scope = Scope()
         if template is None or scope is None or template.status != "published":
             continue
-        wanted = student_id != template.owner_user_id and (
-            (is_student and (scope.everyone or student_id in scope.users)) or (active and student_id in scope.members)
+        wanted = learner_id != template.owner_user_id and (
+            (is_learner and (scope.everyone or learner_id in scope.users)) or (active and learner_id in scope.members)
         )
         has = template_id in assigned
         if wanted != has:
             _apply_assignments(
-                template, {student_id} if wanted else set(), set() if wanted else {student_id}
+                template, {learner_id} if wanted else set(), set() if wanted else {learner_id}
             )
 
 
-def reconcile_student_quietly(student_id: str) -> None:
+def reconcile_learner_quietly(learner_id: str) -> None:
     try:
-        reconcile_student(student_id)
+        reconcile_learner(learner_id)
     except Exception:
-        logger.exception("Could not update the Mastery Path assignments of %s", student_id)
+        logger.exception("Could not update the Mastery Path assignments of %s", learner_id)
 
 
 __all__ = [
@@ -339,7 +339,7 @@ __all__ = [
     "get_scope",
     "managed_items",
     "named_items",
-    "reconcile_student",
-    "reconcile_student_quietly",
+    "reconcile_learner",
+    "reconcile_learner_quietly",
     "reconcile_template",
 ]

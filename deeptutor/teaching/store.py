@@ -1,8 +1,8 @@
-"""System-level persistence for teacher mastery templates.
+"""System-level persistence for author mastery templates.
 
 Lives in ``<SYSTEM_ROOT>/teaching.sqlite3``, outside every account workspace:
 templates, their immutable published revisions, and who they are assigned to.
-A student's learning state never comes here — it stays in their own
+A learner's learning state never comes here — it stays in their own
 ``mastery.sqlite3``.
 
 Journal mode: DELETE with FULL synchronous, matching the existing KB and book
@@ -404,7 +404,7 @@ class TeachingStore:
     ) -> int:
         """Hand every template of a deleted account to its successor.
 
-        With *published_only* (a teacher who became a student keeps their
+        With *published_only* (an author who became a learner keeps their
         account): only templates ever published move; drafts stay theirs.
 
         The draft lived in the deleted account's workspace, so it is detached:
@@ -567,12 +567,12 @@ class TeachingStore:
     # ---- assignments ------------------------------------------------------
 
     def assign(
-        self, template_id: str, student_ids: list[str], *, assigned_by: str
+        self, template_id: str, learner_ids: list[str], *, assigned_by: str
     ) -> list[MasteryAssignment]:
-        """Activate each student; a revoked row comes back with its instance."""
+        """Activate each learner; a revoked row comes back with its instance."""
         now = time.time()
         with _write(self.db_path) as conn:
-            for student_id in dict.fromkeys(student_ids):
+            for learner_id in dict.fromkeys(learner_ids):
                 conn.execute(
                     """
                     INSERT INTO mastery_assignments (
@@ -583,28 +583,28 @@ class TeachingStore:
                         assigned_by = excluded.assigned_by,
                         revoked_at = NULL
                     """,
-                    (template_id, student_id, assigned_by, now),
+                    (template_id, learner_id, assigned_by, now),
                 )
         return self.list_assignments(template_id)
 
-    def revoke(self, template_id: str, student_id: str) -> MasteryAssignment | None:
+    def revoke(self, template_id: str, learner_id: str) -> MasteryAssignment | None:
         with _write(self.db_path) as conn:
             conn.execute(
                 """
                 UPDATE mastery_assignments SET status = 'revoked', revoked_at = ?
                 WHERE template_id = ? AND student_user_id = ? AND status = 'active'
                 """,
-                (time.time(), template_id, student_id),
+                (time.time(), template_id, learner_id),
             )
-        return self.get_assignment(template_id, student_id)
+        return self.get_assignment(template_id, learner_id)
 
-    def get_assignment(self, template_id: str, student_id: str) -> MasteryAssignment | None:
+    def get_assignment(self, template_id: str, learner_id: str) -> MasteryAssignment | None:
         with _read(self.db_path) as conn:
             if conn is None:
                 return None
             row = conn.execute(
                 "SELECT * FROM mastery_assignments WHERE template_id = ? AND student_user_id = ?",
-                (template_id, student_id),
+                (template_id, learner_id),
             ).fetchone()
         return self._assignment(row) if row is not None else None
 
@@ -618,20 +618,20 @@ class TeachingStore:
             ).fetchall()
         return [self._assignment(row) for row in rows]
 
-    def assignments_for_student(self, student_id: str) -> list[MasteryAssignment]:
+    def assignments_for_learner(self, learner_id: str) -> list[MasteryAssignment]:
         with _read(self.db_path) as conn:
             if conn is None:
                 return []
             rows = conn.execute(
                 "SELECT * FROM mastery_assignments WHERE student_user_id = ? ORDER BY assigned_at",
-                (student_id,),
+                (learner_id,),
             ).fetchall()
         return [self._assignment(row) for row in rows]
 
     def record_instance(
         self,
         template_id: str,
-        student_id: str,
+        learner_id: str,
         *,
         instance_path_id: str,
         applied_revision: int,
@@ -644,7 +644,7 @@ class TeachingStore:
                 WHERE template_id = ? AND student_user_id = ?
                   AND applied_revision < ?
                 """,
-                (instance_path_id, applied_revision, template_id, student_id, applied_revision),
+                (instance_path_id, applied_revision, template_id, learner_id, applied_revision),
             )
 
     def has_assignments(self, template_id: str) -> bool:
@@ -668,13 +668,13 @@ class TeachingStore:
             ).fetchone()
         return int(row["n"])
 
-    def revoke_all_for_student(self, student_id: str) -> int:
+    def revoke_all_for_learner(self, learner_id: str) -> int:
         with _write(self.db_path) as conn:
             cursor = conn.execute(
                 """
                 UPDATE mastery_assignments SET status = 'revoked', revoked_at = ?
                 WHERE student_user_id = ? AND status = 'active'
                 """,
-                (time.time(), student_id),
+                (time.time(), learner_id),
             )
         return int(cursor.rowcount)

@@ -1,11 +1,11 @@
-"""What changed between two published revisions of a teacher's outline.
+"""What changed between two published revisions of an author's outline.
 
 Identity is the stable ``kp_id``, never the name. A knowledge point the
-teacher renamed gets a new draft id (the outline editors mint one whenever a
+author renamed gets a new draft id (the outline editors mint one whenever a
 point's name or type changes — see ``assign_objective_identities``), so it
 shows up here as *added* while its predecessor shows up as *removed*. The
 model may suggest that the two are one objective reworded or redefined; only
-the teacher's confirmation turns that into an alias and lets the student's
+the author's confirmation turns that into an alias and lets the learner's
 progress follow it.
 """
 
@@ -63,7 +63,7 @@ class KpSuggestion(BaseModel):
 
 
 class ChangeDecisionError(ValueError):
-    """The teacher's per-point decisions do not describe a valid update."""
+    """The author's per-point decisions do not describe a valid update."""
 
 
 def _points(modules: list[LearningModule]) -> dict[str, KnowledgePoint]:
@@ -135,7 +135,7 @@ async def _ask_model(diff: OutlineDiff, language: str) -> dict[str, Any] | None:
         # One line, no stack: a provider outage or timeout is not a bug here,
         # and the publish preview falls back to the default verdicts.
         logger.warning(
-            "teacher change suggestion failed: %s: %s",
+            "author change suggestion failed: %s: %s",
             type(exc).__name__,
             " ".join(str(exc).split())[:_MAX_REASON_LEN],
         )
@@ -198,7 +198,7 @@ async def suggest_changes(diff: OutlineDiff, *, language: str = "en") -> list[Kp
 def build_change_log(
     diff: OutlineDiff, decisions: dict[str, KpDecision]
 ) -> tuple[dict[str, ChangeEntry], dict[str, str]]:
-    """Turn the teacher's confirmed verdicts into a change log and new aliases."""
+    """Turn the author's confirmed verdicts into a change log and new aliases."""
     kept_ids = {new.id for _old, new in diff.kept}
     added_ids = {point.id for point in diff.added}
     unknown = sorted(set(decisions) - kept_ids - added_ids)

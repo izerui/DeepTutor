@@ -52,7 +52,7 @@ COURSE_RESOURCE_KINDS: tuple[str, ...] = (
     "reading_workspace",
     "partner",
     "partner_group",
-    # Spec 2026-11-03 batch 4 §5: a course a teacher sent, referenced, never copied.
+    # Spec 2026-11-03 batch 4 §5: a course an author sent, referenced, never copied.
     "teacher_course",
 )
 
@@ -140,7 +140,7 @@ class StudyCourse:
     """A course and everything a conversation inside it inherits.
 
     ``instructions`` is authored by the learner — the conventions of this
-    subject (notation, the way the teacher frames things, how they want to be
+    subject (notation, the way the author frames things, how they want to be
     taught). ``agent_notes`` is the assistant's own accumulating read on the
     learner within this course. Both reach the model, but they are stored apart
     so that the assistant can never quietly rewrite what the learner declared.

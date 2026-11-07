@@ -18,8 +18,8 @@ from deeptutor.services.auth import TokenPayload
 @pytest.fixture
 def accounts(seed_user):
     boss = seed_user("boss", role="admin")
-    teacher = seed_user("tina", role="teacher")
-    return boss, teacher
+    author = seed_user("tina", role="teacher")
+    return boss, author
 
 
 def _book(tmp_path, owner, name, *, visibility="private"):
@@ -47,8 +47,8 @@ def _reference(kb, book, *, owner=None, kind="book"):
 def test_deletion_transfers_all_books_to_the_same_kb_successor(
     accounts, tmp_path, as_user, token_kind,
 ):
-    boss, teacher = accounts
-    owner = teacher["id"]
+    boss, author = accounts
+    owner = author["id"]
     records = [
         _book(tmp_path, owner, "public", visibility="public"),
         _book(tmp_path, owner, "private"),
@@ -128,9 +128,9 @@ def test_transfer_changes_only_active_references_of_actual_transferred_books(
 def test_simultaneous_takeover_keeps_own_refs_and_requires_force_for_foreign_refs(
     accounts, tmp_path, as_user, foreign_ref,
 ):
-    boss, teacher = accounts
-    kb = _kb(tmp_path, teacher["id"], "shared")
-    own = _book(tmp_path, teacher["id"], "own", visibility="public")
+    boss, author = accounts
+    kb = _kb(tmp_path, author["id"], "shared")
+    own = _book(tmp_path, author["id"], "own", visibility="public")
     foreign = _book(tmp_path, "other", "foreign", visibility="public")
     books.set_book_kb_links(own.ref, {"shared": kb.kb_id})
     _reference(kb, own)
@@ -163,9 +163,9 @@ def test_simultaneous_takeover_keeps_own_refs_and_requires_force_for_foreign_ref
 def test_failed_reference_transfer_rolls_back_books_and_refs_but_deletion_succeeds(
     accounts, tmp_path, failure, caplog,
 ):
-    boss, teacher = accounts
-    kb = _kb(tmp_path, teacher["id"], "shared")
-    records = [_book(tmp_path, teacher["id"], name) for name in ("one", "two")]
+    boss, author = accounts
+    kb = _kb(tmp_path, author["id"], "shared")
+    records = [_book(tmp_path, author["id"], name) for name in ("one", "two")]
     for book in records:
         _reference(kb, book)
     before = kbs.list_references(kb.ref)
@@ -187,7 +187,7 @@ def test_failed_reference_transfer_rolls_back_books_and_refs_but_deletion_succee
             )
     token = TokenPayload(username="boss", role="admin", user_id=boss["id"])
     assert _delete_admin_user("tina", token) == (200, "")
-    assert get_user_by_id(teacher["id"]) is None
+    assert get_user_by_id(author["id"]) is None
     assert "Could not transfer books" in caplog.text
     assert "Could not transfer knowledge bases" not in caplog.text
     assert kbs.get_kb(kb.ref).created_by == boss["id"]
@@ -196,7 +196,7 @@ def test_failed_reference_transfer_rolls_back_books_and_refs_but_deletion_succee
     assert not books.list_transferred_books(boss["id"])
     with kbs._write() as conn:
         conn.execute("DROP TRIGGER fail_owner")
-    assert len(books.transfer_book_ownership(teacher["id"], boss["id"])) == 2
+    assert len(books.transfer_book_ownership(author["id"], boss["id"])) == 2
     assert kbs.list_references(kb.ref) == [replace(ref, created_by=boss["id"]) for ref in before]
 
 
@@ -204,9 +204,9 @@ def test_failed_reference_transfer_rolls_back_books_and_refs_but_deletion_succee
 def test_registry_failure_is_nonfatal_and_does_not_skip_the_other_transfer(
     accounts, tmp_path, monkeypatch, caplog, failed_registry,
 ):
-    _, teacher = accounts
-    book = _book(tmp_path, teacher["id"], "retained")
-    kb = _kb(tmp_path, teacher["id"], "retained")
+    _, author = accounts
+    book = _book(tmp_path, author["id"], "retained")
+    kb = _kb(tmp_path, author["id"], "retained")
 
     def fail(*_args):
         raise sqlite3.OperationalError("injected unavailable registry")
@@ -216,12 +216,12 @@ def test_registry_failure_is_nonfatal_and_does_not_skip_the_other_transfer(
     else:
         monkeypatch.setattr(kbs, "transfer_ownership", fail)
     assert _delete_admin_user("tina", None) == (200, "")
-    assert get_user_by_id(teacher["id"]) is None
+    assert get_user_by_id(author["id"]) is None
     assert books.get_book(book.ref).created_by == (
-        teacher["id"] if failed_registry == "book" else "local-admin"
+        author["id"] if failed_registry == "book" else "local-admin"
     )
     assert kbs.get_kb(kb.ref).created_by == (
-        teacher["id"] if failed_registry == "kb" else "local-admin"
+        author["id"] if failed_registry == "kb" else "local-admin"
     )
     assert "Could not transfer" in caplog.text
 
@@ -235,8 +235,8 @@ def test_deleted_owners_books_appear_in_successors_general_library_at_canonical_
     from deeptutor.services.workspace import ContentWorkspaceService
     from deeptutor.services.workspace.context import workspace_context
 
-    boss, teacher = accounts
-    with as_user(teacher["id"], role="teacher"):
+    boss, author = accounts
+    with as_user(author["id"], role="teacher"):
         storage = get_book_storage()
         for book_id in ("public", "private"):
             storage.save_book(Book(id=book_id, title=book_id))

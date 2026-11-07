@@ -1,7 +1,7 @@
 /**
- * R9: which teacher path a read request belongs to. The server opens a path's
+ * R9: which author path a read request belongs to. The server opens a path's
  * reference-only knowledge bases and books only for original-content GETs
- * that carry it, and only for students with an active assignment.
+ * that carry it, and only for learners with an active assignment.
  */
 export const MASTERY_TEMPLATE_PARAM = "mastery_template";
 export const MASTERY_TEMPLATE_HEADER = "X-DeepTutor-Mastery-Template";

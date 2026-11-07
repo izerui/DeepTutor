@@ -50,10 +50,10 @@ def loop_threads(monkeypatch):
 
 @pytest.mark.usefixtures("quiet_change_model")
 def test_preview_and_publish_keep_store_io_off_the_event_loop(
-    as_account, teacher_draft, loop_threads, publish_template
+    as_account, author_draft, loop_threads, publish_template
 ):
     calls, run = loop_threads
-    teacher_draft()
+    author_draft()
     # A first revision so the republish path reads the previous revision too.
     template_id = publish_template()["template"]["id"]
     calls.clear()
@@ -74,9 +74,9 @@ def test_preview_and_publish_keep_store_io_off_the_event_loop(
 
 @pytest.mark.usefixtures("quiet_change_model")
 def test_event_loop_stays_responsive_while_add_revision_waits_for_material_lock(
-    as_account, teacher_draft
+    as_account, author_draft
 ):
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")

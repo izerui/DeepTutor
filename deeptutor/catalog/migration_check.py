@@ -37,25 +37,25 @@ def _reach(user_id: str, account: dict[str, Any]) -> dict[str, Any]:
     from deeptutor.multi_user.context import reset_current_user, set_current_user
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.tasks.courses import assigned_courses
-    from deeptutor.tasks.service import StudentTasks
+    from deeptutor.tasks.service import LearnerTasks
     from deeptutor.teaching.store import TeachingStore
 
     actor = _actor(user_id, account)
     token = set_current_user(actor)
     try:
-        from deeptutor.publishing.scope import reconcile_student
+        from deeptutor.publishing.scope import reconcile_learner
 
         # As opening the learning list would: stale path assignments are settled first.
-        reconcile_student(user_id)
+        reconcile_learner(user_id)
         teaching = TeachingStore()
         out: dict[str, Any] = {
             "practice_set": sorted(s["id"] for s in PracticeSetService(actor).assigned()),
             "mastery_path": sorted(
-                a.template_id for a in teaching.assignments_for_student(user_id)
+                a.template_id for a in teaching.assignments_for_learner(user_id)
                 if a.status == "active" and (t := teaching.get_template(a.template_id)) and t.status == "published"
             ),
             # Practice sets and paths shown as tasks stop being tasks by design (batch 2 §5).
-            "task": sorted(t["key"] for t in StudentTasks(actor).assigned() if ":" not in t["key"]),
+            "task": sorted(t["key"] for t in LearnerTasks(actor).assigned() if ":" not in t["key"]),
             "course": sorted(c["id"] for c in assigned_courses(actor) if not c.get("unavailable")),
             "book": sorted(
                 r.book_id for r in book_registry.list_book_records()

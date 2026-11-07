@@ -233,7 +233,7 @@ export function LessonEditor({
       </div>
       {/* Traceability #5: a task in no course goes on its own to a learner. */}
       {isAdmin && !task.course_id && (
-        <HandOverPanel handOver={(learnerId) => handOverTask(task.id, learnerId)} onDone={onDeleted} />
+        <HandOverPanel handOver={(recipientId) => handOverTask(task.id, recipientId)} onDone={onDeleted} />
       )}
       {error && <p role="alert" className="text-[12px] text-red-600">{error}</p>}
 

@@ -563,7 +563,7 @@ class LearningService:
 
         record attempt -> recompute mastery -> advance the spaced-repetition
         state -> rebuild the review queue -> persist. This is the single source
-        of truth for what happens when a student answers, shared by every
+        of truth for what happens when a learner answers, shared by every
         interactive stage. Grading is fail-closed: with no stored expected
         answer the attempt is recorded wrong, never right.
         """
@@ -3062,7 +3062,7 @@ class LearningService:
                 continue
             if progress is not None:
                 loaded.append(progress)
-        # A revoked or archived teacher path is no longer the learner's to open.
+        # A revoked or archived author path is no longer the learner's to open.
         closed = closed_instance_ids(loaded)
         overviews: list[dict] = []
         for progress in loaded:
@@ -3107,7 +3107,7 @@ class LearningService:
                 continue
             if progress is not None:
                 loaded.append(progress)
-        # A revoked or archived teacher path is no longer the learner's to open.
+        # A revoked or archived author path is no longer the learner's to open.
         closed = closed_instance_ids(loaded)
         for progress in loaded:
             bid = progress.book_id

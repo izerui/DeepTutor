@@ -208,7 +208,7 @@ export default function CourseResources({
                 />
                 <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
                   {resource.kind === "teacher_course" && resource.available ? (
-                    // Batch 4 §5: a teacher's course opens where it lives, with its progress.
+                    // Batch 4 §5: an author's course opens where it lives, with its progress.
                     <Link href={`/tasks?course=${encodeURIComponent(resource.ref_id)}`}
                       className="truncate text-[12.5px] text-[var(--foreground)] hover:underline">
                       {resource.label}

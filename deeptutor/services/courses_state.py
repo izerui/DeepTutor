@@ -200,8 +200,8 @@ async def _partner_index() -> ResourceIndex:
     return result
 
 
-async def _teacher_course_index() -> ResourceIndex:
-    """Courses teachers sent the student that still reach them, with progress (batch 4 §5)."""
+async def _author_course_index() -> ResourceIndex:
+    """Courses authors sent the learner that still reach them, with progress (batch 4 §5)."""
     from deeptutor.tasks.courses import assigned_courses
 
     rows = await asyncio.to_thread(assigned_courses)
@@ -245,7 +245,7 @@ _INDEX_LOADERS: dict[str, Callable[[], Awaitable[ResourceIndex]]] = {
     "mastery_path": _mastery_path_index,
     "reading_workspace": _reading_workspace_index,
     "partner": _partner_index,
-    "teacher_course": _teacher_course_index,
+    "teacher_course": _author_course_index,
 }
 
 

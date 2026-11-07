@@ -22,14 +22,14 @@ from tests.multi_user.path_members import leave_path
 
 
 @pytest.fixture
-def kb_instance(fake_kb_registry, teaching_users, teacher_draft, publish_template, as_account):
+def kb_instance(fake_kb_registry, teaching_users, author_draft, publish_template, as_account):
     fake_kb_registry.add(
         "kb_answers",
         visibility="private",
         created_by=teaching_users["tina"]["id"],
         legacy_refs=("user:kb:answers",),
     )
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -40,7 +40,7 @@ def kb_instance(fake_kb_registry, teaching_users, teacher_draft, publish_templat
             ),
         )
     )
-    result = publish_template(students=("sara",), kb_choices={"kb_answers": "reference_only"})
+    result = publish_template(learners=("sara",), kb_choices={"kb_answers": "reference_only"})
     with as_account("sara"):
         topics = asyncio.run(mastery_path.list_topics())["topics"]
     return SimpleNamespace(path_id=topics[0]["path_id"], template_id=result["template"]["id"])
@@ -201,7 +201,7 @@ async def test_missing_materials_stop_the_tutor_instead_of_improvising(
 
 
 def test_an_admin_forced_revocation_marks_the_path_unavailable(
-    fake_kb_registry, teaching_users, teacher_draft, publish_template, as_account
+    fake_kb_registry, teaching_users, author_draft, publish_template, as_account
 ):
     # Spec 7.4: an admin forces another account's public KB back to private.
     fake_kb_registry.add(
@@ -211,7 +211,7 @@ def test_an_admin_forced_revocation_marks_the_path_unavailable(
         name="Algebra",
         legacy_refs=("admin:kb:algebra",),
     )
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -222,7 +222,7 @@ def test_an_admin_forced_revocation_marks_the_path_unavailable(
             ),
         )
     )
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
 
@@ -231,10 +231,10 @@ def test_an_admin_forced_revocation_marks_the_path_unavailable(
     with as_account("tina"):
         (described,) = TeachingService().list_for_actor()
         preview = asyncio.run(TeachingService().preview_publish(template_id))
-    # The teacher sees it on the path, and cannot simply republish it.
+    # The author sees it on the path, and cannot simply republish it.
     assert described["materials_unavailable"] == ["Algebra notes"]
     assert [issue["code"] for issue in preview["source_issues"]] == ["not_shareable"]
-    # The student sees "course materials unavailable"; the tutor stops (see above).
+    # The learner sees "course materials unavailable"; the tutor stops (see above).
     with as_account("sara"):
         payload = asyncio.run(mastery_path.get_topic(path_id))
     assert payload["origin"]["materials_available"] is False

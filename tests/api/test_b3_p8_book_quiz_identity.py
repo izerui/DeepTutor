@@ -270,9 +270,9 @@ def test_transferred_book_quiz_via_full_resolution(shared_env, actor: str) -> No
     canonical.save_page(page)
 
     # Perform the actual ownership transfer.
-    teacher_id = auth_mod.decode_token("teacher").user_id
+    author_id = auth_mod.decode_token("teacher").user_id
     alice_id = auth_mod.decode_token("alice").user_id
-    book_reg.transfer_book_ownership(teacher_id, alice_id)
+    book_reg.transfer_book_ownership(author_id, alice_id)
 
     headers = {"Authorization": f"Bearer {actor}"}
     resp = client.post("/api/books/quiz-attempt", headers=headers, json={
@@ -288,7 +288,7 @@ def test_transferred_book_quiz_via_full_resolution(shared_env, actor: str) -> No
         entries = asyncio.run(store.list_notebook_entries(source="book"))
         assert entries["total"] == 1
 
-    # Teacher's session store is untouched.
+    # Author's session store is untouched.
     with _actor_ctx("teacher") as store:
         assert asyncio.run(store.list_notebook_entries(source="book"))["total"] == 0
 

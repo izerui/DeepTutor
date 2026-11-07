@@ -39,7 +39,7 @@ def referenced_private_book(tmp_path):
 def test_reference_readers_run_after_the_book_snapshot_closes(
     referenced_private_book, make_user, entry,
 ):
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     observed: list[bool] = []
 
     def reader(_referrer, _user):
@@ -48,21 +48,21 @@ def test_reference_readers_run_after_the_book_snapshot_closes(
 
     registry.register_book_reference_reader("course", reader)
     if entry == "single":
-        assert registry.can_read_book(referenced_private_book, student)
+        assert registry.can_read_book(referenced_private_book, learner)
     else:
-        [access] = registry.book_access_batch([referenced_private_book], student)
+        [access] = registry.book_access_batch([referenced_private_book], learner)
         assert access.readable and not access.writable
     assert observed == [True]
 
 
 def test_batch_keeps_reader_denials_and_failures_closed(referenced_private_book, make_user):
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
 
     def broken(_referrer, _user):
         raise RuntimeError("synthetic reader failure")
 
     registry.register_book_reference_reader("course", lambda _r, _u: False)
-    assert not registry.book_access_batch([referenced_private_book], student)[0].readable
+    assert not registry.book_access_batch([referenced_private_book], learner)[0].readable
     registry.register_book_reference_reader("course", broken)
-    assert not registry.book_access_batch([referenced_private_book], student)[0].readable
-    assert not registry.can_read_book(referenced_private_book, student)
+    assert not registry.book_access_batch([referenced_private_book], learner)[0].readable
+    assert not registry.can_read_book(referenced_private_book, learner)

@@ -165,7 +165,7 @@ async def attach_course_resource(
     payload: AttachCourseResourceRequest,
 ) -> dict[str, object]:
     if payload.kind == "teacher_course":
-        # Batch 4 §5: only a course a teacher sent this student, and under its own title.
+        # Batch 4 §5: only a course an author sent this learner, and under its own title.
         from deeptutor.services.courses_state import resolve_resource_reference
 
         detail = await resolve_resource_reference("teacher_course", payload.ref_id)

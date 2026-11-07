@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from deeptutor.publishing.scope import ScopeError
-from deeptutor.tasks.service import StudentTasks, TaskError, TaskService
+from deeptutor.tasks.service import LearnerTasks, TaskError, TaskService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -152,17 +152,17 @@ async def create_task(body: TaskCreate):
 
 @router.get("/assigned")
 async def assigned_tasks():
-    return {"tasks": await _call(StudentTasks().assigned)}
+    return {"tasks": await _call(LearnerTasks().assigned)}
 
 
 @router.get("/assigned/{key:path}")
 async def assigned_task(key: str):
-    return {"task": await _call(StudentTasks().get, key)}
+    return {"task": await _call(LearnerTasks().get, key)}
 
 
 @router.post("/assigned/{task_id}/done")
 async def mark_done(task_id: str):
-    return {"task": await _call(StudentTasks().mark_done, task_id)}
+    return {"task": await _call(LearnerTasks().mark_done, task_id)}
 
 
 @router.get("/{task_id}")

@@ -70,7 +70,7 @@ export interface QuestionResult {
   /** Null while the result is withheld. */
   points: number | null;
   max_points: number;
-  /** What the student answered. */
+  /** What the learner answered. */
   answer?: string;
   feedback?: string;
   correct_answer?: string;
@@ -125,7 +125,7 @@ export interface PracticeReport {
     /** The attempt that counts under the set's score mode. */
     score?: number | null;
     score_max?: number | null;
-    /** Answers the AI could not judge, waiting for the teacher. */
+    /** Answers the AI could not judge, waiting for the author. */
     ungraded?: number;
   }[];
   score_mode?: ScoreMode;
@@ -239,7 +239,7 @@ export const getAttempt = (setId: string, submissionId: string) =>
   call<{ attempt: ReviewAttempt }>(`${id(setId)}/submissions${id(submissionId)}`).then((r) => r.attempt);
 export const listAssigned = () => call<{ sets: AssignedSet[] }>("/assigned").then((r) => r.sets);
 export const takeSet = (setId: string) => call<{ set: TakeView }>(`${id(setId)}/take`).then((r) => r.set);
-/** ``revision`` is the version the student opened: answers are graded against it. */
+/** ``revision`` is the version the learner opened: answers are graded against it. */
 export const submitSet = (
   setId: string,
   answers: Record<string, string>,

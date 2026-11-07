@@ -59,9 +59,9 @@ export function TopicAtlas({
   onRetry: () => void
   /** Rendered beside the eyebrow when this visit belongs to one course. */
   scopeChip?: ReactNode
-  /** Present for teachers and admins: their own templates, to decorate their own cards. */
+  /** Present for authors and admins: their own templates, to decorate their own cards. */
   authorTemplates?: AuthorTemplate[]
-  /** Templates without a card here (another teacher's, or without a draft): manage only. */
+  /** Templates without a card here (another author's, or without a draft): manage only. */
   unlistedTemplates?: AuthorTemplate[]
   onPublish?: (
     topic: MasteryTopic,
@@ -180,7 +180,7 @@ export function TopicAtlas({
                   <TopicMapCard
                     key={libraryItemKey(topic, topic.path_id)}
                     topic={topic}
-                    // A teacher path has no outline to agree: straight into Study.
+                    // An author path has no outline to agree: straight into Study.
                     href={masterySessionRoute(
                       topic.path_id,
                       'study',

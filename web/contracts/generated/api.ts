@@ -114,7 +114,7 @@ export interface paths {
     };
     /**
      * List Account Handoffs
-     * @description Deleted accounts whose hand-over (KBs, books, teacher paths) is unfinished.
+     * @description Deleted accounts whose hand-over (KBs, books, author paths) is unfinished.
      */
     readonly get: operations["list_account_handoffs_api_auth_account_handoffs_get"];
     readonly put?: never;
@@ -355,7 +355,7 @@ export interface paths {
     readonly get?: never;
     /**
      * Change Own Password
-     * @description Change one's own password (e.g. after an administrator or teacher reset it).
+     * @description Change one's own password (e.g. after an administrator or author reset it).
      *
      *     Every other session ends (tokens carry the password version); this browser
      *     gets a fresh session so the person stays signed in here.
@@ -382,7 +382,7 @@ export interface paths {
      * @description Self-service registration.
      *
      *     The first account becomes the administrator. After that, anyone may sign
-     *     up as a student while public registration is open; while it is closed,
+     *     up as a learner while public registration is open; while it is closed,
      *     only an administrator makes accounts.
      *
      *     Only available when AUTH_ENABLED=true.
@@ -679,10 +679,10 @@ export interface paths {
     readonly post?: never;
     /**
      * Delete Book
-     * @description Rule R1: references never block the owner; teacher paths need ``confirm``.
+     * @description Rule R1: references never block the owner; author paths need ``confirm``.
      *
      *     Every reference is revoked (``book_deleted``) with the deletion. When a
-     *     published teacher path cites the book, the first request answers a
+     *     published author path cites the book, the first request answers a
      *     counts-only 409 and nothing changes; a confirmation only covers the paths
      *     whose counts were shown (``expected_*``), otherwise fresh counts return.
      *     The registry transaction and the rename aside stay on the event loop
@@ -4848,7 +4848,7 @@ export interface paths {
     readonly get?: never;
     /**
      * Update Pass Standard
-     * @description The learner's own path only: a teacher path's copy keeps the teacher's standard.
+     * @description The learner's own path only: an author path's copy keeps the author's standard.
      */
     readonly put: operations["update_pass_standard_api_mastery_paths_topics__path_id__pass_standard_put"];
     readonly post?: never;
@@ -4929,7 +4929,7 @@ export interface paths {
     readonly put?: never;
     /**
      * Acknowledge Teacher Update
-     * @description Hide the one-time "your teacher updated this course" notice.
+     * @description Hide the one-time "the author updated this course" notice.
      */
     readonly post: operations["acknowledge_teacher_update_api_mastery_paths_topics__path_id__teacher_update_ack_post"];
     readonly delete?: never;
@@ -14993,7 +14993,7 @@ export interface components {
     readonly KnowledgeType: "memory" | "concept" | "procedure" | "design";
     /**
      * KpDecision
-     * @description The teacher's verdict on one knowledge point of a republished outline.
+     * @description The author's verdict on one knowledge point of a republished outline.
      */
     readonly KpDecision: {
       /**

@@ -21,7 +21,7 @@ import deeptutor.teaching.access  # noqa: F401  (registers the "mastery_template
 from deeptutor.teaching.models import PublishRequest
 from deeptutor.teaching.service import TeachingError, TeachingService
 
-#: The only routes a teacher-path context opens (R9): original content of a
+#: The only routes an author-path context opens (R9): original content of a
 #: KB (file, extracted text, verified visual asset, rendered source page) and
 #: of a book (the book, its chapters, its pages). Config, KB progress, linked
 #: folders, sync sources and every write keep their normal rules, except the
@@ -62,7 +62,7 @@ MASTERY_TEMPLATE_HEADER = "x-deeptutor-mastery-template"
 DOCUMENT_ID_PARAM = "doc_id"
 
 async def enter_mastery_template_scope(request: Request) -> None:
-    """R9: a student opens a teacher path's originals from the Study page.
+    """R9: a learner opens an author path's originals from the Study page.
 
     A GET on an original-content route that names the path
     (``?mastery_template=<id>`` or the ``X-DeepTutor-Mastery-Template``

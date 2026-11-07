@@ -1,4 +1,4 @@
-"""What a teacher's draft may share with students, and how it is snapshotted."""
+"""What an author's draft may share with learners, and how it is snapshotted."""
 
 from __future__ import annotations
 
@@ -41,14 +41,14 @@ def _source(index: int, kind: TopicSourceKind, source_id: str = "", **metadata) 
 
 
 @pytest.fixture
-def teacher(make_user):
+def author(make_user):
     return make_user("u_tina", role="teacher", username="tina")
 
 
-def test_public_kb_passes_and_is_rewritten_to_its_stable_ref(fake_kb_registry, teacher):
+def test_public_kb_passes_and_is_rewritten_to_its_stable_ref(fake_kb_registry, author):
     fake_kb_registry.add("kb1", visibility="public", legacy_refs=("admin:kb:calculus",))
 
-    plan = plan_sources([_source(0, KB, "admin:kb:calculus")], teacher)
+    plan = plan_sources([_source(0, KB, "admin:kb:calculus")], author)
 
     assert plan.issues == []
     assert plan.private_kbs == []
@@ -57,12 +57,12 @@ def test_public_kb_passes_and_is_rewritten_to_its_stable_ref(fake_kb_registry, t
     assert plan.to_sources({}, {}).kb_refs[0].access == "public"
 
 
-def test_own_private_kb_asks_for_a_choice_defaulting_to_public(fake_kb_registry, teacher):
+def test_own_private_kb_asks_for_a_choice_defaulting_to_public(fake_kb_registry, author):
     fake_kb_registry.add(
         "kb2", visibility="private", created_by="u_tina", legacy_refs=("user:kb:mine",)
     )
 
-    plan = plan_sources([_source(0, KB, "user:kb:mine")], teacher)
+    plan = plan_sources([_source(0, KB, "user:kb:mine")], author)
 
     assert plan.issues == []
     assert [(c.key, c.default) for c in plan.private_kbs] == [("kb2", "make_public")]
@@ -70,40 +70,40 @@ def test_own_private_kb_asks_for_a_choice_defaulting_to_public(fake_kb_registry,
     assert plan.to_sources({"kb2": "reference_only"}, {}).kb_refs[0].access == "reference_only"
 
 
-def test_a_republish_defaults_to_the_previous_choice(fake_kb_registry, teacher):
+def test_a_republish_defaults_to_the_previous_choice(fake_kb_registry, author):
     fake_kb_registry.add(
         "kb2", visibility="private", created_by="u_tina", legacy_refs=("user:kb:mine",)
     )
     previous = TemplateSources(kb_refs=[TemplateKbRef(kb_id="kb2", access="reference_only")])
 
-    plan = plan_sources([_source(0, KB, "user:kb:mine")], teacher, previous=previous)
+    plan = plan_sources([_source(0, KB, "user:kb:mine")], author, previous=previous)
 
     assert plan.private_kbs[0].default == "reference_only"
     assert plan.to_sources({}, {}).kb_refs[0].access == "reference_only"
 
 
-def test_someone_elses_private_kb_blocks_publishing(fake_kb_registry, teacher):
+def test_someone_elses_private_kb_blocks_publishing(fake_kb_registry, author):
     fake_kb_registry.add("kb3", visibility="private", created_by="u_tom", legacy_refs=("x",))
 
-    plan = plan_sources([_source(0, KB, "x")], teacher)
+    plan = plan_sources([_source(0, KB, "x")], author)
 
     assert [issue.code for issue in plan.issues] == ["not_shareable"]
 
 
-def test_connector_blocks_publishing(fake_kb_registry, teacher):
+def test_connector_blocks_publishing(fake_kb_registry, author):
     fake_kb_registry.add(
         "vault", visibility="private", created_by="u_tina", kind="obsidian", legacy_refs=("v",)
     )
 
-    plan = plan_sources([_source(0, KB, "v")], teacher)
+    plan = plan_sources([_source(0, KB, "v")], author)
 
     assert [issue.code for issue in plan.issues] == ["connector"]
 
 
-def test_missing_and_unindexed_kbs_block_publishing(fake_kb_registry, teacher):
+def test_missing_and_unindexed_kbs_block_publishing(fake_kb_registry, author):
     fake_kb_registry.add("kb4", visibility="public", ready=False, legacy_refs=("slow",))
 
-    plan = plan_sources([_source(0, KB, "gone"), _source(1, KB, "slow")], teacher)
+    plan = plan_sources([_source(0, KB, "gone"), _source(1, KB, "slow")], author)
 
     assert [issue.code for issue in plan.issues] == ["missing_kb", "not_indexed"]
 
@@ -118,23 +118,23 @@ def test_missing_and_unindexed_kbs_block_publishing(fake_kb_registry, teacher):
         TopicSourceKind.PARTNER_GROUP,
     ],
 )
-def test_personal_sources_block_publishing(fake_kb_registry, teacher, kind):
-    plan = plan_sources([_source(0, kind, "personal-1")], teacher)
+def test_personal_sources_block_publishing(fake_kb_registry, author, kind):
+    plan = plan_sources([_source(0, kind, "personal-1")], author)
 
     assert [issue.code for issue in plan.issues] == ["personal_source"]
     assert plan.sources == []
 
 
-def test_goal_source_is_kept_as_is(fake_kb_registry, teacher):
+def test_goal_source_is_kept_as_is(fake_kb_registry, author):
     goal = _source(0, TopicSourceKind.GOAL)
 
-    plan = plan_sources([goal], teacher)
+    plan = plan_sources([goal], author)
 
     assert plan.issues == []
     assert plan.sources == [goal]
 
 
-def test_files_are_published_with_fixed_document_ids_and_versions(fake_kb_registry, teacher):
+def test_files_are_published_with_fixed_document_ids_and_versions(fake_kb_registry, author):
     fake_kb_registry.add("kb5", visibility="public", legacy_refs=("library",))
     fake_kb_registry.write_file("kb5", "notes/a.md")
     fake_kb_registry.write_file("kb5", "b.md")
@@ -144,7 +144,7 @@ def test_files_are_published_with_fixed_document_ids_and_versions(fake_kb_regist
             _source(0, FILE, "notes/a.md", kb_name="library"),
             _source(1, FILE, "", kb_name="library", path="b.md"),
         ],
-        teacher,
+        author,
     )
 
     # Read-only until publishing: nothing is registered yet.
@@ -171,32 +171,32 @@ def test_files_are_published_with_fixed_document_ids_and_versions(fake_kb_regist
     }
 
 
-def test_already_registered_documents_keep_their_ids(fake_kb_registry, teacher):
+def test_already_registered_documents_keep_their_ids(fake_kb_registry, author):
     fake_kb_registry.add("kb5", visibility="public", legacy_refs=("library",))
     path = fake_kb_registry.write_file("kb5", "a.md")
     existing = kb_access.record_document("kb5", "a.md", path)
 
-    plan = plan_sources([_source(0, FILE, "a.md", kb_name="library")], teacher)
+    plan = plan_sources([_source(0, FILE, "a.md", kb_name="library")], author)
     plan.register_documents()
 
     assert plan.to_sources({}, {}).kb_refs[0].doc_ids == [existing.doc_id]
     assert len(fake_kb_registry.documents) == 1
 
 
-def test_a_missing_document_blocks_publishing(fake_kb_registry, teacher):
+def test_a_missing_document_blocks_publishing(fake_kb_registry, author):
     fake_kb_registry.add("kb5", visibility="public", legacy_refs=("library",))
 
-    plan = plan_sources([_source(0, FILE, "gone.md", kb_name="library")], teacher)
+    plan = plan_sources([_source(0, FILE, "gone.md", kb_name="library")], author)
 
     assert [issue.code for issue in plan.issues] == ["missing_document"]
 
 
-def test_a_whole_kb_wins_over_its_documents(fake_kb_registry, teacher):
+def test_a_whole_kb_wins_over_its_documents(fake_kb_registry, author):
     fake_kb_registry.add("kb6", visibility="public", legacy_refs=("library",))
     fake_kb_registry.write_file("kb6", "doc-1.md")
 
     plan = plan_sources(
-        [_source(0, FILE, "doc-1.md", kb_name="library"), _source(1, KB, "library")], teacher
+        [_source(0, FILE, "doc-1.md", kb_name="library"), _source(1, KB, "library")], author
     )
     plan.register_documents()
 
@@ -205,7 +205,7 @@ def test_a_whole_kb_wins_over_its_documents(fake_kb_registry, teacher):
 
 
 def test_a_source_from_another_workspace_is_resolved_there(
-    fake_kb_registry, teacher, monkeypatch
+    fake_kb_registry, author, monkeypatch
 ):
     fake_kb_registry.add("kb7", visibility="public", legacy_refs=("library",))
     inside: ContextVar[str] = ContextVar("inside", default="")
@@ -228,7 +228,7 @@ def test_a_source_from_another_workspace_is_resolved_there(
     monkeypatch.setattr(snapshot, "source_scope", fake_scope)
     monkeypatch.setattr(kb_access, "resolve", recording_resolve)
 
-    plan = plan_sources([_source(0, KB, "library", content_workspace_id="ws1")], teacher)
+    plan = plan_sources([_source(0, KB, "library", content_workspace_id="ws1")], author)
 
     assert seen == ["ws1"]
     assert "content_workspace_id" not in plan.sources[0].metadata
@@ -350,12 +350,12 @@ def test_a_missing_kb_makes_every_bound_document_missing():
     assert [doc.doc_id for doc in kb_access.missing_documents(captured)] == ["d1"]
 
 
-def test_a_file_source_with_a_document_id_follows_it_not_the_old_path(library, teacher):
+def test_a_file_source_with_a_document_id_follows_it_not_the_old_path(library, author):
     source = _source(
         0, FILE, "a.md", kb_name=library.record.ref, path="a.md", doc_id=library.original.doc_id
     )
 
-    plan = plan_sources([source], teacher)
+    plan = plan_sources([source], author)
     plan.register_documents()
     sources = plan.to_sources({}, {})
 
@@ -369,7 +369,7 @@ def test_a_file_source_with_a_document_id_follows_it_not_the_old_path(library, t
     assert source.metadata["path"] == "a.md"
 
 
-def test_a_file_source_whose_document_id_is_gone_blocks(library, teacher):
+def test_a_file_source_whose_document_id_is_gone_blocks(library, author):
     (library.raw / "moved" / "a.md").unlink()
     from deeptutor.knowledge import registry as kb_registry
 
@@ -378,7 +378,7 @@ def test_a_file_source_whose_document_id_is_gone_blocks(library, teacher):
         0, FILE, "a.md", kb_name=library.record.ref, path="a.md", doc_id=library.original.doc_id
     )
 
-    plan = plan_sources([source], teacher)
+    plan = plan_sources([source], author)
 
     assert [issue.code for issue in plan.issues] == ["missing_document"]
 

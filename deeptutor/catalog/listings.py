@@ -237,7 +237,7 @@ def _course_paths(course_id: str) -> list[str]:
 def _ensure_managed(kind: str, item_id: str, actor_id: str) -> None:
     """A listed item has a stored scope, so its members are its receivers.
 
-    An unmanaged path keeps the students it was handed to by hand; any other
+    An unmanaged path keeps the learners it was handed to by hand; any other
     unmanaged item gets an empty scope (only its members reach it).
     """
     if scopes.get_scope(kind, item_id) is not None:

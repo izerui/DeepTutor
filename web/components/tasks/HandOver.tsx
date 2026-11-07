@@ -21,7 +21,7 @@ export function HandOverPanel({
   handOver,
   onDone,
 }: {
-  handOver: (learnerId: string) => Promise<unknown>;
+  handOver: (recipientId: string) => Promise<unknown>;
   onDone: () => void;
 }) {
   const { t } = useTranslation();

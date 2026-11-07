@@ -22,7 +22,7 @@ import { teachingErrorMessage, type Message } from "./teaching";
 type Confirming = "archive" | "delete" | null;
 
 /**
- * One teacher path's management: its market listing, learning report,
+ * One author path's management: its market listing, learning report,
  * announcements, and archiving or deleting it. Who studies it is whoever
  * joined it (spec 2026-11-05 §1.2): nobody is added or removed by hand.
  */
@@ -63,7 +63,7 @@ export function ManagePathDialog({
 
   // The server refuses to delete anything published or ever joined.
   const deletable = template.current_revision === 0 && template.assigned_count === 0;
-  // Spec 2026-10-29 D10: listing a path is its teacher's choice; an
+  // Spec 2026-10-29 D10: listing a path is its author's choice; an
   // administrator looking at someone else's path archives or deletes it.
   const canList = template.status === "published" && template.is_owner;
 

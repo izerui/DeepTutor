@@ -32,7 +32,7 @@ def test_cached_loaders_restore_both_readers_without_preregistration(
     tmp_path, monkeypatch, make_user
 ):
     owner = make_user("t1", role="teacher")
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     kb = _private_kb(tmp_path, owner.id)
     book = _private_book(tmp_path, owner.id)
     # The module is cached; reset both maps as a fresh test copy would be.
@@ -40,8 +40,8 @@ def test_cached_loaders_restore_both_readers_without_preregistration(
     monkeypatch.setattr(kbs, "_builtin_readers_loaded", False)
     monkeypatch.setattr(books, "_readers", {})
 
-    assert not kbs.can_read(kb, student)
-    assert not books.can_read_book(book, student)
+    assert not kbs.can_read(kb, learner)
+    assert not books.can_read_book(book, learner)
 
     assert kbs._readers[access.REFERRER_KIND] is access.template_reader
     assert books._readers[access.REFERRER_KIND] is access.template_reader
@@ -52,7 +52,7 @@ def test_loaders_and_import_registration_never_replace_a_custom_reader(
     tmp_path, monkeypatch, make_user
 ):
     owner = make_user("t1", role="teacher")
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     kb = _private_kb(tmp_path, owner.id)
     book = _private_book(tmp_path, owner.id)
 
@@ -65,9 +65,9 @@ def test_loaders_and_import_registration_never_replace_a_custom_reader(
     kbs.register_reference_reader(access.REFERRER_KIND, custom)
     books.register_book_reference_reader(access.REFERRER_KIND, custom)
 
-    kbs.can_read(kb, student)
-    books.can_read_book(book, student)
-    books.can_read_book(book, student)  # D's loader runs on every check
+    kbs.can_read(kb, learner)
+    books.can_read_book(book, learner)
+    books.can_read_book(book, learner)  # D's loader runs on every check
     access._register_defaults()
 
     assert kbs._readers[access.REFERRER_KIND] is custom

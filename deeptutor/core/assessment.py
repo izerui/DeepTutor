@@ -4,9 +4,9 @@ from typing import Literal, get_args
 
 AssessmentSource = Literal[
     "deep_question", "mastery_path", "immersive_reading", "book", "partner_chat", "import",
-    # Spec 2026-10-29 §8.3: answers to a teacher's practice set.
+    # Spec 2026-10-29 §8.3: answers to an author's practice set.
     "practice_set",
-    # Spec 2026-11-03 batch 3 §3.2: a student's own remedial questions.
+    # Spec 2026-11-03 batch 3 §3.2: a learner's own remedial questions.
     "remedial",
 ]
 QuestionOriginType = Literal["conversation", "external_import", "document_analysis", "practice_set", "remedial"]

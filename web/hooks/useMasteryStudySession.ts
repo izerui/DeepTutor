@@ -60,7 +60,7 @@ export function useMasteryStudySession(
 
   const [topic, setTopic] = useState<MasteryTopic | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
-  // The teacher path was revoked or archived (the topic read answers 403).
+  // The author path was revoked or archived (the topic read answers 403).
   const [topicClosed, setTopicClosed] = useState(false);
   const currentRouteKey = `${pathId}:${routeSessionId || "new"}`;
   const [sessionResolution, setSessionResolution] = useState<{
@@ -318,7 +318,7 @@ export function useMasteryStudySession(
   return {
     topic,
     topicError,
-    /** A closed teacher path: revoked or archived, here or found by the feed. */
+    /** A closed author path: revoked or archived, here or found by the feed. */
     courseUnavailable: topicClosed || activity.unavailable,
     knowledgeBases,
     sessionError,

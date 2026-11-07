@@ -415,7 +415,7 @@ def _load_partner_group_material(source_id: str, label: str, budget: int) -> Top
 def _file_document(metadata: dict[str, Any], kb_name: str) -> tuple[str, bool]:
     """(the FILE source's document path now, whether it is gone).
 
-    A source carrying a fixed document id (a teacher path's snapshot) follows
+    A source carrying a fixed document id (an author path's snapshot) follows
     it to wherever the document lives now; the captured path may since hold
     an unrelated file.
     """

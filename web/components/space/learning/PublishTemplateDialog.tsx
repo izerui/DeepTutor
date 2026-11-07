@@ -103,7 +103,7 @@ export function PublishTemplateDialog({
         setPreview(next);
         // Defaults come from the server: "make public" the first time, the
         // previous revision's choice on a republish. "Check again" keeps the
-        // teacher's own choices for keys that still exist (never silently
+        // author's own choices for keys that still exist (never silently
         // turning a reference-only material public); only new keys default.
         setKbChoices((current) =>
           keepChoices(
@@ -171,7 +171,7 @@ export function PublishTemplateDialog({
         book_choices: bookChoices,
       });
       // Published, but something after the revision failed: say so and let
-      // the teacher close the dialog themselves.
+      // the author close the dialog themselves.
       if (result.warnings.length > 0) setPublished(result);
       else onPublished(result.template);
     } catch (reason) {

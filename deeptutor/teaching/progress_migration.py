@@ -1,7 +1,7 @@
-"""Apply one published teacher revision to a student's copy (spec §5.3).
+"""Apply one published author revision to a learner's copy (spec §5.3).
 
 Identity is the stable ``kp_id``: a reworded point keeps its id (the template's
-alias table saw to that), so everything the student earned on it stays put.
+alias table saw to that), so everything the learner earned on it stays put.
 The copy's outline is rebuilt through :func:`~deeptutor.teaching.instances.instance_outline`,
 so its sources keep the ids derived for this copy, exactly as when it was
 created.
@@ -68,7 +68,7 @@ def _reset_objective(progress: LearningProgress, kp_id: str, moment: float) -> N
 
 
 def apply_revision(progress: LearningProgress, revision: TemplateRevision) -> dict[str, int]:
-    """Move *progress* (a student's copy) onto *revision*; return what changed."""
+    """Move *progress* (a learner's copy) onto *revision*; return what changed."""
     from deeptutor.teaching.instances import instance_outline
 
     old_ids = {p.id for m in progress.modules for p in m.knowledge_points}
@@ -90,7 +90,7 @@ def apply_revision(progress: LearningProgress, revision: TemplateRevision) -> di
         progress.reassessment_required.pop(kp_id, None)
         progress.kp_redefined_at.pop(kp_id, None)
     progress.modules = modules
-    # The teacher's standard travels with the revision; students never set it.
+    # The author's standard travels with the revision; learners never set it.
     progress.pass_standard = revision.outline.pass_standard
     for module in modules:
         for point in module.knowledge_points:

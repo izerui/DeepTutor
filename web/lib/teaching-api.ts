@@ -1,7 +1,7 @@
 import { apiFetch, apiUrl } from "./api";
 import type { PassStandard } from "./learning-api";
 
-/** Teacher templates are system-level: these routes are never workspace-scoped. */
+/** Author templates are system-level: these routes are never workspace-scoped. */
 const BASE = "/api/mastery-paths/teaching";
 
 export type TemplateStatus = "draft" | "published" | "archived";
@@ -75,7 +75,7 @@ export interface ChangeSuggestion {
   reason: string;
 }
 
-/** A private KB of the teacher that the path, or one of its books (`via`), cites. */
+/** A private KB of the author that the path, or one of its books (`via`), cites. */
 export interface PrivateKbChoice {
   kb_id: string;
   name: string;

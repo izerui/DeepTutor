@@ -4,7 +4,7 @@ Tests cover:
   1. sync_base_dir (listing path) records LOCAL_ADMIN_ID for admin root.
   2. register_new_kb (creation path) records LOCAL_ADMIN_ID for admin root.
   3. Normalization backfill fixes existing admin-root rows with concrete admin ids.
-  4. Non-admin (teacher/student) KBs are untouched by normalization.
+  4. Non-admin (author/learner) KBs are untouched by normalization.
 """
 
 from __future__ import annotations
@@ -123,8 +123,8 @@ def test_normalization_is_idempotent(mu_isolated_root, as_user, seed_user):
     assert fixed.created_by == LOCAL_ADMIN_ID
 
 
-def test_normalization_leaves_teacher_kbs_untouched(mu_isolated_root, as_user, seed_user):
-    """Teacher KBs must not be altered by admin-root normalization."""
+def test_normalization_leaves_author_kbs_untouched(mu_isolated_root, as_user, seed_user):
+    """Author KBs must not be altered by admin-root normalization."""
     from deeptutor.knowledge.registry_backfill import normalize_admin_root_created_by
     from deeptutor.multi_user.paths import scope_for_user
 

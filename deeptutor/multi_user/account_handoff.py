@@ -156,9 +156,9 @@ def run_stages(
         try:
             from deeptutor.teaching import service as teaching_service
 
-            # R6 / D17: the deleted teacher's paths (and their reference
+            # R6 / D17: the deleted author's paths (and their reference
             # ownership) go to the same successor as their libraries and
-            # books; students keep learning. A deleted student's assignments
+            # books; learners keep learning. A deleted learner's assignments
             # are revoked (waking their live subscriptions) and the materials
             # nobody needs any more are released.
             teaching_errors: list[str] = []
@@ -167,7 +167,7 @@ def run_stages(
                 errors=teaching_errors, quiet=quiet,
             ) or []
         except Exception as exc:
-            failure("Could not hand over teacher paths of deleted user '%s'")
+            failure("Could not hand over author paths of deleted user '%s'")
             teaching_failed = teaching
             errors.append(f"teaching: {exc!r}")
         else:
@@ -181,9 +181,9 @@ def run_stages(
         ("practice_sets", lambda: counts.__setitem__(
             "practice_sets", lifecycle.transfer_practice_sets(user_id, successor_id))),
         ("tasks", lambda: _tasks().transfer_tasks(user_id, successor_id, counts=counts)),
-        ("task_records", lambda: _tasks().forget_student(user_id)),
+        ("task_records", lambda: _tasks().forget_learner(user_id)),
         ("notifications", lambda: _notifications().forget_user(user_id)),
-        ("practice_answers", lambda: _practice_review().forget_student_answers(user_id)),
+        ("practice_answers", lambda: _practice_review().forget_learner_answers(user_id)),
         ("catalog", lambda: _catalog_forget(user_id)),
     ):
         if stage not in stages:

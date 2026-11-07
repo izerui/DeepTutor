@@ -22,9 +22,9 @@ def _book(book_id: str, label: str) -> TopicSource:
 
 
 def test_an_own_private_book_shared_by_reference_stays_private(
-    teaching_books, teacher_draft, publish_template
+    teaching_books, author_draft, publish_template
 ):
-    teacher_draft(sources=(_book("bk_own", "Waves"),))
+    author_draft(sources=(_book("bk_own", "Waves"),))
 
     result = publish_template(
         book_choices={"bk_own": "reference_only"},
@@ -49,9 +49,9 @@ def test_an_own_private_book_shared_by_reference_stays_private(
 
 
 def test_an_own_private_book_can_be_made_public_with_its_kbs(
-    teaching_books, teacher_draft, publish_template
+    teaching_books, author_draft, publish_template
 ):
-    teacher_draft(sources=(_book("bk_own", "Waves"),))
+    author_draft(sources=(_book("bk_own", "Waves"),))
 
     publish_template()  # defaults: make the book and its KB public (D13)
 
@@ -59,8 +59,8 @@ def test_an_own_private_book_can_be_made_public_with_its_kbs(
     assert kb_registry.get_kb(teaching_books.answers.kb_id).visibility == "public"
 
 
-def test_a_public_book_passes_untouched(teaching_books, teacher_draft, publish_template):
-    teacher_draft(sources=(_book("bk_pub", "Optics"),))
+def test_a_public_book_passes_untouched(teaching_books, author_draft, publish_template):
+    author_draft(sources=(_book("bk_pub", "Optics"),))
 
     result = publish_template()
 
@@ -77,9 +77,9 @@ def test_a_public_book_passes_untouched(teaching_books, teacher_draft, publish_t
     ],
 )
 def test_a_failed_book_step_aborts_before_the_revision(
-    teaching_books, teacher_draft, publish_template, monkeypatch, choice, patched, failed_step
+    teaching_books, author_draft, publish_template, monkeypatch, choice, patched, failed_step
 ):
-    teacher_draft(sources=(_book("bk_own", "Waves"),))
+    author_draft(sources=(_book("bk_own", "Waves"),))
 
     def broken(*_args, **_kwargs):
         raise book_registry.BookVisibilityError("book registry is busy")
@@ -87,7 +87,7 @@ def test_a_failed_book_step_aborts_before_the_revision(
     monkeypatch.setattr(book_registry, patched, broken)
 
     with pytest.raises(PublishBlocked) as blocked:
-        publish_template(students=("sara",), book_choices={"bk_own": choice})
+        publish_template(learners=("sara",), book_choices={"bk_own": choice})
 
     assert blocked.value.detail["failed_step"] == failed_step
     assert blocked.value.detail["completed_steps"] == ["documents"]
@@ -100,7 +100,7 @@ def test_a_failed_book_step_aborts_before_the_revision(
 
 
 def test_book_steps_report_what_completed_before_them(
-    teaching_books, teacher_draft, publish_template, teaching_users, monkeypatch, tmp_path
+    teaching_books, author_draft, publish_template, teaching_users, monkeypatch, tmp_path
 ):
     from deeptutor.knowledge.manager import KnowledgeBaseManager
 
@@ -114,7 +114,7 @@ def test_book_steps_report_what_completed_before_them(
     monkeypatch.setattr(
         KnowledgeBaseManager, "get_kb_status", lambda self, name: {"status": "ready"}
     )
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s_notes",
@@ -145,14 +145,14 @@ def test_book_steps_report_what_completed_before_them(
 
 
 def test_several_sources_citing_one_book_offer_one_choice(
-    as_account, teaching_books, teacher_draft, quiet_change_model
+    as_account, teaching_books, author_draft, quiet_change_model
 ):
     import asyncio
 
     from deeptutor.teaching.service import TeachingService
 
     second = _book("bk_own", "Waves, chapter 2").model_copy(update={"id": "src_again", "position": 1})
-    teacher_draft(sources=(_book("bk_own", "Waves"), second))
+    author_draft(sources=(_book("bk_own", "Waves"), second))
 
     with as_account("tina"):
         service = TeachingService()

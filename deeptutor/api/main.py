@@ -363,7 +363,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"v1 memory migration failed: {e}")
 
     app.state.ready = True
-    # Retry account deletions whose hand-over (KBs, books, teacher paths)
+    # Retry account deletions whose hand-over (KBs, books, author paths)
     # failed or was interrupted (B2-9): in the background on a worker thread,
     # bounded by count and time; each stage is idempotent. Serving never waits.
     handoff_retry = None
@@ -675,13 +675,13 @@ app.include_router(
     dependencies=_auth,
 )
 app.include_router(practice_sets.router, prefix="/api/practice-sets", tags=["practice-sets"], dependencies=_auth)
-# Spec 2026-11-03 batch 1: tasks, notifications, the student home.
+# Spec 2026-11-03 batch 1: tasks, notifications, the learner home.
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"], dependencies=_auth)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"], dependencies=_auth)
 app.include_router(home.router, prefix="/api/home", tags=["home"], dependencies=_auth)
-# Spec 2026-11-03 batch 3 §8: students' daily AI limit.
+# Spec 2026-11-03 batch 3 §8: learners' daily AI limit.
 app.include_router(ai_usage.router, prefix="/api/ai-usage", tags=["ai-usage"], dependencies=_auth)
-# Batch 3 §3.2: a student's remedial questions from their mistakes (in the question bank).
+# Batch 3 §3.2: a learner's remedial questions from their mistakes (in the question bank).
 app.include_router(remedial.router, prefix="/api/question-notebook/remedial", tags=["remedial"], dependencies=_auth)
 # Platform batch 1: the learning market, listings and their review.
 app.include_router(catalog.router, prefix="/api/catalog", tags=["catalog"], dependencies=_auth)

@@ -18,7 +18,7 @@ interface SocketStatus {
   pathId: string | null;
   connection: MasteryConnectionState;
   error: string | null;
-  /** The teacher path behind this id was closed (revoked or archived). */
+  /** The author path behind this id was closed (revoked or archived). */
   unavailable?: boolean;
 }
 
@@ -30,7 +30,7 @@ export interface MasteryPathActivity {
   connection: MasteryConnectionState;
   error: string | null;
   /**
-   * A teacher path that was revoked or archived while open: its feed now
+   * An author path that was revoked or archived while open: its feed now
    * answers 403 and its live socket ends with `teacher_path_unavailable`.
    * Also checked on focus, so a tab whose socket was down finds out on return.
    */

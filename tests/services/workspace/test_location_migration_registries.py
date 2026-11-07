@@ -15,7 +15,7 @@ _TEMPLATE = "tpl_location"
 
 
 def _seed(account) -> dict:
-    """A workspace KB (public + referenced) and book (public + teacher path)."""
+    """A workspace KB (public + referenced) and book (public + author path)."""
     from deeptutor.book import registry as books
     from deeptutor.book.models import Book
     from deeptutor.book.storage import BookStorage
@@ -94,7 +94,7 @@ def _assert_follows(account, seeded: dict, destination: Path) -> None:
         record = book_access.ensure_book_registered(loaded, storage)
         assert record is not None and record.book_id == book.book_id
         assert teaching_books.resolve(book.book_id).book_id == book.book_id
-        # The teacher path's cited material resolves at the new location.
+        # The author path's cited material resolves at the new location.
         cited = teaching_books.resolve(f"book:{book.book_id}")
         assert cited.base_dir == str(book_root)
         assert [r.book_id for r in books.list_referenced_books("mastery_template", _TEMPLATE)] == [

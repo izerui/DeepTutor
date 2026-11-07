@@ -25,7 +25,7 @@ vi.mock("@/lib/video-learning-api", () => ({
 const video = {
   videoId: "aircAruvnKk",
   title: "Neural networks",
-  author: "Teacher",
+  author: "Tina",
   lengthSeconds: 120,
 };
 

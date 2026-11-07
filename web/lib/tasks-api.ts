@@ -52,7 +52,7 @@ export interface TaskDetail extends TaskSummary {
   }[];
 }
 
-/** One thing to do, as the student sees it (a task, or a practice set / path no task names). */
+/** One thing to do, as the learner sees it (a task, or a practice set / path no task names). */
 export interface AssignedTask {
   key: string;
   task_id: string;
@@ -138,14 +138,14 @@ export interface JoinedItem {
   study: import("./catalog-api").StudyTarget;
 }
 
-/** The student home in one request (spec 2026-11-03 batch 1 §6). */
+/** The learner home in one request (spec 2026-11-03 batch 1 §6). */
 export async function getHome(): Promise<HomeData> {
   const res = await apiFetch(apiUrl("/api/home"));
   if (!res.ok) throw new TasksApiError(`Request failed (${res.status})`, res.status);
   return (await res.json()) as HomeData;
 }
 
-// Teacher courses (spec 2026-11-03 batch 2 §5): tasks in an order.
+// Author courses (spec 2026-11-03 batch 2 §5): tasks in an order.
 export interface CourseSummary {
   id: string;
   title: string;
@@ -192,10 +192,10 @@ export const publishCourse = (courseId: string) =>
   call<{ course: CourseDetail }>(`/courses${id(courseId)}/publish`, send("POST")).then((r) => r.course);
 export const archiveCourse = (courseId: string) => call(`/courses${id(courseId)}/archive`, send("POST"));
 export const deleteCourse = (courseId: string) => call<{ ok: boolean }>(`/courses${id(courseId)}`, send("DELETE"));
-/** Traceability #5: an administrator gives a course they hold to a teacher. */
-export const handOverCourse = (courseId: string, learnerId: string) =>
-  call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: learnerId }));
+/** Traceability #5: an administrator gives a course they hold to another account, who becomes its author. */
+export const handOverCourse = (courseId: string, recipientId: string) =>
+  call<{ course: { id: string; owner_user_id: string } }>(`/courses${id(courseId)}/hand-over`, send("POST", { teacher_id: recipientId }));
 /** The same for a task that is in no course. */
-export const handOverTask = (taskId: string, learnerId: string) =>
-  call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: learnerId }));
+export const handOverTask = (taskId: string, recipientId: string) =>
+  call<{ task: { id: string; owner_user_id: string } }>(`${id(taskId)}/hand-over`, send("POST", { teacher_id: recipientId }));
 

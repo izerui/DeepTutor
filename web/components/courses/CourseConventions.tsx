@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
  * The two texts that shape every conversation in a course.
  *
  * `instructions` is the learner's own: the conventions of this subject — the
- * notation it uses, how the teacher frames things, how they want to be taught.
+ * notation it uses, how the author frames things, how they want to be taught.
  * It is the course's equivalent of a project's standing instructions, and the
  * reason a course is more than a folder.
  *

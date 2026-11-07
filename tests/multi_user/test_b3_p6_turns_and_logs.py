@@ -2,7 +2,7 @@
 admission across switches, off-loop store construction, and the original
 content scope guard.
 
-B3-9: a refused teacher-path turn is an expected outcome, logged as one INFO
+B3-9: a refused author-path turn is an expected outcome, logged as one INFO
 line without a stack; the change-suggestion fallback warns with the stack.
 T4-M2/M3: the reason length is one constant; a raising model falls back to
 the default verdicts. B2-15 leftovers: the turn-start admission is recorded
@@ -42,12 +42,12 @@ _EXECUTOR_LOGGER = "deeptutor.services.session.turns.executor"
 
 
 # ---------------------------------------------------------------------------
-# B3-9: a refused teacher-path turn logs INFO, without a stack
+# B3-9: a refused author-path turn logs INFO, without a stack
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_a_refused_teacher_path_turn_logs_one_info_line_without_a_stack(
+async def test_a_refused_author_path_turn_logs_one_info_line_without_a_stack(
     courses, chat_runtime, as_account, teaching_users, caplog
 ):
     with as_account("tina"):
@@ -259,12 +259,12 @@ async def test_history_does_not_follow_a_switch_the_start_scope_does_not_cover(
 
 @pytest.mark.asyncio
 async def test_path_switches_construct_the_learning_store_off_the_event_loop(
-    teacher_draft, as_account, monkeypatch
+    author_draft, as_account, monkeypatch
 ):
     from deeptutor.capabilities.mastery import binding
     from deeptutor.learning.storage import LearningStore
 
-    await asyncio.to_thread(teacher_draft, "sara", path_id="topic_mine")
+    await asyncio.to_thread(author_draft, "sara", path_id="topic_mine")
 
     async def _forget(_session_id, _path_id):
         return None

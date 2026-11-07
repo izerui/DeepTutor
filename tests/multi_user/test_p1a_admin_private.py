@@ -21,7 +21,7 @@ def _book(tmp_path, owner, name, visibility):
     )
 
 
-def test_admin_cannot_open_a_teachers_private_kb(make_user, tmp_path):
+def test_admin_cannot_open_a_authors_private_kb(make_user, tmp_path):
     admin = make_user("boss", role="admin")
     private = _kb(tmp_path, "tina", "notes", "private")
     assert not kbs.can_read(private, admin)
@@ -46,14 +46,14 @@ def test_admin_keeps_own_kbs_and_the_published_fallback(make_user, tmp_path):
 
 
 def test_owner_and_strangers_are_unchanged_for_kbs(make_user, tmp_path):
-    teacher = make_user("tina", role="teacher")
-    student = make_user("sam", role="student")
+    author = make_user("tina", role="teacher")
+    learner = make_user("sam", role="student")
     private = _kb(tmp_path, "tina", "notes", "private")
-    assert kbs.can_read(private, teacher) and kbs.can_write(private, teacher)
-    assert not kbs.can_read(private, student) and not kbs.can_write(private, student)
+    assert kbs.can_read(private, author) and kbs.can_write(private, author)
+    assert not kbs.can_read(private, learner) and not kbs.can_write(private, learner)
 
 
-def test_admin_cannot_open_a_teachers_private_book(make_user, tmp_path):
+def test_admin_cannot_open_a_authors_private_book(make_user, tmp_path):
     admin = make_user("boss", role="admin")
     private = _book(tmp_path, "tina", "draft", "private")
     assert not books.can_read_book(private, admin)

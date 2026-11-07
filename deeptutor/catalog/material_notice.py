@@ -1,6 +1,6 @@
-"""Tell teachers when material their content cites goes away (platform batch 3 §6).
+"""Tell authors when material their content cites goes away (platform batch 3 §6).
 
-A book or knowledge base cited by another teacher's
+A book or knowledge base cited by another author's
 published Mastery Path — or a book read by a task of their course — that an
 administrator takes down, or its owner makes private or deletes, is no longer
 there for their learners. Those authors hear of it, once a day per material

@@ -136,8 +136,8 @@ def transfer_ownership(
 ) -> list[books.BookRecord]:
     """Hand over books and active protection without renewing withdrawn access.
 
-    With *shared_only* (the account lives on, e.g. a teacher who became a
-    student): only public or referenced books move; private ones stay theirs.
+    With *shared_only* (the account lives on, e.g. an author who became a
+    learner): only public or referenced books move; private ones stay theirs.
     """
     shared = (
         " AND (visibility = 'public' OR book_id IN (SELECT book_id FROM books.book_references))"
@@ -382,7 +382,7 @@ def change_visibility(
     """Connection-taking transition for callers retaining a bound target.
 
     Rule R1: the owner may always make a book private. Other accounts'
-    references are revoked (``made_private``); published teacher paths among
+    references are revoked (``made_private``); published author paths among
     them need ``confirm`` first (:class:`BookWithdrawalNeedsConfirmation`,
     nothing written). ``force`` (admins only) implies the confirmation.
     """

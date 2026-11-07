@@ -34,7 +34,7 @@ function presentedPages(events: StreamEvent[]): Page[] {
 
 function SourcePage({ page }: { page: Page }) {
   const { t } = useTranslation();
-  // R9: inside an open teacher path's Study page the original is read in the
+  // R9: inside an open author path's Study page the original is read in the
   // path's context; elsewhere the context is "" and the URL is unchanged.
   const templateId = useMasteryTemplate();
   const state = useBinarySource(apiUrl(withMasteryTemplate(page.preview_url, templateId)), "image/png");

@@ -39,7 +39,7 @@ def _in_course(*task_ids, **options):
 
 def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_account, ids, monkeypatch):
     from deeptutor.practice_sets.service import PracticeSetService
-    from deeptutor.tasks.service import StudentTasks, TaskService
+    from deeptutor.tasks.service import LearnerTasks, TaskService
     from deeptutor.tasks.store import db
 
     with as_account("tina"):
@@ -57,7 +57,7 @@ def test_a_practice_set_task_is_done_when_it_was_submitted_not_when_noticed(as_a
     later = submitted + 3600  # she opens her tasks an hour later
     monkeypatch.setattr("deeptutor.tasks.service._now", lambda: later)
     with as_account("sara"):
-        entry = StudentTasks().get(task["id"])
+        entry = LearnerTasks().get(task["id"])
     assert entry["state"] == "completed" and "late" not in entry and "due_at" not in entry
     with db.read() as conn:
         assert conn.execute("SELECT completed_at FROM task_completions WHERE task_key = ?",

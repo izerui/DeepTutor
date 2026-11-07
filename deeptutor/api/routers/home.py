@@ -1,4 +1,4 @@
-"""The student home (spec 2026-11-03 batch 1 §6): assigned, newly listed, mine."""
+"""The learner home (spec 2026-11-03 batch 1 §6): assigned, newly listed, mine."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _market() -> list[dict[str, Any]]:
 
 
 def _mine() -> list[dict[str, Any]]:
-    """The student's own Mastery Paths, most recently studied first."""
+    """The learner's own Mastery Paths, most recently studied first."""
     from deeptutor.learning import policy
     from deeptutor.learning.storage import LearningStore
 
@@ -92,10 +92,10 @@ def _mine_courses() -> list[dict[str, Any]]:
 
 @router.get("")
 async def home() -> dict[str, Any]:
-    from deeptutor.tasks.service import StudentTasks
+    from deeptutor.tasks.service import LearnerTasks
 
     def build() -> dict[str, Any]:
-        tasks = StudentTasks().assigned()
+        tasks = LearnerTasks().assigned()
         sections: dict[str, Any] = {
             "assigned": [t for t in tasks if t["state"] == "open"],
             "history_count": sum(1 for t in tasks if t["state"] in ("completed", "closed")),

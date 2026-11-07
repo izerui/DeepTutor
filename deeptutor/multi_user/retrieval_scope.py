@@ -1,6 +1,6 @@
 """Which knowledge bases a turn may retrieve from (R8).
 
-A tutoring turn on a teacher's path is taught from that path's own materials.
+A tutoring turn on an author's path is taught from that path's own materials.
 Narrowing the KBs attached to the turn is not enough for that: the model can
 still name any readable library in an explicit ``rag(kb_name=...)`` call, and
 visual inspection resolves its library separately. So the restriction lives
@@ -36,13 +36,13 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 #: What a refused retrieval reports. Stable English; the model relays it.
-TEACHER_PATH_RETRIEVAL_DENIED = (
+AUTHOR_PATH_RETRIEVAL_DENIED = (
     "This course is taught from its author's materials only, and that "
     "knowledge base is not one of them. Retrieve from the course's own "
     "knowledge bases instead."
 )
 #: Machine-readable code carried on a refused tool result.
-TEACHER_PATH_SCOPE_CODE = "teacher_path_scope"
+AUTHOR_PATH_SCOPE_CODE = "teacher_path_scope"
 
 
 @dataclass
@@ -50,7 +50,7 @@ class TurnRetrievalScope:
     """One turn's retrieval allowlist. ``kb_ids is None`` means unrestricted."""
 
     kb_ids: frozenset[str] | None = None
-    #: The teacher template the turn is currently on, ``""`` otherwise.
+    #: The author template the turn is currently on, ``""`` otherwise.
     template_id: str = ""
     #: The scope that was active when this one opened. A nested turn can never
     #: widen what its enclosing turn was allowed to read.
@@ -141,7 +141,7 @@ def location_allowed(base_dir: Path | str, name: str) -> bool:
 def enforce_retrieval_scope(resource: Any) -> None:
     """Refuse an already access-checked resource outside the turn's allowlist."""
     if not location_allowed(resource.base_dir, resource.name):
-        raise HTTPException(status_code=403, detail=TEACHER_PATH_RETRIEVAL_DENIED)
+        raise HTTPException(status_code=403, detail=AUTHOR_PATH_RETRIEVAL_DENIED)
 
 
 def retrieval_refusal(kb_ref: str) -> str:
@@ -161,12 +161,12 @@ def retrieval_refusal(kb_ref: str) -> str:
         return ""
     if location_allowed(resource.base_dir, resource.name):
         return ""
-    return TEACHER_PATH_RETRIEVAL_DENIED
+    return AUTHOR_PATH_RETRIEVAL_DENIED
 
 
 __all__ = [
-    "TEACHER_PATH_RETRIEVAL_DENIED",
-    "TEACHER_PATH_SCOPE_CODE",
+    "AUTHOR_PATH_RETRIEVAL_DENIED",
+    "AUTHOR_PATH_SCOPE_CODE",
     "TurnRetrievalScope",
     "canonical_kb_ids",
     "current_retrieval_scope",

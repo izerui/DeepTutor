@@ -143,7 +143,7 @@ def test_deleting_an_account_without_templates_skips_the_joint_writer(joint_call
     assert joint_calls == []
 
 
-def test_deleting_a_teacher_still_transfers_in_the_joint_writer(joint_calls):
+def test_deleting_a_author_still_transfers_in_the_joint_writer(joint_calls):
     store = TeachingStore()
     created = store.create_template(
         owner_user_id="teacher-1", title="T", description="", draft_path_id="p",

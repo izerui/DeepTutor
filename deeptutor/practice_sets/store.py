@@ -1,11 +1,11 @@
-"""System-level persistence for teacher practice sets (spec 2026-10-29 §8.1).
+"""System-level persistence for author practice sets (spec 2026-10-29 §8.1).
 
 Lives in ``<SYSTEM_ROOT>/practice_sets.sqlite3``, outside every account:
 
-* ``practice_sets``: the teacher's set and its editable draft;
+* ``practice_sets``: the author's set and its editable draft;
 * ``practice_set_revisions``: each published version, frozen;
 * ``practice_submissions``: one row per submission with per-question
-  results and the score. Every answer goes to the student's own question
+  results and the score. Every answer goes to the learner's own question
   bank; only what the set's author reviews is kept here as well — the text
   of subjective answers and the option picked (batch 3 §2.1).
 
@@ -103,9 +103,9 @@ def _open(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 #: Columns added after the first release (spec 2026-11-03 batch 3 §6.1).
 _ADDED_COLUMNS = {
     "practice_sets": {
-        # ``NULL``: as many attempts as the student likes.
+        # ``NULL``: as many attempts as the learner likes.
         "attempts_limit": "INTEGER",
-        # Which attempt is the student's score: ``best`` or ``first``.
+        # Which attempt is the learner's score: ``best`` or ``first``.
         "score_mode": "TEXT NOT NULL DEFAULT 'best'",
         # Who made it; unchanged when it is handed over (follow-ups §4). ``NULL`` on
         # sets made before: not known, so an administrator owning one is treated as

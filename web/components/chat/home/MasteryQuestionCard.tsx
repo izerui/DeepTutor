@@ -129,7 +129,7 @@ const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
   onChallenge, groupInput, rejectionKey,
 }: MasteryQuestionCardProps & { groupInput?: GroupInput }) {
   const { t } = useTranslation();
-  // R9: originals of an open teacher path are read in its context ("" elsewhere).
+  // R9: originals of an open author path are read in its context ("" elsewhere).
   const templateId = useMasteryTemplate();
   const sourceUrl = (url: string) => browserPath(withMasteryTemplate(url, templateId));
   const [picked, setPicked] = useState<string>(() => grade?.final === false ? grade.learnerAnswer : "");

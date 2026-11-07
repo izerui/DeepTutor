@@ -1,7 +1,7 @@
 import { masteryTopicRoute } from "@/lib/learning-routes";
 
 /**
- * Where ``/start?task=<key>`` (a task notification) leads a teacher or an
+ * Where ``/start?task=<key>`` (a task notification) leads an author or an
  * administrator (traceability #7): their own task opens in the editor; a task
  * of a course they joined opens under the "Learning" tab. Older keys naming a
  * practice set or a path open that directly.

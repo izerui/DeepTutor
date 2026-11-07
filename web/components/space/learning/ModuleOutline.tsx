@@ -89,7 +89,7 @@ export function ModuleOutline({
   selectedId: string | null;
   zh: boolean;
   onSelect: (id: string | null) => void;
-  /** Absent on a teacher's path: mastery is not claimed by hand there. */
+  /** Absent on an author's path: mastery is not claimed by hand there. */
   onOverride?: (
     objectiveId: string,
     mastered: boolean,
@@ -223,7 +223,7 @@ function ObjectiveDrawer({
   revision: number;
   zh: boolean;
   onClose: () => void;
-  /** Absent on a teacher's path: mastery is not claimed by hand there. */
+  /** Absent on an author's path: mastery is not claimed by hand there. */
   onOverride?: (
     objectiveId: string,
     mastered: boolean,

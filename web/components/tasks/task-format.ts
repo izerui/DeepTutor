@@ -29,7 +29,7 @@ export function targetHref(task: Pick<AssignedTask, "kind" | "target_id" | "sett
     case "practice_set":
       return `/practice-sets?set=${encodeURIComponent(task.target_id)}`;
     case "mastery_path":
-      // A student studies their own copy of a teacher path (``assigned_<template>``).
+      // A learner studies their own copy of an author path (``assigned_<template>``).
       return masteryTopicRoute(`assigned_${task.target_id}`, "");
     case "book":
       return bookRoute(`book:${task.target_id}`, task.settings.page_ids?.[0] ?? null, "");

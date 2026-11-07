@@ -1,4 +1,4 @@
-"""Teacher-side operations: register, preview, publish, archive, delete."""
+"""Author-side operations: register, preview, publish, archive, delete."""
 
 from __future__ import annotations
 
@@ -42,10 +42,10 @@ def _preview(as_account, template_id: str, name: str = "tina") -> dict:
         return asyncio.run(TeachingService().preview_publish(template_id))
 
 
-def test_first_publish_snapshots_the_outline_but_not_the_teachers_progress(
-    as_account, teacher_draft, publish_template, teaching_users
+def test_first_publish_snapshots_the_outline_but_not_the_authors_progress(
+    as_account, author_draft, publish_template, teaching_users
 ):
-    path_id = teacher_draft()
+    path_id = author_draft()
     with as_account("tina"):
         store = LearningStore()
 
@@ -59,7 +59,7 @@ def test_first_publish_snapshots_the_outline_but_not_the_teachers_progress(
 
         store.mutate(path_id, practise)
 
-    result = publish_template(students=("sara",))
+    result = publish_template(learners=("sara",))
 
     template_id = result["template"]["id"]
     revision = TeachingStore().get_revision(template_id, 1)
@@ -78,8 +78,8 @@ def test_first_publish_snapshots_the_outline_but_not_the_teachers_progress(
     assert assignment.status == "active"
 
 
-def test_registering_twice_returns_the_same_template(as_account, teacher_draft):
-    teacher_draft()
+def test_registering_twice_returns_the_same_template(as_account, author_draft):
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         assert service.register("topic_calculus", "").id == service.register(
@@ -88,7 +88,7 @@ def test_registering_twice_returns_the_same_template(as_account, teacher_draft):
 
 
 def test_private_kbs_are_published_or_shared_by_reference(
-    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry
+    as_account, author_draft, publish_template, teaching_users, fake_kb_registry
 ):
     tina = teaching_users["tina"]["id"]
     fake_kb_registry.add(
@@ -97,7 +97,7 @@ def test_private_kbs_are_published_or_shared_by_reference(
     fake_kb_registry.add(
         "kb_answers", visibility="private", created_by=tina, legacy_refs=("user:kb:answers",)
     )
-    teacher_draft(
+    author_draft(
         sources=(
             _kb_source(0, "user:kb:notes", "Notes"),
             _kb_source(1, "user:kb:answers", "Answers"),
@@ -122,7 +122,7 @@ def test_private_kbs_are_published_or_shared_by_reference(
 
 
 def test_a_republish_keeps_the_reference_only_choice(
-    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry
+    as_account, author_draft, publish_template, teaching_users, fake_kb_registry
 ):
     fake_kb_registry.add(
         "kb_answers",
@@ -130,7 +130,7 @@ def test_a_republish_keeps_the_reference_only_choice(
         created_by=teaching_users["tina"]["id"],
         legacy_refs=("user:kb:answers",),
     )
-    teacher_draft(sources=(_kb_source(0, "user:kb:answers", "Answers"),))
+    author_draft(sources=(_kb_source(0, "user:kb:answers", "Answers"),))
     template_id = publish_template(kb_choices={"kb_answers": "reference_only"})["template"]["id"]
 
     preview = _preview(as_account, template_id)
@@ -141,11 +141,11 @@ def test_a_republish_keeps_the_reference_only_choice(
 
 
 def test_file_sources_reference_fixed_document_ids(
-    as_account, teacher_draft, publish_template, fake_kb_registry
+    as_account, author_draft, publish_template, fake_kb_registry
 ):
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
     fake_kb_registry.write_file("kb_lib", "ch1.md")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="f0",
@@ -167,8 +167,8 @@ def test_file_sources_reference_fixed_document_ids(
     assert [(d.doc_id, d.version) for d in ref.documents] == [("doc_1", 1)]
 
 
-def test_personal_sources_block_publishing(as_account, teacher_draft, quiet_change_model):
-    teacher_draft(
+def test_personal_sources_block_publishing(as_account, author_draft, quiet_change_model):
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -194,7 +194,7 @@ def test_personal_sources_block_publishing(as_account, teacher_draft, quiet_chan
 
 
 def test_a_failed_make_public_aborts_before_anything_is_written(
-    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry, monkeypatch
+    as_account, author_draft, publish_template, teaching_users, fake_kb_registry, monkeypatch
 ):
     fake_kb_registry.add(
         "kb_notes",
@@ -202,7 +202,7 @@ def test_a_failed_make_public_aborts_before_anything_is_written(
         created_by=teaching_users["tina"]["id"],
         legacy_refs=("user:kb:notes",),
     )
-    teacher_draft(sources=(_kb_source(0, "user:kb:notes", "Notes"),))
+    author_draft(sources=(_kb_source(0, "user:kb:notes", "Notes"),))
 
     def refuse(kb_id, visibility, *, force=False):
         raise registry.KbVisibilityError("Still referenced elsewhere")
@@ -210,7 +210,7 @@ def test_a_failed_make_public_aborts_before_anything_is_written(
     monkeypatch.setattr(registry, "set_visibility", refuse)
 
     with pytest.raises(PublishBlocked) as blocked:
-        publish_template(students=("sara",))
+        publish_template(learners=("sara",))
 
     assert blocked.value.detail["failed_step"] == "make_public:kb:kb_notes"
     assert blocked.value.detail["completed_steps"] == ["documents"]
@@ -220,17 +220,17 @@ def test_a_failed_make_public_aborts_before_anything_is_written(
 
 
 def test_a_failed_reference_write_is_reported_as_a_warning(
-    as_account, teacher_draft, publish_template, fake_kb_registry, monkeypatch
+    as_account, author_draft, publish_template, fake_kb_registry, monkeypatch
 ):
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
-    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    author_draft(sources=(_kb_source(0, "library", "Library"),))
 
     def broken(*_args, **_kwargs):
         raise registry.KbRegistryError("registry is read-only")
 
     monkeypatch.setattr(registry, "replace_references", broken)
 
-    result = publish_template(students=("sara",))
+    result = publish_template(learners=("sara",))
 
     assert result["revision"] == 1
     assert [w["step"] for w in result["warnings"]] == ["knowledge_base_references"]
@@ -238,9 +238,9 @@ def test_a_failed_reference_write_is_reported_as_a_warning(
 
 
 def test_sources_are_resolved_in_the_drafts_workspace(
-    as_account, teacher_draft, teaching_users, quiet_change_model, monkeypatch
+    as_account, author_draft, teaching_users, quiet_change_model, monkeypatch
 ):
-    teacher_draft()
+    author_draft()
     template = TeachingStore().create_template(
         owner_user_id=teaching_users["tina"]["id"],
         title="Calculus I",
@@ -273,8 +273,8 @@ def test_sources_are_resolved_in_the_drafts_workspace(
     assert seen == ["ws_course"]
 
 
-def test_a_stale_preview_cannot_be_published(as_account, teacher_draft, quiet_change_model):
-    teacher_draft()
+def test_a_stale_preview_cannot_be_published(as_account, author_draft, quiet_change_model):
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")
@@ -288,9 +288,9 @@ def test_a_stale_preview_cannot_be_published(as_account, teacher_draft, quiet_ch
             )
 
 
-def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
-    teacher_draft()
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
+def test_ownership_rules_d17(as_account, author_draft, publish_template):
+    author_draft()
+    template_id = publish_template(learners=("sara", "sam"))["template"]["id"]
 
     with as_account("tom"):
         service = TeachingService()
@@ -307,16 +307,16 @@ def test_ownership_rules_d17(as_account, teacher_draft, publish_template):
 
 
 def test_delete_only_before_publishing_and_archive_afterwards(
-    as_account, teacher_draft, publish_template, fake_kb_registry
+    as_account, author_draft, publish_template, fake_kb_registry
 ):
-    teacher_draft(path_id="topic_unpublished")
+    author_draft(path_id="topic_unpublished")
     with as_account("tina"):
         service = TeachingService()
         unpublished = service.register("topic_unpublished", "")
         service.delete(unpublished.id)
         assert TeachingStore().get_template(unpublished.id) is None
 
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     with as_account("tina"):
         service = TeachingService()
@@ -327,10 +327,10 @@ def test_delete_only_before_publishing_and_archive_afterwards(
 
 
 def test_republishing_records_the_confirmed_changes(
-    as_account, teacher_draft, publish_template, edit_calculus_draft
+    as_account, author_draft, publish_template, edit_calculus_draft
 ):
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     ids = edit_calculus_draft()
     assert ids.renamed != ids.derivatives
 
@@ -368,9 +368,9 @@ def test_republishing_records_the_confirmed_changes(
 
 
 def test_only_the_owner_reaches_source_planning(
-    as_account, teacher_draft, publish_template, monkeypatch
+    as_account, author_draft, publish_template, monkeypatch
 ):
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     calls: list[str] = []
     real_plan = service_module.plan_sources
@@ -406,11 +406,11 @@ def test_only_the_owner_reaches_source_planning(
 
 
 def test_a_failed_document_registration_aborts_first(
-    teacher_draft, publish_template, fake_kb_registry, monkeypatch
+    author_draft, publish_template, fake_kb_registry, monkeypatch
 ):
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
     fake_kb_registry.write_file("kb_lib", "ch1.md")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="f0",
@@ -429,7 +429,7 @@ def test_a_failed_document_registration_aborts_first(
     monkeypatch.setattr(registry, "upsert_documents", broken)
 
     with pytest.raises(PublishBlocked) as blocked:
-        publish_template(students=("sara",))
+        publish_template(learners=("sara",))
 
     assert blocked.value.detail["failed_step"] == "documents"
     assert blocked.value.detail["completed_steps"] == []
@@ -442,12 +442,12 @@ def test_a_failed_document_registration_aborts_first(
 
 @pytest.mark.parametrize("step", ["book_references", "assignments"])
 def test_post_version_failures_are_warnings_not_false_success(
-    teacher_draft, publish_template, fake_kb_registry, monkeypatch, step
+    author_draft, publish_template, fake_kb_registry, monkeypatch, step
 ):
     from deeptutor.book import registry as book_registry
 
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
-    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    author_draft(sources=(_kb_source(0, "library", "Library"),))
 
     def broken(*_args, **_kwargs):
         raise RuntimeError(f"{step} store is read-only")
@@ -458,7 +458,7 @@ def test_post_version_failures_are_warnings_not_false_success(
         # Who receives it (nobody named, people join) is stored after the revision.
         monkeypatch.setattr("deeptutor.publishing.scope.default_scope_on_publish", broken)
 
-    result = publish_template(students=("sara",))
+    result = publish_template(learners=("sara",))
 
     assert result["revision"] == 1
     assert result["warnings"] == [{"step": step, "message": f"{step} store is read-only"}]
@@ -473,14 +473,14 @@ def test_post_version_failures_are_warnings_not_false_success(
 
 
 def test_only_explicit_reference_only_choices_record_private_intent(
-    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry
+    as_account, author_draft, publish_template, teaching_users, fake_kb_registry
 ):
     tina = teaching_users["tina"]["id"]
     fake_kb_registry.add(
         "kb_answers", visibility="private", created_by=tina, legacy_refs=("user:kb:answers",)
     )
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
-    teacher_draft(
+    author_draft(
         sources=(
             _kb_source(0, "user:kb:answers", "Answers"),
             _kb_source(1, "library", "Library"),
@@ -539,11 +539,11 @@ def two_libraries(fake_kb_registry):
 
 
 def test_an_update_keeps_the_old_revisions_materials_for_instances_still_on_it(
-    as_account, teacher_draft, publish_template, teaching_users, two_libraries
+    as_account, author_draft, publish_template, teaching_users, two_libraries
 ):
     sara = teaching_users["sara"]["id"]
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(learners=("sara", "sam"))["template"]["id"]
     # Sara's instance is on revision 1 (e.g. a pending old-revision question).
     TeachingStore().record_instance(
         template_id, sara, instance_path_id=f"assigned_{template_id}", applied_revision=1
@@ -566,11 +566,11 @@ def test_an_update_keeps_the_old_revisions_materials_for_instances_still_on_it(
 
 
 def test_without_an_instance_on_the_old_revision_its_materials_are_released(
-    as_account, teacher_draft, publish_template, two_libraries
+    as_account, author_draft, publish_template, two_libraries
 ):
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
     # Sam is assigned but never opened the path: no instance on revision 1.
-    template_id = publish_template(students=("sam",))["template"]["id"]
+    template_id = publish_template(learners=("sam",))["template"]["id"]
     _swap_sources(as_account, (_kb_source(0, "lib_b", "B"),))
 
     publish_template()
@@ -578,12 +578,12 @@ def test_without_an_instance_on_the_old_revision_its_materials_are_released(
     assert _referenced(two_libraries, template_id) == ["kb_b"]
 
 
-def test_the_last_student_on_an_old_revision_leaving_releases_it_immediately(
-    as_account, teacher_draft, publish_template, teaching_users, two_libraries
+def test_the_last_learner_on_an_old_revision_leaving_releases_it_immediately(
+    as_account, author_draft, publish_template, teaching_users, two_libraries
 ):
     sara = teaching_users["sara"]["id"]
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     TeachingStore().record_instance(
         template_id, sara, instance_path_id=f"assigned_{template_id}", applied_revision=1
     )
@@ -597,11 +597,11 @@ def test_the_last_student_on_an_old_revision_leaving_releases_it_immediately(
 
 
 def test_archiving_releases_every_revisions_materials_immediately(
-    as_account, teacher_draft, publish_template, teaching_users, two_libraries
+    as_account, author_draft, publish_template, teaching_users, two_libraries
 ):
     sara = teaching_users["sara"]["id"]
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     TeachingStore().record_instance(
         template_id, sara, instance_path_id=f"assigned_{template_id}", applied_revision=1
     )
@@ -618,11 +618,11 @@ def test_archiving_releases_every_revisions_materials_immediately(
 
 
 def test_an_old_revision_never_regains_a_revoked_material(
-    as_account, teacher_draft, publish_template, teaching_users, two_libraries
+    as_account, author_draft, publish_template, teaching_users, two_libraries
 ):
     sara = teaching_users["sara"]["id"]
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     TeachingStore().record_instance(
         template_id, sara, instance_path_id=f"assigned_{template_id}", applied_revision=1
     )
@@ -690,19 +690,19 @@ def _entered(monkeypatch, method: str):
 
 
 def test_a_resync_racing_a_publish_keeps_the_new_revisions_materials(
-    as_account, teacher_draft, publish_template, teaching_users, fake_kb_registry, monkeypatch
+    as_account, author_draft, publish_template, teaching_users, fake_kb_registry, monkeypatch
 ):
     sara = teaching_users["sara"]["id"]
     for kb_id, ref in (("kb_a", "lib_a"), ("kb_b", "lib_b"), ("kb_c", "lib_c")):
         fake_kb_registry.add(kb_id, visibility="public", legacy_refs=(ref,))
-    teacher_draft(sources=(_kb_source(0, "lib_a", "A"),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(0, "lib_a", "A"),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     instance = f"assigned_{template_id}"
     TeachingStore().record_instance(template_id, sara, instance_path_id=instance, applied_revision=1)
     _swap_sources(as_account, (_kb_source(0, "lib_b", "B"),))
     publish_template()
     assert _referenced(fake_kb_registry, template_id) == ["kb_a", "kb_b"]
-    # Sara migrates to revision 2; the teacher meanwhile prepares revision 3.
+    # Sara migrates to revision 2; the author meanwhile prepares revision 3.
     TeachingStore().record_instance(template_id, sara, instance_path_id=instance, applied_revision=2)
     _swap_sources(as_account, (_kb_source(0, "lib_b", "B"), _kb_source(1, "lib_c", "C")))
     add_revision = _entered(monkeypatch, "add_revision")
@@ -727,10 +727,10 @@ def test_a_resync_racing_a_publish_keeps_the_new_revisions_materials(
 
 
 def test_an_archive_racing_the_reference_write_leaves_nothing_shared(
-    as_account, teacher_draft, publish_template, fake_kb_registry, monkeypatch
+    as_account, author_draft, publish_template, fake_kb_registry, monkeypatch
 ):
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
-    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    author_draft(sources=(_kb_source(0, "library", "Library"),))
     with as_account("tina"):
         template_id = TeachingService().register("topic_calculus", "").id
     update = _entered(monkeypatch, "update_template")
@@ -756,10 +756,10 @@ def test_an_archive_racing_the_reference_write_leaves_nothing_shared(
 
 
 def test_a_publish_that_finds_its_path_archived_shares_nothing(
-    teacher_draft, publish_template, fake_kb_registry, monkeypatch
+    author_draft, publish_template, fake_kb_registry, monkeypatch
 ):
     fake_kb_registry.add("kb_lib", visibility="public", legacy_refs=("library",))
-    teacher_draft(sources=(_kb_source(0, "library", "Library"),))
+    author_draft(sources=(_kb_source(0, "library", "Library"),))
     real_add = TeachingStore.add_revision
 
     def add_then_archive(self, revision, **kwargs):
@@ -769,7 +769,7 @@ def test_a_publish_that_finds_its_path_archived_shares_nothing(
 
     monkeypatch.setattr(TeachingStore, "add_revision", add_then_archive)
 
-    result = publish_template(students=("sara",))
+    result = publish_template(learners=("sara",))
 
     assert [w["step"] for w in result["warnings"]] == [
         "knowledge_base_references",

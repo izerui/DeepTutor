@@ -1,6 +1,6 @@
 """B2-12: closed path + ?mastery_template falls back to normal auth, not 403.
 
-End-to-end HTTP route tests: when the teacher path is closed (archived,
+End-to-end HTTP route tests: when the author path is closed (archived,
 revoked, not assigned) the ``mastery_template`` query parameter is silently
 ignored and the route's own authorization rules decide the response status.
 """
@@ -25,7 +25,7 @@ def _files_url(ref: str, rel_path: str) -> str:
 
 @pytest.fixture
 def public_and_private_path(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, quiet_change_model
+    teaching_users, as_account, make_kb, author_draft, publish_template, quiet_change_model
 ):
     """Tina's two KBs — one public, one private — published to Sara then archived."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -48,7 +48,7 @@ def public_and_private_path(
     assert pub_rec.visibility == "public"
     assert priv_rec.visibility == "private"
 
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -67,7 +67,7 @@ def public_and_private_path(
         )
     )
     result = publish_template(
-        students=("sara",),
+        learners=("sara",),
         kb_choices={pub_rec.kb_id: "reference_only", priv_rec.kb_id: "reference_only"},
     )
     template_id = result["template"]["id"]
@@ -110,7 +110,7 @@ def test_closed_path_private_kb_matches_plain_route(public_and_private_path, tea
 
 
 def test_open_path_entitled_doc_still_200(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template,
+    teaching_users, as_account, make_kb, author_draft, publish_template,
     quiet_change_model, teaching_http,
 ):
     """While the path is open, an entitled document returns 200 (no regression)."""
@@ -127,7 +127,7 @@ def test_open_path_entitled_doc_still_200(
             root, "open-kb", created_by=teaching_users["tina"]["id"]
         )
 
-    teacher_draft(
+    author_draft(
         path_id="topic_open",
         sources=(
             TopicSource(
@@ -141,7 +141,7 @@ def test_open_path_entitled_doc_still_200(
     )
     result = publish_template(
         path_id="topic_open",
-        students=("sara",),
+        learners=("sara",),
         kb_choices={rec.kb_id: "reference_only"},
     )
     template_id = result["template"]["id"]
@@ -154,7 +154,7 @@ def test_open_path_entitled_doc_still_200(
 
 
 def test_open_path_non_existent_doc_returns_404(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template,
+    teaching_users, as_account, make_kb, author_draft, publish_template,
     quiet_change_model, teaching_http,
 ):
     """While the path is open, a non-existent file in an entitled KB returns 404."""
@@ -171,7 +171,7 @@ def test_open_path_non_existent_doc_returns_404(
             root, "entitled-kb", created_by=teaching_users["tina"]["id"]
         )
 
-    teacher_draft(
+    author_draft(
         path_id="topic_nonexist",
         sources=(
             TopicSource(
@@ -185,7 +185,7 @@ def test_open_path_non_existent_doc_returns_404(
     )
     result = publish_template(
         path_id="topic_nonexist",
-        students=("sara",),
+        learners=("sara",),
         kb_choices={rec.kb_id: "reference_only"},
     )
     template_id = result["template"]["id"]

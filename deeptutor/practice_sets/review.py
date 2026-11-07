@@ -96,7 +96,7 @@ class PracticeReview:
         }
 
     def export_csv(self, set_id: str) -> str:
-        """Every reported student's results, one row each, with each question's result."""
+        """Every reported learner's results, one row each, with each question's result."""
         report = self.service.report(set_id)
         with store.read() as conn:
             current = conn.execute(
@@ -107,7 +107,7 @@ class PracticeReview:
                 "ORDER BY submitted_at",
                 (set_id, current),
             ).fetchall()
-        # Per question: each student's first attempt at the current version, whose questions the columns are.
+        # Per question: each learner's first attempt at the current version, whose questions the columns are.
         first: dict[str, dict[str, str]] = {}
         for submission in submissions:
             if submission["student_id"] not in first:
@@ -123,15 +123,15 @@ class PracticeReview:
             "counted_score", "counted_max", "minutes", "submitted_at",
             *[f"Q{i + 1}" for i in range(len(questions))],
         ])
-        for student in report["students"]:
-            results = first.get(student["id"], {})
+        for learner in report["students"]:
+            results = first.get(learner["id"], {})
             writer.writerow([
-                student["username"], "yes" if student["in_scope"] else "no", student["attempts"],
-                _number(student["first_score"]), _number(student["max_score"]),
-                _number(student["best_score"]), _number(student["best_max_score"]),
-                _number(student["score"]), _number(student["score_max"]),
-                _number(student["minutes"]),
-                time.strftime("%Y-%m-%d %H:%M", time.localtime(student["submitted_at"])) if student["submitted_at"] else "",
+                learner["username"], "yes" if learner["in_scope"] else "no", learner["attempts"],
+                _number(learner["first_score"]), _number(learner["max_score"]),
+                _number(learner["best_score"]), _number(learner["best_max_score"]),
+                _number(learner["score"]), _number(learner["score_max"]),
+                _number(learner["minutes"]),
+                time.strftime("%Y-%m-%d %H:%M", time.localtime(learner["submitted_at"])) if learner["submitted_at"] else "",
                 *[results.get(q["question_id"], "") for q in questions],
             ])
         return out.getvalue()
@@ -143,14 +143,14 @@ def _number(value: Any) -> str:
     return f"{float(value):g}"
 
 
-def forget_student_answers(student_id: str) -> int:
-    """A deleted student's answers kept for review go with the account (batch 3 §11)."""
+def forget_learner_answers(learner_id: str) -> int:
+    """A deleted learner's answers kept for review go with the account (batch 3 §11)."""
     if not store.practice_db_path().exists():
         return 0
     with store.write() as conn:
         return int(conn.execute(
-            "UPDATE practice_submissions SET answers_json = '{}' WHERE student_id = ?", (student_id,)
+            "UPDATE practice_submissions SET answers_json = '{}' WHERE student_id = ?", (learner_id,)
         ).rowcount)
 
 
-__all__ = ["PracticeReview", "forget_student_answers", "option_counts"]
+__all__ = ["PracticeReview", "forget_learner_answers", "option_counts"]

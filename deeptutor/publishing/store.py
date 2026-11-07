@@ -3,7 +3,7 @@
 Lives in ``<SYSTEM_ROOT>/publish_scopes.sqlite3``. An item appears in
 ``publish_items`` once its publisher sets a scope; until then the content
 type's old rule applies (a public book or knowledge base reaches everyone, a
-Mastery Path reaches the students it was assigned to). Same storage contract
+Mastery Path reaches the learners it was assigned to). Same storage contract
 as the class store: DELETE journal with FULL synchronous, ``BEGIN IMMEDIATE``
 writers that never nest, read-only connections for reads, and no file
 created by a read.

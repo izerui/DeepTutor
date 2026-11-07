@@ -444,7 +444,7 @@ def _registry_fields(record: Any, *, owned: bool) -> dict[str, Any]:
 
     return {
         "can_retire": can_retire,
-        # Spec 2026-11-02 §3.1: own / school / teacher / shared.
+        # Spec 2026-11-02 §3.1: own / school / shared.
         "provenance": provenance(record.created_by, get_current_user()),
         "kb_id": record.kb_id,
         "ref": record.ref,
@@ -531,7 +531,7 @@ def resolve_for_rag(kb_ref: str | None) -> KnowledgeResource | None:
     """The library a retrieval reads, after access *and* the turn's allowlist.
 
     Every textual and visual retrieval resolves its library here, so this is
-    where a teacher path's R8 restriction is enforced (403 outside it). The
+    where an author path's R8 restriction is enforced (403 outside it). The
     allowlist is checked after the ordinary rules and therefore only narrows.
     """
     if not kb_ref:
@@ -610,7 +610,7 @@ def live_document_path(kb_ref: str | None, doc_id: str) -> str | None:
     """Where document *doc_id* of the library *kb_ref* lives now, or ``None``.
 
     Documents keep a fixed id when they move (plan B), so a material that
-    captured a path at some point — a teacher path's published snapshot —
+    captured a path at some point — an author path's published snapshot —
     follows the id instead: the captured path may since hold an unrelated
     file. ``None`` when the library or the live document is gone. A lookup,
     not an access check: callers still read through the access-checked seams.

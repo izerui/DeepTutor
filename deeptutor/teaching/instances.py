@@ -1,8 +1,8 @@
-"""A student's own copy of a teacher path.
+"""A learner's own copy of an author path.
 
-Everything here runs in the *student's* request context: the copy lives in the
-student's own ``mastery.sqlite3`` and is created the first time the student's
-mastery list is read. The teacher side never writes a student's store.
+Everything here runs in the *learner's* request context: the copy lives in the
+learner's own ``mastery.sqlite3`` and is created the first time the learner's
+mastery list is read. The author side never writes a learner's store.
 
 Every check returns immediately for a path without an ``origin`` and, in that
 case, never opens the system teaching database.
@@ -35,8 +35,8 @@ INSTANCE_UNAVAILABLE = (
     "This course is no longer available to you. Ask its author if you think "
     "this is a mistake."
 )
-#: Stable code of anything refused because the teacher path closed for this
-#: student (revoked assignment, archived path): a live mastery subscription's
+#: Stable code of anything refused because the author path closed for this
+#: learner (revoked assignment, archived path): a live mastery subscription's
 #: terminal message, the ``detail.code`` of a refused mastery-path REST route,
 #: and the same value a refused mastery turn carries.
 INSTANCE_UNAVAILABLE_CODE = "teacher_path_unavailable"
@@ -45,7 +45,7 @@ INSTANCE_ACCESS_CHANGED = "instance.access_changed"
 
 
 class InstanceUnavailableError(PermissionError):
-    """The student's assignment was revoked or the teacher path archived."""
+    """The learner's assignment was revoked or the author path archived."""
 
 
 def instance_path_id(template_id: str) -> str:
@@ -109,7 +109,7 @@ def notify_instance_closed(template_id: str) -> None:
             instance_path_id(template_id), INSTANCE_ACCESS_CHANGED
         )
     except Exception:
-        logger.exception("Could not notify live subscriptions of teacher path %s", template_id)
+        logger.exception("Could not notify live subscriptions of author path %s", template_id)
 
 
 def instance_source_id(path_id: str, source_id: str) -> str:
@@ -122,7 +122,7 @@ def instance_outline(
 ) -> tuple[list[TopicSource], list[LearningModule]]:
     """The revision's sources and modules as the copy *path_id* stores them.
 
-    Source ids are primary keys of the student's whole store, and two
+    Source ids are primary keys of the learner's whole store, and two
     templates published from one draft carry the same ones (an archived
     template's copy is retained). Every source id is therefore derived from
     the copy, and every reference to one (``KnowledgePoint.topic_source_ids``)
@@ -161,7 +161,7 @@ def materialize_instance(
     template: MasteryTemplate,
     revision: TemplateRevision,
 ) -> LearningProgress:
-    """Create the student's copy of *revision*: the outline, none of the history."""
+    """Create the learner's copy of *revision*: the outline, none of the history."""
     from deeptutor.learning.service import LearningService
 
     metadata = _metadata(path_id, revision)
@@ -169,7 +169,7 @@ def materialize_instance(
     def create(tx) -> None:
         if tx.base_revision:
             # Every stored path has revision >= 1: a concurrent list request
-            # (or the student's own path under this id) got here first.
+            # (or the learner's own path under this id) got here first.
             return
         sources, modules = instance_outline(path_id, revision)
         tx.progress.name = revision.outline.name[:200]
@@ -195,10 +195,10 @@ def materialize_instance(
 
 
 def _report_squatted(template_id: str, user_id: str, path_id: str) -> None:
-    # The student's own path already uses this id. It is never taken over,
+    # The learner's own path already uses this id. It is never taken over,
     # so the assignment cannot be delivered until that path is renamed away.
     logger.warning(
-        "Teacher path %s is assigned to %s but %s is the student's own path; "
+        "Author path %s is assigned to %s but %s is the learner's own path; "
         "the copy is not created",
         template_id,
         user_id,
@@ -207,10 +207,10 @@ def _report_squatted(template_id: str, user_id: str, path_id: str) -> None:
 
 
 def sync_assigned_instances(store: LearningStore) -> list[str]:
-    """Create the current student's missing copies; return the ids created.
+    """Create the current learner's missing copies; return the ids created.
 
-    Only students, and only in their default workspace — the one place a
-    teacher path lives in a student account. An existing copy is never
+    Only learners, and only in their default workspace — the one place a
+    author path lives in a learner account. An existing copy is never
     rewritten and its recorded ``applied_revision`` never moved: only a
     revision migration may advance it.
     """
@@ -226,13 +226,13 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
 
         if not any(kind == "mastery_path" for kind, _ in joined_by(user_id)):
             return []
-    from deeptutor.publishing.scope import reconcile_student_quietly
+    from deeptutor.publishing.scope import reconcile_learner_quietly
 
     # Spec 2026-10-29 §7.1: paths published to a class or everyone reach later joiners.
-    reconcile_student_quietly(user_id)
+    reconcile_learner_quietly(user_id)
     teaching = TeachingStore()
     created: list[str] = []
-    for assignment in teaching.assignments_for_student(user_id):
+    for assignment in teaching.assignments_for_learner(user_id):
         if assignment.status != "active":
             continue
         template = teaching.get_template(assignment.template_id)
@@ -262,12 +262,12 @@ def sync_assigned_instances(store: LearningStore) -> list[str]:
                 template.id, user_id, instance_path_id=path_id, applied_revision=applied
             )
         except Exception:
-            # One broken copy must not take the student's whole list down.
-            logger.exception("Could not create the copy of teacher path %s", template.id)
+            # One broken copy must not take the learner's whole list down.
+            logger.exception("Could not create the copy of author path %s", template.id)
     return created
 
 
-def _teacher_name(owner_user_id: str) -> str:
+def _author_name(owner_user_id: str) -> str:
     from deeptutor.multi_user.identity import get_user_by_id
 
     found = get_user_by_id(owner_user_id)
@@ -293,7 +293,7 @@ def origin_payload(
         "kind": origin.kind,
         "template_id": origin.template_id,
         "revision": origin.revision,
-        "teacher_name": _teacher_name(template.owner_user_id),
+        "teacher_name": _author_name(template.owner_user_id),
         # Spec 2026-11-02 §3.1: who it comes from now (a transferred path reads "school").
         "provenance": _provenance(template.owner_user_id),
         "update_notice": (
@@ -305,11 +305,11 @@ def origin_payload(
 
 
 def _open_templates(template_ids: Iterable[str]) -> dict[str, MasteryTemplate]:
-    """The templates the current student may still enter, by id."""
+    """The templates the current learner may still enter, by id."""
     teaching = TeachingStore()
     assignments = {
         assignment.template_id: assignment
-        for assignment in teaching.assignments_for_student(get_current_user().id)
+        for assignment in teaching.assignments_for_learner(get_current_user().id)
     }
     opened: dict[str, MasteryTemplate] = {}
     for template_id in dict.fromkeys(template_ids):
@@ -320,7 +320,7 @@ def _open_templates(template_ids: Iterable[str]) -> dict[str, MasteryTemplate]:
 
 
 def describe_instances(progresses: Iterable[LearningProgress]) -> dict[str, dict[str, Any]]:
-    """Origin payloads for the instances the current student may still open."""
+    """Origin payloads for the instances the current learner may still open."""
     instances = [progress for progress in progresses if progress.origin is not None]
     if not instances:
         return {}
@@ -408,7 +408,7 @@ OUTLINE_LOCKED = (
 
 
 class OutlineLockedError(PermissionError):
-    """The path's outline belongs to a teacher."""
+    """The path's outline belongs to an author."""
 
 
 def ensure_outline_mutable(path_id: str, store: LearningStore) -> None:
@@ -421,7 +421,7 @@ def ensure_outline_mutable(path_id: str, store: LearningStore) -> None:
 def describe_instance_materials(
     path_id: str, store: LearningStore
 ) -> tuple[dict[str, Any] | None, frozenset[str]]:
-    """The teacher path's origin payload and the ids of its unavailable sources.
+    """The author path's origin payload and the ids of its unavailable sources.
 
     ``(None, frozenset())`` for a learner's own path. Storage-bound.
     """
@@ -557,7 +557,7 @@ def unavailable_sources(path_id: str, store: LearningStore) -> list[TopicSource]
     return missing
 
 
-# ---- teacher updates (spec 5.3) ---------------------------------------------
+# ---- author updates (spec 5.3) ---------------------------------------------
 
 
 def _record_applied(teaching: TeachingStore, template_id: str, user_id: str, path_id: str, store) -> None:
@@ -579,14 +579,14 @@ def _record_applied(teaching: TeachingStore, template_id: str, user_id: str, pat
         template_id, user_id, instance_path_id=path_id, applied_revision=origin.revision
     )
     try:
-        # Plan D re-checks that the actor (this student) can read every book
+        # Plan D re-checks that the actor (this learner) can read every book
         # the rewrite keeps; a reference-only book is readable to them only
         # while studying this path. It only ever releases references.
         with studying_template(template_id):
             sync_material_references(template_id, store=teaching)
     except Exception:
         logger.warning(
-            "Could not release the material references of teacher path %s after %s "
+            "Could not release the material references of author path %s after %s "
             "moved to revision %s; the earlier references stay until the next resync",
             template_id,
             path_id,
@@ -607,7 +607,7 @@ def apply_pending_revision(
     respect_lease: bool,
     lease_turn_id: str = "",
 ) -> TemplateUpdateNotice | None:
-    """Bring the student's copy to the teacher's current revision, if it may move now.
+    """Bring the learner's copy to the author's current revision, if it may move now.
 
     Never while a question is open: the copy stays on its applied revision —
     and keeps that revision's materials — until the question is answered or
@@ -693,7 +693,7 @@ def apply_pending_revision(
 
 
 def acknowledge_update(path_id: str, store: LearningStore) -> bool:
-    """The student has seen "your teacher updated this course"; stop showing it."""
+    """The learner has seen "the author updated this course"; stop showing it."""
     if store.load_origin(path_id) is None:
         return False
 

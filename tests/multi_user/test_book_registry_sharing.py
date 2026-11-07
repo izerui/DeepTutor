@@ -132,7 +132,7 @@ def test_publish_role_and_force_permissions(library, as_user, role):
 
 @pytest.mark.parametrize("kind", ["template", "mastery_template"])
 def test_owner_withdraw_revokes_only_foreign_then_delete_keeps_evidence(library, as_user, kind):
-    """Rule R1: the owner withdraws; only teacher paths need a confirmation first."""
+    """Rule R1: the owner withdraws; only author paths need a confirmation first."""
     book, _, _ = library
     with as_user("t1", role="teacher"):
         books.set_book_visibility(book.ref, "public")

@@ -1,4 +1,4 @@
-"""A teacher's update reaches each student at their next study start, by the rules."""
+"""An author's update reaches each learner at their next study start, by the rules."""
 
 from __future__ import annotations
 
@@ -206,8 +206,8 @@ def test_opening_the_path_applies_the_update_and_ack_clears_the_notice(
     assert "path.teacher_update_acknowledged" in events
 
 
-def test_acknowledging_a_learners_own_path_does_nothing(teacher_draft, as_account):
-    teacher_draft("sara", path_id="topic_own")
+def test_acknowledging_a_learners_own_path_does_nothing(author_draft, as_account):
+    author_draft("sara", path_id="topic_own")
     with as_account("sara"):
         store = LearningStore()
         before = store.load("topic_own").version
@@ -487,7 +487,7 @@ def cited_course(as_account, fake_kb_registry, publish_template):
             metadata=TopicMetadata(path_id="topic_calculus", goal="Differentiate"),
             sources=[_source(0, "lib_a")],
         )
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
     return SimpleNamespace(template_id=template_id, path_id=path_id, kbs=fake_kb_registry)
@@ -519,7 +519,7 @@ def test_migration_rebuilds_the_outline_with_the_instances_own_source_ids(
     assert [(s.id, s.source_id) for s in topic.sources] == [(derived, "kb:kb_b")]
     limits = progress.modules[0].knowledge_points[0]
     assert limits.topic_source_ids == [derived]
-    # The template keeps the teacher's ids.
+    # The template keeps the author's ids.
     revision = TeachingStore().get_revision(cited_course.template_id, 2)
     assert [s.id for s in revision.sources.sources] == ["s0"]
 
@@ -598,7 +598,7 @@ def test_skipping_a_stuck_old_question_lets_the_update_apply(
         store.mutate(path_id, earn)
         earned = store.load(path_id)
     _ask(as_account, path_id, "kp_limits")
-    # An admin withdraws the old material; the teacher publishes a new revision.
+    # An admin withdraws the old material; the author publishes a new revision.
     cited_course.kbs.force_private("kb_a")
     _swap_to_library_b(as_account, publish_template)
 
@@ -636,7 +636,7 @@ def test_skipping_a_stuck_old_question_lets_the_update_apply(
         assert client.request(method, url, headers=_auth("sara")).status_code == 403, url
 
 
-def test_skip_question_works_on_an_active_teacher_instance(
+def test_skip_question_works_on_an_active_author_instance(
     sara_instance, as_account, teaching_http
 ):
     path_id = sara_instance.path_id
@@ -726,14 +726,14 @@ async def test_a_turn_never_migrates_under_another_turns_lease(
 
 
 @pytest.mark.asyncio
-async def test_switching_onto_a_teacher_path_applies_its_update(
-    cited_course, as_account, publish_template, teacher_draft, monkeypatch
+async def test_switching_onto_a_author_path_applies_its_update(
+    cited_course, as_account, publish_template, author_draft, monkeypatch
 ):
     from deeptutor.capabilities.mastery.loop import _path_binder
     from deeptutor.tools.mastery_tool import MasterySwitchTool
 
     await asyncio.to_thread(_swap_to_library_b, as_account, publish_template)
-    await asyncio.to_thread(teacher_draft, "sara", path_id="topic_own")
+    await asyncio.to_thread(author_draft, "sara", path_id="topic_own")
     seen: dict = {}
 
     async def _loop(self, context, _stream):

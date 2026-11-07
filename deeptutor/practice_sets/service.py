@@ -123,7 +123,7 @@ def normalize_questions(raw: Any) -> list[dict[str, Any]]:
     return questions
 
 
-def _for_student(question: dict[str, Any], *, reveal: bool) -> dict[str, Any]:
+def _for_learner(question: dict[str, Any], *, reveal: bool) -> dict[str, Any]:
     shown = {k: question[k] for k in ("question_id", "question", "question_type", "options", "points")}
     if reveal:
         shown["correct_answer"] = question["correct_answer"]
@@ -192,7 +192,7 @@ async def _judge(pending: list[tuple[dict[str, Any], str]]) -> dict[str, dict[st
         from deeptutor.services.llm.usage_limit import exempt
 
         try:
-            # A teacher's set is graded even when the student's own AI is used up (batch 3 §8).
+            # An author's set is graded even when the learner's own AI is used up (batch 3 §8).
             with exempt():
                 decided = await judge_answers(None, items)
         except AssessmentUnavailable:
@@ -228,7 +228,7 @@ def reviewable_answer(question: dict[str, Any], answer: str) -> str | None:
 
 
 def counted_submission(submissions, mode: str):
-    """The attempt that is the student's score: the first, or the best (§6.1)."""
+    """The attempt that is the learner's score: the first, or the best (§6.1)."""
     if not submissions:
         return None
     return submissions[0] if mode == "first" else best_submission(submissions)
@@ -251,7 +251,7 @@ PENDING = "pending"
 def _withheld(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Per-question rows with nothing that tells right from wrong.
 
-    Before a student has submitted the version they see, right/wrong per
+    Before a learner has submitted the version they see, right/wrong per
     question (or a score) would let them find the key by resubmitting variations.
     """
     return [
@@ -400,7 +400,7 @@ class PracticeSetService:
         with store.read() as conn:
             draft = self._owned(conn, set_id)
         # Checked before receivers are stored: a failed first publication must not
-        # keep receivers the teacher then changes (the stored ones would win).
+        # keep receivers the author then changes (the stored ones would win).
         self._check_publishable(draft)
         from deeptutor.publishing.scope import PRACTICE_SET, default_scope_on_publish
 
@@ -519,10 +519,10 @@ class PracticeSetService:
             question_types=question_types, difficulty=difficulty, language=language, material=material,
         )
 
-    # the student side
+    # the learner side
 
     def _published(self, conn, set_id: str, revision: int | None = None):
-        """The set and its current revision, or the earlier *revision* a student opened."""
+        """The set and its current revision, or the earlier *revision* a learner opened."""
         row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
         if row is None or row["status"] != "published" or not self._reaches_me(set_id):
             raise PracticeNotFound("Practice set not found.")
@@ -536,7 +536,7 @@ class PracticeSetService:
         return row, frozen
 
     def assigned(self) -> list[dict[str, Any]]:
-        """Published sets whose scope reaches the student, with their own progress."""
+        """Published sets whose scope reaches the learner, with their own progress."""
         from deeptutor.publishing.scope import PRACTICE_SET
 
         from deeptutor.catalog.enrollment import joined_by
@@ -655,7 +655,7 @@ class PracticeSetService:
             "attempts_left": 0,
             "answers_revealed": latest is not None,
             "class_average": None,
-            "questions": [_for_student(q, reveal=True) for q in questions],
+            "questions": [_for_learner(q, reveal=True) for q in questions],
             "submissions": [
                 {**{k: s[k] for k in ("id", "revision", "submitted_at", "max_score")}, "score": s["score"]}
                 for s in submissions
@@ -698,7 +698,7 @@ class PracticeSetService:
             "answers_revealed": reveal,
             # R6 / batch 4 §1: on the current version's full marks; ``None`` with fewer than 3 scores.
             "class_average": average,
-            "questions": [_for_student(q, reveal=reveal) for q in questions],
+            "questions": [_for_learner(q, reveal=reveal) for q in questions],
             "submissions": [
                 {**{k: s[k] for k in ("id", "revision", "submitted_at", "max_score")},
                  "score": s["score"] if graded else None}
@@ -710,7 +710,7 @@ class PracticeSetService:
         }
 
     def _class_average(self, row, max_score: float) -> float | None:
-        """The average of the students the set reaches, each by the counted attempt's share."""
+        """The average of the learners the set reaches, each by the counted attempt's share."""
         from deeptutor.publishing.scope import PRACTICE_SET, audience, get_scope
 
         scope = get_scope(PRACTICE_SET, row["id"])
@@ -720,19 +720,19 @@ class PracticeSetService:
                 "SELECT student_id, score, max_score FROM practice_submissions WHERE set_id = ? ORDER BY submitted_at",
                 (row["id"],),
             ).fetchall() if conn else []
-        by_student: dict[str, list] = {}
+        by_learner: dict[str, list] = {}
         for submission in rows:
             if submission["student_id"] in reached:
-                by_student.setdefault(submission["student_id"], []).append(submission)
+                by_learner.setdefault(submission["student_id"], []).append(submission)
         mode = _col(row, "score_mode", "best") or "best"
-        shares = [_ratio(counted_submission(mine, mode)) for mine in by_student.values()]
+        shares = [_ratio(counted_submission(mine, mode)) for mine in by_learner.values()]
         if len(shares) < CLASS_AVERAGE_MIN:
             return None
         return round(sum(shares) / len(shares) * max_score, 1)
 
     @staticmethod
     def _reveal(row, submitted: bool) -> bool:
-        """Answers show only to a student who has submitted this version (§8.3).
+        """Answers show only to a learner who has submitted this version (§8.3).
 
         A stored ``after_due`` behaves the same (spec 2026-11-05 remove-teacher-management §2).
         """
@@ -742,8 +742,8 @@ class PracticeSetService:
         self, set_id: str, answers: dict[str, Any], *, started_at: float | None = None,
         revision: int | None = None,
     ) -> dict[str, Any]:
-        """Grade against the version the student opened (*revision*), not one the
-        teacher published while they were answering; without it, the current one."""
+        """Grade against the version the learner opened (*revision*), not one the
+        author published while they were answering; without it, the current one."""
         import asyncio
 
         def load():
@@ -841,8 +841,8 @@ class PracticeSetService:
             "question": question["question"],
             "question_type": question["question_type"],
             "options": question["options"],
-            # Withheld until the teacher's reveal time (§8.3); filled in by
-            # :meth:`reveal_in_bank` once the student may see them.
+            # Withheld until the author's reveal time (§8.3); filled in by
+            # :meth:`reveal_in_bank` once the learner may see them.
             "correct_answer": question["correct_answer"] if reveal else "",
             "explanation": question["explanation"] if reveal else "",
             "user_answer": answer,
@@ -856,7 +856,7 @@ class PracticeSetService:
         }
 
     async def _to_my_bank(self, row, revision, questions, given, results, *, reveal: bool) -> None:
-        """Each answer into the student's own question bank, tagged with the set (§8.3)."""
+        """Each answer into the learner's own question bank, tagged with the set (§8.3)."""
         from deeptutor.services.session.sqlite_store import get_sqlite_session_store
 
         items = [
@@ -873,9 +873,9 @@ class PracticeSetService:
             logger.exception("Could not save practice set %s answers to the question bank", row["id"])
 
     async def with_my_answers(self, view: dict[str, Any]) -> dict[str, Any]:
-        """Fill the latest attempt's answers back in from the student's own bank.
+        """Fill the latest attempt's answers back in from the learner's own bank.
 
-        The answers are the student's personal data: the practice store keeps
+        The answers are the learner's personal data: the practice store keeps
         only results, and the bank (their own) keeps what they wrote.
         """
         from deeptutor.services.session.sqlite_store import get_sqlite_session_store
@@ -895,7 +895,7 @@ class PracticeSetService:
     async def reveal_in_bank(self, set_id: str) -> None:
         """Once answers may show, complete the bank entries saved without them.
 
-        Every version the student submitted is completed, not only the current
+        Every version the learner submitted is completed, not only the current
         one: a set republished after their attempt must not leave that attempt's
         mistakes without answers forever.
         """
@@ -981,25 +981,25 @@ class PracticeSetService:
         visible = None
         accounts = _accounts()
         names = {user_id: account["username"] for user_id, account in accounts.items()}
-        by_student: dict[str, list] = {}
+        by_learner: dict[str, list] = {}
         for submission in submissions:
             # A deleted account or one that became an administrator is not reported.
             if visible is not None and submission["student_id"] not in visible:
                 continue
             account = accounts.get(submission["student_id"])
             if (account is not None and account["role"] != "admin") or submission["student_id"] in reached:
-                by_student.setdefault(submission["student_id"], []).append(submission)
-        students = []
-        for student_id in sorted(reached | set(by_student), key=lambda s: names.get(s, s)):
-            mine = by_student.get(student_id, [])
+                by_learner.setdefault(submission["student_id"], []).append(submission)
+        learners = []
+        for learner_id in sorted(reached | set(by_learner), key=lambda s: names.get(s, s)):
+            mine = by_learner.get(learner_id, [])
             first = mine[0] if mine else None
             best = best_submission(mine)
             counted = counted_submission(mine, _col(row, "score_mode", "best") or "best")
-            students.append({
-                "id": student_id,
-                "username": names.get(student_id, student_id),
+            learners.append({
+                "id": learner_id,
+                "username": names.get(learner_id, learner_id),
                 # False: submitted earlier, then left the scope (a class, or was removed).
-                "in_scope": student_id in reached,
+                "in_scope": learner_id in reached,
                 "completed": bool(mine),
                 "attempts": len(mine),
                 "first_score": first["score"] if first else None,
@@ -1011,7 +1011,7 @@ class PracticeSetService:
                 # The attempt that counts under the set's score mode (batch 3 §6.1).
                 "score": counted["score"] if counted else None,
                 "score_max": counted["max_score"] if counted else None,
-                # Answers the AI could not judge, waiting for the teacher (§6.1).
+                # Answers the AI could not judge, waiting for the author (§6.1).
                 "ungraded": sum(
                     1 for s in mine for r in json.loads(s["results_json"]) if r["result"] == "ungraded"
                 ),
@@ -1020,11 +1020,11 @@ class PracticeSetService:
                 if first and first["started_at"] else None,
                 "submitted_at": first["submitted_at"] if first else None,
             })
-        # Error rate per question of the current version, over each student's
+        # Error rate per question of the current version, over each learner's
         # first submission to that version.
         tally: dict[str, list[int]] = {}
         firsts = []
-        for mine in by_student.values():
+        for mine in by_learner.values():
             current = [s for s in mine if s["revision"] == row["current_revision"]]
             if not current:
                 continue
@@ -1043,7 +1043,7 @@ class PracticeSetService:
             "title": row["title"],
             "score_mode": _col(row, "score_mode", "best") or "best",
             "attempts_limit": _col(row, "attempts_limit"),
-            "students": students,
+            "students": learners,
             "questions": [
                 {
                     "question_id": q["question_id"],
@@ -1075,7 +1075,7 @@ async def _bank_answer(set_id: str, revision: int, question_id: str) -> str | No
 REJUDGE_LIMIT = 20
 
 
-async def judge_ungraded(set_id: str, *, student_id: str | None = None, from_bank: bool = False) -> int:
+async def judge_ungraded(set_id: str, *, learner_id: str | None = None, from_bank: bool = False) -> int:
     """Grade again the answers the AI could not grade when they were submitted.
 
     Called when a learner opens the set (their own attempts) or its author or
@@ -1092,8 +1092,8 @@ async def judge_ungraded(set_id: str, *, student_id: str | None = None, from_ban
             if conn is None:
                 return []
             sql = ("SELECT * FROM practice_submissions WHERE set_id = ? AND results_json LIKE '%\"ungraded\"%'"
-                   + (" AND student_id = ?" if student_id else "") + " ORDER BY submitted_at LIMIT ?")
-            params = (set_id, student_id, REJUDGE_LIMIT) if student_id else (set_id, REJUDGE_LIMIT)
+                   + (" AND student_id = ?" if learner_id else "") + " ORDER BY submitted_at LIMIT ?")
+            params = (set_id, learner_id, REJUDGE_LIMIT) if learner_id else (set_id, REJUDGE_LIMIT)
             submissions = conn.execute(sql, params).fetchall()
             revisions = {
                 number: conn.execute(
@@ -1150,7 +1150,7 @@ async def generate_questions(
     question_types: list[str] | None = None, difficulty: str = "", language: str = "zh",
     material: str = "",
 ) -> list[dict[str, Any]]:
-    """AI questions in the stored shape; shared by teachers' sets and students' remedial practice."""
+    """AI questions in the stored shape; shared by authors' sets and learners' remedial practice."""
     from deeptutor.agents.question.pipeline import QuestionPipeline
     from deeptutor.book.blocks.quiz import QuizGenerator
     from deeptutor.core.context import UnifiedContext

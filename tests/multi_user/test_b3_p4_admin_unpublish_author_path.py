@@ -1,6 +1,6 @@
 """B3-12 follow-up: an admin's set-private on an archived-source book still goes through R1.
 
-A published teacher path cites Tom's public book, stored in a workspace he
+A published author path cites Tom's public book, stored in a workspace he
 then archives. The admin's first request answers the counts-only 409; the
 confirmation with the counts shown succeeds and revokes the path's reference.
 """
@@ -15,7 +15,7 @@ from tests.multi_user.test_owner_withdrawal_books import _assert_counts_only, _a
 
 
 @pytest.fixture
-def archived_cited_book(as_account, teacher_draft, publish_template):
+def archived_cited_book(as_account, author_draft, publish_template):
     from deeptutor.book.models import Book, Page
     from deeptutor.book.storage import get_book_storage
     from deeptutor.multi_user import book_access
@@ -32,10 +32,10 @@ def archived_cited_book(as_account, teacher_draft, publish_template):
             record = book_access.resolve_book("bk_tom").record
             book_registry.set_book_kb_links(record.book_id, {})
             book_registry.set_book_visibility(record.book_id, "public")
-    teacher_draft(sources=(TopicSource(
+    author_draft(sources=(TopicSource(
         id="b0", kind=TopicSourceKind.BOOK, source_id="bk_tom", label="Optics", position=0,
     ),))
-    result = publish_template(students=("sara", "sam"))
+    result = publish_template(learners=("sara", "sam"))
     assert result["warnings"] == []
     template_id = result["template"]["id"]
     assert book_registry.list_referenced_books("mastery_template", template_id)
@@ -44,7 +44,7 @@ def archived_cited_book(as_account, teacher_draft, publish_template):
     return template_id, store
 
 
-def test_admin_unpublish_of_archived_book_needs_the_teacher_path_confirmation(
+def test_admin_unpublish_of_archived_book_needs_the_author_path_confirmation(
     archived_cited_book, teaching_http, teaching_users,
 ):
     template_id, store = archived_cited_book
@@ -59,7 +59,7 @@ def test_admin_unpublish_of_archived_book_needs_the_teacher_path_confirmation(
     first = client.put("/api/books/book:bk_tom/visibility", json={"visibility": "private"},
                        headers=_auth("adam"))
     assert first.status_code == 409, first.text
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert book_registry.get_book("bk_tom").visibility == "public"
     assert book_registry.list_unavailable_book_references("mastery_template", template_id) == []
 

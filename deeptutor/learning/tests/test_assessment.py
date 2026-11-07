@@ -484,7 +484,7 @@ def test_old_linked_assessment_rejected_after_reassessment_flag_cleared(
 
     Scenario:
     1. A linked assessment is created at T0.
-    2. A teacher redefines the KP at T1 (reassessment_required set).
+    2. An author redefines the KP at T1 (reassessment_required set).
     3. A newer assessment at T2 clears the flag.
     4. The old T0 assessment is replayed (e.g. reconcile) — it must still be rejected
        because it predates the redefinition, even though the flag is already gone.

@@ -347,7 +347,7 @@ class MasteryLoopPipeline(AgenticLoopPipeline):
                 if turn is None:
                     return {}
             # A learner's own path is tutored from their selection plus the
-            # path's sources; a teacher's path from its own libraries only (R8).
+            # path's sources; an author's path from its own libraries only (R8).
             turn.attach(context, merge_path_sources=True)
             stack.enter_context(learning_source_access(turn.refs))
             return await super().run(context, stream)

@@ -37,7 +37,7 @@ export function ModeSwitch({
   /** A turn is live: its tool surface was decided when it started. */
   disabled?: boolean;
   className?: string;
-  /** The modes offered here; a teacher path has no outline mode. */
+  /** The modes offered here; an author path has no outline mode. */
   modes?: readonly MasteryMode[];
 }) {
   const { t } = useTranslation();

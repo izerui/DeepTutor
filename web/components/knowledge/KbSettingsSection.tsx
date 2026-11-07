@@ -31,7 +31,7 @@ interface KbSettingsSectionProps {
   onSetDefault?: () => Promise<void>;
   onDelete?: () => Promise<void>;
   onMove?: (targetWorkspaceId: string) => Promise<void>;
-  /** Rule R1: retried with the confirmed counts after the user accepts the teacher-path impact. */
+  /** Rule R1: retried with the confirmed counts after the user accepts the author-path impact. */
   onVisibilityChange?: (
     visibility: KnowledgeBaseVisibility, options?: { confirmed?: WithdrawalImpact },
   ) => Promise<void>;
@@ -87,7 +87,7 @@ export default function KbSettingsSection({
     setVisibilityBusy(true);
     setVisibilityError(null);
     try {
-      // Rule R1: other accounts never block a withdrawal; published teacher
+      // Rule R1: other accounts never block a withdrawal; published author
       // paths only need the owner to confirm the (counts-only) impact.
       await runWithWithdrawalConfirmation(
         (confirmed) =>

@@ -353,13 +353,13 @@ def _apply_linked_retention(
         if redefined_at is None:
             redefined_at = progress.reassessment_required.get(kp.id)
         if redefined_at is not None and evidence.timestamp < redefined_at:
-            # It assessed the objective a teacher has since redefined (R11).
+            # It assessed the objective an author has since redefined (R11).
             return False
         prior_evidence = [
             item for item in progress.learning_evidence if item.knowledge_point_id == kp.id
         ]
         progress.learning_evidence.append(evidence)
-        # A linked assessment after a teacher redefined the objective (R11).
+        # A linked assessment after an author redefined the objective (R11).
         clear_reassessment(progress, kp.id, assessed_at=evidence.timestamp)
         if any(item.timestamp > evidence.timestamp for item in prior_evidence):
             # A saved event may be retried after a newer assessment. Rebuild

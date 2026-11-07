@@ -385,7 +385,7 @@ class LLMProvider(ABC):
             except asyncio.CancelledError:
                 raise
             except AiLimitReached:
-                # A student over today's AI limit is told so, not retried or reworded.
+                # A learner over today's AI limit is told so, not retried or reworded.
                 raise
             except Exception as exc:
                 status_code = self._status_code_from_exception(exc)

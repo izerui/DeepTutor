@@ -1,4 +1,4 @@
-"""Batch 3 / P2: teacher-path material availability and migration repairs.
+"""Batch 3 / P2: author-path material availability and migration repairs.
 
 B3-19 per-source availability, T10-M2 applied-revision repair before a
 deferred migration, the B2-19 unsettled withdrawal counts and the public
@@ -24,12 +24,12 @@ def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
 
-# ---- B3-19: a withdrawn KB shows as unavailable on the student's copy ----------
+# ---- B3-19: a withdrawn KB shows as unavailable on the learner's copy ----------
 
 
 @pytest.fixture
 def toms_kbs(teaching_users, as_account, make_kb):
-    """Tom's (teacher, not admin) two public KBs in his account library."""
+    """Tom's (author, not admin) two public KBs in his account library."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.multi_user.paths import get_account_path_service
 
@@ -48,10 +48,10 @@ def toms_kbs(teaching_users, as_account, make_kb):
     return records
 
 
-def test_withdrawn_kb_source_is_reported_unavailable_on_the_teacher_path(
-    toms_kbs, teacher_draft, publish_template, teaching_http, as_account
+def test_withdrawn_kb_source_is_reported_unavailable_on_the_author_path(
+    toms_kbs, author_draft, publish_template, teaching_http, as_account
 ):
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE,
@@ -63,7 +63,7 @@ def test_withdrawn_kb_source_is_reported_unavailable_on_the_teacher_path(
             ),
         )
     )
-    publish_template(students=("sara",))
+    publish_template(learners=("sara",))
     client = teaching_http.client
     [row] = client.get("/api/mastery-paths/topics", headers=_auth("sara")).json()["topics"]
     path_id = row["path_id"]
@@ -96,8 +96,8 @@ def test_withdrawn_kb_source_is_reported_unavailable_on_the_teacher_path(
     }
 
 
-def test_a_learners_own_path_keeps_its_stored_availability(teaching_http, teacher_draft):
-    teacher_draft(
+def test_a_learners_own_path_keeps_its_stored_availability(teaching_http, author_draft):
+    author_draft(
         "sara",
         path_id="topic_own",
         sources=(
@@ -143,7 +143,7 @@ def test_stale_applied_revision_is_repaired_while_the_update_waits(
     finally:
         conn.close()
     assert TeachingStore().get_assignment(sara_instance.template_id, sara).applied_revision == 1
-    # ... then the teacher publishes revision 3 and the student has a question open.
+    # ... then the author publishes revision 3 and the learner has a question open.
     publish_template(kp_decisions={ids.limits: KpDecision(kind="redefined")})
     assert TeachingStore().get_template(sara_instance.template_id).current_revision == 3
     with as_account("sara"):
@@ -173,12 +173,12 @@ class _Referenced(Exception):
 
 
 def test_unsettled_withdrawal_reports_the_last_rounds_counts(
-    teacher_draft, publish_template
+    author_draft, publish_template
 ):
-    teacher_draft(path_id="topic_calculus")
-    wide = publish_template(path_id="topic_calculus", students=("sara", "sam"))["template"]["id"]
-    teacher_draft(path_id="topic_algebra")
-    narrow = publish_template(path_id="topic_algebra", students=("sara",))["template"]["id"]
+    author_draft(path_id="topic_calculus")
+    wide = publish_template(path_id="topic_calculus", learners=("sara", "sam"))["template"]["id"]
+    author_draft(path_id="topic_algebra")
+    narrow = publish_template(path_id="topic_algebra", learners=("sara",))["template"]["id"]
     rounds = iter([{wide, narrow}, {wide}, {narrow}])
     assert access.WITHDRAWAL_ROUNDS == 3
 

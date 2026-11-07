@@ -155,7 +155,7 @@ it("a private book read through an author path keeps the reader's own learning c
 });
 
 it.each([
-  ["a public book opened from a teacher path", "?mastery_template=tpl_1", "public"],
+  ["a public book opened from an author path", "?mastery_template=tpl_1", "public"],
   ["a private shared book opened normally", "", "private"],
 ])("%s keeps its learning controls", async (_name, search, visibility) => {
   fixture.book = { visibility };

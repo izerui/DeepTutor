@@ -38,7 +38,7 @@ vi.mock("@/features/knowledge/api/files", async () => ({
 
 const owned: KnowledgeBase = {
   name: "notes", kb_id: "own", id: "account:kb:notes", owned: true,
-  read_only: false, can_set_default: true, visibility: "private", created_by: "teacher",
+  read_only: false, can_set_default: true, visibility: "private", created_by: "author",
 };
 beforeEach(() => {
   fixture.auth = { isAdmin: false };
@@ -68,7 +68,7 @@ it("allows managing an external owned KB but never offers a scoped default", asy
 
 it("lets the owner withdraw despite other accounts' references, shown only as counts (R1)", async () => {
   fixture.references.mockResolvedValue({
-    references: [{ referrer_kind: "partner", referrer_id: "mine", created_by: "teacher" }],
+    references: [{ referrer_kind: "partner", referrer_id: "mine", created_by: "author" }],
     other_references: { total: 3, by_kind: { course: 2, partner: 1 } },
   });
   const change = vi.fn().mockResolvedValue(undefined);
@@ -170,7 +170,7 @@ it("preserves a read-only KB's files without delete, move or folder controls", a
 
 it.each(["requires_confirmation", "document_referenced"] as const)("handles document deletion guard %s", async (code) => {
   fixture.deleteFile.mockRejectedValueOnce(new KbFileDeleteBlockedError("Protected", code, [
-    { kb_id: "own", referrer_kind: "partner", referrer_id: "reader", created_by: "teacher", doc_ids: null },
+    { kb_id: "own", referrer_kind: "partner", referrer_id: "reader", created_by: "author", doc_ids: null },
   ], { total: 2, by_kind: { course: 2 } }));
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   render(<KbDocumentList kbName="kb:own" collapsed={false} selectedFile={null}

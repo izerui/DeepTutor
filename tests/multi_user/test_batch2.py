@@ -1,7 +1,7 @@
-"""Batch 2 of the 2026-11-02 plan: teacher courses.
+"""Batch 2 of the 2026-11-02 plan: author courses.
 
 (Departments, grades and class announcements went with classes; comments,
-opening times and the calendar went with teacher management, spec
+opening times and the calendar went with author management, spec
 2026-11-05-remove-teacher-management.)
 
 Spec: docs/superpowers/specs/2026-11-03-batch2-design.md
@@ -13,7 +13,7 @@ import pytest
 
 from deeptutor.notifications import service as notifications
 from deeptutor.tasks.courses import CourseService, assigned_courses
-from deeptutor.tasks.service import StudentTasks
+from deeptutor.tasks.service import LearnerTasks
 
 
 @pytest.fixture
@@ -27,10 +27,10 @@ def _kinds(user_id: str) -> list[str]:
 
 def _entry(as_account, name: str, key: str):
     with as_account(name):
-        return {e["key"]: e for e in StudentTasks().assigned()}.get(key)
+        return {e["key"]: e for e in LearnerTasks().assigned()}.get(key)
 
 
-# ── teacher courses ────────────────────────────────────────
+# ── author courses ────────────────────────────────────────
 
 
 def test_a_course_publishes_its_tasks_once_and_withdrawing_it_keeps_them(ids, as_account, deliver):

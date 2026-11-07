@@ -489,7 +489,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     },
     icon: FolderOpen,
     href: "/settings#workspace",
-    // Spec 2026-10-29 D4: teachers and students have no workspaces to manage.
+    // Spec 2026-10-29 D4: non-admins have no workspaces to manage.
     adminOnly: true,
   },
   {

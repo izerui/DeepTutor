@@ -58,7 +58,7 @@ def shared_env(tmp_path, monkeypatch):
     alice = save_user("alice", "hash", role="user")
     bob = save_user("bob", "hash", role="user")
     editor = save_user("editor", "hash", role="user")
-    teacher = save_user("teacher", "hash", role="teacher")
+    author = save_user("teacher", "hash", role="teacher")
     default_learner = save_user("default-learner", "hash", role="user", preset="learner")
     books_without_acl = save_user("books-without-acl", "hash", role="user", preset="learner")
     reader = save_user("reader", "hash", role="user", preset="learner")
@@ -81,7 +81,7 @@ def shared_env(tmp_path, monkeypatch):
         "alice": TokenPayload(username="alice", role="user", user_id=alice["id"]),
         "bob": TokenPayload(username="bob", role="user", user_id=bob["id"]),
         "editor": TokenPayload(username="editor", role="user", user_id=editor["id"]),
-        "teacher": TokenPayload(username="teacher", role="teacher", user_id=teacher["id"]),
+        "teacher": TokenPayload(username="teacher", role="teacher", user_id=author["id"]),
         "default-learner": TokenPayload(
             username="default-learner", role="user", user_id=default_learner["id"]
         ),
@@ -93,7 +93,7 @@ def shared_env(tmp_path, monkeypatch):
     monkeypatch.setattr(auth_router, "decode_token", lambda token: tokens.get(token))
 
     shared = BookStorage(path_service=get_path_service_for_scope(
-        scope_for_user(teacher["id"], is_admin=False),
+        scope_for_user(author["id"], is_admin=False),
     ))
     shared.save_book(Book(id="bk_shared", title="Shared", page_count=1))
     shared.save_page(
@@ -114,7 +114,7 @@ def shared_env(tmp_path, monkeypatch):
     )
     book_registry.register_book(
         base_dir=shared.path_service.get_book_dir(), dir_name="book_bk_shared",
-        title="Shared", created_by=teacher["id"], visibility="public",
+        title="Shared", created_by=author["id"], visibility="public",
     )
 
     app = FastAPI()
@@ -406,7 +406,7 @@ def test_admin_delete_preserves_inert_legacy_evidence(shared_env) -> None:
     )
 
     assert response.status_code == 200
-    # Spec 2026-10-29 D10 / §4 rule 5: an admin's deletion of the teacher's
+    # Spec 2026-10-29 D10 / §4 rule 5: an admin's deletion of the author's
     # book only withdraws it; the owner's files stay.
     assert canonical.load_book("bk_shared") is not None
     from deeptutor.book import registry as book_registry

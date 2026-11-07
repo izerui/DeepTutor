@@ -100,7 +100,7 @@ def topic_cards(*, query: str = "", store: LearningStore | None = None) -> dict[
 
     store = store or LearningStore()
     snapshots = store.list_topic_snapshots(status="active")
-    # A revoked or archived teacher path is no longer the learner's to open.
+    # A revoked or archived author path is no longer the learner's to open.
     closed = closed_instance_ids(snapshot[0] for snapshot in snapshots)
     snapshots = [snapshot for snapshot in snapshots if snapshot[0].book_id not in closed]
     needle = " ".join(str(query or "").split()).casefold()
@@ -172,7 +172,7 @@ def find_topic(path_id: str, *, store: LearningStore | None = None) -> dict[str,
         from deeptutor.teaching.instances import closed_instance_ids
 
         if closed_instance_ids([progress]):
-            return None  # a revoked or archived teacher path
+            return None  # a revoked or archived author path
     summary = policy.map_summary(progress)
     if summary["counts"]["total"] <= 0:
         return None

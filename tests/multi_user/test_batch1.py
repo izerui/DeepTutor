@@ -1,4 +1,4 @@
-"""Batch 1 of the 2026-11-02 plan: tasks, notifications, the student home.
+"""Batch 1 of the 2026-11-02 plan: tasks, notifications, the learner home.
 
 Spec: docs/superpowers/specs/2026-11-03-batch1-design.md (homework removed:
 docs/superpowers/specs/2026-11-05-remove-homework.md)
@@ -15,7 +15,7 @@ from deeptutor.notifications import service as notifications
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing import scope as scopes
 from deeptutor.publishing.scope import Scope
-from deeptutor.tasks.service import StudentTasks, TaskError, TaskNotFound, TaskService
+from deeptutor.tasks.service import LearnerTasks, TaskError, TaskNotFound, TaskService
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
@@ -66,7 +66,7 @@ def _leave_course(name: str, course_id: str) -> None:
 
 def _entry(as_account, name: str, key: str):
     with as_account(name):
-        return {e["key"]: e for e in StudentTasks().assigned()}.get(key)
+        return {e["key"]: e for e in LearnerTasks().assigned()}.get(key)
 
 
 # ── rules for publishing a task ────────────────────────────
@@ -89,7 +89,7 @@ def test_a_task_never_goes_to_everyone_nor_on_its_own(as_account):
         assert (scope.everyone, scope.users) == (False, [])
 
 
-def test_a_task_must_not_reach_students_its_content_does_not(as_account):
+def test_a_task_must_not_reach_learners_its_content_does_not(as_account):
     from deeptutor.tasks.courses import CourseService
 
     with as_account("tina"):
@@ -108,11 +108,11 @@ def test_a_task_must_not_reach_students_its_content_does_not(as_account):
     _fixtures["deliver"]("practice_set", created["id"], "sam")
     with as_account("tina"):
         CourseService().publish(course_id)
-    # The named students of the older scope still receive it.
+    # The named learners of the older scope still receive it.
     assert _entry(as_account, "sam", task["id"])["state"] == "open"
 
 
-# ── what students see, and when a task counts as done ──────
+# ── what learners see, and when a task counts as done ──────
 
 
 def test_a_practice_set_task_completes_and_completion_stays(as_account):
@@ -126,13 +126,13 @@ def test_a_practice_set_task_completes_and_completion_stays(as_account):
     # Audit fix B §6: a first publication tells nobody (nobody can have joined yet).
     assert "content_published" not in _kinds(as_account, "sara")
     with as_account("sara"):
-        assert StudentTasks().assigned() == []  # a practice set is not a task by itself
+        assert LearnerTasks().assigned() == []  # a practice set is not a task by itself
     with as_account("tina"):
         task = TaskService().create("practice_set", "Do week 1")
         TaskService().update(task["id"], target_id=created["id"])
     _in_course(task["id"])
     with as_account("sara"):
-        keys = [e["key"] for e in StudentTasks().assigned()]
+        keys = [e["key"] for e in LearnerTasks().assigned()]
         assert keys == [task["id"]]
         qid = PracticeSetService().take(created["id"])["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(created["id"], {qid: "B"}))
@@ -152,7 +152,7 @@ def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account
     assert _entry(as_account, "sara", task_id) is None  # nothing done yet: it simply goes
     _fixtures["deliver"]("course", course_id, "sara")
     with as_account("sara"):
-        StudentTasks().mark_done(task_id)
+        LearnerTasks().mark_done(task_id)
     _leave_course("sara", course_id)
     entry = _entry(as_account, "sara", task_id)
     assert entry["state"] == "completed"  # their own record stays, in their history
@@ -162,13 +162,13 @@ def test_leaving_the_course_closes_a_task_and_coming_back_restores_it(as_account
     assert next(s for s in detail["students"] if s["username"] == "sara")["in_scope"] is False
 
 
-def test_notes_are_marked_done_by_the_student(as_account):
+def test_notes_are_marked_done_by_the_learner(as_account):
     note = _note(as_account, "Revise chapter 3")
     # Audit fix B §6: a first publication announces nothing.
     assert "course_published" not in _kinds(as_account, "sara")
     assert _entry(as_account, "sara", note)["state"] == "open"
     with as_account("sara"):
-        assert StudentTasks().mark_done(note)["state"] == "completed"
+        assert LearnerTasks().mark_done(note)["state"] == "completed"
     with as_account("tina"):
         sara = next(s for s in TaskService().detail(note)["students"] if s["username"] == "sara")
     assert sara["completed"] and sara["self_reported"]
@@ -223,12 +223,12 @@ def test_a_promoted_learner_keeps_their_tasks_and_an_admin_hands_their_own_cours
     assert "tasks_transferred" in _kinds(as_account, "tom")
 
 
-def test_a_deleted_students_completions_and_notifications_go(teaching_users, as_account):
+def test_a_deleted_learners_completions_and_notifications_go(teaching_users, as_account):
     from deeptutor.multi_user.account_handoff import run_stages
 
     task_id = _note(as_account)
     with as_account("sara"):
-        StudentTasks().mark_done(task_id)
+        LearnerTasks().mark_done(task_id)
     notifications.notify([_uid("sara")], "content_announcement", {"title": "Revise", "teacher": "tina"})
     assert notifications.list_for(_uid("sara"))
     failed, _ = run_stages(_uid("sara"), _uid("adam"), ("task_records", "notifications"))
@@ -238,12 +238,12 @@ def test_a_deleted_students_completions_and_notifications_go(teaching_users, as_
         assert all(s["username"] != "sara" or not s["completed"] for s in TaskService().detail(task_id)["students"])
     # Sam's state is untouched.
     with as_account("sam"):
-        StudentTasks().mark_done(task_id)
+        LearnerTasks().mark_done(task_id)
     with as_account("tina"):
         assert next(s for s in TaskService().detail(task_id)["students"] if s["username"] == "sam")["completed"]
 
 
-# ── the student home ───────────────────────────────────────
+# ── the learner home ───────────────────────────────────────
 
 
 def test_the_home_lists_open_tasks_and_counts_history(as_account):
@@ -252,7 +252,7 @@ def test_the_home_lists_open_tasks_and_counts_history(as_account):
     open_task = _note(as_account, "Read chapter 1")
     note = _note(as_account)
     with as_account("sara"):
-        StudentTasks().mark_done(note)
+        LearnerTasks().mark_done(note)
         payload = asyncio.run(home.home())
     assert [t["key"] for t in payload["assigned"]] == [open_task]
     assert payload["history_count"] == 1

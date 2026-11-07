@@ -130,13 +130,13 @@ def test_taxonomy_checks_stages_subjects_and_difficulty():
 
 def test_published_for_the_market_reaches_nobody_until_they_join(as_account):
     set_id = _market_set(as_account)
-    assert _assigned_sets(as_account, "sara") == []  # not the old "the teacher's classes"
+    assert _assigned_sets(as_account, "sara") == []  # not the old "the author's classes"
 
 
 # ── listing states ─────────────────────────────────────────
 
 
-def test_teacher_listing_is_reviewed_then_joined(as_account, teaching_users):
+def test_author_listing_is_reviewed_then_joined(as_account, teaching_users):
     set_id = _market_set(as_account)
     pending = _list(as_account, "practice_set", set_id, approve=False)
     assert pending["status"] == "pending"
@@ -270,7 +270,7 @@ def test_authors_do_not_join_their_own(as_account):
     _list(as_account, "practice_set", set_id)
     with pytest.raises(EnrollmentError):
         _join(as_account, "tina", "practice_set", set_id)  # her own
-    _join(as_account, "tom", "practice_set", set_id)  # batch 2 §6: a teacher may
+    _join(as_account, "tom", "practice_set", set_id)  # batch 2 §6: an author may
 
 
 # ── the market ─────────────────────────────────────────────
@@ -341,11 +341,11 @@ def test_detail_and_author_page(as_account, teaching_users):
 # ── Mastery Paths ──────────────────────────────────────────
 
 
-def _market_path(as_account, teacher_draft):
+def _market_path(as_account, author_draft):
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")
@@ -364,11 +364,11 @@ def _sara_paths(as_account):
 
 
 def test_path_copy_comes_with_joining_and_stays_through_leaving(
-    as_account, teacher_draft, quiet_change_model,
+    as_account, author_draft, quiet_change_model,
 ):
     from deeptutor.teaching.instances import instance_path_id
 
-    template_id = _market_path(as_account, teacher_draft)
+    template_id = _market_path(as_account, author_draft)
     assert _sara_paths(as_account) == []
     _list(as_account, "mastery_path", template_id)
     _join(as_account, "sara", "mastery_path", template_id)
@@ -411,7 +411,7 @@ def test_anyone_joins_a_book_and_then_reads_it(as_account, teaching_users, tmp_p
     for name in ("sara", "tom"):
         with as_account(name):
             assert not book_registry.can_read_book(record, get_current_user())
-        _join(as_account, name, "book", record.book_id)  # a teacher may join a book
+        _join(as_account, name, "book", record.book_id)  # an author may join a book
         with as_account(name):
             assert book_registry.can_read_book(record, get_current_user())
     with as_account("adam"):
@@ -549,7 +549,7 @@ def test_everyone_scoped_content_moves_into_the_market(as_account, teaching_user
     with as_account("sara"):
         qid = PracticeSetService().take(set_id)["questions"][0]["question_id"]
         asyncio.run(PracticeSetService().submit(set_id, {qid: "B"}))
-    # (A student's list holds only what they joined or were named in, so the
+    # (A learner's list holds only what they joined or were named in, so the
     # set is not listed for Sam even before the migration.)
 
     assert migration.run() == 2  # the set, and Tom's public book that never had a scope

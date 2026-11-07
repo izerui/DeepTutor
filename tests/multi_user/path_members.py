@@ -1,4 +1,4 @@
-"""Learners joining or leaving a teacher's Mastery Path, for tests.
+"""Learners joining or leaving an author's Mastery Path, for tests.
 
 Nobody is handed a path or taken off it by hand any more (spec
 2026-11-05-remove-teacher-management §1.2): a path reaches the people who

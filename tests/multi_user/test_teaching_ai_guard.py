@@ -1,9 +1,9 @@
-"""A tutoring turn on a teacher path studies; it never redesigns, and closes when revoked.
+"""A tutoring turn on an author path studies; it never redesigns, and closes when revoked.
 
 R8: such a turn is taught from the path's own knowledge bases only, enforced
 where retrieval executes — an explicit ``rag(kb_name=...)`` naming any other
 library is refused, also when the path cites none. Every path switch re-runs
-the same admission gate and re-points that restriction; leaving a teacher path
+the same admission gate and re-points that restriction; leaving an author path
 drops it. These tests drive the real pipeline entry, the real switch tool, the
 real ``RAGTool`` and the real registries; only the search backend is stubbed.
 """
@@ -31,7 +31,7 @@ from deeptutor.learning.storage import LearningStore
 from deeptutor.multi_user import book_access
 from deeptutor.multi_user.knowledge_access import current_kb_manager, resolve_for_rag
 from deeptutor.multi_user.retrieval_scope import (
-    TEACHER_PATH_RETRIEVAL_DENIED,
+    AUTHOR_PATH_RETRIEVAL_DENIED,
     current_retrieval_scope,
 )
 from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, MATERIALS_UNAVAILABLE
@@ -79,7 +79,7 @@ def _context(path_id: str, mode: str, knowledge_bases: tuple[str, ...] = ()) -> 
 
 
 @pytest.mark.asyncio
-async def test_a_turn_on_a_teacher_path_runs_in_study_mode(sara_instance, as_account, monkeypatch):
+async def test_a_turn_on_a_author_path_runs_in_study_mode(sara_instance, as_account, monkeypatch):
     seen: dict = {}
     _probe_loop(monkeypatch, seen)
     stream = _Stream()
@@ -94,10 +94,10 @@ async def test_a_turn_on_a_teacher_path_runs_in_study_mode(sara_instance, as_acc
 
 
 @pytest.mark.asyncio
-async def test_a_teacher_path_ignores_the_learners_own_kb_selection(
+async def test_a_author_path_ignores_the_learners_own_kb_selection(
     sara_instance, as_account, monkeypatch
 ):
-    # R8: tutoring and questions on a teacher path use only the path's materials.
+    # R8: tutoring and questions on an author path use only the path's materials.
     seen: dict = {}
     _probe_loop(monkeypatch, seen)
 
@@ -110,7 +110,7 @@ async def test_a_teacher_path_ignores_the_learners_own_kb_selection(
 
 
 @pytest.mark.asyncio
-async def test_a_revoked_teacher_path_closes_the_turn(
+async def test_a_revoked_author_path_closes_the_turn(
     sara_instance, as_account, teaching_users, monkeypatch
 ):
     seen: dict = {}
@@ -130,7 +130,7 @@ async def test_a_revoked_teacher_path_closes_the_turn(
 
 
 @pytest.mark.asyncio
-async def test_switching_into_a_revoked_teacher_path_is_refused(
+async def test_switching_into_a_revoked_author_path_is_refused(
     sara_instance, as_account, teaching_users
 ):
     with as_account("tina"):
@@ -199,15 +199,15 @@ def _kb_source(record, index: int = 0) -> TopicSource:
 
 
 @pytest.fixture
-def courses(libraries, teacher_draft, publish_template, as_account):
+def courses(libraries, author_draft, publish_template, as_account):
     """Tina publishes two paths to Sara (A cites calculus, B algebra); Sara also
     keeps a personal path P citing her own notes."""
     from deeptutor.api.routers import mastery_path
 
-    teacher_draft(path_id="topic_calculus", sources=(_kb_source(libraries.calculus),))
-    teacher_draft(path_id="topic_algebra", sources=(_kb_source(libraries.algebra),))
-    a = publish_template(path_id="topic_calculus", students=("sara",))["template"]["id"]
-    b = publish_template(path_id="topic_algebra", students=("sara",))["template"]["id"]
+    author_draft(path_id="topic_calculus", sources=(_kb_source(libraries.calculus),))
+    author_draft(path_id="topic_algebra", sources=(_kb_source(libraries.algebra),))
+    a = publish_template(path_id="topic_calculus", learners=("sara",))["template"]["id"]
+    b = publish_template(path_id="topic_algebra", learners=("sara",))["template"]["id"]
     with as_account("sara"):
         LearningService(LearningStore()).create_topic(
             "topic_mine",
@@ -281,9 +281,9 @@ async def test_an_explicit_rag_call_cannot_reach_an_unrelated_public_kb(
     assert seen["own"].success and "calculus" in seen["own"].content
     for refused in (seen["unrelated"], seen["unrelated_legacy"], seen["visual"]):
         assert refused.success is False
-        assert refused.content == TEACHER_PATH_RETRIEVAL_DENIED
+        assert refused.content == AUTHOR_PATH_RETRIEVAL_DENIED
         assert refused.metadata["error_type"] == "teacher_path_scope"
-    assert seen["seam"] == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["seam"] == AUTHOR_PATH_RETRIEVAL_DENIED
     assert libraries.searched == ["calculus"]
     # Nothing outlives the turn.
     assert current_retrieval_scope() is None
@@ -340,7 +340,7 @@ async def test_rag_search_with_an_explicit_base_dir_obeys_the_allowlist(
 
 
 @pytest.mark.asyncio
-async def test_a_teacher_path_without_knowledge_bases_retrieves_nothing(
+async def test_a_author_path_without_knowledge_bases_retrieves_nothing(
     sara_instance, libraries, as_account, monkeypatch
 ):
     seen: dict = {}
@@ -406,7 +406,7 @@ async def test_a_personal_path_never_opens_the_teaching_store(
 
 
 @pytest.mark.asyncio
-async def test_switching_teacher_paths_re_points_the_allowlist(
+async def test_switching_author_paths_re_points_the_allowlist(
     courses, libraries, as_account, monkeypatch
 ):
     seen: dict = {}
@@ -424,11 +424,11 @@ async def test_switching_teacher_paths_re_points_the_allowlist(
     assert seen["switched"].success, seen["switched"].content
     assert seen["kbs"] == [libraries.algebra.ref]
     assert seen["b"].success
-    assert seen["a"].success is False and seen["a"].content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["a"].success is False and seen["a"].content == AUTHOR_PATH_RETRIEVAL_DENIED
 
 
 @pytest.mark.asyncio
-async def test_leaving_a_teacher_path_drops_its_restriction(
+async def test_leaving_a_author_path_drops_its_restriction(
     courses, libraries, as_account, monkeypatch
 ):
     seen: dict = {}
@@ -505,7 +505,7 @@ async def test_a_switch_re_runs_the_turn_gate_and_rolls_back_its_lease(
     seen: dict = {}
     from deeptutor.capabilities.mastery import turn_scope
 
-    original = turn_scope.teacher_instance_gate
+    original = turn_scope.author_instance_gate
 
     async def gate(stream, learning_store, path_id):
         seen.setdefault("gated", []).append(path_id)
@@ -524,7 +524,7 @@ async def test_a_switch_re_runs_the_turn_gate_and_rolls_back_its_lease(
         seen["a"] = await _rag(libraries.calculus.ref)
 
     _turn(monkeypatch, body)
-    monkeypatch.setattr(turn_scope, "teacher_instance_gate", gate)
+    monkeypatch.setattr(turn_scope, "author_instance_gate", gate)
     with as_account("sara"):
         store = LearningStore()
         await asyncio.to_thread(store.acquire_path_lease, courses.a, "s1", "t1")
@@ -553,12 +553,12 @@ async def test_concurrent_turns_do_not_share_a_scope(courses, libraries, as_acco
             seen["chat"] = await _rag(libraries.history.ref)
         release.set()
 
-    async def teacher_turn():
+    async def author_turn():
         with as_account("sara"):
             await MasteryLoopPipeline(language="en").run(_context(courses.a, "study"), _Stream())
 
     _turn(monkeypatch, body)
-    await asyncio.gather(asyncio.create_task(teacher_turn()), asyncio.create_task(ordinary_chat()))
+    await asyncio.gather(asyncio.create_task(author_turn()), asyncio.create_task(ordinary_chat()))
 
     assert seen["chat"].success
 
@@ -591,7 +591,7 @@ def shared_book(as_account, make_kb, teaching_users):
 
 
 @pytest.mark.asyncio
-async def test_book_reading_retrieval_is_unchanged_outside_teacher_paths(
+async def test_book_reading_retrieval_is_unchanged_outside_author_paths(
     shared_book, courses, libraries, as_account, monkeypatch
 ):
     seen: dict = {}
@@ -610,15 +610,15 @@ async def test_book_reading_retrieval_is_unchanged_outside_teacher_paths(
             await MasteryLoopPipeline(language="en").run(
                 _context(courses.personal, "study", (shared_book.ref,)), _Stream()
             )
-            # A teacher path does not widen to a book the learner attached.
+            # An author path does not widen to a book the learner attached.
             await MasteryLoopPipeline(language="en").run(
                 _context(courses.a, "study", (shared_book.ref,)), _Stream()
             )
             after = await _rag(shared_book.ref)
 
-    personal, teacher = seen["turns"]
+    personal, author = seen["turns"]
     assert chat.success and personal.success and after.success
-    assert teacher.success is False and teacher.content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert author.success is False and author.content == AUTHOR_PATH_RETRIEVAL_DENIED
     assert libraries.searched == ["optics", "optics", "optics"]
 
 
@@ -753,7 +753,7 @@ def chat_runtime(libraries, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_chat_action_on_a_revoked_teacher_path_is_refused(
+async def test_a_chat_action_on_a_revoked_author_path_is_refused(
     courses, chat_runtime, as_account, teaching_users
 ):
     with as_account("tina"):
@@ -776,7 +776,7 @@ async def test_a_chat_action_on_a_revoked_teacher_path_is_refused(
 
 
 @pytest.mark.asyncio
-async def test_a_chat_action_on_a_teacher_path_retrieves_only_its_libraries(
+async def test_a_chat_action_on_a_author_path_retrieves_only_its_libraries(
     courses, libraries, chat_runtime, as_account
 ):
     async def body(context, out):
@@ -790,7 +790,7 @@ async def test_a_chat_action_on_a_teacher_path_retrieves_only_its_libraries(
     assert seen["loaded"] == [courses.a]
     assert seen["kbs"] == [libraries.calculus.ref]
     assert seen["unrelated"].success is False
-    assert seen["unrelated"].content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["unrelated"].content == AUTHOR_PATH_RETRIEVAL_DENIED
     assert seen["own"].success
     assert libraries.searched == ["calculus"]
     assert seen["scope_after"] is None
@@ -854,7 +854,7 @@ async def test_a_switch_inside_a_chat_action_re_runs_the_gate(
     # read_source follows the path: A's material is gone from the index.
     assert "src_a" not in seen["index_b"]
     assert seen["b"].success
-    assert seen["a"].success is False and seen["a"].content == TEACHER_PATH_RETRIEVAL_DENIED
+    assert seen["a"].success is False and seen["a"].content == AUTHOR_PATH_RETRIEVAL_DENIED
     assert seen["to_personal"].success
     assert seen["kbs_p"] == [libraries.history.ref]
     assert seen["history"].success
@@ -886,7 +886,7 @@ _EARLIER = {"hs-tutor-7": '{"archive_id":"hs-tutor-7","messages":["earlier excha
 
 
 @pytest.mark.asyncio
-async def test_history_admitted_on_a_teacher_path_survives_switches_its_scope_allows(
+async def test_history_admitted_on_a_author_path_survives_switches_its_scope_allows(
     courses, chat_runtime, as_account
 ):
     """B2-15: a switch keeps the conversation's history sources when the new
@@ -907,19 +907,19 @@ async def test_history_admitted_on_a_teacher_path_survives_switches_its_scope_al
 
     assert seen["start"].success and "earlier exchange" in seen["start"].content
     assert seen["to_personal"].success, seen["to_personal"].content
-    # teacher -> personal: a learner-owned path has no allowlist to narrow to.
+    # author -> personal: a learner-owned path has no allowlist to narrow to.
     assert seen["on_personal"].success and "earlier exchange" in seen["on_personal"].content
     assert seen["back_to_a"].success, seen["back_to_a"].content
     # Back on the scope that admitted them.
     assert seen["on_a"].success and "earlier exchange" in seen["on_a"].content
     assert seen["to_b"].success, seen["to_b"].content
-    # teacher -> another teacher's path: outside B's allowlist, refused.
+    # author -> another author's path: outside B's allowlist, refused.
     assert seen["on_b"].success is False
     assert "hs-tutor-7" not in seen["index_b"]
 
 
 @pytest.mark.asyncio
-async def test_history_admitted_on_a_personal_path_is_refused_after_a_teacher_switch(
+async def test_history_admitted_on_a_personal_path_is_refused_after_a_author_switch(
     courses, chat_runtime, as_account
 ):
     async def body(context, out):
@@ -935,7 +935,7 @@ async def test_history_admitted_on_a_personal_path_is_refused_after_a_teacher_sw
 
     assert seen["start"].success and "earlier exchange" in seen["start"].content
     assert seen["to_a"].success, seen["to_a"].content
-    # personal -> teacher: unrestricted history never enters an R8 allowlist.
+    # personal -> author: unrestricted history never enters an R8 allowlist.
     assert seen["on_a"].success is False
     assert "hs-tutor-7" not in seen["index_a"]
     assert seen["to_personal"].success, seen["to_personal"].content

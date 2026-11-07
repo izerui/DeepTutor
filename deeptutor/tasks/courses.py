@@ -1,8 +1,8 @@
-"""Teacher courses (spec 2026-11-03 batch 2 §5).
+"""Author courses (spec 2026-11-03 batch 2 §5).
 
 A course is tasks in an order, with a name and a description. Everything a
-student does happens in its tasks — completion — so a course adds no rules of its own: it is how a teacher lays
-out a term. It reaches students through a publish scope (kind ``course``).
+learner does happens in its tasks — completion — so a course adds no rules of its own: it is how an author lays
+out a term. It reaches learners through a publish scope (kind ``course``).
 
 Publishing a course publishes its draft tasks to the people who join it; an
 already published task must already reach all of them. Withdrawing a course
@@ -20,7 +20,7 @@ import uuid
 from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.models import CurrentUser
 from deeptutor.tasks.service import (
-    StudentTasks,
+    LearnerTasks,
     TaskConflict,
     TaskError,
     TaskNotFound,
@@ -224,7 +224,7 @@ class CourseService:
         self.update(course_id, task_ids=[*items, task["id"]])
         return self.get(course_id)
 
-    def hand_over(self, course_id: str, teacher_id: str) -> dict[str, Any]:
+    def hand_over(self, course_id: str, author_id: str) -> dict[str, Any]:
         """An administrator gives a course they hold, with its tasks, to a learner (traceability #5)."""
         from deeptutor.tasks.service import _hand_tasks_to
 
@@ -234,17 +234,17 @@ class CourseService:
             row = self._owned(conn, course_id)
             items = self._items(conn, course_id)
         with db.write() as conn:
-            _hand_tasks_to(conn, self.actor.id, teacher_id, items)
+            _hand_tasks_to(conn, self.actor.id, author_id, items)
             conn.execute(
-                "UPDATE courses SET owner_user_id = ?, updated_at = ? WHERE id = ?", (teacher_id, time.time(), course_id),
+                "UPDATE courses SET owner_user_id = ?, updated_at = ? WHERE id = ?", (author_id, time.time(), course_id),
             )
         from deeptutor.catalog.listings import follow_owners
         from deeptutor.notifications.service import notify
 
         follow_owners(self.actor.id)
-        notify([teacher_id], "tasks_transferred", {"count": len(items) or 1}, link=f"/tasks?tab=courses",
-               dedupe_key=f"course_handed_over:{course_id}:{teacher_id}")
-        return {"id": course_id, "owner_user_id": teacher_id, "title": row["title"]}
+        notify([author_id], "tasks_transferred", {"count": len(items) or 1}, link=f"/tasks?tab=courses",
+               dedupe_key=f"course_handed_over:{course_id}:{author_id}")
+        return {"id": course_id, "owner_user_id": author_id, "title": row["title"]}
 
     def _publish_drafts(self, course_id: str) -> None:
         from deeptutor.publishing import scope as scopes
@@ -335,7 +335,7 @@ class CourseService:
         forget_listing(COURSE, course_id)  # review L6
 
 
-# ── the student's side ─────────────────────────────────────
+# ── the learner's side ─────────────────────────────────────
 
 
 def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
@@ -349,7 +349,7 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     from deeptutor.publishing.provenance import provenance
 
     actor = actor or get_current_user()
-    student = _role(actor) != "admin"
+    learner = _role(actor) != "admin"
     with db.read() as conn:
         if conn is None:
             return []
@@ -385,11 +385,11 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
             continue
         s = scopes.get_scope(scopes.COURSE, r["id"])
         # Learners by name (older data), and anyone who joined.
-        if s and ((student and scopes._reaches(s, actor.id)) or actor.id in s.members):
+        if s and ((learner and scopes._reaches(s, actor.id)) or actor.id in s.members):
             reached.append((r, None))
     if not reached:
         return []
-    entries = {e["key"]: e for e in StudentTasks(actor).assigned()}
+    entries = {e["key"]: e for e in LearnerTasks(actor).assigned()}
     from deeptutor.catalog.listings import withdrawal
 
     # Polish batch §1: out of the market by its author (or as its author left), still studied.
@@ -407,8 +407,8 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
 
 
 def transfer_courses(user_id: str, successor_id: str, *, published_only: bool = False) -> int:
-    """A departing teacher's courses go with their tasks (batch 2 §8); a teacher who
-    becomes a student keeps their drafts, like their draft tasks."""
+    """A departing author's courses go with their tasks (batch 2 §8); an author who
+    becomes a learner keeps their drafts, like their draft tasks."""
     if not db.path().exists():
         return 0
     with db.write() as conn:

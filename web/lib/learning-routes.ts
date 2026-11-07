@@ -18,7 +18,7 @@ export function bookRoute(bookId?: string | null, pageId?: string | null, worksp
   if (!bookId?.trim()) return inWorkspace(BOOKS_HOME, workspaceId)
   const book = `${BOOKS_HOME}/${segment(bookId)}`
   const route = inWorkspace(pageId?.trim() ? `${book}/pages/${segment(pageId)}` : book, workspaceId)
-  // R9: moving between a teacher path's book pages keeps the path's context
+  // R9: moving between an author path's book pages keeps the path's context
   // (the library home above does not need it).
   return withMasteryTemplate(route, currentMasteryTemplate())
 }

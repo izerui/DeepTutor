@@ -991,7 +991,7 @@ async def register(body: PublicRegisterRequest, request: Request, response: Resp
     Self-service registration.
 
     The first account becomes the administrator. After that, anyone may sign
-    up as a student while public registration is open; while it is closed,
+    up as a learner while public registration is open; while it is closed,
     only an administrator makes accounts.
 
     Only available when AUTH_ENABLED=true.
@@ -1175,7 +1175,7 @@ async def change_own_password(
     response: Response,
     payload: TokenPayload | None = Depends(require_auth),
 ) -> dict:
-    """Change one's own password (e.g. after an administrator or teacher reset it).
+    """Change one's own password (e.g. after an administrator or author reset it).
 
     Every other session ends (tokens carry the password version); this browser
     gets a fresh session so the person stays signed in here.
@@ -1797,7 +1797,7 @@ async def batch_remove_users(
 
 @router.get("/account-handoffs")
 async def list_account_handoffs(current: TokenPayload = Depends(require_admin)) -> list[dict]:
-    """Deleted accounts whose hand-over (KBs, books, teacher paths) is unfinished."""
+    """Deleted accounts whose hand-over (KBs, books, author paths) is unfinished."""
     from deeptutor.multi_user import account_handoff
 
     records = await asyncio.to_thread(account_handoff.list_pending_handoffs)

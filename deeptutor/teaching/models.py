@@ -1,4 +1,4 @@
-"""Shapes of teacher mastery templates, revisions and assignments."""
+"""Shapes of author mastery templates, revisions and assignments."""
 
 from __future__ import annotations
 
@@ -27,11 +27,11 @@ class MasteryTemplate(BaseModel):
     description: str = ""
     status: TemplateStatus = "draft"
     current_revision: int = 0
-    #: The teacher's own path the template is edited and trialled in. Empty
+    #: The author's own path the template is edited and trialled in. Empty
     #: once the owning account is deleted and the template moves to an admin.
     draft_path_id: str = ""
     draft_workspace_id: str = ""
-    #: Draft objective id -> stable template id, for objectives the teacher
+    #: Draft objective id -> stable template id, for objectives the author
     #: confirmed as a rewording or redefinition of an earlier one.
     kp_aliases: dict[str, str] = Field(default_factory=dict)
     created_at: float = Field(default_factory=time.time)
@@ -48,7 +48,7 @@ class TemplateOutline(BaseModel):
     description: str = ""
     emoji: str = "🧭"
     modules: list[LearningModule] = Field(default_factory=list)
-    #: How strict the scored gate is for students (``learning.pass_standard``).
+    #: How strict the scored gate is for learners (``learning.pass_standard``).
     #: Revisions published before the setting existed read as "strict".
     pass_standard: PassStandard = "strict"
 
@@ -86,7 +86,7 @@ class TemplateBookRef(BaseModel):
 class TemplateSources(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    #: Topic sources as students see them, rewritten to ``kb:<id>`` / ``book:<id>``.
+    #: Topic sources as learners see them, rewritten to ``kb:<id>`` / ``book:<id>``.
     sources: list[TopicSource] = Field(default_factory=list)
     kb_refs: list[TemplateKbRef] = Field(default_factory=list)
     book_refs: list[TemplateBookRef] = Field(default_factory=list)
@@ -126,7 +126,7 @@ class MasteryAssignment(BaseModel):
 
 
 class KpDecision(BaseModel):
-    """The teacher's verdict on one knowledge point of a republished outline."""
+    """The author's verdict on one knowledge point of a republished outline."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -38,7 +38,7 @@ def _book_source(book_id: str, label: str, position: int = 0) -> TopicSource:
 
 
 @pytest.fixture
-def real_path(teaching_users, as_account, make_kb, teacher_draft, publish_template):
+def real_path(teaching_users, as_account, make_kb, author_draft, publish_template):
     """Tina's private KB, really registered, published reference-only to Sara."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.multi_user.paths import get_account_path_service
@@ -51,7 +51,7 @@ def real_path(teaching_users, as_account, make_kb, teacher_draft, publish_templa
             root, "answer-keys", created_by=teaching_users["tina"]["id"]
         )
     assert record.visibility == "private"
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -62,7 +62,7 @@ def real_path(teaching_users, as_account, make_kb, teacher_draft, publish_templa
             ),
         )
     )
-    result = publish_template(students=("sara",), kb_choices={record.kb_id: "reference_only"})
+    result = publish_template(learners=("sara",), kb_choices={record.kb_id: "reference_only"})
     assert result["warnings"] == []
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
@@ -71,7 +71,7 @@ def real_path(teaching_users, as_account, make_kb, teacher_draft, publish_templa
     )
 
 
-def test_the_student_resolves_the_kb_only_inside_the_path(real_path, as_account):
+def test_the_learner_resolves_the_kb_only_inside_the_path(real_path, as_account):
     assert kb_registry.get_kb(real_path.record.kb_id).visibility == "private"
     with as_account("sara"):
         with pytest.raises(HTTPException) as outside:
@@ -113,11 +113,11 @@ def test_archiving_closes_the_kb_immediately(real_path, as_account):
 
 
 def test_a_reference_only_book_and_its_kbs_open_only_inside_the_path(
-    teaching_books, teacher_draft, publish_template, as_account
+    teaching_books, author_draft, publish_template, as_account
 ):
-    teacher_draft(sources=(_book_source("bk_own", "Waves"),))
+    author_draft(sources=(_book_source("bk_own", "Waves"),))
     template_id = publish_template(
-        students=("sara",),
+        learners=("sara",),
         book_choices={"bk_own": "reference_only"},
         kb_choices={teaching_books.answers.kb_id: "reference_only"},
     )["template"]["id"]
@@ -135,19 +135,19 @@ def test_a_reference_only_book_and_its_kbs_open_only_inside_the_path(
         assert kb_registry.can_read(answers, user) is False
 
 
-def test_a_students_migration_releases_a_dropped_private_book(
-    teaching_books, teaching_users, teacher_draft, publish_template, as_account, tmp_path, caplog
+def test_a_learners_migration_releases_a_dropped_private_book(
+    teaching_books, teaching_users, author_draft, publish_template, as_account, tmp_path, caplog
 ):
-    """C10 handoff: the post-migration resync runs as the student and now succeeds."""
+    """C10 handoff: the post-migration resync runs as the learner and now succeeds."""
     book_registry.register_book(
         base_dir=tmp_path / "books",
         dir_name="book_bk_two",
         title="Two",
         created_by=teaching_users["tina"]["id"],
     )
-    teacher_draft(sources=(_book_source("bk_own", "Waves"), _book_source("bk_two", "Two", 1)))
+    author_draft(sources=(_book_source("bk_own", "Waves"), _book_source("bk_two", "Two", 1)))
     template_id = publish_template(
-        students=("sara",),
+        learners=("sara",),
         book_choices={"bk_own": "reference_only", "bk_two": "reference_only"},
         kb_choices={teaching_books.answers.kb_id: "reference_only"},
     )["template"]["id"]
@@ -212,7 +212,7 @@ def _probe(monkeypatch, body) -> list:
 
 
 def test_admin_force_private_makes_the_path_materials_unavailable(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template
+    teaching_users, as_account, make_kb, author_draft, publish_template
 ):
     """Spec 7.4 with plan B's real force path (``list_unavailable_references``)."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -226,7 +226,7 @@ def test_admin_force_private_makes_the_path_materials_unavailable(
             root, "algebra", created_by=teaching_users["adam"]["id"]
         )
         kb_registry.set_visibility(record.kb_id, "public")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -237,7 +237,7 @@ def test_admin_force_private_makes_the_path_materials_unavailable(
             ),
         )
     )
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
         assert asyncio.run(mastery_path.get_topic(path_id))["origin"]["materials_available"] is True
@@ -260,11 +260,11 @@ def test_admin_force_private_makes_the_path_materials_unavailable(
 
 @pytest.mark.usefixtures("teaching_books")
 def test_admin_force_private_of_a_cited_book_is_reported(
-    teacher_draft, publish_template, as_account
+    author_draft, publish_template, as_account
 ):
     """Spec 7.4 for books, with plan D's ``list_unavailable_book_references``."""
-    teacher_draft(sources=(_book_source("bk_pub", "Optics"),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_book_source("bk_pub", "Optics"),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
 
@@ -283,7 +283,7 @@ def test_admin_force_private_of_a_cited_book_is_reported(
 
 
 @pytest.fixture
-def algebra_book(teaching_users, as_account, make_kb, teacher_draft, publish_template, tmp_path):
+def algebra_book(teaching_users, as_account, make_kb, author_draft, publish_template, tmp_path):
     """Tina's reference-only book bound to Adam's public KB, published to Sara."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.multi_user.paths import get_account_path_service
@@ -301,8 +301,8 @@ def algebra_book(teaching_users, as_account, make_kb, teacher_draft, publish_tem
         created_by=teaching_users["tina"]["id"],
     )
     book_registry.set_book_kb_links(book.book_id, {kb.ref: kb.kb_id})
-    teacher_draft(sources=(_book_source("bk_alg", "Algebra book"),))
-    template_id = publish_template(students=("sara",), book_choices={"bk_alg": "reference_only"})[
+    author_draft(sources=(_book_source("bk_alg", "Algebra book"),))
+    template_id = publish_template(learners=("sara",), book_choices={"bk_alg": "reference_only"})[
         "template"
     ]["id"]
     with as_account("sara"):
@@ -480,12 +480,12 @@ def _write_real_book(as_account, make_kb, teaching_users, *, book_id: str = "bk_
 
 
 @pytest.fixture
-def real_book_path(teaching_users, as_account, make_kb, teacher_draft, publish_template):
+def real_book_path(teaching_users, as_account, make_kb, author_draft, publish_template):
     """A real private book of Tina's, published reference-only to Sara."""
     written = _write_real_book(as_account, make_kb, teaching_users)
-    teacher_draft(sources=(_book_source("bk_real", "Waves"),))
+    author_draft(sources=(_book_source("bk_real", "Waves"),))
     template_id = publish_template(
-        students=("sara",),
+        learners=("sara",),
         book_choices={"bk_real": "reference_only"},
         kb_choices={written.kb.kb_id: "reference_only"},
     )["template"]["id"]
@@ -496,7 +496,7 @@ def real_book_path(teaching_users, as_account, make_kb, teacher_draft, publish_t
 
 @pytest.mark.asyncio
 async def test_a_switch_moves_the_template_and_book_scopes_with_it(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template
+    teaching_users, as_account, make_kb, author_draft, publish_template
 ):
     """Preflight item 2: entering B opens B's materials, leaving A closes A's."""
     import contextlib
@@ -514,7 +514,7 @@ async def test_a_switch_moves_the_template_and_book_scopes_with_it(
             library = kb_registry.ensure_registered(
                 root, "answer-keys", created_by=teaching_users["tina"]["id"]
             )
-        teacher_draft(
+        author_draft(
             path_id="topic_a",
             sources=(
                 TopicSource(
@@ -523,13 +523,13 @@ async def test_a_switch_moves_the_template_and_book_scopes_with_it(
                 ),
             ),
         )
-        teacher_draft(path_id="topic_b", sources=(_book_source("bk_real", "Waves"),))
+        author_draft(path_id="topic_b", sources=(_book_source("bk_real", "Waves"),))
         a = publish_template(
-            path_id="topic_a", students=("sara",), kb_choices={library.kb_id: "reference_only"}
+            path_id="topic_a", learners=("sara",), kb_choices={library.kb_id: "reference_only"}
         )["template"]["id"]
         b = publish_template(
             path_id="topic_b",
-            students=("sara",),
+            learners=("sara",),
             book_choices={"bk_real": "reference_only"},
             kb_choices={book.kb.kb_id: "reference_only"},
         )["template"]["id"]
@@ -670,7 +670,7 @@ def _add_asset(kb_dir, source_path: str) -> str:
 
 
 @pytest.fixture
-def lesson_path(teaching_users, as_account, make_kb, teacher_draft, publish_template):
+def lesson_path(teaching_users, as_account, make_kb, author_draft, publish_template):
     """Tina's private KB with two documents; the path cites only ``notes/lesson.md``."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.multi_user.paths import get_account_path_service
@@ -690,7 +690,7 @@ def lesson_path(teaching_users, as_account, make_kb, teacher_draft, publish_temp
             "lesson": _add_asset(folder, "notes/lesson.md"),
             "secret": _add_asset(folder, "secret.md"),
         }
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="f0",
@@ -703,7 +703,7 @@ def lesson_path(teaching_users, as_account, make_kb, teacher_draft, publish_temp
         )
     )
     template_id = publish_template(
-        students=("sara",), kb_choices={record.kb_id: "reference_only"}
+        learners=("sara",), kb_choices={record.kb_id: "reference_only"}
     )["template"]["id"]
     with as_account("sara"):
         path_id = asyncio.run(mastery_path.list_topics())["topics"][0]["path_id"]
@@ -740,7 +740,7 @@ def test_reference_only_originals_are_document_scoped(lesson_path, teaching_http
 
 
 def test_a_partially_cited_public_kb_keeps_its_public_documents(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, teaching_http
+    teaching_users, as_account, make_kb, author_draft, publish_template, teaching_http
 ):
     """Independent (public) access is not narrowed by the path's document scope."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -754,7 +754,7 @@ def test_a_partially_cited_public_kb_keeps_its_public_documents(
         record = kb_registry.ensure_registered(root, "library", created_by=teaching_users["adam"]["id"])
         kb_registry.set_visibility(record.kb_id, "public")
         kb_registry.refresh_documents(root, "library")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="f0", kind=TopicSourceKind.FILE, source_id="doc.md", label="First",
@@ -762,7 +762,7 @@ def test_a_partially_cited_public_kb_keeps_its_public_documents(
             ),
         )
     )
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         asyncio.run(mastery_path.list_topics())
     other = teaching_http.client.get(
@@ -829,10 +829,10 @@ def test_a_cited_file_that_moved_is_followed_by_its_id(
 
 
 @pytest.fixture
-def real_path_kb_only(teacher_draft, publish_template, as_account):
+def real_path_kb_only(author_draft, publish_template, as_account):
     """A second course of Sara's that cites no book."""
-    teacher_draft(path_id="topic_other")
-    template_id = publish_template(path_id="topic_other", students=("sara",))["template"]["id"]
+    author_draft(path_id="topic_other")
+    template_id = publish_template(path_id="topic_other", learners=("sara",))["template"]["id"]
     with as_account("sara"):
         asyncio.run(mastery_path.list_topics())
     return template_id
@@ -939,7 +939,7 @@ def test_originals_follow_the_revision_the_copy_is_on(
     assert get(old, headers=_auth("sara")).status_code == 404
 
 
-# ---- re-assigning a student parked on an older revision (B2-1) -----------------
+# ---- re-assigning a learner parked on an older revision (B2-1) -----------------
 
 
 def _park_on_v1_then_publish_v2(
@@ -985,7 +985,7 @@ def _park_on_v1_then_publish_v2(
         before_revoke()
     with as_account("tina"):
         leave_path(real_path.template_id, teaching_users["sara"]["id"])
-    # Revoking released K1: no active student needs revision 1 any more.
+    # Revoking released K1: no active learner needs revision 1 any more.
     assert kb_registry.list_referenced("mastery_template", real_path.template_id) == [
         kb_registry.get_kb(k2.kb_id)
     ]
@@ -996,7 +996,7 @@ def _park_on_v1_then_publish_v2(
 async def test_reassigning_restores_the_old_revisions_materials(
     real_path, teaching_users, as_account, make_kb, publish_template, monkeypatch
 ):
-    """Final review C M-a: the re-assigned student's v1 question is answerable again."""
+    """Final review C M-a: the re-assigned learner's v1 question is answerable again."""
     from deeptutor.multi_user.knowledge_access import resolve_for_rag
 
     k2 = await asyncio.to_thread(
@@ -1059,7 +1059,7 @@ async def test_reassigning_does_not_restore_a_deleted_old_material(
 
 @pytest.mark.asyncio
 async def test_reassigning_does_not_restore_an_old_material_its_owner_made_private(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+    teaching_users, as_account, make_kb, author_draft, publish_template, monkeypatch
 ):
     """K1 was cited as Adam's public KB; Adam made it private after the release."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -1073,7 +1073,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_made_priva
             root, "algebra", created_by=teaching_users["adam"]["id"]
         )
         kb_registry.set_visibility(k1.kb_id, "public")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
@@ -1081,7 +1081,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_made_priva
             ),
         )
     )
-    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+    template_id = (await asyncio.to_thread(publish_template, learners=("sara",)))[
         "template"
     ]["id"]
     with as_account("sara"):
@@ -1116,7 +1116,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_made_priva
 
 
 def test_reassigning_restores_an_old_revisions_reference_only_book(
-    teaching_books, teaching_users, teacher_draft, publish_template, as_account, tmp_path
+    teaching_books, teaching_users, author_draft, publish_template, as_account, tmp_path
 ):
     """The book half of M-a: a released v1-only private book is cited again."""
     book_registry.register_book(
@@ -1125,9 +1125,9 @@ def test_reassigning_restores_an_old_revisions_reference_only_book(
         title="Two",
         created_by=teaching_users["tina"]["id"],
     )
-    teacher_draft(sources=(_book_source("bk_own", "Waves"), _book_source("bk_two", "Two", 1)))
+    author_draft(sources=(_book_source("bk_own", "Waves"), _book_source("bk_two", "Two", 1)))
     template_id = publish_template(
-        students=("sara",),
+        learners=("sara",),
         book_choices={"bk_own": "reference_only", "bk_two": "reference_only"},
         kb_choices={teaching_books.answers.kb_id: "reference_only"},
     )["template"]["id"]
@@ -1154,7 +1154,7 @@ def test_reassigning_restores_an_old_revisions_reference_only_book(
 
 @pytest.mark.asyncio
 async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+    teaching_users, as_account, make_kb, author_draft, publish_template, monkeypatch
 ):
     """Review B2-1 I1: Adam makes K1 private after the restore decision, before the write."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -1169,7 +1169,7 @@ async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
             root, "algebra", created_by=teaching_users["adam"]["id"]
         )
         kb_registry.set_visibility(k1.kb_id, "public")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
@@ -1177,7 +1177,7 @@ async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
             ),
         )
     )
-    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+    template_id = (await asyncio.to_thread(publish_template, learners=("sara",)))[
         "template"
     ]["id"]
     with as_account("sara"):
@@ -1212,7 +1212,7 @@ async def test_reassigning_rechecks_an_old_material_in_the_reference_write(
 
 @pytest.mark.asyncio
 async def test_reassigning_does_not_restore_an_old_material_its_owner_withdrew_while_cited(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, monkeypatch
+    teaching_users, as_account, make_kb, author_draft, publish_template, monkeypatch
 ):
     """B2-19 x B2-1: Tom withdraws K1 (confirmed) while Sara's v1 copy still cites it.
 
@@ -1228,7 +1228,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_withdrew_w
         make_kb(KnowledgeBaseManager(base_dir=str(root)), "algebra")
         k1 = kb_registry.ensure_registered(root, "algebra", created_by=teaching_users["tom"]["id"])
         kb_registry.set_visibility(k1.kb_id, "public")
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0", kind=TopicSourceKind.KNOWLEDGE_BASE, source_id=k1.ref,
@@ -1236,7 +1236,7 @@ async def test_reassigning_does_not_restore_an_old_material_its_owner_withdrew_w
             ),
         )
     )
-    template_id = (await asyncio.to_thread(publish_template, students=("sara",)))[
+    template_id = (await asyncio.to_thread(publish_template, learners=("sara",)))[
         "template"
     ]["id"]
     with as_account("sara"):

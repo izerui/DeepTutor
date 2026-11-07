@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { similarQuestions } from "@/lib/workbench-api";
 
 /**
- * A student's remedial practice from their mistakes (spec 2026-11-03 batch 3 §3.2):
+ * A learner's remedial practice from their mistakes (spec 2026-11-03 batch 3 §3.2):
  * AI writes new questions like the chosen ones into their own bank, then
  * practice starts. Theirs alone; uses their own AI.
  */

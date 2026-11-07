@@ -1026,28 +1026,28 @@ def test_account_deletion_transfers_only_public_or_referenced_and_keeps_same_own
     from deeptutor.services.auth import TokenPayload
 
     boss = seed_user("boss", role="admin")
-    teacher = seed_user("tina", role="teacher")
+    author = seed_user("tina", role="teacher")
     records = {}
-    with as_user(teacher["id"], role="teacher"):
+    with as_user(author["id"], role="teacher"):
         manager = current_kb_manager()
         for name in ("public", "referenced", "untouched", "foreign"):
             make_kb(manager, name)
             records[name] = registry.register_kb(
                 base_dir=manager.base_dir, name=name, kind="uploaded",
-                created_by=teacher["id"],
+                created_by=author["id"],
                 visibility="public" if name in ("public", "foreign") else "private",
             )
         for name in ("public", "referenced", "foreign"):
             registry.add_reference(
                 records[name].kb_id, referrer_kind="course", referrer_id=name,
-                created_by="other" if name == "foreign" else teacher["id"],
+                created_by="other" if name == "foreign" else author["id"],
             )
     current = TokenPayload(username="boss", role="admin", user_id=boss["id"]) if authenticated else None
     successor = boss["id"] if authenticated else "local-admin"
     assert _delete_admin_user("tina", current) == (200, "")
     for name, record in records.items():
         transferred = registry.get_kb(record.kb_id)
-        assert transferred.created_by == (teacher["id"] if name == "untouched" else successor)
+        assert transferred.created_by == (author["id"] if name == "untouched" else successor)
         assert transferred.base_dir == record.base_dir
         assert (manager.base_dir / name / "raw/doc.md").read_text() == "hello"
     assert registry.list_references(records["public"].kb_id)[0].created_by == successor
@@ -1092,8 +1092,8 @@ async def test_transferred_private_actual_listing_read_allowlist_and_default_eli
     from deeptutor.services.workspace.knowledge import library_request
 
     boss = seed_user("boss", role="admin")
-    teacher = seed_user("tina", role="teacher")
-    with as_user(teacher["id"], role="teacher"):
+    author = seed_user("tina", role="teacher")
+    with as_user(author["id"], role="teacher"):
         manager = current_kb_manager()
         make_kb(manager, "retained", text="retained content")
         make_kb(manager, "secret")
@@ -1101,7 +1101,7 @@ async def test_transferred_private_actual_listing_read_allowlist_and_default_eli
         record = registry.find_by_location(manager.base_dir, "retained")
         secret = registry.find_by_location(manager.base_dir, "secret")
         registry.add_reference(
-            record.kb_id, referrer_kind="course", referrer_id="course", created_by=teacher["id"],
+            record.kb_id, referrer_kind="course", referrer_id="course", created_by=author["id"],
         )
     current = TokenPayload(username="boss", role="admin", user_id=boss["id"])
     assert _delete_admin_user("tina", current) == (200, "")
@@ -1239,8 +1239,8 @@ def test_every_learner_may_set_a_default_knowledge_base(
     app = FastAPI()
     app.include_router(knowledge.router, prefix="/api")
     seed_user("boss", role="admin")
-    student = seed_user("student", role="student")
-    with as_user(student["id"], role="student"):
+    learner = seed_user("student", role="student")
+    with as_user(learner["id"], role="student"):
         manager = current_kb_manager()
         for name in ("physics", "algebra"):
             make_kb(manager, name)
@@ -1251,7 +1251,7 @@ def test_every_learner_may_set_a_default_knowledge_base(
         }
         manager.set_default("physics")
         if old_switch is not None:
-            save_grant(student["id"], {
+            save_grant(learner["id"], {
                 "student_policy": {"allow_private_kb": old_switch},
             })
         token = library_request.set(library)

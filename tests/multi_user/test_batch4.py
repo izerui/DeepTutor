@@ -1,5 +1,5 @@
 """Batch 4 of the 2026-11-02 plan: learners' averages, hand-over summaries,
-own courses on the home page, teacher courses in one's own.
+own courses on the home page, author courses in one's own.
 
 (The withdrawn-material notices went with classes.)
 
@@ -34,7 +34,7 @@ def _remember(deliver):
 
 
 @pytest.fixture
-def third_student(teaching_users, seed_user):
+def third_learner(teaching_users, seed_user):
     """A third learner, so an average can be shown."""
     stu = seed_user("sue", role="student")
     teaching_users["sue"] = stu
@@ -81,7 +81,7 @@ def _take(as_account, name, set_id):
 # ── learners' averages (§1) ────────────────────────────────
 
 
-def test_a_practice_average_needs_three_scores(as_account, third_student):
+def test_a_practice_average_needs_three_scores(as_account, third_learner):
     set_id = _set(as_account)
     _answer(as_account, "sara", set_id, "B")
     _answer(as_account, "sam", set_id, "A")
@@ -90,7 +90,7 @@ def test_a_practice_average_needs_three_scores(as_account, third_student):
     assert _take(as_account, "sara", set_id)["class_average"] == round(2 * 2 / 3, 1)
 
 
-def test_an_older_after_due_set_shows_the_average_once_submitted(as_account, third_student):
+def test_an_older_after_due_set_shows_the_average_once_submitted(as_account, third_learner):
     from deeptutor.practice_sets import store
 
     set_id = _set(as_account)
@@ -119,7 +119,7 @@ def test_whoever_takes_over_gets_one_summary(as_account, teaching_users):
     assert "tasks_transferred" not in _kinds(ids["adam"])  # not a second notice for the same hand-over
 
 
-def test_a_deleted_teachers_courses_go_even_without_tasks(as_account, teaching_users):
+def test_a_deleted_authors_courses_go_even_without_tasks(as_account, teaching_users):
     from deeptutor.tasks.courses import CourseService
     from deeptutor.tasks.service import transfer_tasks
     from deeptutor.tasks.store import db
@@ -149,7 +149,7 @@ def _publish_course(as_account, title="Waves, term 1"):
     return course["id"]
 
 
-def test_a_student_references_a_teachers_course_until_it_stops_reaching_them(as_account):
+def test_a_learner_references_a_authors_course_until_it_stops_reaching_them(as_account):
     from deeptutor.services.courses import get_course_service
     from deeptutor.services.courses_state import build_course_state, build_course_resource_candidates
     from deeptutor.tasks.courses import CourseService
@@ -169,7 +169,7 @@ def test_a_student_references_a_teachers_course_until_it_stops_reaching_them(as_
         assert row["available"] is False
 
 
-def test_only_a_course_sent_to_the_student_can_be_attached(as_account, teaching_users, monkeypatch):
+def test_only_a_course_sent_to_the_learner_can_be_attached(as_account, teaching_users, monkeypatch):
     from fastapi import HTTPException
 
     from deeptutor.api.routers import courses as course_routes

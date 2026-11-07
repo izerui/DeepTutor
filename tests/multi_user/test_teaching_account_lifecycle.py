@@ -1,4 +1,4 @@
-"""Teacher paths outlive the accounts that made or studied them."""
+"""Author paths outlive the accounts that made or studied them."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _as_admin(teaching_users) -> TokenPayload:
     return TokenPayload(username="adam", role="admin", user_id=admin["id"])
 
 
-def test_deleting_a_teacher_hands_their_paths_to_the_admin(
+def test_deleting_a_author_hands_their_paths_to_the_admin(
     sara_instance, teaching_users, as_account
 ):
     assert _delete_admin_user("tina", _as_admin(teaching_users)) == (200, "")
@@ -37,7 +37,7 @@ def test_deleting_a_teacher_hands_their_paths_to_the_admin(
     template = TeachingStore().get_template(sara_instance.template_id)
     assert template.owner_user_id == teaching_users["adam"]["id"]
     assert template.draft_path_id == ""
-    # Students keep learning.
+    # Learners keep learning.
     with as_account("sara"):
         topics = asyncio.run(mastery_path.list_topics())["topics"]
     assert [t["path_id"] for t in topics] == [sara_instance.path_id]
@@ -75,10 +75,10 @@ def test_a_failed_handover_never_breaks_the_deletion(
     monkeypatch.setattr("deeptutor.teaching.service.handle_account_deleted", broken)
 
     assert _delete_admin_user("tina", _as_admin(teaching_users)) == (200, "")
-    assert "Could not hand over teacher paths" in caplog.text
+    assert "Could not hand over author paths" in caplog.text
 
 
-def test_a_failed_transfer_still_revokes_the_students_assignments(
+def test_a_failed_transfer_still_revokes_the_learners_assignments(
     sara_instance, teaching_users, monkeypatch
 ):
     from deeptutor.teaching.service import handle_account_deleted
@@ -94,7 +94,7 @@ def test_a_failed_transfer_still_revokes_the_students_assignments(
     assert TeachingStore().get_assignment(sara_instance.template_id, sara_id).status == "revoked"
 
 
-def test_deleting_a_student_revokes_their_assignments(sara_instance, teaching_users, as_account):
+def test_deleting_a_learner_revokes_their_assignments(sara_instance, teaching_users, as_account):
     sara_id = teaching_users["sara"]["id"]
 
     assert _delete_admin_user("sara", _as_admin(teaching_users)) == (200, "")
@@ -103,7 +103,7 @@ def test_deleting_a_student_revokes_their_assignments(sara_instance, teaching_us
     # The instance is no longer offered to that identity.
     with as_account("sara"):
         assert asyncio.run(mastery_path.list_topics())["topics"] == []
-    # The teacher keeps owning the path; nothing else moved.
+    # The author keeps owning the path; nothing else moved.
     template = TeachingStore().get_template(sara_instance.template_id)
     assert template.owner_user_id == teaching_users["tina"]["id"]
     assert template.draft_path_id
@@ -190,7 +190,7 @@ def _book_template_refs(book_id: str) -> dict[str, str]:
 
 @pytest.fixture
 def cited_materials(
-    tmp_path, monkeypatch, teaching_users, teacher_draft, publish_template, as_account
+    tmp_path, monkeypatch, teaching_users, author_draft, publish_template, as_account
 ):
     """Tina's public KB and book, cited by her path (to Sara) and, optionally, Tom's."""
 
@@ -201,15 +201,15 @@ def cited_materials(
             base_dir=tmp_path / "books", dir_name="book_bk_tina", title="Tina's book",
             created_by=tina, visibility="public",
         )
-        teacher_draft(
+        author_draft(
             sources=(_kb_source(kb), _file_source(kb, "lesson.md"), _book_source("bk_tina"))
         )
-        own = publish_template(students=("sara",))
+        own = publish_template(learners=("sara",))
         assert own["warnings"] == []
         tom_template = ""
         if foreign:
-            teacher_draft("tom", path_id="topic_tom", sources=(_kb_source(kb), _book_source("bk_tina")))
-            other = publish_template("tom", path_id="topic_tom", students=("sam",))
+            author_draft("tom", path_id="topic_tom", sources=(_kb_source(kb), _book_source("bk_tina")))
+            other = publish_template("tom", path_id="topic_tom", learners=("sam",))
             assert other["warnings"] == []
             tom_template = other["template"]["id"]
         return SimpleNamespace(
@@ -286,7 +286,7 @@ def test_a_failed_path_handover_leaves_template_references_with_the_path(
 
     assert _delete_admin_user("tina", _as_admin(teaching_users)) == (200, "")
 
-    assert "Could not transfer teacher paths" in caplog.text
+    assert "Could not transfer author paths" in caplog.text
     # B and D succeeded...
     assert kb_registry.get_kb(materials.kb.kb_id).created_by == adam
     assert book_registry.get_book("bk_tina").created_by == adam
@@ -326,7 +326,7 @@ def test_a_failed_joint_transfer_rolls_back_paths_and_references_together(
 
     handle_account_deleted(tina, successor_id=adam)
 
-    assert "Could not transfer teacher paths" in caplog.text
+    assert "Could not transfer author paths" in caplog.text
     assert TeachingStore().get_template(materials.template_id) == template_before
     assert _template_refs(materials.kb.kb_id) == kb_before
     assert _book_template_refs("bk_tina") == {materials.template_id: tina}
@@ -341,13 +341,13 @@ def test_a_failed_joint_transfer_rolls_back_paths_and_references_together(
 
 
 def test_takeover_keeps_revocation_history_and_never_restores_access(
-    tmp_path, monkeypatch, teaching_users, teaching_books, teacher_draft, publish_template,
+    tmp_path, monkeypatch, teaching_users, teaching_books, author_draft, publish_template,
     as_account,
 ):
     tom = teaching_users["tom"]["id"]
     kb = _ready_kb(tmp_path, monkeypatch, tom, "tom-notes")
-    teacher_draft(sources=(_kb_source(kb), _book_source("bk_pub")))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(kb), _book_source("bk_pub")))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("adam"):
         kb_registry.set_visibility(kb.kb_id, "private", force=True)
         book_registry.set_book_visibility("bk_pub", "private", force=True)

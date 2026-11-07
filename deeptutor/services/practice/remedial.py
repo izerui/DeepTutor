@@ -1,10 +1,10 @@
-"""A student's own remedial practice from their mistakes (spec 2026-11-03 batch 3 §3.2).
+"""A learner's own remedial practice from their mistakes (spec 2026-11-03 batch 3 §3.2).
 
-New questions like the chosen mistakes go into the student's own question
+New questions like the chosen mistakes go into the learner's own question
 bank, not yet answered (``ungraded``, so they are not mistakes), tagged
-``remedial``; the student then practises them in the usual practice session.
-They are the student's alone: no teacher sees them, they are no task. The
-AI they use counts against the student's daily limit.
+``remedial``; the learner then practises them in the usual practice session.
+They are the learner's alone: no author sees them, they are no task. The
+AI they use counts against the learner's daily limit.
 """
 
 from __future__ import annotations

@@ -275,8 +275,8 @@ def test_add_reference_guard_preserves_state_and_excludes_concurrent_writes(tmp_
     assert registry.list_unavailable_references("partner", "ada") == before_revoked
 
 
-def test_making_private_revokes_other_owners_references_and_confirms_teacher_paths(tmp_path):
-    """Rule R1: never blocked; only other accounts' teacher paths need confirmation."""
+def test_making_private_revokes_other_owners_references_and_confirms_author_paths(tmp_path):
+    """Rule R1: never blocked; only other accounts' author paths need confirmation."""
     kb = registry.register_kb(
         base_dir=tmp_path, name="physics", kind="uploaded", created_by="t1", visibility="public"
     )
@@ -393,7 +393,7 @@ def test_restored_references_are_rechecked_inside_the_write(tmp_path):
 def test_read_and_write_rules(tmp_path, make_user):
     admin = make_user("root", role="admin")
     owner = make_user("t1", role="teacher")
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     private = registry.register_kb(base_dir=tmp_path, name="notes", kind="uploaded", created_by="t1")
     public = registry.register_kb(
         base_dir=tmp_path, name="atlas", kind="uploaded", created_by="t1", visibility="public"
@@ -402,31 +402,31 @@ def test_read_and_write_rules(tmp_path, make_user):
     assert registry.can_read(private, owner) and registry.can_write(private, owner)
     # spec 2026-10-29 D2: an admin does not bypass another account's private KB.
     assert not registry.can_read(private, admin) and not registry.can_write(private, admin)
-    assert not registry.can_read(private, student)
-    assert registry.can_read(public, student)
-    assert not registry.can_write(public, student)
+    assert not registry.can_read(private, learner)
+    assert registry.can_read(public, learner)
+    assert not registry.can_write(public, learner)
 
 
 def test_reference_readers_grant_read_only_access(tmp_path, make_user):
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     other = make_user("s2", role="student")
     kb = registry.register_kb(base_dir=tmp_path, name="notes", kind="uploaded", created_by="t1")
     registry.add_reference(
         kb.kb_id, referrer_kind="mastery_template", referrer_id="tpl1", created_by="t1"
     )
-    assert not registry.can_read(kb, student)
+    assert not registry.can_read(kb, learner)
 
     registry.register_reference_reader(
         "mastery_template",
         lambda referrer_id, user_id: (referrer_id, user_id) == ("tpl1", "s1"),
     )
-    assert registry.can_read(kb, student)
-    assert not registry.can_write(kb, student)
+    assert registry.can_read(kb, learner)
+    assert not registry.can_write(kb, learner)
     assert not registry.can_read(kb, other)
 
 
 def test_a_broken_reader_never_grants_access(tmp_path, make_user):
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     kb = registry.register_kb(base_dir=tmp_path, name="notes", kind="uploaded", created_by="t1")
     registry.add_reference(kb.kb_id, referrer_kind="course", referrer_id="c1", created_by="t1")
 
@@ -434,13 +434,13 @@ def test_a_broken_reader_never_grants_access(tmp_path, make_user):
         raise RuntimeError("reader failed")
 
     registry.register_reference_reader("course", _boom)
-    assert not registry.can_read(kb, student)
+    assert not registry.can_read(kb, learner)
 
 
 def test_builtin_reader_modules_never_clobber_registered_readers(tmp_path, make_user, monkeypatch):
     """Plans C/D add modules to BUILTIN_READER_MODULES; a reader a test (or an
     earlier import) registered must survive their lazy import."""
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     kb = registry.register_kb(base_dir=tmp_path, name="notes", kind="uploaded", created_by="t1")
     registry.add_reference(kb.kb_id, referrer_kind="probe", referrer_id="p1", created_by="t1")
     registry.register_reference_reader("probe", lambda _ref, user_id: user_id == "s1")
@@ -455,13 +455,13 @@ def test_builtin_reader_modules_never_clobber_registered_readers(tmp_path, make_
     monkeypatch.setattr(registry, "BUILTIN_READER_MODULES", ("tests.fake_reader_module",))
     monkeypatch.setattr(registry.importlib, "import_module", fake_import)
 
-    assert registry.can_read(kb, student) is True
+    assert registry.can_read(kb, learner) is True
     assert imported == ["tests.fake_reader_module"]
     # New kinds from the module are kept; the earlier registration won.
     assert "other" in registry._readers
     assert registry._readers["probe"](None, "s1") is True
     # Loaded once per process (the autouse fixture resets the flag per test).
-    registry.can_read(kb, student)
+    registry.can_read(kb, learner)
     assert imported == ["tests.fake_reader_module"]
 
 
@@ -536,8 +536,8 @@ def test_meta_round_trip():
 # ── Fix round 1: privilege escalation & TOCTOU ──────────────────────
 
 
-def test_student_resolving_admin_kb_does_not_become_owner(mu_isolated_root, as_user, make_user, monkeypatch):
-    """A student resolving an assigned admin KB must not gain write access."""
+def test_learner_resolving_admin_kb_does_not_become_owner(mu_isolated_root, as_user, make_user, monkeypatch):
+    """A learner resolving an assigned admin KB must not gain write access."""
     from types import SimpleNamespace
 
     from deeptutor.multi_user.knowledge_access import admin_kb_base_dir
@@ -564,13 +564,13 @@ def test_student_resolving_admin_kb_does_not_become_owner(mu_isolated_root, as_u
         lambda self, name: {"rag_provider": "llamaindex"},
     )
 
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     with as_user("s1", role="student"):
         resolved = registry.resolve_ref("admin:kb:algebra")
 
     assert resolved is not None
     assert resolved.created_by == LOCAL_ADMIN_ID
-    assert not registry.can_write(resolved, student)
+    assert not registry.can_write(resolved, learner)
 
 
 def test_owner_resolving_own_legacy_ref_autoregisters(mu_isolated_root, as_user, make_user, monkeypatch):

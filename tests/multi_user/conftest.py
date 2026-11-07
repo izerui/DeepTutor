@@ -165,7 +165,7 @@ def fake_kb_registry(monkeypatch, tmp_path):
     """Plan B's knowledge-base registry, reduced to what teaching reads.
 
     Records are keyed by ``kb_id``; ``legacy_refs`` stand in for the old
-    ``user:kb:<name>`` style references a teacher's draft still carries.
+    ``user:kb:<name>`` style references an author's draft still carries.
     ``references`` records what teaching registered, keyed by
     ``(referrer_kind, referrer_id)``; ``documents`` mirrors plan B's document
     table, keyed by ``(kb_id, rel_path)``. Kinds follow plan B: ``"uploaded"``
@@ -374,7 +374,7 @@ def deliver(teaching_users):
     enrollment rows the market migration writes (``via='migrated'``), so the
     item need not be listed, then hands out what follows from them (a
     course's tasks and what they cite, a path's copies). Without names it
-    delivers to Sara and Sam, the two students the old fixture class held.
+    delivers to Sara and Sam, the two learners the old fixture class held.
     """
     import time
 
@@ -402,22 +402,22 @@ def deliver(teaching_users):
 def make_learners(as_account, deliver, teaching_users):
     """``make_learners("tina", "sara", "sam")``: they become Tina's learners.
 
-    Learners are people who joined any of the teacher's content. The old fixture class
-    made Sara and Sam the students of both teachers; this gives the teacher a
+    Learners are people who joined any of the author's content. The old fixture class
+    made Sara and Sam the learners of both authors; this gives the author a
     draft course "Learners" (never published, so it reaches nobody) and
-    enrolls those accounts in it. One such course per teacher and test.
+    enrolls those accounts in it. One such course per author and test.
     """
     from deeptutor.tasks.courses import CourseService
 
     courses: dict[str, str] = {}
 
-    def _make(teacher: str = "tina", *names: str) -> str:
+    def _make(author: str = "tina", *names: str) -> str:
         names = names or ("sara", "sam")
-        if teacher not in courses:
-            with as_account(teacher):
-                courses[teacher] = CourseService().create("Learners")["id"]
-        deliver("course", courses[teacher], *names)
-        return courses[teacher]
+        if author not in courses:
+            with as_account(author):
+                courses[author] = CourseService().create("Learners")["id"]
+        deliver("course", courses[author], *names)
+        return courses[author]
 
     return _make
 
@@ -510,8 +510,8 @@ def quiet_change_model(monkeypatch):
 
 
 @pytest.fixture
-def teacher_draft(as_account):
-    """Create a teacher's own mastery path, the draft a template publishes."""
+def author_draft(as_account):
+    """Create an author's own mastery path, the draft a template publishes."""
     from deeptutor.learning.models import (
         KnowledgePoint,
         KnowledgeType,
@@ -613,7 +613,7 @@ def publish_template(as_account, teaching_users, quiet_change_model, deliver):
 
     Uses whatever KB registry the test set up: plan B's real one (isolated per
     test by its autouse fixture), or ``fake_kb_registry`` when requested.
-    ``students`` join the path once it is published (nobody is handed a path
+    ``learners`` join the path once it is published (nobody is handed a path
     any more); the returned template and count include them.
     """
     import asyncio
@@ -625,7 +625,7 @@ def publish_template(as_account, teaching_users, quiet_change_model, deliver):
         name: str = "tina",
         *,
         path_id: str = "topic_calculus",
-        students: tuple[str, ...] = (),
+        learners: tuple[str, ...] = (),
         kp_decisions: dict | None = None,
         kb_choices: dict | None = None,
         book_choices: dict | None = None,
@@ -645,8 +645,8 @@ def publish_template(as_account, teaching_users, quiet_change_model, deliver):
                     ),
                 )
             )
-        if students:
-            deliver("mastery_path", template.id, *students)
+        if learners:
+            deliver("mastery_path", template.id, *learners)
             with as_account(name):
                 service = TeachingService()
                 described, count = service._describe_with_count(service.get(template.id))
@@ -688,15 +688,15 @@ def teaching_http(teaching_users, monkeypatch):
 
 
 @pytest.fixture
-def sara_instance(teacher_draft, publish_template, as_account):
+def sara_instance(author_draft, publish_template, as_account):
     """Tina's calculus path published to Sara, with Sara's own copy created."""
     import asyncio
     from types import SimpleNamespace
 
     from deeptutor.api.routers import mastery_path
 
-    teacher_draft()
-    result = publish_template(students=("sara",))
+    author_draft()
+    result = publish_template(learners=("sara",))
     with as_account("sara"):
         topics = asyncio.run(mastery_path.list_topics())["topics"]
     return SimpleNamespace(path_id=topics[0]["path_id"], template_id=result["template"]["id"])

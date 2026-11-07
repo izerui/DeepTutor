@@ -2,10 +2,10 @@
 
 Lives in ``<SYSTEM_ROOT>/tasks.sqlite3``:
 
-* ``tasks``: what a teacher (or administrator) asks of students — study a
+* ``tasks``: what an author (or administrator) asks of learners — study a
   Mastery Path, answer a practice set, read chapters of a book, or a plain
   instruction;
-* ``task_completions``: once a student completed a task (or a practice set /
+* ``task_completions``: once a learner completed a task (or a practice set /
   Mastery Path shown as one), it stays completed (R24);
 * ``courses`` / ``course_items``: tasks in an order.
 """
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     target_id TEXT NOT NULL DEFAULT '',
     settings_json TEXT NOT NULL DEFAULT '{}',
     due_at REAL,
-    -- Before it, students see only "opens on …" (spec 2026-11-03 batch 2 §6).
+    -- Before it, learners see only "opens on …" (spec 2026-11-03 batch 2 §6).
     open_at REAL,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
     created_at REAL NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS task_completions (
 );
 CREATE INDEX IF NOT EXISTS idx_task_completions_student ON task_completions(student_id);
 
--- Teacher courses: tasks in an order, with a description (spec 2026-11-03 batch 2 §5).
+-- Author courses: tasks in an order, with a description (spec 2026-11-03 batch 2 §5).
 CREATE TABLE IF NOT EXISTS courses (
     id TEXT PRIMARY KEY,
     owner_user_id TEXT NOT NULL,

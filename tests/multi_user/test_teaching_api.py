@@ -1,4 +1,4 @@
-"""Teacher endpoints over HTTP."""
+"""Author endpoints over HTTP."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ def test_every_learner_reaches_the_author_routes(teaching_http):
         assert listed.status_code == 200 and listed.json() == {"templates": []}
 
 
-def test_teacher_publishes_and_learners_join(teaching_http, teacher_draft, quiet_change_model):
+def test_author_publishes_and_learners_join(teaching_http, author_draft, quiet_change_model):
     from tests.multi_user.path_members import join_path
 
-    teacher_draft()
+    author_draft()
     client, users = teaching_http.client, teaching_http.users
 
     created = client.post(
@@ -59,9 +59,9 @@ def test_teacher_publishes_and_learners_join(teaching_http, teacher_draft, quiet
     assert archived.json()["status"] == "archived"
 
 
-def test_the_assignment_endpoints_are_gone(teaching_http, teacher_draft, publish_template):
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
+def test_the_assignment_endpoints_are_gone(teaching_http, author_draft, publish_template):
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     client, users = teaching_http.client, teaching_http.users
 
     for method, url, body in (
@@ -80,8 +80,8 @@ def test_the_assignment_endpoints_are_gone(teaching_http, teacher_draft, publish
     }
 
 
-def test_other_teachers_get_404_and_admins_do_not_publish(teaching_http, teacher_draft):
-    teacher_draft()
+def test_other_authors_get_404_and_admins_do_not_publish(teaching_http, author_draft):
+    author_draft()
     client = teaching_http.client
     template_id = client.post(
         f"{BASE}/templates", json={"path_id": "topic_calculus"}, headers=_auth("tina")
@@ -93,10 +93,10 @@ def test_other_teachers_get_404_and_admins_do_not_publish(teaching_http, teacher
     assert "Only the author of this path" in denied.json()["detail"]
 
 
-def test_blocked_publish_reports_issues(teaching_http, teacher_draft, quiet_change_model):
+def test_blocked_publish_reports_issues(teaching_http, author_draft, quiet_change_model):
     from deeptutor.learning.models import TopicSource, TopicSourceKind
 
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(id="s0", kind=TopicSourceKind.CHAT, source_id="c1", label="A chat", position=0),
         )

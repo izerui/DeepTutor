@@ -1,6 +1,6 @@
-"""Teacher mastery paths: templates, published revisions and assignments.
+"""Author mastery paths: templates, published revisions and assignments.
 
-The outline a teacher publishes lives in a system-level database; every
-student's learning state stays in that student's own workspace store, created
-lazily from the student's own requests (see :mod:`deeptutor.teaching.instances`).
+The outline an author publishes lives in a system-level database; every
+learner's learning state stays in that learner's own workspace store, created
+lazily from the learner's own requests (see :mod:`deeptutor.teaching.instances`).
 """

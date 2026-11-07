@@ -1,6 +1,6 @@
 /**
  * Rule R1: an owner may always make a knowledge base or book private, or
- * delete it. When published teacher paths cite it, the server first answers
+ * delete it. When published author paths cite it, the server first answers
  * 409 `referenced_by_teacher_paths` with aggregate counts only; the client
  * shows them and repeats the request with `confirm: true`.
  */
@@ -66,7 +66,7 @@ export class WithdrawalConfirmationError extends Error {
   }
 }
 
-/** The confirmation question, in counts only (never whose paths or students). */
+/** The confirmation question, in counts only (never whose paths or learners). */
 export function describeWithdrawalImpact(impact: WithdrawalImpact, t: Translate): string {
   return [
     t("{{count}} published paths use this material", { count: impact.affectedPaths }),
@@ -76,7 +76,7 @@ export function describeWithdrawalImpact(impact: WithdrawalImpact, t: Translate)
 }
 
 /**
- * Run a withdrawal (make private / delete); when published teacher paths need
+ * Run a withdrawal (make private / delete); when published author paths need
  * consent, ask with the counts and, if accepted, run it again confirming those
  * counts. If they changed meanwhile the server answers with fresh counts,
  * which are asked about again (a few times at most). Other errors propagate.

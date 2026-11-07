@@ -27,7 +27,7 @@ export interface MasteryTopicEventMessage {
 export interface MasterySocketErrorMessage {
   type: "error";
   content: string;
-  /** Stable reason, e.g. `teacher_path_unavailable` for a closed teacher path. */
+  /** Stable reason, e.g. `teacher_path_unavailable` for a closed author path. */
   code?: string;
   path_id?: string;
 }
@@ -101,7 +101,7 @@ export interface MasteryTopicSocketHandlers {
   onDisconnect?: () => void;
   onError?: (message: string) => void;
   /**
-   * The teacher path was revoked or archived: the server ended this
+   * The author path was revoked or archived: the server ended this
    * subscription for good (the same closed state REST reports with 403).
    */
   onUnavailable?: () => void;

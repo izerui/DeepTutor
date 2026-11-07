@@ -1,4 +1,4 @@
-"""Students get their own copy of a teacher path, created from their own requests."""
+"""Learners get their own copy of an author path, created from their own requests."""
 
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ def _set_mastery(as_account, name: str, path_id: str, level: float) -> str:
     return point
 
 
-def test_each_student_gets_an_independent_instance(
-    as_account, teacher_draft, publish_template, teaching_users
+def test_each_learner_gets_an_independent_instance(
+    as_account, author_draft, publish_template, teaching_users
 ):
-    teacher_draft()
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
+    author_draft()
+    template_id = publish_template(learners=("sara", "sam"))["template"]["id"]
 
     sara_topics = _topics(as_account, "sara")
     assert len(sara_topics) == 1
@@ -70,7 +70,7 @@ def test_listing_again_reuses_the_instance(sara_instance, as_account):
         assert LearningStore().load(sara_instance.path_id).version == before
 
 
-def test_the_teachers_own_listing_creates_nothing(sara_instance, as_account):
+def test_the_authors_own_listing_creates_nothing(sara_instance, as_account):
     topics = _topics(as_account, "tina")
     assert [t["path_id"] for t in topics] == ["topic_calculus"]
     assert topics[0]["origin"] is None
@@ -116,7 +116,7 @@ def test_archiving_closes_the_path(sara_instance, as_account):
             )
 
 
-def test_get_topic_describes_the_teacher(sara_instance, as_account):
+def test_get_topic_describes_the_author(sara_instance, as_account):
     with as_account("sara"):
         payload = asyncio.run(mastery_path.get_topic(sara_instance.path_id))
     assert payload["origin"]["teacher_name"] == "tina"
@@ -130,17 +130,17 @@ def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
 
-def _personal_path(teacher_draft, name: str, path_id: str) -> str:
-    return teacher_draft(name, path_id=path_id)
+def _personal_path(author_draft, name: str, path_id: str) -> str:
+    return author_draft(name, path_id=path_id)
 
 
 def test_personal_paths_never_open_the_teaching_store(
-    as_account, teacher_draft, monkeypatch
+    as_account, author_draft, monkeypatch
 ):
     from deeptutor.learning import navigation
     from deeptutor.learning.service import LearningService
 
-    _personal_path(teacher_draft, "sara", "topic_own")
+    _personal_path(author_draft, "sara", "topic_own")
 
     def _refuse(*_args, **_kwargs):
         raise AssertionError("TeachingStore was opened for a path without an origin")
@@ -170,12 +170,12 @@ def test_personal_paths_never_open_the_teaching_store(
 
 
 def test_legacy_progress_list_and_every_path_route_close_a_revoked_instance(
-    sara_instance, teaching_http, teacher_draft, teaching_users, as_account
+    sara_instance, teaching_http, author_draft, teaching_users, as_account
 ):
     from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE
 
     client = teaching_http.client
-    _personal_path(teacher_draft, "sara", "topic_own")
+    _personal_path(author_draft, "sara", "topic_own")
     path_id = sara_instance.path_id
 
     listed = client.get("/api/mastery-paths/progress", headers=_auth("sara")).json()
@@ -211,7 +211,7 @@ def test_legacy_progress_list_and_every_path_route_close_a_revoked_instance(
             "message": INSTANCE_UNAVAILABLE,
         }, url
 
-    # Revoking retains the student's copy; the personal path stays open.
+    # Revoking retains the learner's copy; the personal path stays open.
     with as_account("sara"):
         assert LearningStore().exists(path_id)
     assert client.get("/api/mastery-paths/topics/topic_own", headers=_auth("sara")).status_code == 200
@@ -289,13 +289,13 @@ def test_websocket_subscription_refuses_a_closed_instance(
 
 
 def test_other_content_workspaces_neither_create_nor_list_instances(
-    as_account, teacher_draft, publish_template
+    as_account, author_draft, publish_template
 ):
     from deeptutor.services.workspace import get_content_workspace_service
     from deeptutor.services.workspace.context import workspace_context
 
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         workspace_id = get_content_workspace_service().create_workspace("Physics")["workspace_id"]
         with workspace_context(workspace_id):
@@ -339,12 +339,12 @@ def test_applied_revision_survives_new_revisions_and_reassignment(
 
 
 def test_an_unrecorded_copy_is_recorded_at_its_own_revision(
-    as_account, teacher_draft, publish_template, teaching_users
+    as_account, author_draft, publish_template, teaching_users
 ):
     from deeptutor.teaching.instances import instance_path_id, materialize_instance
 
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     teaching = TeachingStore()
     template = teaching.get_template(template_id)
     revision = teaching.get_revision(template_id, 1)
@@ -364,11 +364,11 @@ def test_an_unrecorded_copy_is_recorded_at_its_own_revision(
 
 
 def test_a_personal_path_under_the_instance_id_is_never_adopted(
-    as_account, teacher_draft, publish_template, teaching_users
+    as_account, author_draft, publish_template, teaching_users
 ):
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
-    _personal_path(teacher_draft, "sara", f"assigned_{template_id}")
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
+    _personal_path(author_draft, "sara", f"assigned_{template_id}")
 
     topics = _topics(as_account, "sara")
     assert [(t["path_id"], t["origin"]) for t in topics] == [(f"assigned_{template_id}", None)]
@@ -376,11 +376,11 @@ def test_a_personal_path_under_the_instance_id_is_never_adopted(
     assert (assignment.instance_path_id, assignment.applied_revision) == ("", 0)
 
 
-def test_two_copies_with_shared_source_ids_coexist(as_account, teacher_draft, publish_template):
+def test_two_copies_with_shared_source_ids_coexist(as_account, author_draft, publish_template):
     from deeptutor.learning.models import TopicSource, TopicSourceKind
     from deeptutor.teaching.instances import materialize_instance
 
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     teaching = TeachingStore()
     template = teaching.get_template(template_id)
@@ -457,7 +457,7 @@ def test_objectives_citing_materials_stay_teachable_in_the_copy(
             metadata=TopicMetadata(path_id="topic_calculus", goal="Differentiate"),
             sources=sources,
         )
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     path_id = _topics(as_account, "sara")[0]["path_id"]
 
     resolved = SimpleNamespace(base_dir="/nonexistent", name="library")
@@ -476,18 +476,18 @@ def test_objectives_citing_materials_stay_teachable_in_the_copy(
         for kp_id in points:
             assert lesson_evidence.selected_scope(topic, progress, kp_id) == {}
 
-    # The template's own revision keeps the teacher's ids untouched.
+    # The template's own revision keeps the author's ids untouched.
     revision = TeachingStore().get_revision(template_id, 1)
     assert [s.id for s in revision.sources.sources] == ["f0", "k0"]
     assert revision.outline.modules[0].knowledge_points[1].topic_source_ids == ["f0", "k0"]
 
 
-def test_a_student_path_squatting_the_instance_id_is_logged(
-    as_account, teacher_draft, publish_template, caplog
+def test_a_learner_path_squatting_the_instance_id_is_logged(
+    as_account, author_draft, publish_template, caplog
 ):
-    teacher_draft()
-    template_id = publish_template(students=("sara",))["template"]["id"]
-    _personal_path(teacher_draft, "sara", f"assigned_{template_id}")
+    author_draft()
+    template_id = publish_template(learners=("sara",))["template"]["id"]
+    _personal_path(author_draft, "sara", f"assigned_{template_id}")
 
     with caplog.at_level("WARNING", logger="deeptutor.teaching.instances"):
         _topics(as_account, "sara")

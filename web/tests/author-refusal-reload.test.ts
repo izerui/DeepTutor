@@ -1,5 +1,5 @@
 /**
- * B2-16: teacher-path refusal reasons must survive a page reload.
+ * B2-16: author-path refusal reasons must survive a page reload.
  *
  * Behavioural tests: call annotateFailureCode, simulate reload via
  * readFailedSubmissions, verify the code + material names survive and

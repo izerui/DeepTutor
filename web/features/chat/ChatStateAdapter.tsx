@@ -343,7 +343,7 @@ export interface MessageItem {
   failedSubmissionNeedsReview?: boolean;
   failedSubmissionNotSaved?: boolean;
   failedSubmissionId?: string;
-  /** Stable teacher-path failure code preserved across reloads (B2-16). */
+  /** Stable author-path failure code preserved across reloads (B2-16). */
   failureCode?: string;
   /** Extra structured data from the refusal event (material names, etc.). */
   failureDetails?: Record<string, unknown>;
@@ -2261,7 +2261,7 @@ export function ChatStateAdapterProvider({
         // user row. Other terminal errors are not causal proof that the user
         // row was persisted either; transcript reconciliation uses the
         // client_submission_id stored on that row.
-        // B2-16: when the turn was refused by a teacher-path gate (e.g.
+        // B2-16: when the turn was refused by an author-path gate (e.g.
         // materials forced private), annotate the local-storage record with
         // the stable failure code so the localized reason survives a reload.
         const pendingSub = pendingSubmissionIdsRef.current.get(effectiveKey);

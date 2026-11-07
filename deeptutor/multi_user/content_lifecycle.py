@@ -16,7 +16,7 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def _end_student_assignments(user_id: str) -> None:
+def _end_learner_assignments(user_id: str) -> None:
     """A former learner keeps their records but no author's path stays open to them by name."""
     from deeptutor.teaching import service as teaching_service
 
@@ -24,7 +24,7 @@ def _end_student_assignments(user_id: str) -> None:
         user_id, successor_id="", stages=("student_assignments", "path_materials"),
     )
     if failed:
-        logger.warning("Could not close every teacher path of %s: %s", user_id, failed)
+        logger.warning("Could not close every author path of %s: %s", user_id, failed)
 
 
 def after_role_change(user_id: str, old_role: str, new_role: str) -> None:
@@ -36,10 +36,10 @@ def after_role_change(user_id: str, old_role: str, new_role: str) -> None:
     if (old_role == "admin") == (new_role == "admin"):
         return
     if new_role == "admin":
-        _end_student_assignments(user_id)
-    from deeptutor.publishing.scope import reconcile_student_quietly
+        _end_learner_assignments(user_id)
+    from deeptutor.publishing.scope import reconcile_learner_quietly
 
-    reconcile_student_quietly(user_id)
+    reconcile_learner_quietly(user_id)
 
 
 def forget_publish_targets(user_id: str) -> None:

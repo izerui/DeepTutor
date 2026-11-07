@@ -112,7 +112,7 @@ class MasteryTopicEventHub:
     def publish_to_path(self, path_id: str, reason: str) -> None:
         """Wake every subscription to *path_id*, whichever workspace holds it.
 
-        A teacher path's copies share one id across students' stores. The
+        An author path's copies share one id across learners' stores. The
         teaching side does not know (and must not open) those stores, so a
         change of access wakes all of them; each socket then re-checks its
         own reader's access. Revision 0 never advances anyone's cursor.

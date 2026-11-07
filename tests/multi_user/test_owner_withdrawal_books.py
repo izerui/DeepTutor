@@ -1,6 +1,6 @@
 """Rule R1 (B2-19) for books: the owner may always make private or delete a book.
 
-Other accounts' references are revoked; published teacher paths need one
+Other accounts' references are revoked; published author paths need one
 explicit confirmation, answered first with a counts-only 409.
 """
 
@@ -20,9 +20,9 @@ def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
 
-def _assert_counts_only(detail, teaching_users, template_id: str, *, paths: int, students: int):
+def _assert_counts_only(detail, teaching_users, template_id: str, *, paths: int, learners: int):
     assert detail["code"] == CODE and detail["requires_confirmation"] is True
-    assert (detail["affected_paths"], detail["affected_students"]) == (paths, students)
+    assert (detail["affected_paths"], detail["affected_students"]) == (paths, learners)
     text = json.dumps(detail)
     ids = [teaching_users[name]["id"] for name in ("tina", "sara", "sam")]
     for foreign in [*ids, "tina", "sara", "sam", template_id]:
@@ -63,9 +63,9 @@ def toms_book(teaching_users, as_account):
 
 
 @pytest.fixture
-def book_cited_by_tinas_path(toms_book, teacher_draft, publish_template):
-    teacher_draft(sources=(_book_source(toms_book.book_id, "Optics"),))
-    result = publish_template(students=("sara", "sam"))
+def book_cited_by_tinas_path(toms_book, author_draft, publish_template):
+    author_draft(sources=(_book_source(toms_book.book_id, "Optics"),))
+    result = publish_template(learners=("sara", "sam"))
     assert result["warnings"] == []
     assert book_registry.list_referenced_books("mastery_template", result["template"]["id"])
     return result["template"]["id"]
@@ -83,14 +83,14 @@ def test_book_course_references_do_not_block_the_owner(toms_book, teaching_http,
     assert revoked.reason == "made_private"
 
 
-def test_withdrawing_a_book_cited_by_a_teacher_path_needs_confirmation(
+def test_withdrawing_a_book_cited_by_a_author_path_needs_confirmation(
     book_cited_by_tinas_path, teaching_http, teaching_users
 ):
     template_id = book_cited_by_tinas_path
     client = teaching_http.client
     first = client.put("/api/books/bk_tom/visibility", json={"visibility": "private"}, headers=_auth("tom"))
     assert first.status_code == 409
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert book_registry.get_book("bk_tom").visibility == "public"
 
     second = client.put(
@@ -103,14 +103,14 @@ def test_withdrawing_a_book_cited_by_a_teacher_path_needs_confirmation(
     assert _materials_unavailable(teaching_http, template_id) == ["Optics"]
 
 
-def test_deleting_a_book_cited_by_a_teacher_path_needs_confirmation(
+def test_deleting_a_book_cited_by_a_author_path_needs_confirmation(
     book_cited_by_tinas_path, teaching_http, teaching_users
 ):
     template_id = book_cited_by_tinas_path
     client = teaching_http.client
     first = client.delete("/api/books/bk_tom", headers=_auth("tom"))
     assert first.status_code == 409
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert book_registry.get_book("bk_tom") is not None
 
     second = client.delete("/api/books/bk_tom?confirm=true", headers=_auth("tom"))

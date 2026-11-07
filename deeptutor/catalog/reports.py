@@ -1,7 +1,7 @@
 """Learning reports of a course or a Mastery Path (platform batch 3 §1).
 
 The class report's numbers, for the people who joined the item instead of a
-class's students. The item's author reads it, and so do administrators
+class's learners. The item's author reads it, and so do administrators
 (spec 2026-11-05 §2); both only read — nothing here changes a learner's data.
 """
 
@@ -157,7 +157,7 @@ class LearnerReportService(LearnerData):
         rows = []
         outlines = {template_id: _revision_points(template_id) for template_id in paths}
         for user_id in learners:
-            report = self._student_report(user_id, paths, detail=False, days=days)
+            report = self._learner_report(user_id, paths, detail=False, days=days)
             seen = {p["template_id"] for p in report["teacher_paths"]}
             for template_id, title in paths.items():
                 if template_id not in seen:
@@ -259,7 +259,7 @@ class LearnerReportService(LearnerData):
         if user_id not in self._learners(kind, item_id, info.owner):
             raise ListingNotFound("This person has not joined it.")
         paths, sets, task_ids = self._scope_of(kind, item_id)
-        report = self._student_report(user_id, paths, detail=True)
+        report = self._learner_report(user_id, paths, detail=True)
         return {
             "id": user_id,
             "username": (_accounts().get(user_id) or {}).get("username") or user_id,

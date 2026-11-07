@@ -1,4 +1,4 @@
-"""A path whose outline belongs to a teacher says so, and says it cheaply."""
+"""A path whose outline belongs to an author says so, and says it cheaply."""
 
 from __future__ import annotations
 

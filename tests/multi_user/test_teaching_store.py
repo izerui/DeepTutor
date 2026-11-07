@@ -1,4 +1,4 @@
-"""System-level persistence for teacher mastery templates."""
+"""System-level persistence for author mastery templates."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def test_reads_on_missing_db_return_empty_without_creating_file(tmp_path):
     assert s.revisions_between("tpl_missing", after=0, upto=5) == []
     assert s.get_assignment("tpl_missing", "u") is None
     assert s.list_assignments("tpl_missing") == []
-    assert s.assignments_for_student("u") == []
+    assert s.assignments_for_learner("u") == []
     assert s.has_assignments("tpl_missing") is False
     assert s.count_active("tpl_missing") == 0
 
@@ -180,7 +180,7 @@ def test_assign_revoke_and_reassign_keep_the_instance(store):
     assert again.status == "active"
     assert again.revoked_at is None
     assert (again.instance_path_id, again.applied_revision) == ("assigned_x", 1)
-    assert [a.template_id for a in store.assignments_for_student("u_sara")] == [template.id]
+    assert [a.template_id for a in store.assignments_for_learner("u_sara")] == [template.id]
     assert store.has_assignments(template.id) is True
 
 
@@ -189,7 +189,7 @@ def test_revoking_an_unknown_assignment_returns_none(store):
     assert store.revoke(template.id, "u_nobody") is None
 
 
-def test_transfer_owner_and_student_cleanup(store):
+def test_transfer_owner_and_learner_cleanup(store):
     template = _template(store)
     store.assign(template.id, ["u_sara"], assigned_by="u_tina")
 
@@ -198,7 +198,7 @@ def test_transfer_owner_and_student_cleanup(store):
     assert moved.owner_user_id == "u_adam"
     assert moved.draft_path_id == ""
 
-    assert store.revoke_all_for_student("u_sara") == 1
+    assert store.revoke_all_for_learner("u_sara") == 1
     assert store.get_assignment(template.id, "u_sara").status == "revoked"
 
 

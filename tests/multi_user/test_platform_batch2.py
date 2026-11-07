@@ -114,16 +114,16 @@ def test_tasks_go_out_with_courses_only(as_account):
 
 
 def test_joined_sets_and_paths_are_not_tasks(as_account, deliver):
-    from deeptutor.tasks.service import StudentTasks
+    from deeptutor.tasks.service import LearnerTasks
 
     set_id = _published_set(as_account)
     deliver("practice_set", set_id, "sara")
     with as_account("sara"):
-        assert StudentTasks().assigned() == []
+        assert LearnerTasks().assigned() == []
     assert _assigned_sets(as_account, "sara") == [set_id]  # still in her practice sets
 
 
-# ── teachers and administrators join (§6) ──────────────────
+# ── authors and administrators join (§6) ──────────────────
 
 
 def _listed_set(as_account):
@@ -143,7 +143,7 @@ def _listed_set(as_account):
     return created["id"]
 
 
-def test_a_teacher_joins_answers_and_shows_in_the_results(as_account, teaching_users):
+def test_a_author_joins_answers_and_shows_in_the_results(as_account, teaching_users):
     from deeptutor.catalog.enrollment import join
     from deeptutor.multi_user.context import get_current_user
     from deeptutor.practice_sets.service import PracticeSetService
@@ -160,7 +160,7 @@ def test_a_teacher_joins_answers_and_shows_in_the_results(as_account, teaching_u
     assert tom["attempts"] == 1
 
 
-def test_a_teacher_joins_a_path_and_gets_a_copy(as_account, teaching_users, teacher_draft, quiet_change_model):
+def test_a_author_joins_a_path_and_gets_a_copy(as_account, teaching_users, author_draft, quiet_change_model):
     from deeptutor.api.routers import mastery_path
     from deeptutor.catalog.enrollment import join
     from deeptutor.catalog.listings import ListingService
@@ -169,7 +169,7 @@ def test_a_teacher_joins_a_path_and_gets_a_copy(as_account, teaching_users, teac
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")

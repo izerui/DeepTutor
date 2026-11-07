@@ -17,7 +17,7 @@ const resources: MultiUserResources = {
   tools: [{ name: "reason" }], mcp_tools: [],
 };
 const stored: GrantPayload = {
-  version: 2, user_id: "student", models: { llm: [] },
+  version: 2, user_id: "learner", models: { llm: [] },
   knowledge_bases: [{ resource_id: "old", name: "Retired KB", custom: { preserve: [1, "two"] } }],
   skills: [], partners: [], enabled_tools: null, mcp_tools: null, exec_enabled: null,
   ai_daily_tokens: null,
@@ -27,7 +27,7 @@ it("saves other assignments and the daily AI limit without altering stored KB gr
   vi.mocked(fetchAdminResources).mockResolvedValue(resources);
   vi.mocked(fetchUserGrant).mockResolvedValue(structuredClone(stored));
   vi.mocked(saveUserGrant).mockImplementation(async (_id, grant) => grant);
-  render(<GrantEditor userId="student" />);
+  render(<GrantEditor userId="learner" />);
   await screen.findByRole("heading", { name: "Daily AI limit" });
   // Spec 2026-11-05: no feature switches are offered any more.
   expect(screen.queryByRole("combobox", { name: "Create their own knowledge bases" })).not.toBeInTheDocument();

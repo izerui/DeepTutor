@@ -14,7 +14,7 @@ the file out of the sandbox is what makes the reference-based secret handling in
 :mod:`deeptutor.services.mcp.secrets` mean anything.
 
 **Remote transports only.** A ``stdio`` server is a command executed on the host
-as the application user; no permission flag makes that safe to hand a student on
+as the application user; no permission flag makes that safe to hand a learner on
 a shared deployment. Entries that ask for it are rejected on read and reported,
 so a config edited by hand cannot smuggle one in either.
 

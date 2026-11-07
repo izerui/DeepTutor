@@ -13,8 +13,8 @@ bar a MEMORY / PROCEDURE objective must reach:
 CONCEPT / DESIGN objectives keep their qualitative pass, but the standard
 sets what the AI judge asks of an explanation (2026-11-03): see
 :func:`explanation_expectation`.
-A learner sets the standard of their own path; a student's copy of a teacher
-path takes the teacher's, published with the revision, and cannot change it.
+A learner sets the standard of their own path; a learner's copy of an author
+path takes the author's, published with the revision, and cannot change it.
 """
 
 from __future__ import annotations

@@ -24,7 +24,7 @@ def _files_url(ref: str, rel_path: str) -> str:
 
 @pytest.fixture
 def open_path_with_kb(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template,
+    teaching_users, as_account, make_kb, author_draft, publish_template,
     quiet_change_model,
 ):
     """Tina publishes a path with one KB, assigned to Sara — path stays open."""
@@ -41,7 +41,7 @@ def open_path_with_kb(
             root, "cross-kb", created_by=teaching_users["tina"]["id"]
         )
 
-    teacher_draft(
+    author_draft(
         path_id="topic_cross",
         sources=(
             TopicSource(
@@ -55,7 +55,7 @@ def open_path_with_kb(
     )
     result = publish_template(
         path_id="topic_cross",
-        students=("sara",),
+        learners=("sara",),
         kb_choices={rec.kb_id: "reference_only"},
     )
     return {

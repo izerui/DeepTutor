@@ -1,8 +1,8 @@
-"""Turn a teacher's draft path into an immutable, shareable snapshot.
+"""Turn an author's draft path into an immutable, shareable snapshot.
 
 Only the curriculum travels: modules, knowledge points (with stable ids),
-prerequisites, pass thresholds and the sources students may read. Nothing the
-teacher produced while trialling the path — mastery, answers, reviews — is
+prerequisites, pass thresholds and the sources learners may read. Nothing the
+author produced while trialling the path — mastery, answers, reviews — is
 part of a snapshot, because :class:`TemplateOutline` has no field for it.
 
 Planning is read-only. Registering missing document ids is a separate step
@@ -40,7 +40,7 @@ from deeptutor.teaching.models import (
     TemplateSources,
 )
 
-#: Sources that live only in the teacher's own account (spec 5.1, 7.4).
+#: Sources that live only in the author's own account (spec 5.1, 7.4).
 PERSONAL_KINDS = frozenset(
     {
         TopicSourceKind.NOTEBOOK,
@@ -66,7 +66,7 @@ class SourceIssue:
 
 @dataclass(frozen=True)
 class PrivateChoice:
-    """A private KB or book of the teacher: make public, or share by reference."""
+    """A private KB or book of the author: make public, or share by reference."""
 
     key: str
     name: str
@@ -283,7 +283,7 @@ def _plan_kb(
         )
         return
     rewritten = source.model_copy(deep=True)
-    # A teacher's content workspace means nothing in a student's account.
+    # An author's content workspace means nothing in a learner's account.
     rewritten.metadata.pop("content_workspace_id", None)
     if source.kind == TopicSourceKind.KNOWLEDGE_BASE:
         rewritten.source_id = record.ref

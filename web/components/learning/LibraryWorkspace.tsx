@@ -103,7 +103,7 @@ export function useLearningCreation(open: () => void) {
     </div>
   </Modal>
   // Course-created content inherits the course store so its references stay valid.
-  // Spec 2026-10-29 D4: teachers and students always save to their own space.
+  // Spec 2026-10-29 D4: non-admins always save to their own space.
   return { begin: () => query.has("course") || !isAdmin ? open() : setChoosing(true), dialog }
 }
 

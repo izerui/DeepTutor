@@ -99,7 +99,7 @@ def test_the_frontend_address_is_trusted_only_from_the_proxy():
     assert auth_router._client_address(request("127.0.0.1", "not-an-ip")) == ""
 
 
-# ── student permissions (§7) ───────────────────────────────
+# ── learner permissions (§7) ───────────────────────────────
 
 
 @pytest.fixture
@@ -197,7 +197,7 @@ def test_a_learner_over_todays_tokens_is_refused_and_administrators_never_are(as
         assert status_for_current_user()["limit"] == 0
 
 
-def test_a_teachers_grading_is_neither_refused_nor_counted(as_account):
+def test_a_authors_grading_is_neither_refused_nor_counted(as_account):
     from deeptutor.services.llm.usage_limit import AiLimitReached, admit_call, exempt, status_for_current_user
 
     _limit_sara(1000)
@@ -321,7 +321,7 @@ def test_the_author_sees_subjective_text_and_picked_options_but_not_blanks(as_ac
         assert PracticeReview().attempt(set_id, result["submission_id"])["questions"] == attempt["questions"]
 
 
-def test_option_counts_use_each_students_first_attempt(as_account):
+def test_option_counts_use_each_learners_first_attempt(as_account):
     from deeptutor.practice_sets.service import PracticeSetService
 
     set_id = _published_set(as_account)
@@ -346,8 +346,8 @@ def test_attempts_run_out_and_the_first_one_can_be_what_counts(as_account):
     with pytest.raises(PracticeConflict):
         _answer(as_account, "sara", set_id, choice="B")
     with as_account("tina"):
-        student = _row(PracticeSetService().report(set_id), "sara")
-        assert (student["attempts"], student["score"], student["best_score"]) == (2, 1.0, 2.0)
+        learner = _row(PracticeSetService().report(set_id), "sara")
+        assert (learner["attempts"], learner["score"], learner["best_score"]) == (2, 1.0, 2.0)
         PracticeSetService().update(set_id, attempts_limit=None)  # lifting it lets them answer again
     _answer(as_account, "sara", set_id, choice="B")
 
@@ -369,12 +369,12 @@ def test_the_results_export_as_csv(as_account):
     assert sam[2] == "0"
 
 
-def test_a_deleted_students_answers_go(as_account, teaching_users):
+def test_a_deleted_learners_answers_go(as_account, teaching_users):
     from deeptutor.practice_sets import review, store
 
     set_id = _published_set(as_account)
     _answer(as_account, "sara", set_id)
-    assert review.forget_student_answers(teaching_users["sara"]["id"]) == 1
+    assert review.forget_learner_answers(teaching_users["sara"]["id"]) == 1
     with store.read() as conn:
         assert {r[0] for r in conn.execute("SELECT answers_json FROM practice_submissions")} == {"{}"}
 
@@ -432,10 +432,10 @@ def test_book_questions_use_only_the_chosen_chapters_and_readable_books(as_accou
     assert questions[0]["question"] == "Q?"
 
 
-# ── remedial practice (§3.2; a teacher's remedial sets went, spec 2026-11-05) ──
+# ── remedial practice (§3.2; an author's remedial sets went, spec 2026-11-05) ──
 
 
-def test_a_student_gets_similar_questions_in_their_own_bank_not_as_mistakes(as_account, monkeypatch):
+def test_a_learner_gets_similar_questions_in_their_own_bank_not_as_mistakes(as_account, monkeypatch):
     import asyncio
 
     from deeptutor.services.practice import remedial
@@ -492,7 +492,7 @@ def test_the_workbench_lists_what_was_sent(as_account, teaching_users):
     # No "learners who need attention" (spec 2026-11-05 remove-teacher-management §1.3).
     assert set(board) == {"role", "sent"}
     with as_account("adam"):
-        assert workbench() == {"role": "admin"}  # administrators see no students
+        assert workbench() == {"role": "admin"}  # administrators see no learners
 
 
 def test_answers_the_ai_could_not_grade_are_graded_when_the_set_is_opened_again(as_account, monkeypatch):

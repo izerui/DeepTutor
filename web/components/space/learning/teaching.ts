@@ -59,7 +59,7 @@ export function defaultKpDecisions(items: ChangeSuggestion[]): Record<string, Kp
 }
 
 /**
- * A fresh check keeps what the teacher already chose for every key that still
+ * A fresh check keeps what the author already chose for every key that still
  * exists; only new keys take the server default, and vanished keys drop out.
  */
 export function keepChoices<T>(
@@ -108,7 +108,7 @@ export function canSubmitPublish(
 
 export { withMasteryTemplate } from "@/lib/mastery-template-scope";
 
-// ---- presentation helpers for the teacher dialogs ---------------------------
+// ---- presentation helpers for the author dialogs ---------------------------
 
 /** A catalog key plus its interpolation values; the dialogs call `t(key, values)`. */
 export interface Message {
@@ -186,7 +186,7 @@ export function publishBlocked(error: unknown): PublishBlockedDetail | null {
 }
 
 /**
- * Teacher-route failures other than PublishBlocked, localized by HTTP status.
+ * Author-route failures other than PublishBlocked, localized by HTTP status.
  * These answers carry English sentences only, so the status is what decides.
  */
 export function teachingErrorMessage(
@@ -229,8 +229,8 @@ export function unpublishableReason(template: AuthorTemplate): Message {
 }
 
 /**
- * Live templates without a card of their own on the atlas: another teacher's
- * (seen by an admin), a deleted teacher's transferred path, or one whose
+ * Live templates without a card of their own on the atlas: another author's
+ * (seen by an admin), a deleted author's transferred path, or one whose
  * draft is gone. They are managed from a list instead of a card.
  */
 export function unlistedTemplates(

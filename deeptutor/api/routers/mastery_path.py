@@ -53,9 +53,9 @@ def _check_instance_access(path_id: str) -> None:
     )
 
     store = LearningStore()
-    # B3-P16: a direct link to a teacher path must not depend on the list
+    # B3-P16: a direct link to an author path must not depend on the list
     # having been read first. The same sync the list runs creates only copies
-    # of open assignments (students, default workspace); a closed or missing
+    # of open assignments (learners, default workspace); a closed or missing
     # assignment still has no copy and answers 404 as before.
     if path_id.startswith(instance_path_id("")) and not store.exists(path_id):
         sync_assigned_instances(store)
@@ -63,7 +63,7 @@ def _check_instance_access(path_id: str) -> None:
 
 
 async def require_instance_access(request: Request) -> None:
-    """A revoked or archived teacher path is closed on every route that names it.
+    """A revoked or archived author path is closed on every route that names it.
 
     Installed on the whole router: any ``{path_id}`` / ``{book_id}`` route sees
     it. Ordinary paths pay one indexed JSON read and never touch the system
@@ -79,7 +79,7 @@ async def require_instance_access(request: Request) -> None:
         await asyncio.to_thread(_check_instance_access, path_id)
     except InstanceUnavailableError as exc:
         # The code is what clients branch on (the same one a live subscription
-        # ends with); any other 403 on a teacher path carries no code.
+        # ends with); any other 403 on an author path carries no code.
         raise HTTPException(
             status_code=403,
             detail={"code": INSTANCE_UNAVAILABLE_CODE, "message": str(exc)},
@@ -91,7 +91,7 @@ ws_router = APIRouter()
 
 
 async def require_outline_mutable(request: Request) -> None:
-    """Refuse every outline change on a path whose outline is a teacher's."""
+    """Refuse every outline change on a path whose outline is an author's."""
     path_id = str(request.path_params.get("path_id") or request.path_params.get("book_id") or "")
     _validate_book_id(path_id)
     from deeptutor.teaching.instances import OutlineLockedError, ensure_outline_mutable
@@ -110,7 +110,7 @@ _OUTLINE_WRITE = [Depends(require_outline_mutable)]
 #: deleted topic changes everything.
 _SCREEN_ONLY_SIGNALS = frozenset({"session.bound", "session.released", "topic.deleted"})
 
-#: How often a live subscription to a teacher path's copy re-checks access
+#: How often a live subscription to an author path's copy re-checks access
 #: when no signal arrives. Revoke/archive wake this process's sockets at once;
 #: this bounds how long a socket served by another worker process (the wake-up
 #: hub is per process) keeps a closed course open. Ordinary paths never poll.
@@ -496,7 +496,7 @@ def _topic_payload_from_snapshot(
             else None
         ),
         # Who owns this path's outline. Null for every path the learner built;
-        # the list and topic routes enrich it with the teacher's name.
+        # the list and topic routes enrich it with the author's name.
         "origin": (
             progress.origin.model_dump(mode="json") if progress.origin is not None else None
         ),
@@ -532,7 +532,7 @@ async def list_topics():
 
     def read() -> list[dict]:
         store = LearningStore()
-        # A student's teacher paths are created here, from the student's own
+        # A learner's author paths are created here, from the learner's own
         # request, the first time their list is read.
         sync_assigned_instances(store)
         snapshots = store.list_topic_snapshots(status="active")
@@ -541,7 +541,7 @@ async def list_topics():
         for snapshot in snapshots:
             progress = snapshot[0]
             if progress.origin is not None and progress.book_id not in origins:
-                continue  # revoked or archived: no longer the student's to open
+                continue  # revoked or archived: no longer the learner's to open
             payload = _topic_payload_from_snapshot(*snapshot)
             if progress.book_id in origins:
                 payload["origin"] = origins[progress.book_id]
@@ -708,14 +708,14 @@ async def get_topic(path_id: str):
 
     def read() -> dict:
         store = LearningStore()
-        # Opening a teacher path is a study start: a newer revision is applied
+        # Opening an author path is a study start: a newer revision is applied
         # here unless a question is open or a tutoring turn is running.
         apply_pending_revision(path_id, store, respect_lease=True)
         payload = _topic_payload(store, path_id)
         described, unavailable = describe_instance_materials(path_id, store)
         if described is not None:
             payload["origin"] = described
-            # A teacher path's withdrawn materials show as unavailable in this
+            # An author path's withdrawn materials show as unavailable in this
             # response only; the copy's stored sources are not rewritten.
             for source in payload["sources"]:
                 if source.get("id") in unavailable:
@@ -727,7 +727,7 @@ async def get_topic(path_id: str):
 
 @router.post("/topics/{path_id}/teacher-update/ack")
 async def acknowledge_teacher_update(path_id: str):
-    """Hide the one-time "your teacher updated this course" notice."""
+    """Hide the one-time "the author updated this course" notice."""
     _validate_book_id(path_id)
     from deeptutor.teaching.instances import acknowledge_update
 
@@ -780,7 +780,7 @@ async def update_review_settings(path_id: str, body: ReviewSettingsRequest):
 
 @router.put("/topics/{path_id}/pass-standard", dependencies=_OUTLINE_WRITE)
 async def update_pass_standard(path_id: str, body: PassStandardRequest):
-    """The learner's own path only: a teacher path's copy keeps the teacher's standard."""
+    """The learner's own path only: an author path's copy keeps the author's standard."""
     async with _exclusive_path_mutation(path_id):
         store = LearningStore()
 
@@ -962,7 +962,7 @@ def _authorized_tail(
 ) -> tuple[bool, list]:
     """Whether the reader may still follow *path_id*, and its events after *cursor*.
 
-    One worker-thread hop per coalesced signal. A teacher path's copy is
+    One worker-thread hop per coalesced signal. An author path's copy is
     re-authorized before anything of it is read, so an event committed after
     a revoke or archive is never forwarded; an ordinary path skips the check.
     """
@@ -1013,7 +1013,7 @@ async def mastery_topic_websocket(ws: WebSocket) -> None:
             forward_task = None
 
     async def end_closed(path_id: str) -> None:
-        """Terminal message of a subscription whose teacher path closed."""
+        """Terminal message of a subscription whose author path closed."""
         from deeptutor.teaching.instances import INSTANCE_UNAVAILABLE, INSTANCE_UNAVAILABLE_CODE
 
         await send(

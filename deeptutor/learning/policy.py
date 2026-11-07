@@ -186,14 +186,14 @@ def objective_status(progress: LearningProgress, kp: KnowledgePoint) -> str:
     return "learning" if seen else "new"
 
 
-#: ``QuizAttempt.void_reason`` of answers to an objective a teacher redefined.
+#: ``QuizAttempt.void_reason`` of answers to an objective an author redefined.
 REDEFINED_VOID_REASON = "objective_redefined"
 
 
 def needs_reassessment(progress: LearningProgress, kp: KnowledgePoint) -> bool:
     """The objective changed under the learner and has not been assessed since.
 
-    Persisted when a teacher's revision redefines the objective (spec 5.3,
+    Persisted when an author's revision redefines the objective (spec 5.3,
     R11), so it holds whatever the objective's history was — never attempted,
     assessed qualitatively, or with answers voided for other reasons. Only
     :func:`clear_reassessment` (a new assessment) removes it. It is shown next

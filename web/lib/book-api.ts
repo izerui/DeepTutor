@@ -88,7 +88,7 @@ export function bookWithdrawalImpact(error: unknown): WithdrawalImpact | null {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  // R9: a book opened from a teacher path's Study page carries the path in
+  // R9: a book opened from an author path's Study page carries the path in
   // its URL; only original-content GETs honour it server-side.
   const template = currentMasteryTemplate();
   const res = await apiFetch(apiUrl(`${BASE}${path}`), {
@@ -196,7 +196,7 @@ export const bookApi = {
     body: {
       visibility: BookVisibility;
       force?: boolean;
-      /** Rule R1: proceed although published teacher paths cite the book… */
+      /** Rule R1: proceed although published author paths cite the book… */
       confirm?: boolean;
       /** …as long as these counts (the ones shown) still hold. */
       expected_paths?: number;

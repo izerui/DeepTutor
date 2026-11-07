@@ -1,7 +1,7 @@
 """Three pass standards for the scored mastery gate (local extension, 2026-10-31).
 
-A learner chooses the standard of their own path; a student's copy of a
-teacher path takes the teacher's, published with the revision, and cannot
+A learner chooses the standard of their own path; a learner's copy of a
+author path takes the author's, published with the revision, and cannot
 change it.
 """
 
@@ -64,7 +64,7 @@ def test_the_strict_expectation_is_the_wording_paths_always_had():
     assert len({explanation_expectation(s) for s in ("relaxed", "standard", "strict")}) == 3
 
 
-def test_explanations_are_judged_by_the_paths_standard(teacher_draft, as_account, monkeypatch):
+def test_explanations_are_judged_by_the_paths_standard(author_draft, as_account, monkeypatch):
     """2026-11-03: the path's standard sets what the AI judge asks of an explanation."""
     from deeptutor.learning import lesson_evidence, semantic_assessment
     from deeptutor.learning.pass_standard import explanation_expectation
@@ -80,7 +80,7 @@ def test_explanations_are_judged_by_the_paths_standard(teacher_draft, as_account
     monkeypatch.setattr(semantic_assessment, "judge_answers", judge)
     monkeypatch.setattr(lesson_evidence, "validate_evidence", lambda *args, **kwargs: None)
     monkeypatch.setattr(lesson_evidence, "objective_fingerprint", lambda *args, **kwargs: "fp")
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         store = LearningStore()
         kp_id = store.load("topic_calculus").modules[0].knowledge_points[0].id
@@ -99,8 +99,8 @@ def _auth(name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {name}"}
 
 
-def test_learners_set_their_own_paths_standard(teaching_http, teacher_draft, as_account):
-    teacher_draft("sara", path_id="topic_own")
+def test_learners_set_their_own_paths_standard(teaching_http, author_draft, as_account):
+    author_draft("sara", path_id="topic_own")
     client = teaching_http.client
     url = "/api/mastery-paths/topics/topic_own"
     assert client.get(url, headers=_auth("sara")).json()["pass_standard"] == "strict"
@@ -113,10 +113,10 @@ def test_learners_set_their_own_paths_standard(teaching_http, teacher_draft, as_
     assert bad.status_code == 422
 
 
-def test_students_follow_the_teachers_standard_and_cannot_change_it(
-    teaching_http, teacher_draft, publish_template, as_account
+def test_learners_follow_the_authors_standard_and_cannot_change_it(
+    teaching_http, author_draft, publish_template, as_account
 ):
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         store = LearningStore()
 
@@ -128,7 +128,7 @@ def test_students_follow_the_teachers_standard_and_cannot_change_it(
             store.mutate("topic_calculus", apply)
 
         standard("standard")
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     with as_account("sara"):
         [topic] = asyncio.run(mastery_path.list_topics())["topics"]
     path_id = topic["path_id"]
@@ -141,7 +141,7 @@ def test_students_follow_the_teachers_standard_and_cannot_change_it(
     )
     assert refused.status_code == 403
 
-    # The teacher loosens the standard; the student gets it with the update.
+    # The author loosens the standard; the learner gets it with the update.
     with as_account("tina"):
         standard("relaxed")
         from deeptutor.teaching.service import TeachingService

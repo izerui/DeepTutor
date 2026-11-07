@@ -73,7 +73,7 @@ def test_a_later_publication_keeps_an_older_named_scope(teaching_users, as_accou
 
 @pytest.mark.first_publish_rule
 def test_practice_sets_and_paths_publish_to_nobody_until_they_join(
-    teaching_users, as_account, teacher_draft, publish_template
+    teaching_users, as_account, author_draft, publish_template
 ):
     from deeptutor.teaching.store import TeachingStore
 
@@ -84,25 +84,25 @@ def test_practice_sets_and_paths_publish_to_nobody_until_they_join(
     with as_account("sara"):
         assert PracticeSetService().assigned() == []
 
-    teacher_draft("tom", path_id="topic_tom")
+    author_draft("tom", path_id="topic_tom")
     template_id = publish_template("tom", path_id="topic_tom")["template"]["id"]
     assert get_scope(MASTERY_PATH, template_id).empty
     assert [a for a in TeachingStore().list_assignments(template_id) if a.status == "active"] == []
 
 
-# ── 4. cited materials some students cannot read ───────────
+# ── 4. cited materials some learners cannot read ───────────
 
 
-def test_cited_materials_out_of_the_students_reach_are_flagged(
-    teaching_users, as_account, tmp_path, teacher_draft, publish_template
+def test_cited_materials_out_of_the_learners_reach_are_flagged(
+    teaching_users, as_account, tmp_path, author_draft, publish_template
 ):
     from deeptutor.knowledge import registry
     from deeptutor.teaching.service import TeachingService
     from deeptutor.teaching.snapshot import SourcePlan
 
-    teacher_draft()
+    author_draft()
     template = TeachingService().store.get_template(
-        publish_template(students=("sara", "sam"))["template"]["id"]
+        publish_template(learners=("sara", "sam"))["template"]["id"]
     )
     kb = _kb(teaching_users, tmp_path, "tom")
     with as_account("tom"):
@@ -133,7 +133,7 @@ def test_provenance_follows_the_publishers_live_role(teaching_users, as_account,
         assert provenance(me.id, me) == {"kind": "own", "name": ""}
         assert provenance(teaching_users["adam"]["id"], me)["kind"] == "school"
         assert provenance(LOCAL_ADMIN_ID, me)["kind"] == "school"
-        # Spec 2026-11-05: no teacher label; every other learner is its author.
+        # Spec 2026-11-05: no author label; every other learner is its author.
         assert provenance(teaching_users["tina"]["id"], me) == {"kind": "shared", "name": "tina"}
         assert provenance(stu, me) == {"kind": "shared", "name": "stu"}
     set_role("tina", "admin")
@@ -185,14 +185,14 @@ def test_admins_withdraw_and_read_but_never_edit_others_practice_sets(as_account
 
 
 def test_a_learner_made_administrator_keeps_what_they_published(
-    teaching_users, as_account, tmp_path, teacher_draft, publish_template, monkeypatch, deliver
+    teaching_users, as_account, tmp_path, author_draft, publish_template, monkeypatch, deliver
 ):
     from deeptutor.api.routers import auth as auth_router
     from deeptutor.knowledge import registry
     from deeptutor.teaching.store import TeachingStore
 
     adam, tina = teaching_users["adam"]["id"], teaching_users["tina"]["id"]
-    teacher_draft()
+    author_draft()
     template_id = publish_template()["template"]["id"]
     published_set = _draft_set(as_account, "tina")
     draft_set = _draft_set(as_account, "tina", title="Unfinished")
@@ -223,6 +223,6 @@ def test_a_learner_made_administrator_keeps_what_they_published(
     with practice_store.read() as conn:
         owner = conn.execute("SELECT owner_user_id FROM practice_sets WHERE id = ?", (draft_set,)).fetchone()
     assert owner["owner_user_id"] == tina
-    # Students keep learning what was published.
+    # Learners keep learning what was published.
     with as_account("sara"):
         assert [row["id"] for row in PracticeSetService().assigned()] == [published_set]

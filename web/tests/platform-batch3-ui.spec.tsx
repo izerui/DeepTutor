@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 
 // Platform batch 3: learning reports and announcements for courses and Mastery
-// Paths ("needs attention" and teacher remedial practice are gone, spec 2026-11-05).
+// Paths ("needs attention" and author remedial practice are gone, spec 2026-11-05).
 const { auth, catalog, workbench, tasks, push, search, t } = vi.hoisted(() => ({
   auth: { isAdmin: false, loading: false },
   catalog: {
@@ -191,7 +191,7 @@ it("shows who has mastered each point and offers nothing to send", async () => {
   expect(push).not.toHaveBeenCalled();
 });
 
-it("shows the server's refusal when the viewer is not the item's teacher", async () => {
+it("shows the server's refusal when the viewer is not the item's author", async () => {
   search.value = "kind=course&id=crs_1";
   catalog.getLearnerReport.mockRejectedValue(new Error("Only the teacher who made it sees its learning report."));
   render(<LearnerReportPage />);

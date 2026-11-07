@@ -1,6 +1,6 @@
-"""Reading a teacher path's knowledge bases and books.
+"""Reading an author path's knowledge bases and books.
 
-A library or book a teacher shared "by reference only" stays private. Plans
+A library or book an author shared "by reference only" stays private. Plans
 B and D ask the registered reader of each reference whether a user may read
 it through that reference; this module answers for ``mastery_template``
 references: yes only while that user is studying that very path, their
@@ -12,7 +12,7 @@ other surface never study a path, so these materials cannot be used there
 
 - an explicit :func:`studying_template` block (admission checks, one
   Study-page original-content request — R9);
-- a mastery turn on a teacher path: the turn's retrieval scope
+- a mastery turn on an author path: the turn's retrieval scope
   (:class:`~deeptutor.multi_user.retrieval_scope.TurnRetrievalScope`) records
   the template the turn is on *now*. That scope is a shared mutable object, so
   a path switch inside the turn moves the reading scope with it — a context
@@ -20,7 +20,7 @@ other surface never study a path, so these materials cannot be used there
   context.
 
 The readers are KB/book-level. Which documents of a referenced library a
-student may open, and which revision's materials they are entitled to, are
+learner may open, and which revision's materials they are entitled to, are
 enforced where the content is served: the turn's retrieval allowlist (R8) and
 :func:`entitled_materials` / :func:`original_document_path` for originals.
 
@@ -47,7 +47,7 @@ T = TypeVar("T")
 
 REFERRER_KIND = "mastery_template"
 
-#: The teacher template an explicit block or one original-content request studies.
+#: The author template an explicit block or one original-content request studies.
 active_mastery_template: ContextVar[str] = ContextVar("active_mastery_template", default="")
 #: One original-content request of a path material (R9): the live path of
 #: the cited document it names, and the canonical book it reads. Set by the
@@ -102,11 +102,11 @@ WITHDRAWAL_CONFIRMATION_CODE = "referenced_by_teacher_paths"
 
 
 def withdrawal_impact(template_ids: Iterable[str]) -> tuple[int, int]:
-    """Aggregate impact of withdrawing material from these teacher paths (rule R1).
+    """Aggregate impact of withdrawing material from these author paths (rule R1).
 
-    Returns (published paths, distinct students with an active assignment on
+    Returns (published paths, distinct learners with an active assignment on
     them). Only counts leave this function: the owner withdrawing a library
-    or book must not learn which paths, teachers or students cite it. Read
+    or book must not learn which paths, authors or learners cite it. Read
     only; callers run it after their registry writer has ended (lock order
     teaching -> KB -> Book).
     """
@@ -114,25 +114,25 @@ def withdrawal_impact(template_ids: Iterable[str]) -> tuple[int, int]:
 
     store = TeachingStore()
     paths = 0
-    students: set[str] = set()
+    learners: set[str] = set()
     for template_id in sorted(set(template_ids)):
         template = store.get_template(template_id)
         if template is None or template.status != "published":
             continue
         paths += 1
-        students.update(
+        learners.update(
             assignment.student_user_id
             for assignment in store.list_assignments(template_id)
             if assignment.status == "active"
         )
-    return paths, len(students)
+    return paths, len(learners)
 
 
 def withdrawal_confirmation_detail(
     template_ids: Iterable[str], *, resource: str
 ) -> dict[str, Any] | None:
     """The counts-only 409 detail, or ``None`` when no published path is affected."""
-    paths, students = withdrawal_impact(template_ids)
+    paths, learners = withdrawal_impact(template_ids)
     if not paths:
         return None
     return {
@@ -140,9 +140,9 @@ def withdrawal_confirmation_detail(
         "requires_confirmation": True,
         "resource": resource,
         "affected_paths": paths,
-        "affected_students": students,
+        "affected_students": learners,
         "message": (
-            f"{paths} published Mastery Path(s) with {students} learner(s) cite this "
+            f"{paths} published Mastery Path(s) with {learners} learner(s) cite this "
             f"{resource}; they will show it as unavailable. Confirm to continue."
         ),
     }
@@ -168,7 +168,7 @@ def run_confirmed_withdrawal(
     """Run a KB/book withdrawal so a confirmation covers exactly what was shown.
 
     ``attempt(None)`` runs unconfirmed; ``attempt(ids)`` runs confirmed for
-    those teacher paths only (the registry refuses again for any other).
+    those author paths only (the registry refuses again for any other).
     Each refusal (``needs_confirmation``, carrying ``referrer_ids``) is
     counted after the registry writer ended (lock order teaching -> KB ->
     Book). The request proceeds bound to those paths when no published path
@@ -294,12 +294,12 @@ def _register_defaults() -> None:
             book_registry.register_book_reference_reader(REFERRER_KIND, template_reader)
 
 
-# ---- what an assigned student may open (R9, preflight items 3, 4, 6) -------
+# ---- what an assigned learner may open (R9, preflight items 3, 4, 6) -------
 
 
 @dataclass(frozen=True)
 class EntitledMaterials:
-    """The materials of the revision a student's copy is on.
+    """The materials of the revision a learner's copy is on.
 
     ``kbs`` maps a KB id to the document ids the path cites (``None`` = the
     whole library). ``captured`` maps a KB id to ``{rel_path as published:
@@ -325,7 +325,7 @@ class EntitledMaterials:
 
 
 def _applied_revision(template: Any, assignment: Any) -> int:
-    """The revision the student's copy is on (preflight item 6)."""
+    """The revision the learner's copy is on (preflight item 6)."""
     from deeptutor.learning.storage import LearningStore
     from deeptutor.services.workspace.context import current_workspace_id, workspace_context
     from deeptutor.teaching.instances import instance_path_id
@@ -338,7 +338,7 @@ def _applied_revision(template: Any, assignment: Any) -> int:
         else:
             origin = LearningStore().load_origin(path_id)
     except Exception:
-        logger.warning("Could not read the copy of teacher path %s", template.id, exc_info=True)
+        logger.warning("Could not read the copy of author path %s", template.id, exc_info=True)
         origin = None
     if origin is not None and origin.template_id == template.id and origin.revision > 0:
         return origin.revision

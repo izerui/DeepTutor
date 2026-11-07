@@ -1,7 +1,7 @@
 """Teaching's only door into the book registry (plan D).
 
-A teacher path cites books like it cites knowledge bases (spec 7.8): public
-books pass, the teacher's own private books are made public or shared by
+An author path cites books like it cites knowledge bases (spec 7.8): public
+books pass, the author's own private books are made public or shared by
 reference, other accounts' private books cannot be cited.
 """
 

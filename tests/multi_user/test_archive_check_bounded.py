@@ -50,7 +50,7 @@ def _accounts_with_catalogs(as_user) -> list[Path]:
     return catalogs
 
 
-def _teacher_kb(as_user, make_kb):
+def _author_kb(as_user, make_kb):
     with as_user("teacher"):
         service = ContentWorkspaceService()
         workspace = service.create_workspace("Course")["workspace_id"]
@@ -85,8 +85,8 @@ def test_resolution_opens_bounded_catalogs_and_archive_applies_immediately(
         as_user, make_kb, monkeypatch, caller,
 ):
     catalogs = _accounts_with_catalogs(as_user)
-    _, workspace, record, teacher_catalog = _teacher_kb(as_user, make_kb)
-    for catalog in [*catalogs, teacher_catalog]:
+    _, workspace, record, author_catalog = _author_kb(as_user, make_kb)
+    for catalog in [*catalogs, author_catalog]:
         _age(catalog)
     role = "admin" if caller == "root" else "user"
     from deeptutor.publishing.admin import admin_retiring
@@ -111,7 +111,7 @@ def test_resolution_opens_bounded_catalogs_and_archive_applies_immediately(
             resolve_kb(record.ref, require_write=True)
         assert denied.value.status_code == 403
     # Only the just-written (hence not yet trusted) catalog is re-read.
-    assert opened and all(teacher_catalog.as_uri() in path for path in opened)
+    assert opened and all(author_catalog.as_uri() in path for path in opened)
 
     # Restoring takes effect immediately too.
     with as_user("teacher"):
@@ -124,7 +124,7 @@ def test_rewrite_keeping_size_and_mtime_is_not_served_from_cache(as_user, make_k
     """A commit that keeps size and (coarse) mtime must not serve stale state."""
     from deeptutor.knowledge import registry_scope
 
-    _, workspace, record, catalog = _teacher_kb(as_user, make_kb)
+    _, workspace, record, catalog = _author_kb(as_user, make_kb)
     _age(catalog)
     aged = catalog.stat()
     with as_user("teacher"):
@@ -140,7 +140,7 @@ def test_rewrite_keeping_size_and_mtime_is_not_served_from_cache(as_user, make_k
 
 
 def test_connector_classification_follows_config_changes(as_user, make_kb, monkeypatch):
-    manager, _, record, _ = _teacher_kb(as_user, make_kb)
+    manager, _, record, _ = _author_kb(as_user, make_kb)
     config = Path(manager.base_dir) / "kb_config.json"
     _age(config)
     assert registry.config_kind(record) == registry.UPLOADED_KIND

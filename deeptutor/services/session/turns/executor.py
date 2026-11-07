@@ -802,7 +802,7 @@ class TurnExecutor:
             # Every action on a mastery path — the tutor, chat, ask/solve,
             # standalone pipelines — passes the same admission gate and runs in
             # the same retrieval scope, opened before any of the path's
-            # materials are read. A closed teacher path ends the turn here.
+            # materials are read. A closed author path ends the turn here.
             mastery_turn = None
             #: The conversation's earlier exchanges (``read_source`` archives):
             #: merged into the topic index below, and kept by a path switch
@@ -1064,7 +1064,7 @@ class TurnExecutor:
             )
 
             if mastery_turn is not None:
-                # R8: a teacher path's turn reads its own libraries only.
+                # R8: an author path's turn reads its own libraries only.
                 mastery_turn.attach(context)
 
             pending_done_event: StreamEvent | None = None
@@ -1416,7 +1416,7 @@ class TurnExecutor:
                     )
             else:
                 if getattr(exc, "expected_refusal", False) is True:
-                    # An expected refusal (e.g. a closed teacher path), not a
+                    # An expected refusal (e.g. a closed author path), not a
                     # fault: one line, no stack. The events are the same.
                     logger.info("Turn %s refused: %s", turn_id, exc)
                 else:
@@ -1429,7 +1429,7 @@ class TurnExecutor:
                         content=str(exc),
                         metadata={
                             # Machine-readable details of a refused turn,
-                            # e.g. the unavailable teacher materials.
+                            # e.g. the unavailable author materials.
                             **_error_details(exc),
                             "turn_terminal": True,
                             "status": "failed",

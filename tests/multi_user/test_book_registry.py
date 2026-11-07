@@ -158,18 +158,18 @@ def test_replace_references_validates_all_targets_before_clearing(tmp_path):
 def test_read_and_write_rules_and_location_binding(tmp_path, make_user):
     admin = make_user("root", role="admin")
     owner = make_user("t1", role="teacher")
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     private = _register(tmp_path)
     public = _register(tmp_path, "bk_public", visibility="public")
     assert registry.can_read_book(private, owner) and registry.can_write_book(private, owner)
     # spec 2026-10-29 D2: an admin does not bypass another account's private book.
     assert not registry.can_read_book(private, admin) and not registry.can_write_book(private, admin)
-    assert not registry.can_read_book(private, student)
-    assert registry.can_read_book(public, student)
-    assert not registry.can_write_book(public, student)
-    collision = replace(public, base_dir=str(tmp_path / "foreign"), created_by=student.id)
-    assert not registry.can_read_book(collision, student)
-    assert not registry.can_write_book(collision, student)
+    assert not registry.can_read_book(private, learner)
+    assert registry.can_read_book(public, learner)
+    assert not registry.can_write_book(public, learner)
+    collision = replace(public, base_dir=str(tmp_path / "foreign"), created_by=learner.id)
+    assert not registry.can_read_book(collision, learner)
+    assert not registry.can_write_book(collision, learner)
     assert registry.get_book(public.ref) == public
 
 
@@ -189,25 +189,25 @@ def test_stale_records_cannot_grant_access_after_transfer_withdrawal_or_deletion
 
 
 def test_reference_reader_is_read_only_and_failure_is_closed(tmp_path, make_user):
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     book = _register(tmp_path)
     registry.replace_book_references("course", "c1", [book.ref], created_by="t1")
-    assert not registry.can_read_book(book, student)
+    assert not registry.can_read_book(book, learner)
     registry.register_book_reference_reader("course", lambda rid, uid: (rid, uid) == ("c1", "s1"))
-    assert registry.can_read_book(book, student)
-    assert not registry.can_write_book(book, student)
+    assert registry.can_read_book(book, learner)
+    assert not registry.can_write_book(book, learner)
     assert not registry.can_read_book(book, make_user("s2", role="student"))
 
     def broken(_rid, _uid):
         raise RuntimeError("synthetic reader failure")
 
     registry.register_book_reference_reader("course", broken)
-    assert not registry.can_read_book(book, student)
+    assert not registry.can_read_book(book, learner)
 
 
 def test_builtin_hook_reloads_after_loader_reset_preserving_custom_reader(tmp_path, make_user, monkeypatch):
     book = _register(tmp_path)
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     for kind in ("course", "partner"):
         registry.replace_book_references(kind, "r1", [book.ref], created_by="t1")
     module = types.ModuleType("synthetic_book_readers")
@@ -230,8 +230,8 @@ def test_builtin_hook_reloads_after_loader_reset_preserving_custom_reader(tmp_pa
             return False
 
         registry.register_book_reference_reader("course", custom)
-        assert registry.can_read_book(book, student)
-        assert registry.can_read_book(book, student)
+        assert registry.can_read_book(book, learner)
+        assert registry.can_read_book(book, learner)
         assert registry._readers["course"] is custom
     # Once per loader reset, not once per read (B3-4).
     assert len(calls) == 2
@@ -242,12 +242,12 @@ def test_revocation_retains_owner_references_and_never_grants_access(tmp_path, m
     registry.replace_book_references("course", "foreign", [book.ref], created_by="t2")
     registry.replace_book_references("course", "own", [book.ref], created_by="t1")
     registry.register_book_reference_reader("course", lambda rid, _uid: rid == "foreign")
-    student = make_user("s1", role="student")
-    assert registry.can_read_book(book, student)
+    learner = make_user("s1", role="student")
+    assert registry.can_read_book(book, learner)
     moved = registry._revoke_references(book.ref, reason="made_private", keep_created_by="t1")
     assert [r.referrer_id for r in moved] == ["foreign"]
     assert [r.referrer_id for r in registry.list_book_references(book.ref)] == ["own"]
-    assert not registry.can_read_book(book, student)
+    assert not registry.can_read_book(book, learner)
     assert registry.list_unavailable_book_references("course", "foreign") == moved
     assert moved[0].to_dict() == {
         "book_id": book.book_id, "book_title": book.title, "referrer_kind": "course",
@@ -411,26 +411,26 @@ def test_symlink_base_is_same_canonical_registration(tmp_path):
 
 def test_atomic_visibility_revoke_helpers_see_uncommitted_state(tmp_path, make_user):
     book = _register(tmp_path, visibility="public")
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     owner = make_user("t1", role="teacher")
     registry.replace_book_references("course", "c1", [book.ref], created_by="t2")
     registry.register_book_reference_reader("course", lambda _rid, _uid: True)
     with registry._write() as conn:
         target = registry._target(conn, book.ref)
         assert registry._can_write(conn, target, owner)
-        assert not registry._can_write(conn, target, student)
+        assert not registry._can_write(conn, target, learner)
         conn.execute("UPDATE book_registry SET visibility = 'private' WHERE book_id = ?", (book.book_id,))
         registry._revoke(conn, target, registry._references_of(conn, book.ref), reason="made_private")
-        assert not registry._can_read(conn, target, student)
+        assert not registry._can_read(conn, target, learner)
         assert registry._can_read(conn, target, owner)
-    assert not registry.can_read_book(book, student)
+    assert not registry.can_read_book(book, learner)
     assert registry.list_book_references(book.ref) == []
     assert registry.list_revoked_book_references(book.ref)[0].reason == "made_private"
 
 
 def test_builtin_hook_failure_rolls_back_partial_readers_then_retries(tmp_path, make_user, monkeypatch):
     book = _register(tmp_path)
-    student = make_user("s1", role="student")
+    learner = make_user("s1", role="student")
     registry.replace_book_references("course", "c1", [book.ref], created_by="t1")
     module = types.ModuleType("synthetic_failing_book_readers")
     fail = True
@@ -444,10 +444,10 @@ def test_builtin_hook_failure_rolls_back_partial_readers_then_retries(tmp_path, 
     monkeypatch.setitem(sys.modules, module.__name__, module)
     monkeypatch.setattr(registry, "BUILTIN_BOOK_READER_MODULES", (module.__name__,))
     monkeypatch.setattr(registry, "_readers", {})
-    assert not registry.can_read_book(book, student)
+    assert not registry.can_read_book(book, learner)
     assert registry._readers == {}
     fail = False
-    assert registry.can_read_book(book, student)
+    assert registry.can_read_book(book, learner)
 
 
 def test_invalid_revoke_reason_preserves_live_references(tmp_path):

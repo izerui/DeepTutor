@@ -36,7 +36,7 @@ REGISTRY_FILENAME = "book_registry.sqlite3"
 DB_PATH_OVERRIDE: Path | None = None
 KB_REFERRER_KIND = "book"
 #: Referrers whose withdrawal needs the owner's explicit confirmation (rule
-#: R1): published teacher paths. Others are revoked and shown as unavailable.
+#: R1): published author paths. Others are revoked and shown as unavailable.
 CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({"mastery_template"})
 KbChoice = Literal["make_public", "reference_only"]
 KB_CHOICES: frozenset[str] = frozenset({"make_public", "reference_only"})
@@ -124,7 +124,7 @@ class BookReferenceError(BookRegistryError):
 
 
 class BookWithdrawalNeedsConfirmation(BookVisibilityError):
-    """Making private / deleting would cut off published teacher paths (rule R1).
+    """Making private / deleting would cut off published author paths (rule R1).
 
     Raised before anything is written; repeat with ``confirm=True``.
     ``referrer_ids`` are the affected template ids, for aggregate counts only.
@@ -142,7 +142,7 @@ def require_withdrawal_confirmation(
     references: Sequence[BookReference], *, confirm: bool,
     confirmed_referrers: Collection[str] | None = None,
 ) -> None:
-    """Refuse a withdrawal that would revoke teacher-path references not confirmed.
+    """Refuse a withdrawal that would revoke author-path references not confirmed.
 
     ``confirmed_referrers`` binds ``confirm`` to the paths it was given for.
     """

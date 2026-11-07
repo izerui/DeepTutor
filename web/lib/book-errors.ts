@@ -25,7 +25,7 @@ const CODE_MESSAGES: Record<string, string> = {
 
 /** The message to show for a failed book operation. */
 export function bookErrorMessage(error: unknown, t: Translate): string {
-  // Opened from a teacher path that has since been revoked or archived.
+  // Opened from an author path that has since been revoked or archived.
   if (error instanceof BookApiError && error.status === 403 && currentMasteryTemplate()) {
     return t(COURSE_UNAVAILABLE_KEY);
   }

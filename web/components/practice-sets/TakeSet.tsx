@@ -46,7 +46,7 @@ function restored(view: TakeView): SubmitResult | null {
   };
 }
 
-/** A student answers a practice set; every submission is graded and kept (spec §8.3). */
+/** A learner answers a practice set; every submission is graded and kept (spec §8.3). */
 export function TakeSet({ setId }: { setId: string }) {
   const { t } = useTranslation();
   const [view, setView] = useState<TakeView | null>(null);

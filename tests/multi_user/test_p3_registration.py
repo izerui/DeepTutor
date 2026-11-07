@@ -1,4 +1,4 @@
-"""P3b: open sign-up creates students; closed sign-up admits nobody (invites are ignored)."""
+"""P3b: open sign-up creates learners; closed sign-up admits nobody (invites are ignored)."""
 
 from __future__ import annotations
 

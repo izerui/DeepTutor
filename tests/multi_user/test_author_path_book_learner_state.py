@@ -1,9 +1,9 @@
-"""B2-17 (R2): a student's own reading state on a teacher path's reference-only book.
+"""B2-17 (R2): a learner's own reading state on an author path's reference-only book.
 
-Through the path (``X-DeepTutor-Mastery-Template``) an assigned student may
+Through the path (``X-DeepTutor-Mastery-Template``) an assigned learner may
 record reading progress, bookmarks, in-book quiz attempts and learning
 captures for a book they cannot read on their own. Those writes land in the
-student's own per-reader overlay keyed by the canonical book id — never in the
+learner's own per-reader overlay keyed by the canonical book id — never in the
 owner's book directory — and are refused once the path is closed or for a
 book the applied revision does not cite.
 """
@@ -95,7 +95,7 @@ def _snapshot(root: Path) -> dict[str, str]:
 
 
 @pytest.fixture
-def ref_book(teaching_users, as_account, teacher_draft, publish_template):
+def ref_book(teaching_users, as_account, author_draft, publish_template):
     """Tina's two private books; the path cites only ``bk_ref`` (reference only)."""
     from deeptutor.book.learning_overlay import BookLearningOverlay
     from deeptutor.book.storage import get_book_storage
@@ -105,7 +105,7 @@ def ref_book(teaching_users, as_account, teacher_draft, publish_template):
         _write_book(BOOK_ID, "Waves")
         _write_book(OTHER_BOOK_ID, "Unlisted")
         owner_dir = get_book_storage().book_root(BOOK_ID)
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="b0", kind=TopicSourceKind.BOOK, source_id=BOOK_ID, label="Waves", position=0
@@ -113,7 +113,7 @@ def ref_book(teaching_users, as_account, teacher_draft, publish_template):
         )
     )
     template_id = publish_template(
-        students=("sara",), book_choices={BOOK_ID: "reference_only"}
+        learners=("sara",), book_choices={BOOK_ID: "reference_only"}
     )["template"]["id"]
     with as_account("sara"):
         asyncio.run(mastery_path.list_topics())
@@ -162,7 +162,7 @@ def _write_all(client, headers, book_id: str = BOOK_ID) -> dict[str, int]:
     }
 
 
-def test_student_state_lands_in_the_students_own_store(ref_book, teaching_http):
+def test_learner_state_lands_in_the_learners_own_store(ref_book, teaching_http):
     client = teaching_http.client
     before = _snapshot(ref_book.owner_dir)
     assert before, "the owner's book directory holds the book"
@@ -182,7 +182,7 @@ def test_student_state_lands_in_the_students_own_store(ref_book, teaching_http):
     assert patched.status_code == 200
     assert patched.json()["capture"]["user_note"] == "mine"
 
-    # Reads return the student's own state.
+    # Reads return the learner's own state.
     detail = client.get(f"/api/books/{BOOK_ID}", headers=ref_book.scoped)
     assert detail.status_code == 200
     progress = detail.json()["progress"]
@@ -190,7 +190,7 @@ def test_student_state_lands_in_the_students_own_store(ref_book, teaching_http):
     assert progress["bookmarked_page_ids"] == ["pg_2"]
     assert [a["question_id"] for a in progress["quiz_attempts"]] == ["q1"]
 
-    # Stored in the student's overlay, keyed by the canonical book id ...
+    # Stored in the learner's overlay, keyed by the canonical book id ...
     assert (ref_book.overlay_dir / "progress.json").is_file()
     assert (ref_book.overlay_dir / "learning_captures.json").is_file()
     assert ref_book.overlay_dir.name == f"book_{BOOK_ID}"
@@ -202,13 +202,13 @@ def test_student_state_lands_in_the_students_own_store(ref_book, teaching_http):
     assert owner_view["quiz_attempts"] == []
 
 
-def test_without_the_path_the_student_still_cannot_write(ref_book, teaching_http):
+def test_without_the_path_the_learner_still_cannot_write(ref_book, teaching_http):
     statuses = _write_all(teaching_http.client, _auth("sara"))
     assert set(statuses.values()) == {404}
     assert not ref_book.overlay_dir.exists()
 
 
-def test_an_unassigned_student_naming_the_path_is_refused(ref_book, teaching_http):
+def test_an_unassigned_learner_naming_the_path_is_refused(ref_book, teaching_http):
     headers = {**_auth("sam"), "X-DeepTutor-Mastery-Template": ref_book.template_id}
     assert set(_write_all(teaching_http.client, headers).values()) == {404}
 
@@ -225,7 +225,7 @@ def test_a_book_the_revision_does_not_cite_is_refused(ref_book, teaching_http):
 
 
 @pytest.mark.parametrize("close", ["revoke", "archive"])
-def test_closing_the_path_refuses_writes_and_keeps_the_students_data(
+def test_closing_the_path_refuses_writes_and_keeps_the_learners_data(
     ref_book, teaching_http, as_account, teaching_users, close
 ):
     client = teaching_http.client
@@ -243,7 +243,7 @@ def test_closing_the_path_refuses_writes_and_keeps_the_students_data(
         client.get(f"/api/books/{BOOK_ID}/learning-captures", headers=ref_book.scoped).status_code
         == 404
     )
-    # The student's own data is retained, untouched.
+    # The learner's own data is retained, untouched.
     assert (ref_book.overlay_dir / "progress.json").read_bytes() == saved
 
 
@@ -261,7 +261,7 @@ def test_the_owner_naming_the_path_keeps_using_the_book_store(ref_book, teaching
 # ---- Fix round 1: page chat binding and the graded quiz (review Minors 1, 2) ----
 
 
-def test_page_chat_binding_lands_in_the_students_own_store(ref_book, teaching_http):
+def test_page_chat_binding_lands_in_the_learners_own_store(ref_book, teaching_http):
     client = teaching_http.client
     before = _snapshot(ref_book.owner_dir)
     body = {"book_id": BOOK_ID, "page_id": "pg_1", "session_id": "sara-chat-1"}
@@ -301,7 +301,7 @@ def test_page_chat_binding_is_refused_after_revoke(
     assert (ref_book.overlay_dir / "page_chat_sessions.json").read_bytes() == saved
 
 
-def test_a_graded_quiz_answer_lands_in_the_students_own_question_bank(
+def test_a_graded_quiz_answer_lands_in_the_learners_own_question_bank(
     ref_book, teaching_http, as_account
 ):
     from deeptutor.services.session import get_sqlite_session_store
@@ -335,8 +335,8 @@ def test_a_graded_quiz_answer_lands_in_the_students_own_question_bank(
     assert entries("tina") == []
 
 
-def test_an_admin_cannot_use_a_teachers_private_path_book(ref_book, teaching_http):
-    """Spec 2026-10-29 D2: an unassigned admin cannot read the teacher's private book."""
+def test_an_admin_cannot_use_a_authors_private_path_book(ref_book, teaching_http):
+    """Spec 2026-10-29 D2: an unassigned admin cannot read the author's private book."""
     before = _snapshot(ref_book.owner_dir)
     headers = {**_auth("adam"), "X-DeepTutor-Mastery-Template": ref_book.template_id}
     statuses = _write_all(teaching_http.client, headers)

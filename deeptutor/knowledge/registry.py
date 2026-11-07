@@ -51,14 +51,14 @@ CONNECTOR_KINDS: frozenset[str] = frozenset(CONNECTED_KB_TYPES)
 CONNECTOR_REFERRER_KINDS: frozenset[str] = frozenset({"partner"})
 #: Referrer kind of a book; must equal ``deeptutor.book.registry.KB_REFERRER_KIND``.
 BOOK_REFERRER_KIND = "book"
-#: Referrer kind of a teacher path; must equal ``deeptutor.teaching.kb.REFERRER_KIND``.
+#: Referrer kind of an author path; must equal ``deeptutor.teaching.kb.REFERRER_KIND``.
 MASTERY_TEMPLATE_REFERRER_KIND = "mastery_template"
 #: Referrers whose withdrawal needs the owner's explicit confirmation (rule
-#: R1): published teacher paths. Every other referrer (partners, books, ...)
+#: R1): published author paths. Every other referrer (partners, books, ...)
 #: simply records a revocation and shows the material as unavailable.
 CONFIRM_REFERRER_KINDS: frozenset[str] = frozenset({MASTERY_TEMPLATE_REFERRER_KIND})
 #: Referrers whose ``created_by`` follows a hand-over of the referring entity
-#: itself (books in ``book.sharing``'s joint writer, teacher paths in the
+#: itself (books in ``book.sharing``'s joint writer, author paths in the
 #: teaching store's joint writer), never a KB owner's account transfer.
 ENTITY_TRANSFERRED_REFERRER_KINDS: frozenset[str] = frozenset(
     {BOOK_REFERRER_KIND, MASTERY_TEMPLATE_REFERRER_KIND}
@@ -183,7 +183,7 @@ class KbReferenceError(KbRegistryError):
 
 
 class KbWithdrawalNeedsConfirmation(KbVisibilityError):
-    """Withdrawing (private/delete) would cut off published teacher paths (rule R1).
+    """Withdrawing (private/delete) would cut off published author paths (rule R1).
 
     Raised before anything is written; repeat with ``confirm=True`` to proceed.
     ``referrer_ids`` are the affected ``mastery_template`` ids, for the caller
@@ -198,7 +198,7 @@ class KbWithdrawalNeedsConfirmation(KbVisibilityError):
         )
 
 
-def teacher_path_referrers(references: Sequence[KbReference]) -> set[str]:
+def author_path_referrers(references: Sequence[KbReference]) -> set[str]:
     """Published-path ids that lose material if these references are revoked.
 
     Direct ``mastery_template`` references, plus paths citing a *book* whose
@@ -227,12 +227,12 @@ def require_withdrawal_confirmation(
     confirm: bool,
     confirmed_referrers: Collection[str] | None = None,
 ) -> None:
-    """Refuse a withdrawal that would cut off teacher paths the owner did not confirm.
+    """Refuse a withdrawal that would cut off author paths the owner did not confirm.
 
     ``confirm`` with ``confirmed_referrers`` binds the consent to the paths it
     was given for: any further path (published meanwhile) asks again.
     """
-    blocking = teacher_path_referrers(references)
+    blocking = author_path_referrers(references)
     if not blocking:
         return
     if confirm and (confirmed_referrers is None or blocking <= set(confirmed_referrers)):
@@ -871,7 +871,7 @@ def set_visibility(
     Rule R1: the owner may always make a public KB private. Other accounts'
     references move to the revoked table (reason ``made_private``, see
     :func:`list_unavailable_references`) and their referrers show the material
-    as unavailable. When a teacher path would lose it — citing it directly or
+    as unavailable. When an author path would lose it — citing it directly or
     through a book whose reference is revoked — the request is refused with
     :class:`KbWithdrawalNeedsConfirmation` (nothing written) and must be
     repeated with ``confirm``, optionally bound to ``confirmed_referrers``
@@ -998,7 +998,7 @@ def set_meta(key: str, value: str) -> None:
 
 # ── pending account hand-overs (B2-9) ───────────────────────────────
 #
-# Account deletion hands a deleted account's KBs, books and teacher paths to
+# Account deletion hands a deleted account's KBs, books and author paths to
 # a successor in separate best-effort stages. A row here names the stages
 # still to run, so they can be retried. It lives in this deployment-wide
 # registry because the registry already keeps cross-feature admin
@@ -1440,7 +1440,7 @@ def _revoked(row: sqlite3.Row) -> RevokedReference:
 def list_unavailable_references(referrer_kind: str, referrer_id: str) -> list[RevokedReference]:
     """What withdrawals (made private, deleted) took away from this referrer (spec 7.4).
 
-    Plan C shows "资料不可用" on a teacher path for every row returned here.
+    Plan C shows "资料不可用" on an author path for every row returned here.
     """
     with _read() as conn:
         if conn is None:

@@ -5134,7 +5134,7 @@
       },
       "KpDecision": {
         "additionalProperties": false,
-        "description": "The teacher's verdict on one knowledge point of a republished outline.",
+        "description": "The author's verdict on one knowledge point of a republished outline.",
         "properties": {
           "from_id": {
             "default": "",
@@ -14981,7 +14981,7 @@
     },
     "/api/auth/account-handoffs": {
       "get": {
-        "description": "Deleted accounts whose hand-over (KBs, books, teacher paths) is unfinished.",
+        "description": "Deleted accounts whose hand-over (KBs, books, author paths) is unfinished.",
         "operationId": "list_account_handoffs_api_auth_account_handoffs_get",
         "parameters": [
           {
@@ -15881,7 +15881,7 @@
     },
     "/api/auth/profile/password": {
       "put": {
-        "description": "Change one's own password (e.g. after an administrator or teacher reset it).\n\nEvery other session ends (tokens carry the password version); this browser\ngets a fresh session so the person stays signed in here.",
+        "description": "Change one's own password (e.g. after an administrator or author reset it).\n\nEvery other session ends (tokens carry the password version); this browser\ngets a fresh session so the person stays signed in here.",
         "operationId": "change_own_password_api_auth_profile_password_put",
         "parameters": [
           {
@@ -15959,7 +15959,7 @@
     },
     "/api/auth/register": {
       "post": {
-        "description": "Self-service registration.\n\nThe first account becomes the administrator. After that, anyone may sign\nup as a student while public registration is open; while it is closed,\nonly an administrator makes accounts.\n\nOnly available when AUTH_ENABLED=true.",
+        "description": "Self-service registration.\n\nThe first account becomes the administrator. After that, anyone may sign\nup as a learner while public registration is open; while it is closed,\nonly an administrator makes accounts.\n\nOnly available when AUTH_ENABLED=true.",
         "operationId": "register_api_auth_register_post",
         "requestBody": {
           "content": {
@@ -18813,7 +18813,7 @@
     },
     "/api/books/{book_id}": {
       "delete": {
-        "description": "Rule R1: references never block the owner; teacher paths need ``confirm``.\n\nEvery reference is revoked (``book_deleted``) with the deletion. When a\npublished teacher path cites the book, the first request answers a\ncounts-only 409 and nothing changes; a confirmation only covers the paths\nwhose counts were shown (``expected_*``), otherwise fresh counts return.\nThe registry transaction and the rename aside stay on the event loop\n(runtime finalization is bound to it); the teaching-store counting and\nthe removal of the staged tree run in worker threads.",
+        "description": "Rule R1: references never block the owner; author paths need ``confirm``.\n\nEvery reference is revoked (``book_deleted``) with the deletion. When a\npublished author path cites the book, the first request answers a\ncounts-only 409 and nothing changes; a confirmation only covers the paths\nwhose counts were shown (``expected_*``), otherwise fresh counts return.\nThe registry transaction and the rename aside stay on the event loop\n(runtime finalization is bound to it); the teaching-store counting and\nthe removal of the staged tree run in worker threads.",
         "operationId": "delete_book_api_books__book_id__delete",
         "parameters": [
           {
@@ -36738,7 +36738,7 @@
     },
     "/api/mastery-paths/topics/{path_id}/pass-standard": {
       "put": {
-        "description": "The learner's own path only: a teacher path's copy keeps the teacher's standard.",
+        "description": "The learner's own path only: an author path's copy keeps the author's standard.",
         "operationId": "update_pass_standard_api_mastery_paths_topics__path_id__pass_standard_put",
         "parameters": [
           {
@@ -37137,7 +37137,7 @@
     },
     "/api/mastery-paths/topics/{path_id}/teacher-update/ack": {
       "post": {
-        "description": "Hide the one-time \"your teacher updated this course\" notice.",
+        "description": "Hide the one-time \"the author updated this course\" notice.",
         "operationId": "acknowledge_teacher_update_api_mastery_paths_topics__path_id__teacher_update_ack_post",
         "parameters": [
           {

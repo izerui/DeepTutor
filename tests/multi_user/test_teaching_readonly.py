@@ -1,4 +1,4 @@
-"""A student cannot change a teacher's outline through any REST route."""
+"""A learner cannot change an author's outline through any REST route."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def _auth(name: str) -> dict[str, str]:
         ("put", "/api/mastery-paths/topics/{p}/sessions/s1/mode", {"mode": "outline"}),
     ],
 )
-def test_students_cannot_change_a_teacher_outline(
+def test_learners_cannot_change_a_author_outline(
     teaching_http, sara_instance, as_account, method, url, body
 ):
     with as_account("sara"):
@@ -65,7 +65,7 @@ def test_students_cannot_change_a_teacher_outline(
     assert progress.learner_mastery_overrides == {}
 
 
-def test_redo_resets_only_the_students_own_state(teaching_http, sara_instance, as_account):
+def test_redo_resets_only_the_learners_own_state(teaching_http, sara_instance, as_account):
     with as_account("sara"):
         store = LearningStore()
         point = store.load(sara_instance.path_id).modules[0].knowledge_points[0].id
@@ -102,7 +102,7 @@ def test_study_and_review_modes_stay_available(teaching_http, sara_instance):
     assert response.status_code == 200
 
 
-def test_the_teachers_own_draft_stays_editable(teaching_http, sara_instance):
+def test_the_authors_own_draft_stays_editable(teaching_http, sara_instance):
     response = teaching_http.client.patch(
         "/api/mastery-paths/progress/topic_calculus",
         json={"name": "Calculus I (2026)"},

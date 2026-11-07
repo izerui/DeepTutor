@@ -1,4 +1,4 @@
-"""Practice set API (spec 2026-10-29 §8): authoring, answering, the teacher's report."""
+"""Practice set API (spec 2026-10-29 §8): authoring, answering, the author's report."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ class FromBankRequest(BaseModel):
 class SubmitRequest(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)
     started_at: float | None = None
-    #: The version the student opened; answers are graded against it.
+    #: The version the learner opened; answers are graded against it.
     revision: int | None = None
 
 
@@ -202,17 +202,17 @@ async def take_set(set_id: str):
     if view["submissions"]:
         # Answers the AI could not grade when submitted are graded again (spec 2026-11-06).
         try:
-            if await judge_ungraded(set_id, student_id=service.actor.id, from_bank=True):
+            if await judge_ungraded(set_id, learner_id=service.actor.id, from_bank=True):
                 view = await _call(service.take, set_id)
         except Exception:
             logger.exception("Could not grade practice set %s answers again", set_id)
     try:
         view = await service.with_my_answers(view)
     except Exception:
-        # The results stand without them; the student can still answer again.
+        # The results stand without them; the learner can still answer again.
         logger.exception("Could not read practice set %s answers from the question bank", set_id)
     if view["submissions"]:
-        # Answers withheld from the student's bank until now are filled in
+        # Answers withheld from the learner's bank until now are filled in
         # (it checks the reveal time itself, for every version submitted).
         try:
             await service.reveal_in_bank(set_id)

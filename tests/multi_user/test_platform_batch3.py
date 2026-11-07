@@ -96,10 +96,10 @@ def _answer(as_account, name, set_id, choice="B"):
 
 
 def _mark_done(as_account, name, task_id):
-    from deeptutor.tasks.service import StudentTasks
+    from deeptutor.tasks.service import LearnerTasks
 
     with as_account(name):
-        StudentTasks().mark_done(task_id)
+        LearnerTasks().mark_done(task_id)
 
 
 def _reports():
@@ -149,11 +149,11 @@ def test_only_the_author_and_administrators_read_the_report(as_account, teaching
         _reports().learner("course", course.id, _uid(teaching_users, "sam"))  # never joined
 
 
-def _market_path(as_account, teacher_draft):
+def _market_path(as_account, author_draft):
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")
@@ -163,10 +163,10 @@ def _market_path(as_account, teacher_draft):
     return template.id
 
 
-def test_path_report_and_its_points(as_account, teaching_users, teacher_draft, quiet_change_model):
+def test_path_report_and_its_points(as_account, teaching_users, author_draft, quiet_change_model):
     from deeptutor.api.routers import mastery_path
 
-    template_id = _market_path(as_account, teacher_draft)
+    template_id = _market_path(as_account, author_draft)
     _join(as_account, "sara", "mastery_path", template_id)
     with as_account("sara"):
         asyncio.run(mastery_path.list_topics())  # her copy is made

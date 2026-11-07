@@ -1,1 +1,1 @@
-"""Teacher practice sets (spec 2026-10-29 §8)."""
+"""Author practice sets (spec 2026-10-29 §8)."""

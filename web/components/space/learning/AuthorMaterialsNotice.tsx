@@ -10,7 +10,7 @@ import { listAuthorTemplates, type AuthorTemplate } from '@/lib/teaching-api'
 import { templateForTopic } from './teaching'
 
 /**
- * On a teacher's own draft: which published materials students can no longer
+ * On an author's own draft: which published materials learners can no longer
  * read (an admin made them private or deleted them, spec 7.4).
  */
 export function AuthorMaterialsNotice({

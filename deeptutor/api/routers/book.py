@@ -877,7 +877,7 @@ def _page_summary(page) -> dict[str, Any]:
 
 
 def _path_book_ref(book_id: str) -> str:
-    """A teacher path's book (R9) is always read at its registered identity.
+    """An author path's book (R9) is always read at its registered identity.
 
     The same holds for the reader's own state on it (B2-17): progress,
     bookmarks, quiz attempts and captures of a path book are kept in the
@@ -976,10 +976,10 @@ async def delete_book(
     expected_paths: int | None = Query(default=None, ge=0),
     expected_students: int | None = Query(default=None, ge=0),
 ) -> dict[str, Any]:
-    """Rule R1: references never block the owner; teacher paths need ``confirm``.
+    """Rule R1: references never block the owner; author paths need ``confirm``.
 
     Every reference is revoked (``book_deleted``) with the deletion. When a
-    published teacher path cites the book, the first request answers a
+    published author path cites the book, the first request answers a
     counts-only 409 and nothing changes; a confirmation only covers the paths
     whose counts were shown (``expected_*``), otherwise fresh counts return.
     The registry transaction and the rename aside stay on the event loop
@@ -1128,7 +1128,7 @@ async def _retire_archived_book(
 class BookVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
-    #: Rule R1: make private although published teacher paths cite the book, as
+    #: Rule R1: make private although published author paths cite the book, as
     #: long as the affected counts still equal the ones shown (when given).
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)

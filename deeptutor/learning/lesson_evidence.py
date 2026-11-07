@@ -221,7 +221,7 @@ def objective_fingerprint(progress: Any, kp_id: str) -> str:
 def _document_key(source: Any, kb: str) -> str:
     """The document a FILE source names, at the path it lives at now.
 
-    A source that carries a fixed document id (a teacher path's published
+    A source that carries a fixed document id (an author path's published
     snapshot) follows it: the captured path may since hold an unrelated file.
     A failing registry lookup counts as a gone document, as in
     ``topic_materials._file_document``.

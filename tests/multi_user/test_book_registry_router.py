@@ -90,7 +90,7 @@ async def test_sharing_denials_and_roles(owned, as_user):
 
 @pytest.mark.asyncio
 async def test_references_never_block_the_owners_delete_and_are_revoked(owned, as_user):
-    """Rule R1: non-teacher-path references are revoked; force stays admin-only."""
+    """Rule R1: non-author-path references are revoked; force stays admin-only."""
     resolved, kb = owned
     with as_user("owner", role="teacher"):
         registry.replace_book_references("course", "c1", ["bk_one"], created_by="owner")

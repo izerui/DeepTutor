@@ -1,4 +1,4 @@
-"""The tutor cannot redesign an outline that belongs to a teacher."""
+"""The tutor cannot redesign an outline that belongs to an author."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def instance(store):
 
 
 @pytest.mark.asyncio
-async def test_build_is_refused_on_a_teacher_path(instance, store):
+async def test_build_is_refused_on_a_author_path(instance, store):
     result = await MasteryBuildTool().execute(
         _mastery_path_id=instance, _mastery_session_mode="outline", modules=NEW_MODULES
     )
@@ -70,7 +70,7 @@ async def test_build_is_refused_on_a_teacher_path(instance, store):
 
 
 @pytest.mark.asyncio
-async def test_revise_is_refused_on_a_teacher_path(instance, store):
+async def test_revise_is_refused_on_a_author_path(instance, store):
     result = await MasteryReviseTool().execute(
         _mastery_path_id=instance,
         _mastery_session_mode="outline",

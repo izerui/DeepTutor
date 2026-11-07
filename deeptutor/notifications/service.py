@@ -151,7 +151,7 @@ def forget_user(user_id: str) -> None:
 
 
 def notify_handover(successor_id: str, from_user_id: str, from_name: str, counts: dict[str, int]) -> None:
-    """One summary to whoever took over a departing teacher's content (spec 2026-11-03 batch 4 §3)."""
+    """One summary to whoever took over a departing author's content (spec 2026-11-03 batch 4 §3)."""
     moved = {kind: int(n) for kind, n in counts.items() if n}
     if not successor_id or not moved:
         return

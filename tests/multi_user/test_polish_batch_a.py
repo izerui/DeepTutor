@@ -154,11 +154,11 @@ def test_archived_and_unlisted_sets_are_marked_and_only_unlisted_ones_are_answer
 # ── §1 Mastery Paths and courses ───────────────────────────
 
 
-def _market_path(as_account, teacher_draft):
+def _market_path(as_account, author_draft):
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")
@@ -177,11 +177,11 @@ def _sara_topics(as_account):
 
 
 def test_a_taken_down_path_stays_listed_read_only_and_an_unlisted_one_is_marked(
-    as_account, teacher_draft, quiet_change_model,
+    as_account, author_draft, quiet_change_model,
 ):
     from deeptutor.teaching.instances import instance_path_id
 
-    template_id = _market_path(as_account, teacher_draft)
+    template_id = _market_path(as_account, author_draft)
     _list(as_account, "mastery_path", template_id)
     _join(as_account, "sara", "mastery_path", template_id)
     topics, gone = _sara_topics(as_account)
@@ -202,10 +202,10 @@ def test_a_taken_down_path_stays_listed_read_only_and_an_unlisted_one_is_marked(
     assert card["objectives"] == 3 and card["mastered"] == 0
 
 
-def test_an_archived_path_one_joined_stays_as_archived(as_account, teacher_draft, quiet_change_model):
+def test_an_archived_path_one_joined_stays_as_archived(as_account, author_draft, quiet_change_model):
     from deeptutor.teaching.service import TeachingService
 
-    template_id = _market_path(as_account, teacher_draft)
+    template_id = _market_path(as_account, author_draft)
     _list(as_account, "mastery_path", template_id)
     _join(as_account, "sara", "mastery_path", template_id)
     _sara_topics(as_account)  # the copy is made when the list is first read

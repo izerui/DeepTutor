@@ -21,7 +21,7 @@ from tests.api.test_book_archived_source import (  # noqa: F401
     headers,
 )
 from tests.api.test_book_shared_access import shared_env  # noqa: F401
-from tests.multi_user.test_b3_p4_admin_unpublish_teacher_path import (  # noqa: F401
+from tests.multi_user.test_b3_p4_admin_unpublish_author_path import (  # noqa: F401
     archived_cited_book,
 )
 from tests.multi_user.test_owner_withdrawal_books import _assert_counts_only, _auth
@@ -158,7 +158,7 @@ def test_owner_listing_during_archive_re_registers_a_private_book(archive_env):
     assert tree_hashes(source) == before
 
 
-def test_admin_delete_of_archived_book_needs_the_teacher_path_confirmation(
+def test_admin_delete_of_archived_book_needs_the_author_path_confirmation(
     archived_cited_book, teaching_http, teaching_users,
 ):
     template_id, store = archived_cited_book
@@ -170,7 +170,7 @@ def test_admin_delete_of_archived_book_needs_the_teacher_path_confirmation(
 
     first = client.delete("/api/books/book:bk_tom", headers=_auth("adam"))
     assert first.status_code == 409, first.text
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert book_registry.get_book("bk_tom") is not None
     assert book_registry.list_unavailable_book_references("mastery_template", template_id) == []
 

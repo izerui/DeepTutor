@@ -140,7 +140,7 @@ const STARTERS: Record<
   ],
 };
 
-/** A teacher path is studied or reviewed, never redesigned here. */
+/** An author path is studied or reviewed, never redesigned here. */
 const AUTHOR_PATH_MODES: readonly MasteryMode[] = ["study", "review"];
 
 /**
@@ -545,7 +545,7 @@ export function MasteryStudy({
   );
 
   // A stale "?mode=outline" link (or a draft opened before the topic loaded)
-  // must not start an outline conversation on a teacher's path: the server
+  // must not start an outline conversation on an author's path: the server
   // refuses it, so the draft is moved to study before anything is sent.
   const authorPath = topic ? isAuthorInstance(topic) : false;
   useEffect(() => {

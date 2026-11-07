@@ -21,7 +21,7 @@ function courseBooks(topic: MasteryTopic) {
 }
 
 /**
- * What a learner needs to know about a path their teacher set: whose it is,
+ * What a learner needs to know about a path their author set: whose it is,
  * that its outline is not theirs to edit, that it just changed, and when its
  * materials are gone (the tutor will not teach it from its own knowledge).
  */

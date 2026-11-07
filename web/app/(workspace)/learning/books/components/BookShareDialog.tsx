@@ -44,7 +44,7 @@ function SharingForm({ book, isAdmin, onClose, onChanged }: {
   const [force, setForce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Rule R1: set once the server reports published teacher paths citing the
+  // Rule R1: set once the server reports published author paths citing the
   // book; the next submission then confirms the withdrawal.
   const [impact, setImpact] = useState<WithdrawalImpact | null>(null);
   const alive = useRef(true);

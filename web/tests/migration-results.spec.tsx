@@ -105,7 +105,7 @@ it("treats a missing items array as empty and preserves API errors", async () =>
 
 it.each([
   { label: "ordinary user", isAdmin: false },
-  { label: "student", isAdmin: false },
+  { label: "learner", isAdmin: false },
   { label: "loading administrator", loading: true },
   { label: "unavailable identity", statusAvailable: false },
   { label: "unauthenticated identity", authenticated: false },

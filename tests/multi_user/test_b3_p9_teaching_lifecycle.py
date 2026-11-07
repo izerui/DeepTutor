@@ -1,6 +1,6 @@
-"""B3 P9: teaching lifecycle tests — student deletion releases materials, three-store lock ordering.
+"""B3 P9: teaching lifecycle tests — learner deletion releases materials, three-store lock ordering.
 
-P9-1: deleting a student who exclusively holds an old-revision KB reference
+P9-1: deleting a learner who exclusively holds an old-revision KB reference
 releases that reference while still-needed references survive.
 P9-2: concurrent ``transfer_owner`` (``_joint_write``), ``shared_write``
 and ``sync_material_references`` (``material_lock``) do not deadlock.
@@ -24,7 +24,7 @@ from deeptutor.teaching.store import TeachingStore
 
 
 # ---------------------------------------------------------------------------
-# P9-1: deleting a student releases materials exclusive to their old revision
+# P9-1: deleting a learner releases materials exclusive to their old revision
 # ---------------------------------------------------------------------------
 
 
@@ -49,8 +49,8 @@ def two_public_kbs(teaching_users, as_account, make_kb):
     return SimpleNamespace(**records)
 
 
-def test_deleting_a_student_releases_old_revision_material(
-    two_public_kbs, teacher_draft, publish_template, as_account,
+def test_deleting_a_learner_releases_old_revision_material(
+    two_public_kbs, author_draft, publish_template, as_account,
     teaching_users, edit_calculus_draft,
 ):
     """Sara stays on revision 1 (with both KBs); Sam moves to revision 2
@@ -60,7 +60,7 @@ def test_deleting_a_student_releases_old_revision_material(
     dropped = two_public_kbs.dropped_kb
 
     # Publish revision 1 with both KBs as sources.
-    teacher_draft(
+    author_draft(
         sources=(
             TopicSource(
                 id="s0",
@@ -78,10 +78,10 @@ def test_deleting_a_student_releases_old_revision_material(
             ),
         )
     )
-    publish_template(students=("sara", "sam"))
+    publish_template(learners=("sara", "sam"))
     template_id = TeachingStore().list_templates()[0].id
 
-    # Both students access the path so their instances are created (applied_revision = 1).
+    # Both learners access the path so their instances are created (applied_revision = 1).
     from deeptutor.teaching.instances import sync_assigned_instances
     for name in ("sara", "sam"):
         with as_account(name):
@@ -140,7 +140,7 @@ def test_deleting_a_student_releases_old_revision_material(
 
 
 def test_concurrent_joint_write_shared_write_and_material_lock_do_not_deadlock(
-    teacher_draft, publish_template, teaching_users, as_account
+    author_draft, publish_template, teaching_users, as_account
 ):
     """Multiple threads repeatedly take ``_joint_write`` (teaching->KB->Book),
     ``shared_write`` (KB->Book) and ``material_lock`` in parallel; all must
@@ -150,10 +150,10 @@ def test_concurrent_joint_write_shared_write_and_material_lock_do_not_deadlock(
     from deeptutor.teaching import store as teaching_store
 
     # Set up a minimal template so transfer_owner and sync have rows to work with.
-    teacher_draft()
-    publish_template(students=("sara",))
+    author_draft()
+    publish_template(learners=("sara",))
 
-    # Create a second teacher so transfer_owner actually takes the lock and moves rows.
+    # Create a second author so transfer_owner actually takes the lock and moves rows.
     store = TeachingStore()
     store.create_template(
         owner_user_id="locktest-teacher",

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { AI_LIMIT_PRESETS, getMyAiUsage, getSchoolAiLimit, setSchoolAiLimit, type AiUsage } from "@/lib/workbench-api";
 
-/** A student's AI left today (spec 2026-11-03 batch 3 §8); nothing without a limit. */
+/** A learner's AI left today (spec 2026-11-03 batch 3 §8); nothing without a limit. */
 export function AiUsageNote() {
   const { t } = useTranslation();
   const [usage, setUsage] = useState<AiUsage | null>(null);
@@ -65,7 +65,7 @@ export function AiLimitPicker({
   );
 }
 
-/** The school default for students' daily AI (administrators; batch 3 §8). */
+/** The school default for learners' daily AI (administrators; batch 3 §8). */
 export function AiLimitSetting() {
   const { t } = useTranslation();
   const [value, setValue] = useState<number | undefined>(undefined);

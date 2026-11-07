@@ -1,7 +1,7 @@
 """Rule R1 (B2-19): an owner may always withdraw or delete a referenced KB / book.
 
 Other accounts' course / partner references are revoked and their referrers
-see the material as unavailable. Published teacher paths need one explicit
+see the material as unavailable. Published author paths need one explicit
 confirmation: the first request answers 409 with aggregate counts only.
 """
 
@@ -32,7 +32,7 @@ def _kb_source(record) -> TopicSource:
 
 @pytest.fixture
 def toms_kb(teaching_users, as_account, make_kb):
-    """Tom's (teacher, not admin) public KB in his account library."""
+    """Tom's (author, not admin) public KB in his account library."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
     from deeptutor.multi_user.paths import get_account_path_service
 
@@ -48,10 +48,10 @@ def toms_kb(teaching_users, as_account, make_kb):
 
 
 @pytest.fixture
-def cited_by_tinas_path(toms_kb, teacher_draft, publish_template):
+def cited_by_tinas_path(toms_kb, author_draft, publish_template):
     """Tina's published path cites Tom's public KB; Sara and Sam study it."""
-    teacher_draft(sources=(_kb_source(toms_kb),))
-    result = publish_template(students=("sara", "sam"))
+    author_draft(sources=(_kb_source(toms_kb),))
+    result = publish_template(learners=("sara", "sam"))
     assert result["warnings"] == []
     return result["template"]["id"]
 
@@ -61,9 +61,9 @@ def _foreign_ids(teaching_users, *extra: str) -> list[str]:
     return [*ids, "tina", "sara", "sam", *extra]
 
 
-def _assert_counts_only(detail, teaching_users, template_id: str, *, paths: int, students: int):
+def _assert_counts_only(detail, teaching_users, template_id: str, *, paths: int, learners: int):
     assert detail["code"] == CODE and detail["requires_confirmation"] is True
-    assert (detail["affected_paths"], detail["affected_students"]) == (paths, students)
+    assert (detail["affected_paths"], detail["affected_students"]) == (paths, learners)
     text = json.dumps(detail)
     for foreign in _foreign_ids(teaching_users, template_id):
         assert f'"{foreign}"' not in text and f":{foreign}" not in text and f" {foreign}" not in text
@@ -136,10 +136,10 @@ def test_course_marks_a_withdrawn_kb_unavailable_with_its_reason(
     assert reasons == {toms_kb.kb_id: "made_private"}
 
 
-# ---- 3. published teacher paths: counts-only 409, then confirm ----------------
+# ---- 3. published author paths: counts-only 409, then confirm ----------------
 
 
-def test_withdrawing_a_kb_cited_by_a_teacher_path_needs_confirmation(
+def test_withdrawing_a_kb_cited_by_a_author_path_needs_confirmation(
     cited_by_tinas_path, toms_kb, teaching_http, teaching_users
 ):
     template_id = cited_by_tinas_path
@@ -147,7 +147,7 @@ def test_withdrawing_a_kb_cited_by_a_teacher_path_needs_confirmation(
     url = f"/api/knowledge-bases/{toms_kb.ref}/visibility"
     first = client.put(url, json={"visibility": "private"}, headers=_auth("tom"))
     assert first.status_code == 409
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert kb_registry.get_kb(toms_kb.kb_id).visibility == "public"
     assert kb_registry.list_unavailable_references("mastery_template", template_id) == []
     assert _materials_unavailable(teaching_http, template_id) == []
@@ -161,7 +161,7 @@ def test_withdrawing_a_kb_cited_by_a_teacher_path_needs_confirmation(
 
 
 @pytest.mark.parametrize("body_route", [False, True])
-def test_deleting_a_kb_cited_by_a_teacher_path_needs_confirmation(
+def test_deleting_a_kb_cited_by_a_author_path_needs_confirmation(
     cited_by_tinas_path, toms_kb, teaching_http, teaching_users, body_route
 ):
     template_id = cited_by_tinas_path
@@ -178,7 +178,7 @@ def test_deleting_a_kb_cited_by_a_teacher_path_needs_confirmation(
 
     first = delete(False)
     assert first.status_code == 409
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert kb_registry.get_kb(toms_kb.kb_id) is not None
     assert Path(toms_kb.base_dir, toms_kb.dir_name).is_dir()
 
@@ -191,8 +191,8 @@ def test_deleting_a_kb_cited_by_a_teacher_path_needs_confirmation(
     assert _materials_unavailable(teaching_http, template_id) == ["Algebra notes"]
 
 
-def test_owners_own_teacher_path_counts_for_delete_but_not_for_withdrawal(
-    teaching_users, as_account, make_kb, teacher_draft, publish_template, teaching_http
+def test_owners_own_author_path_counts_for_delete_but_not_for_withdrawal(
+    teaching_users, as_account, make_kb, author_draft, publish_template, teaching_http
 ):
     """Tina's own path keeps reading her private KB, so only deletion affects it."""
     from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -204,8 +204,8 @@ def test_owners_own_teacher_path_counts_for_delete_but_not_for_withdrawal(
         make_kb(KnowledgeBaseManager(base_dir=str(root)), "keys")
         record = kb_registry.ensure_registered(root, "keys", created_by=teaching_users["tina"]["id"])
         kb_registry.set_visibility(record.kb_id, "public")
-    teacher_draft(sources=(_kb_source(record),))
-    template_id = publish_template(students=("sara",))["template"]["id"]
+    author_draft(sources=(_kb_source(record),))
+    template_id = publish_template(learners=("sara",))["template"]["id"]
     client = teaching_http.client
     response = client.put(
         f"/api/knowledge-bases/{record.ref}/visibility",
@@ -310,7 +310,7 @@ def _book_source(book_id: str, label: str, position: int = 1) -> TopicSource:
 @pytest.mark.parametrize("also_direct", [False, True])
 @pytest.mark.parametrize("operation", ["private", "delete"])
 def test_kb_cited_through_a_book_of_a_published_path_needs_confirmation(
-    toms_kb, teaching_users, teacher_draft, publish_template, teaching_http, tmp_path,
+    toms_kb, teaching_users, author_draft, publish_template, teaching_http, tmp_path,
     operation, also_direct,
 ):
     """Review I1: path -> book -> KB counts like a direct citation (deduplicated)."""
@@ -324,9 +324,9 @@ def test_kb_cited_through_a_book_of_a_published_path_needs_confirmation(
     sources = (_book_source(book.book_id, "Waves"),)
     if also_direct:
         sources = (_kb_source(toms_kb), *sources)
-    teacher_draft(sources=sources)
+    author_draft(sources=sources)
     template_id = publish_template(
-        students=("sara", "sam"), book_choices={book.book_id: "reference_only"},
+        learners=("sara", "sam"), book_choices={book.book_id: "reference_only"},
     )["template"]["id"]
     assert [r.kb_id for r in kb_registry.list_referenced("book", book.book_id)] == [toms_kb.kb_id]
     client = teaching_http.client
@@ -343,7 +343,7 @@ def test_kb_cited_through_a_book_of_a_published_path_needs_confirmation(
 
     first = withdraw()
     assert first.status_code == 409, first.text
-    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, students=2)
+    _assert_counts_only(first.json()["detail"], teaching_users, template_id, paths=1, learners=2)
     assert "bk_waves" not in first.text
     assert kb_registry.list_unavailable_references("book", book.book_id) == []
     assert _materials_unavailable(teaching_http, template_id) == []

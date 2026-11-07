@@ -12,8 +12,8 @@ TEACHER = re.compile(r"\bteachers?\b", re.IGNORECASE)
 
 
 def test_relayed_messages_name_the_author():
-    from deeptutor.capabilities.mastery.mode import TEACHER_OUTLINE_LOCKED
-    from deeptutor.multi_user.retrieval_scope import TEACHER_PATH_RETRIEVAL_DENIED
+    from deeptutor.capabilities.mastery.mode import AUTHOR_OUTLINE_LOCKED
+    from deeptutor.multi_user.retrieval_scope import AUTHOR_PATH_RETRIEVAL_DENIED
     from deeptutor.teaching.instances import (
         INSTANCE_UNAVAILABLE,
         MATERIALS_UNAVAILABLE,
@@ -21,8 +21,8 @@ def test_relayed_messages_name_the_author():
     )
 
     for message in (
-        TEACHER_OUTLINE_LOCKED,
-        TEACHER_PATH_RETRIEVAL_DENIED,
+        AUTHOR_OUTLINE_LOCKED,
+        AUTHOR_PATH_RETRIEVAL_DENIED,
         INSTANCE_UNAVAILABLE,
         MATERIALS_UNAVAILABLE,
         OUTLINE_LOCKED,
@@ -30,7 +30,7 @@ def test_relayed_messages_name_the_author():
         assert not TEACHER.search(message), message
         assert "author" in message, message
     # No feedback channel to the author exists: the AI must not promise one.
-    assert "send" not in TEACHER_OUTLINE_LOCKED.lower()
+    assert "send" not in AUTHOR_OUTLINE_LOCKED.lower()
     assert "feedback" not in OUTLINE_LOCKED.lower()
 
 

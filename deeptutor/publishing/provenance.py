@@ -7,7 +7,7 @@ an administrator turns "shared" into "school" without touching the item.
 * ``own``     — the viewer's own item ("我自己的");
 * ``school``  — published by an administrator ("学校发布");
 * ``shared``  — published by another learner, its author ("name 分享";
-  spec 2026-11-05: no teacher label any more).
+  spec 2026-11-05: no author label any more).
 """
 
 from __future__ import annotations

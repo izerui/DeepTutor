@@ -1,4 +1,4 @@
-"""Teachers no longer manage learners (spec 2026-11-05-remove-teacher-management).
+"""Authors no longer manage learners (spec 2026-11-05-remove-teacher-management).
 
 No comments, no naming who receives content, no "learners who need
 attention", no deadlines, opening times or calendar. Older data keeps
@@ -16,7 +16,7 @@ import pytest
 
 from deeptutor.practice_sets.service import PracticeSetService
 from deeptutor.publishing import scope as scopes
-from deeptutor.tasks.service import StudentTasks, TaskService
+from deeptutor.tasks.service import LearnerTasks, TaskService
 
 QUESTIONS = [
     {"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"},
@@ -100,7 +100,7 @@ def test_an_older_named_scope_still_reaches_its_learner(as_account, teaching_use
         assert PracticeSetService().assigned() == []
 
 
-def test_teacher_remedial_and_comments_are_gone(http):
+def test_author_remedial_and_comments_are_gone(http):
     assert importlib.util.find_spec("deeptutor.comments") is None
     assert importlib.util.find_spec("deeptutor.practice_sets.remedial") is None
     assert importlib.util.find_spec("deeptutor.catalog.attention") is None
@@ -138,10 +138,10 @@ def test_an_older_task_past_its_deadline_is_just_open(as_account, in_course, tea
                      (time.time() - 3600, time.time() + 3600, task["id"]))
     in_course(task["id"])
     with as_account("sara"):
-        [entry] = StudentTasks().assigned()
+        [entry] = LearnerTasks().assigned()
         assert entry["state"] == "open" and entry["description"] == ""
         assert not {"due_at", "open_at", "late"} & set(entry)
-        done = StudentTasks().mark_done(task["id"])
+        done = LearnerTasks().mark_done(task["id"])
     assert done["state"] == "completed" and "late" not in done
     with as_account("tina"):
         detail = TaskService().detail(task["id"])

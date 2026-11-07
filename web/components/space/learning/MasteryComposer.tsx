@@ -52,7 +52,7 @@ export function MasteryComposer({
   disabled?: boolean;
   /** Lets the screen drop a handed-off opening line into the textarea. */
   prefillInputRef?: React.MutableRefObject<((text: string) => void) | null>;
-  /** Fallback display names for KB refs the catalog does not list (e.g. teacher-path references). */
+  /** Fallback display names for KB refs the catalog does not list (e.g. author-path references). */
   knowledgeBaseLabels?: Record<string, string>;
 }) {
   const {

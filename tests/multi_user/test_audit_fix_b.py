@@ -234,7 +234,7 @@ def test_taking_down_unlisting_and_archiving_tell_who_joined(as_account, teachin
 
 def test_a_taken_down_course_stays_among_what_one_learns(as_account, teaching_users):
     from deeptutor.tasks.courses import CourseService, assigned_courses
-    from deeptutor.tasks.service import StudentTasks, TaskService
+    from deeptutor.tasks.service import LearnerTasks, TaskService
 
     with as_account("tina"):
         note = TaskService().create("note", "Read")
@@ -244,7 +244,7 @@ def test_a_taken_down_course_stays_among_what_one_learns(as_account, teaching_us
     _list(as_account, "course", course["id"])
     _join(as_account, "sara", "course", course["id"])
     with as_account("sara"):
-        StudentTasks().mark_done(note["id"])
+        LearnerTasks().mark_done(note["id"])
         [mine] = assigned_courses()
     assert mine["unavailable"] is None
     with as_account("adam"):
@@ -282,7 +282,7 @@ def test_a_new_lesson_in_a_published_course_tells_who_joined(as_account, teachin
 def test_an_archived_practice_set_in_a_course_says_its_author_archived_it(as_account, teaching_users):
     from deeptutor.practice_sets.service import PracticeSetService
     from deeptutor.tasks.courses import CourseService
-    from deeptutor.tasks.service import StudentTasks
+    from deeptutor.tasks.service import LearnerTasks
 
     set_id = _market_set(as_account)
     with as_account("tina"):
@@ -292,14 +292,14 @@ def test_an_archived_practice_set_in_a_course_says_its_author_archived_it(as_acc
     _list(as_account, "course", course["id"])
     _join(as_account, "sara", "course", course["id"])
     with as_account("sara"):
-        [lesson] = StudentTasks().assigned()
+        [lesson] = LearnerTasks().assigned()
     assert lesson["state"] == "open" and lesson["target_archived"] is False
     with as_account("tina"):
         PracticeSetService().archive(set_id)
         [authored] = CourseService().get(course["id"])["tasks"]
     assert authored["target_archived"] is True  # the author sees it in the course editor
     with as_account("sara"):
-        [lesson] = StudentTasks().assigned()
+        [lesson] = LearnerTasks().assigned()
     assert lesson["state"] == "closed" and lesson["target_archived"] is True
 
 

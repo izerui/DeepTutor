@@ -167,7 +167,7 @@ interface ChatMessageItem {
    *  unsent message, not an ordinary sent one. */
   failedSubmission?: boolean;
   failedSubmissionNeedsReview?: boolean;
-  /** Stable teacher-path failure code preserved across reloads (B2-16). */
+  /** Stable author-path failure code preserved across reloads (B2-16). */
   failureCode?: string;
   /** Extra structured data from the refusal event (material names, etc.). */
   failureDetails?: Record<string, unknown>;
@@ -2475,7 +2475,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                   <AlertCircle className="h-4 w-4 shrink-0 text-[var(--destructive)]" />
                   <span className="min-w-0 flex-1 text-[12px] leading-[1.5] text-[var(--foreground)]">
                     {(() => {
-                      // A teacher path's refusal carries a stable code; its
+                      // An author path's refusal carries a stable code; its
                       // English sentence is for logs, not for the learner.
                       const refusal = authorTurnErrorMessage(
                         terminalError?.metadata as Record<string, unknown> | undefined,

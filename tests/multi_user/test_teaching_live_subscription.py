@@ -1,7 +1,7 @@
-"""A live mastery subscription ends when its teacher path closes (rule R3).
+"""A live mastery subscription ends when its author path closes (rule R3).
 
 REST, turns, lists and new subscriptions already refuse a revoked or archived
-copy. These tests cover a socket that was subscribed *before* the teacher
+copy. These tests cover a socket that was subscribed *before* the author
 closed the path: it must stop forwarding the copy's events and say why, with
 the same machine-readable code a refused turn carries.
 """
@@ -149,13 +149,13 @@ def test_a_close_in_another_process_is_noticed_without_a_signal(
         assert time.monotonic() - started < FALLBACK_SECONDS - 1
 
 
-def test_revoking_one_student_leaves_another_students_subscription_live(
-    teacher_draft, publish_template, ws_client, as_account, teaching_users
+def test_revoking_one_learner_leaves_another_learners_subscription_live(
+    author_draft, publish_template, ws_client, as_account, teaching_users
 ):
     import asyncio
 
-    teacher_draft()
-    template_id = publish_template(students=("sara", "sam"))["template"]["id"]
+    author_draft()
+    template_id = publish_template(learners=("sara", "sam"))["template"]["id"]
     for name in ("sara", "sam"):
         with as_account(name):
             asyncio.run(mastery_path.list_topics())
@@ -223,7 +223,7 @@ def test_a_failed_access_read_keeps_the_subscription_alive(
 def test_the_periodic_recheck_forwards_what_it_reads(
     sara_instance, ws_client, as_account, monkeypatch
 ):
-    """An authorized student never loses events read at a re-check timeout."""
+    """An authorized learner never loses events read at a re-check timeout."""
     from deeptutor.learning import event_hub
 
     monkeypatch.setattr(mastery_path, "_ACCESS_RECHECK_SECONDS", 0.05)

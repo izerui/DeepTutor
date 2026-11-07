@@ -28,7 +28,7 @@ function TemplateStatus({ template }: { template: AuthorTemplate }) {
   )
 }
 
-/** The footer of a teacher's own path card: its publishing state and controls. */
+/** The footer of an author's own path card: its publishing state and controls. */
 export function AuthorCardActions({
   topic,
   template,
@@ -76,8 +76,8 @@ export function AuthorCardActions({
 }
 
 /**
- * Teacher paths without a card here: another teacher's (an admin sees them),
- * a removed teacher's transferred path, or one whose draft is gone. They can
+ * Author paths without a card here: another author's (an admin sees them),
+ * a removed author's transferred path, or one whose draft is gone. They can
  * be managed but not published from this page, and the reason is said.
  */
 export function UnlistedAuthorTemplates({

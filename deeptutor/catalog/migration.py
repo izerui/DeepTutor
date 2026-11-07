@@ -1,6 +1,6 @@
 """Content published to everyone becomes listed (platform direction §9.1, batch 1 §7).
 
-Runs once at startup, and is safe to run again. Teachers' and
+Runs once at startup, and is safe to run again. Authors' and
 administrators' content that reached everyone — a stored "everyone"
 scope, or a public book or knowledge base that never had a scope — gets a
 listing in the market. "Everyone" goes; the people who had started on it
@@ -65,7 +65,7 @@ def _publisher(owner: str, accounts: dict[str, dict[str, Any]]) -> bool:
 
 
 def _candidates(accounts: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
-    """(kind, id) of teachers' and administrators' content reaching everyone."""
+    """(kind, id) of authors' and administrators' content reaching everyone."""
     from deeptutor.book import registry as book_registry
     from deeptutor.knowledge import registry as kb_registry
     from deeptutor.practice_sets import store as practice_store
@@ -189,10 +189,10 @@ def _book_starters(book_id: str, people: list[str]) -> set[str]:
 
 
 def _starters(kind: str, item_id: str, owner: str, accounts: dict[str, dict[str, Any]]) -> set[str]:
-    students = sorted(u for u, a in accounts.items() if a["role"] == "student" and u != owner)
+    learners = sorted(u for u, a in accounts.items() if a["role"] == "student" and u != owner)
     readers = sorted(u for u, a in accounts.items() if a["role"] in ("student", "teacher") and u != owner)
     if kind == scopes.MASTERY_PATH:
-        return _path_starters(item_id, students)
+        return _path_starters(item_id, learners)
     if kind == scopes.PRACTICE_SET:
         return _set_starters(item_id) - {owner}
     if kind == scopes.COURSE:

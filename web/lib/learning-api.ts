@@ -80,7 +80,7 @@ export interface MapKnowledgePoint {
   mastery_source: "system" | "learner" | "";
   override_note: string;
   deferred?: boolean;
-  /** A teacher redefined this objective; the learner has not answered since (R11). */
+  /** An author redefined this objective; the learner has not answered since (R11). */
   needs_reassessment?: boolean;
 }
 
@@ -245,7 +245,7 @@ export interface ObjectiveAttempt {
   is_correct: boolean;
   error_type: string;
   at: number;
-  /** Kept for the record but not evidence, e.g. answered before a teacher redefined the objective. */
+  /** Kept for the record but not evidence, e.g. answered before an author redefined the objective. */
   voided?: boolean;
   /** `objective_redefined`, or the note recorded when the assessment was voided. */
   void_reason?: string;
@@ -300,7 +300,7 @@ export interface ObjectiveReport {
   gate: "quantitative" | "qualitative";
   mastered: boolean;
   assessed_mastered: boolean;
-  /** A teacher redefined this objective; earlier answers no longer count (R11). */
+  /** An author redefined this objective; earlier answers no longer count (R11). */
   needs_reassessment?: boolean;
   explained?: { summary: string; timestamp: number };
   required_visual_tasks?: string[];
@@ -507,12 +507,12 @@ export interface AuthorUpdateNoticeData {
   applied_at: number;
 }
 
-/** Present only on a learner's copy of a teacher path. */
+/** Present only on a learner's copy of an author path. */
 export interface MasteryTopicOrigin {
   kind: "teacher_template";
   template_id: string;
   revision: number;
-  /** Empty when the teacher's account no longer exists. */
+  /** Empty when the author's account no longer exists. */
   teacher_name: string;
   /** Who it comes from now (spec 2026-11-02 §3.1); a transferred path reads "school". */
   provenance?: Provenance;
@@ -688,10 +688,10 @@ export class MasteryApiError extends Error {
 }
 
 /**
- * A teacher path the learner can no longer open: its assignment was revoked
+ * An author path the learner can no longer open: its assignment was revoked
  * or the path archived. The server refuses every route that names it with 403
  * and this code (the same one a live subscription ends with); any other 403,
- * even on a teacher path, is that route's own error.
+ * even on an author path, is that route's own error.
  *
  * ``_pathId`` is accepted for existing call sites and deliberately ignored:
  * the id never decides why a request was refused.
@@ -786,7 +786,7 @@ export function updateMasteryReviewSettings(
   );
 }
 
-/** The learner's own path only; a teacher path keeps the teacher's standard. */
+/** The learner's own path only; an author path keeps the author's standard. */
 export function updateMasteryPassStandard(
   pathId: string,
   passStandard: PassStandard,
@@ -900,7 +900,7 @@ export async function fetchMasteryTopicSessions(
   return result.sessions;
 }
 
-/** Hide the one-time "your teacher updated this course" notice. */
+/** Hide the one-time "the author updated this course" notice. */
 export function acknowledgeAuthorUpdate(
   pathId: string,
 ): Promise<{ status: string; acknowledged: boolean }> {

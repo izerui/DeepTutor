@@ -47,7 +47,7 @@ beforeEach(() => {
 
 describe("annotateFailureCode round-trip", () => {
   it("stores failureCode and failureDetails, readable after simulated reload", async () => {
-    await principal("student-1");
+    await principal("learner-1");
 
     // 1. Store a failed submission (simulates the pre-turn local persistence).
     const stored = storeFailedSubmission(SESSION, {
@@ -57,7 +57,7 @@ describe("annotateFailureCode round-trip", () => {
     });
     expect(stored).toBe(SUBMISSION);
 
-    // 2. Annotate with a teacher-path materials-unavailable refusal.
+    // 2. Annotate with an author-path materials-unavailable refusal.
     const annotated = annotateFailureCode(SESSION, SUBMISSION, "teacher_materials_unavailable", {
       error_code: "teacher_materials_unavailable",
       materials: ["Physics notes", "Mechanics book"],
@@ -74,17 +74,17 @@ describe("annotateFailureCode round-trip", () => {
     expect(records[0].failureDetails?.materials).toEqual(["Physics notes", "Mechanics book"]);
 
     // 4. The localized message must include the material names.
-    const teacher = authorTurnErrorMessage({
+    const message = authorTurnErrorMessage({
       error_code: records[0].failureCode!,
       ...records[0].failureDetails,
     });
-    expect(teacher).not.toBeNull();
-    expect(teacher!.key).toMatch(/Course materials are temporarily unavailable.*\{\{materials\}\}/);
-    expect(teacher!.values?.materials).toBe("Physics notes · Mechanics book");
+    expect(message).not.toBeNull();
+    expect(message!.key).toMatch(/Course materials are temporarily unavailable.*\{\{materials\}\}/);
+    expect(message!.values?.materials).toBe("Physics notes · Mechanics book");
   });
 
   it("stores failureCode for course-unavailable without details", async () => {
-    await principal("student-1");
+    await principal("learner-1");
 
     storeFailedSubmission(SESSION, {
       submissionId: SUBMISSION,
@@ -98,21 +98,21 @@ describe("annotateFailureCode round-trip", () => {
     expect(records[0].failureCode).toBe("teacher_path_unavailable");
     expect(records[0].failureDetails).toBeUndefined();
 
-    const teacher = authorTurnErrorMessage({
+    const message = authorTurnErrorMessage({
       error_code: records[0].failureCode!,
     });
-    expect(teacher).not.toBeNull();
-    expect(teacher!.key).toMatch(/This course is no longer available/);
+    expect(message).not.toBeNull();
+    expect(message!.key).toMatch(/This course is no longer available/);
   });
 
   it("does not annotate when the record does not exist", async () => {
-    await principal("student-1");
+    await principal("learner-1");
     const result = annotateFailureCode(SESSION, "nonexistent", "teacher_path_unavailable");
     expect(result).toBe(false);
   });
 
   it("strips non-string/non-string-array values from failureDetails", async () => {
-    await principal("student-1");
+    await principal("learner-1");
 
     storeFailedSubmission(SESSION, {
       submissionId: SUBMISSION,
@@ -136,7 +136,7 @@ describe("annotateFailureCode round-trip", () => {
   });
 
   it("reason disappears once the submission is cleared (materials restored)", async () => {
-    await principal("student-1");
+    await principal("learner-1");
 
     storeFailedSubmission(SESSION, {
       submissionId: SUBMISSION,

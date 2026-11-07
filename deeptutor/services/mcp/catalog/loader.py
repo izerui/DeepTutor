@@ -136,7 +136,7 @@ def search_catalog(
     """Filter the catalog and return one page of it.
 
     *self_service_only* is what a per-user store passes: stdio entries exist in
-    the data for the deployment admin and must never reach a student's grid.
+    the data for the deployment admin and must never reach a learner's grid.
     """
     needle = q.strip().casefold()
     matches = [

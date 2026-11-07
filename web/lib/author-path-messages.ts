@@ -1,7 +1,7 @@
 /**
- * What a learner is told when a teacher path refuses something, in their own
+ * What a learner is told when an author path refuses something, in their own
  * language. The server's answers are stable English constants written for
- * logs; the code (or the HTTP status on a teacher path) is the contract, so
+ * logs; the code (or the HTTP status on an author path) is the contract, so
  * the wording lives here and is looked up by it.
  */
 
@@ -9,7 +9,7 @@
 export const AUTHOR_PATH_UNAVAILABLE_CODE = 'teacher_path_unavailable'
 export const AUTHOR_MATERIALS_UNAVAILABLE_CODE = 'teacher_materials_unavailable'
 
-/** `QuizAttempt.void_reason` of answers to an objective a teacher redefined. */
+/** `QuizAttempt.void_reason` of answers to an objective an author redefined. */
 export const OBJECTIVE_REDEFINED_REASON = 'objective_redefined'
 
 export const COURSE_UNAVAILABLE_KEY =
@@ -40,7 +40,7 @@ function materialNames(value: unknown): string[] {
 }
 
 /**
- * The localized message for a turn a teacher path refused, or null when the
+ * The localized message for a turn an author path refused, or null when the
  * event is some other failure (its own content is shown as before).
  */
 export function authorTurnErrorMessage(

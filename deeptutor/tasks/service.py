@@ -1,18 +1,18 @@
 """Tasks (spec 2026-11-03 batch 1 §3).
 
-A teacher (or administrator) asks students to do one thing: study a Mastery
+An author (or administrator) asks learners to do one thing: study a Mastery
 Path, answer a practice set, read chapters of a book, or a plain
-instruction. The task reaches students through a publish scope (kind
+instruction. The task reaches learners through a publish scope (kind
 ``task``) and only ever names content its author published.
 
-On the student side a task is *open*, *completed* or *closed*: tasks have
+On the learner side a task is *open*, *completed* or *closed*: tasks have
 no deadline or opening time (spec 2026-11-05 remove-teacher-management §1.4;
 the columns are kept and never read). Completion is detected from what the
-student actually did and then kept (R24). *Closed* is never stored: it
-is whether the task, its content and the student's place in its scope still
+learner actually did and then kept (R24). *Closed* is never stored: it
+is whether the task, its content and the learner's place in its scope still
 hold right now, so coming back into scope restores it.
 
-Practice sets and Mastery Paths a student received and no task names are
+Practice sets and Mastery Paths a learner received and no task names are
 shown as tasks too (``practice_set:<id>`` / ``mastery_path:<template id>``),
 so nothing assigned is listed twice (R23).
 """
@@ -69,9 +69,9 @@ def _accounts() -> dict[str, dict[str, Any]]:
 # ── targets ────────────────────────────────────────────────
 
 
-def _hand_tasks_to(conn, admin_id: str, teacher_id: str, task_ids: list[str]) -> int:
+def _hand_tasks_to(conn, admin_id: str, author_id: str, task_ids: list[str]) -> int:
     """Inside a write: the administrator's tasks among *task_ids* go to an active learner (spec 2026-11-05 §4)."""
-    account = _accounts().get(teacher_id)
+    account = _accounts().get(author_id)
     if account is None or account["role"] == "admin" or account["disabled"]:
         raise TaskError("Choose an active learner.")
     if not task_ids:
@@ -79,7 +79,7 @@ def _hand_tasks_to(conn, admin_id: str, teacher_id: str, task_ids: list[str]) ->
     marks = ",".join("?" for _ in task_ids)
     return int(conn.execute(
         f"UPDATE tasks SET owner_user_id = ?, updated_at = ? WHERE owner_user_id = ? AND id IN ({marks})",  # nosec B608
-        (teacher_id, _now(), admin_id, *task_ids),
+        (author_id, _now(), admin_id, *task_ids),
     ).rowcount)
 
 
@@ -119,7 +119,7 @@ def _in_a_course(task_id: str) -> bool:
 
 
 def _target_audience(kind: str, target_id: str) -> set[str] | None:
-    """Students the referenced content reaches; ``None`` means everyone."""
+    """Learners the referenced content reaches; ``None`` means everyone."""
     from deeptutor.publishing import scope as scopes
 
     if kind == "practice_set":
@@ -183,8 +183,8 @@ def _target_archived(kind: str, target_id: str) -> bool:
     return False
 
 
-def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> bool:
-    """Whether the student can still open the referenced content."""
+def _target_available_to(kind: str, target_id: str, learner: CurrentUser) -> bool:
+    """Whether the learner can still open the referenced content."""
     if kind == "note":
         return True
     if kind == "practice_set":
@@ -194,13 +194,13 @@ def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> boo
         with practice_store.read() as conn:
             row = conn.execute("SELECT status FROM practice_sets WHERE id = ?", (target_id,)).fetchone() if conn else None
         scope = scopes.get_scope(scopes.PRACTICE_SET, target_id)
-        return bool(row and row["status"] == "published" and scope and scopes._reaches(scope, student.id))
+        return bool(row and row["status"] == "published" and scope and scopes._reaches(scope, learner.id))
     if kind == "mastery_path":
         from deeptutor.teaching.store import TeachingStore
 
         teaching = TeachingStore()
         template = teaching.get_template(target_id)
-        assignment = teaching.get_assignment(target_id, student.id)
+        assignment = teaching.get_assignment(target_id, learner.id)
         return bool(
             template and template.status == "published" and assignment and assignment.status == "active"
         )
@@ -208,24 +208,24 @@ def _target_available_to(kind: str, target_id: str, student: CurrentUser) -> boo
         from deeptutor.book import registry as book_registry
 
         record = book_registry.get_book(target_id)
-        return bool(record and book_registry.can_read_book(record, student))
+        return bool(record and book_registry.can_read_book(record, learner))
     return False
 
 
-def _first_submission(set_id: str, student_id: str) -> float | None:
-    """When the student first submitted a practice set: the moment it was done."""
+def _first_submission(set_id: str, learner_id: str) -> float | None:
+    """When the learner first submitted a practice set: the moment it was done."""
     from deeptutor.practice_sets import store as practice_store
 
     with practice_store.read() as conn:
         row = conn.execute(
             "SELECT MIN(submitted_at) FROM practice_submissions WHERE set_id = ? AND student_id = ?",
-            (set_id, student_id),
+            (set_id, learner_id),
         ).fetchone() if conn else None
     return float(row[0]) if row and row[0] else None
 
 
-def _completed_now(kind: str, target_id: str, settings: dict[str, Any], student: CurrentUser) -> bool:
-    """Whether what the student did meets the task (notes are stored, not detected)."""
+def _completed_now(kind: str, target_id: str, settings: dict[str, Any], learner: CurrentUser) -> bool:
+    """Whether what the learner did meets the task (notes are stored, not detected)."""
     try:
         if kind == "practice_set":
             from deeptutor.practice_sets import store as practice_store
@@ -233,7 +233,7 @@ def _completed_now(kind: str, target_id: str, settings: dict[str, Any], student:
             with practice_store.read() as conn:
                 return bool(conn and conn.execute(
                     "SELECT 1 FROM practice_submissions WHERE set_id = ? AND student_id = ? LIMIT 1",
-                    (target_id, student.id),
+                    (target_id, learner.id),
                 ).fetchone())
         if kind == "mastery_path":
             from deeptutor.learning import policy
@@ -241,7 +241,7 @@ def _completed_now(kind: str, target_id: str, settings: dict[str, Any], student:
             from deeptutor.teaching.instances import instance_path_id
             from deeptutor.teaching.store import TeachingStore
 
-            assignment = TeachingStore().get_assignment(target_id, student.id)
+            assignment = TeachingStore().get_assignment(target_id, learner.id)
             path_id = (assignment.instance_path_id if assignment else "") or instance_path_id(target_id)
             progress = LearningStore().load(path_id)
             if progress is None:
@@ -426,18 +426,18 @@ class TaskService:
             conn.execute(f"UPDATE tasks SET {columns} WHERE id = ?", (*sets.values(), task_id))  # nosec B608
         return self.get(task_id)
 
-    def hand_over(self, task_id: str, teacher_id: str) -> dict[str, Any]:
+    def hand_over(self, task_id: str, author_id: str) -> dict[str, Any]:
         """An administrator gives a task they hold to a learner (traceability #5)."""
         if _role(self.actor) != "admin":
             raise TaskError("Only administrators hand lessons over.")
         with db.write() as conn:
             self._owned(conn, task_id)
-            _hand_tasks_to(conn, self.actor.id, teacher_id, [task_id])
+            _hand_tasks_to(conn, self.actor.id, author_id, [task_id])
         from deeptutor.notifications.service import notify
 
-        notify([teacher_id], "tasks_transferred", {"count": 1}, link=f"/tasks?task={task_id}",
-               dedupe_key=f"task_handed_over:{task_id}:{teacher_id}")
-        return {"id": task_id, "owner_user_id": teacher_id}
+        notify([author_id], "tasks_transferred", {"count": 1}, link=f"/tasks?task={task_id}",
+               dedupe_key=f"task_handed_over:{task_id}:{author_id}")
+        return {"id": task_id, "owner_user_id": author_id}
 
     def publish(self, task_id: str, *, quiet: bool = False) -> dict[str, Any]:
         """Check what it names, settle its receivers (§3.2), then publish and notify.
@@ -521,7 +521,7 @@ class TaskService:
 
         forget(TASK, task_id)
 
-    # the author's view of their students
+    # the author's view of their learners
 
     def _receivers(self, row) -> set[str]:
         from deeptutor.publishing import scope as scopes
@@ -550,35 +550,35 @@ class TaskService:
             }
         receivers = self._receivers(row)
         accounts = _accounts()
-        students = []
-        for student_id in sorted(receivers | set(completions),
+        learners = []
+        for learner_id in sorted(receivers | set(completions),
                                  key=lambda s: (accounts.get(s) or {}).get("username", s)):
-            account = accounts.get(student_id)
+            account = accounts.get(learner_id)
             if account is None:
                 continue
-            done = completions.get(student_id)
-            students.append({
-                "id": student_id,
+            done = completions.get(learner_id)
+            learners.append({
+                "id": learner_id,
                 "username": account["username"],
-                "in_scope": student_id in receivers,
+                "in_scope": learner_id in receivers,
                 "completed": bool(done),
                 "completed_at": done["completed_at"] if done else None,
                 "self_reported": bool(done and done["self_reported"]),
             })
-        return {**self._summary(row), "students": students}
+        return {**self._summary(row), "students": learners}
 
 
-# ── the student's side ─────────────────────────────────────
+# ── the learner's side ─────────────────────────────────────
 
 
-class StudentTasks:
-    """What reaches the current student, with its live state."""
+class LearnerTasks:
+    """What reaches the current learner, with its live state."""
 
     def __init__(self, actor: CurrentUser | None = None) -> None:
         self.actor = actor or get_current_user()
 
-    def _is_student(self) -> bool:
-        """A learner here: a student, or anyone who joined something (platform batch 2 §6)."""
+    def _is_learner(self) -> bool:
+        """A learner here: a learner, or anyone who joined something (platform batch 2 §6)."""
         if _role(self.actor) != "admin":
             return True
         from deeptutor.catalog.enrollment import joined_by
@@ -586,7 +586,7 @@ class StudentTasks:
         return bool(joined_by(self.actor.id))
 
     def _task_rows(self) -> list:
-        """Published or withdrawn tasks that reach the student, or that they worked on."""
+        """Published or withdrawn tasks that reach the learner, or that they worked on."""
         from deeptutor.publishing import scope as scopes
 
         # A task reaches who joined it (through its course), or whom older data named; only those are read.
@@ -610,12 +610,12 @@ class StudentTasks:
                     ids[start:start + 500],
                 )
             ]
-        student = _role(self.actor) != "admin"
+        learner = _role(self.actor) != "admin"
         out = []
         for row in rows:
             scope = scopes.get_scope(scopes.TASK, row["id"])
             reaches = bool(scope) and row["owner_user_id"] != self.actor.id and (
-                (student and scopes._reaches(scope, self.actor.id)) or self.actor.id in scope.members
+                (learner and scopes._reaches(scope, self.actor.id)) or self.actor.id in scope.members
             )
             if reaches or row["id"] in mine:
                 out.append((row, reaches))
@@ -638,7 +638,7 @@ class StudentTasks:
             )
 
     def _entry(self, *, key: str, kind: str, title: str, description: str, target_id: str,
-               settings: dict[str, Any], teacher_id: str, open_: bool, task_row=None) -> dict[str, Any]:
+               settings: dict[str, Any], author_id: str, open_: bool, task_row=None) -> dict[str, Any]:
         from deeptutor.publishing.provenance import provenance
 
         completion = self._completion(key)
@@ -667,13 +667,13 @@ class StudentTasks:
             "settings": settings,
             "state": state,
             "completed_at": completion["completed_at"] if completion else None,
-            "provenance": provenance(teacher_id, self.actor),
-            "teacher_id": teacher_id,
+            "provenance": provenance(author_id, self.actor),
+            "teacher_id": author_id,
         }
 
     def assigned(self) -> list[dict[str, Any]]:
         """Every task that reached the learner through the courses they joined (or by name)."""
-        if not self._is_student():
+        if not self._is_learner():
             return []
         entries: list[dict[str, Any]] = []
         for row, reaches in self._task_rows():
@@ -685,7 +685,7 @@ class StudentTasks:
             entry = self._entry(
                 key=row["id"], kind=row["kind"], title=row["title"], description=row["description"],
                 target_id=row["target_id"], settings=settings,
-                teacher_id=row["owner_user_id"], open_=open_, task_row=row,
+                author_id=row["owner_user_id"], open_=open_, task_row=row,
             )
             entries.append(entry)
         order = {"open": 0, "completed": 1, "closed": 2}
@@ -721,7 +721,7 @@ class StudentTasks:
 def transfer_tasks(
     user_id: str, successor_id: str, *, published_only: bool = False, counts: dict[str, int] | None = None,
 ) -> int:
-    """A departing teacher's tasks go to *successor_id*."""
+    """A departing author's tasks go to *successor_id*."""
     with db.read() as conn:
         if conn is None:
             return 0
@@ -754,8 +754,8 @@ def transfer_tasks(
     return len(moves)
 
 
-def forget_student(user_id: str) -> None:
-    """A deleted student's completions go (§7)."""
+def forget_learner(user_id: str) -> None:
+    """A deleted learner's completions go (§7)."""
     if not db.path().exists():
         return
     with db.write() as conn:
@@ -763,11 +763,11 @@ def forget_student(user_id: str) -> None:
 
 
 __all__ = [
-    "StudentTasks",
+    "LearnerTasks",
     "TaskConflict",
     "TaskError",
     "TaskNotFound",
     "TaskService",
-    "forget_student",
+    "forget_learner",
     "transfer_tasks",
 ]

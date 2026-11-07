@@ -1,7 +1,7 @@
 """A failed account hand-over leaves a durable, retryable record (B2-9).
 
 Account deletion deletes the account first and then hands its knowledge bases,
-books and teacher paths to the deleting admin. Every stage is best effort, so
+books and author paths to the deleting admin. Every stage is best effort, so
 a failing one must leave a "pending account handoff" record that names the
 stages still to run. A retry (at startup, or by an admin through the API)
 re-runs only those stages; a successful retry clears the record, and every
@@ -53,7 +53,7 @@ def _broken(*_args, **_kwargs):
 
 @pytest.fixture
 def world(sara_instance, teaching_users, tmp_path):
-    """Tina owns a public KB, a book and Sara's teacher path."""
+    """Tina owns a public KB, a book and Sara's author path."""
     tina = teaching_users["tina"]["id"]
     kb = kb_registry.register_kb(
         base_dir=tmp_path / "kbs", name="tina-public", kind="uploaded",
@@ -81,7 +81,7 @@ FAULTS = [
     (
         "sara",
         "student_assignments",
-        (TeachingStore, "revoke_all_for_student"),
+        (TeachingStore, "revoke_all_for_learner"),
         ["student_assignments", "path_materials"],
     ),
     ("sara", "path_materials", (teaching_service, "sync_material_references"), ["path_materials"]),
@@ -217,7 +217,7 @@ def test_a_retried_revocation_wakes_live_subscriptions(world, teaching_users, mo
         teaching_service, "notify_instance_closed", lambda template_id: woken.append(template_id)
     )
     with monkeypatch.context() as broken:
-        broken.setattr(TeachingStore, "revoke_all_for_student", _broken)
+        broken.setattr(TeachingStore, "revoke_all_for_learner", _broken)
         auth_router._delete_admin_user("sara", _as_admin(teaching_users))
     assert woken == []
     assert TeachingStore().get_assignment(world.template_id, world.sara).status == "active"
@@ -237,7 +237,7 @@ def test_a_retried_revocation_wakes_live_subscriptions(world, teaching_users, mo
     assert TeachingStore().get_assignment(world.template_id, world.sara).status == "revoked"
 
 
-def test_a_material_only_retry_releases_the_students_paths(world, teaching_users, monkeypatch):
+def test_a_material_only_retry_releases_the_learners_paths(world, teaching_users, monkeypatch):
     with monkeypatch.context() as broken:
         broken.setattr(teaching_service, "sync_material_references", _broken)
         auth_router._delete_admin_user("sara", _as_admin(teaching_users))
@@ -396,7 +396,7 @@ def test_a_crash_between_revocation_and_release_is_finished_by_the_retry(world, 
     """Write-ahead record holds every stage, but the revocation had committed."""
     from deeptutor.multi_user.identity import delete_user
 
-    TeachingStore().revoke_all_for_student(world.sara)
+    TeachingStore().revoke_all_for_learner(world.sara)
     assert delete_user("sara")
     kb_registry.begin_account_handoff(world.sara, "sara", world.adam, ALL_STAGES)
 

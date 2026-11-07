@@ -18,7 +18,7 @@ export interface FailedSubmissionRecord {
   priorMatchingUserIds?: string[];
   /** The text survived, but its request context could not be stored. */
   retryRequiresReview?: boolean;
-  /** Stable machine-readable code of a teacher-path refusal that ended the
+  /** Stable machine-readable code of an author-path refusal that ended the
    *  turn before the server could persist the user row (e.g.
    *  `teacher_materials_unavailable`). Annotated after the terminal error
    *  arrives so the reason survives a reload. */
@@ -305,7 +305,7 @@ function sanitizeFailureDetails(
 /** Annotate an existing failed-submission record with a stable failure code
  *  and optional structured details (e.g. material names).
  *
- * Called when a terminal error carries a teacher-path refusal code but the
+ * Called when a terminal error carries an author-path refusal code but the
  * server never confirmed the user row (no `user_message_id` in DONE). The
  * code and details are written back so a reload can display the localized
  * refusal reason (including material names) instead of the generic "Not sent"

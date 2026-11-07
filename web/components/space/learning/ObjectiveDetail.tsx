@@ -28,7 +28,7 @@ export function ObjectiveDetail({
   const qualitative = report.gate === "qualitative";
   const evidence = report.evidence ?? [];
   const evidenceCount = report.evidence_count ?? evidence.length;
-  // A voided answer (e.g. given before a teacher redefined the objective) is
+  // A voided answer (e.g. given before an author redefined the objective) is
   // kept for the record but is not evidence: it is not in the total and is
   // marked rather than shown as a pass or a miss.
   const countedAttempts = countedAttemptTotal(report);

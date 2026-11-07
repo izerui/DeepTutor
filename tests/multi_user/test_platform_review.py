@@ -139,7 +139,7 @@ def test_reviews_and_author_pages_show_only_the_market(as_account, teaching_user
         with pytest.raises(ListingNotFound):
             ReviewService().list_for("practice_set", set_id)
         with pytest.raises(ListingNotFound):
-            author_page(get_current_user(), _uid(teaching_users, "sara"))  # a student, nothing listed
+            author_page(get_current_user(), _uid(teaching_users, "sara"))  # a learner, nothing listed
 
 
 def test_deleting_a_draft_forgets_its_listing(as_account):
@@ -241,7 +241,7 @@ def test_a_set_an_older_scope_named_one_for_shows(as_account, teaching_users):
 
 
 def test_a_path_learner_who_never_opened_it_counts_in_the_report(
-    as_account, teaching_users, teacher_draft, quiet_change_model,
+    as_account, teaching_users, author_draft, quiet_change_model,
 ):
     import asyncio
 
@@ -251,7 +251,7 @@ def test_a_path_learner_who_never_opened_it_counts_in_the_report(
     from deeptutor.teaching.models import PublishRequest
     from deeptutor.teaching.service import TeachingService
 
-    teacher_draft()
+    author_draft()
     with as_account("tina"):
         service = TeachingService()
         template = service.register("topic_calculus", "")
@@ -341,7 +341,7 @@ def test_home_lists_what_one_joined(as_account, teaching_users):
 
     set_id = _market_set(as_account)
     _list(as_account, "practice_set", set_id)
-    with as_account("tom"):  # a teacher learning too
+    with as_account("tom"):  # an author learning too
         join(get_current_user(), "practice_set", set_id)
         joined = asyncio.run(home.home())["joined"]
     assert [(j["kind"], j["id"]) for j in joined] == [("practice_set", set_id)]
@@ -398,7 +398,7 @@ def test_one_school_behind_one_address_is_not_locked_out(monkeypatch):
     monkeypatch.setattr(rate_limit, "REGISTER_PER_ADDRESS", (0, 3600))
     monkeypatch.setattr(rate_limit, "LOGIN_FAILURES_PER_ADDRESS", (0, 900))
     school = "203.0.113.7"
-    for index in range(400):  # many students sign up from the school's one address
+    for index in range(400):  # many learners sign up from the school's one address
         rate_limit.check_registration(school)
         rate_limit.registered(school)
     for index in range(500):  # many of them mistype their passwords now and then

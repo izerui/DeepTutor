@@ -617,10 +617,10 @@ class ReadingLearningRecords(BaseModel):
 
 
 class TemplateUpdateNotice(BaseModel):
-    """One-time "your teacher updated this course" receipt.
+    """One-time "the author updated this course" receipt.
 
-    Written when a newer teacher revision is applied to a student's path and
-    cleared when the student acknowledges it.
+    Written when a newer author revision is applied to a learner's path and
+    cleared when the learner acknowledges it.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -661,8 +661,8 @@ class LearningProgress(BaseModel):
     # every path behaved before this field existed — so an aggregate persisted
     # without it needs no migration.
     name: str = ""
-    # Set only on a student's copy of a teacher path. Absent on every path a
-    # learner built themselves, which is how all paths behaved before teacher
+    # Set only on a learner's copy of an author path. Absent on every path a
+    # learner built themselves, which is how all paths behaved before author
     # paths existed — so no migration is needed.
     origin: PathOrigin | None = None
     diagnostic: DiagnosticResult | None = None
@@ -702,13 +702,13 @@ class LearningProgress(BaseModel):
     # just prefers any other eligible waypoint until only deferred ones remain.
     deferred_objectives: dict[str, DeferredObjective] = Field(default_factory=dict)
     explained_objectives: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    # Objectives a teacher redefined under this learner (kp id -> when), shown
+    # Objectives an author redefined under this learner (kp id -> when), shown
     # as "needs re-assessment" until the objective is assessed again (R11).
     # Recorded from the revision change itself, never derived from attempts.
-    # Absent on every path before teacher updates existed: nothing to migrate.
+    # Absent on every path before author updates existed: nothing to migrate.
     reassessment_required: dict[str, float] = Field(default_factory=dict)
     # Persistent high-water-mark: the most recent redefinition timestamp per KP.
-    # Unlike ``reassessment_required`` (cleared when the student is reassessed),
+    # Unlike ``reassessment_required`` (cleared when the learner is reassessed),
     # this survives so that linked evidence older than the redefinition is always
     # rejected, even after the reassessment flag has been cleared.
     kp_redefined_at: dict[str, float] = Field(default_factory=dict)

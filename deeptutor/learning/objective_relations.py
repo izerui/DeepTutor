@@ -73,7 +73,7 @@ def runnable_module_issues(modules: list[LearningModule]) -> list[str]:
     """Why an outline cannot be studied yet; empty when it can.
 
     Shared by the outline routes (which answer with the first issue) and
-    teacher publishing (which lists all of them before anything is written).
+    author publishing (which lists all of them before anything is written).
     """
     if not modules:
         return ["At least one learning module is required"]

@@ -92,7 +92,7 @@ async def rebind_active_path(
     """Move this turn (and the conversation) onto ``path_id``.
 
     Returns the resolved path id. Raises :class:`PathBindingError` when the
-    target does not exist, is busy in another conversation, is a teacher's
+    target does not exist, is busy in another conversation, is an author's
     path the learner may no longer open, or is refused by the running turn's
     admission gate (which, when it admits, has already re-pointed the turn's
     materials scope at the target).

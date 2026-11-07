@@ -830,7 +830,7 @@ def _assert_document_deletable(
 def _reference_summary(record, references) -> dict:
     """The owner's own references in full; other accounts' only as counts (rule R1).
 
-    A KB owner must not learn which partners, books or teacher paths of other
+    A KB owner must not learn which partners, books or author paths of other
     accounts cite the library, so their ids never leave the server.
     """
     own = [ref for ref in references if ref.created_by == record.created_by]
@@ -3494,7 +3494,7 @@ def _move_kb_file(kb_name: str, payload: MoveFilePayload):
 
 
 def _original_path(requested: str) -> str:
-    """The live path of a teacher path's cited document (R9), else the request's.
+    """The live path of an author path's cited document (R9), else the request's.
 
     ``enter_mastery_template_scope`` follows the document's fixed id for this
     request; a path captured when the course was published may since hold
@@ -3750,7 +3750,7 @@ def _detach_kb(
     expected_paths: int | None = None,
     expected_students: int | None = None,
 ):
-    """Delete-detach ``kb_name``; teacher paths need a confirmation bound to their counts."""
+    """Delete-detach ``kb_name``; author paths need a confirmation bound to their counts."""
     if force:
         return _detach_kb_once(kb_name, force=True, confirmed=None)
     return _confirmed_withdrawal(
@@ -3773,7 +3773,7 @@ def _detach_kb_once(kb_name: str, *, force: bool, confirmed: frozenset[str] | No
     after the commit while that ownership is still held (#370 tolerance).
 
     Rule R1: references never block the owner. Every live reference is
-    revoked (``kb_deleted``) in the same transaction; when published teacher
+    revoked (``kb_deleted``) in the same transaction; when published author
     paths cite the KB (directly or through a book), the transaction is
     refused with :class:`KbWithdrawalNeedsConfirmation` unless ``confirmed``
     covers them (or an admin's ``force``); see :func:`_confirmed_withdrawal`.
@@ -3917,7 +3917,7 @@ async def _delete_kb_off_loop(
 class DeleteKnowledgeBaseRequest(BaseModel):
     name: str
     force: bool = False
-    #: Rule R1: proceed although published teacher paths cite the KB, as long
+    #: Rule R1: proceed although published author paths cite the KB, as long
     #: as the affected counts still equal the ones shown (when given).
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)
@@ -3966,7 +3966,7 @@ async def delete_knowledge_base(
 class KbVisibilityRequest(BaseModel):
     visibility: Literal["public", "private"]
     force: bool = False
-    #: Rule R1: make private although published teacher paths cite the KB, as
+    #: Rule R1: make private although published author paths cite the KB, as
     #: long as the affected counts still equal the ones shown (when given).
     confirm: bool = False
     expected_paths: int | None = Field(default=None, ge=0)
@@ -4000,7 +4000,7 @@ async def set_kb_visibility(kb_name: str, payload: KbVisibilityRequest):
 
 
 def _apply_kb_visibility(kb_id: str, payload: KbVisibilityRequest) -> dict[str, str]:
-    """Rule R1: the owner may always withdraw; teacher paths need a bound ``confirm``."""
+    """Rule R1: the owner may always withdraw; author paths need a bound ``confirm``."""
     from deeptutor.knowledge import registry
 
     def attempt(confirmed: frozenset[str] | None):

@@ -52,7 +52,7 @@ def grade_answer(user_answer: str, expected_answer: str, question_type: str = "s
 def classify_error(user_answer: str) -> ErrorType:
     """Coarse error classification for a wrong answer.
 
-    A blank answer signals the student did not know (metacognitive); anything
+    A blank answer signals the learner did not know (metacognitive); anything
     else is treated as a wrong application. The richer four-type taxonomy is
     assigned later by the LLM in the error-diagnosis stage.
     """
