@@ -1,11 +1,12 @@
 "use client";
 
 import { Search } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { actionClass, inputClass } from "@/components/common/form-styles";
+import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { PageHeader, pageGridClass } from "@/components/layout/FeaturePage";
 import { marketQueryString, searchMarket, type MarketPage, type MarketQuery, type SortOrder } from "@/lib/catalog-api";
 
@@ -130,6 +131,18 @@ export default function MarketBrowser() {
           {!result && loading ? (
             <div aria-busy="true" className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
           ) : result && result.items.length === 0 ? (
+            !query.favorites && !hasConditions(query) ? (
+              // Polish batch §4: an empty market invites the first content.
+              <div className="space-y-3 rounded-xl border border-dashed border-[var(--border)] p-8 text-center" data-testid="market-empty">
+                <p className="text-[13px] text-[var(--muted-foreground)]">
+                  {t("Nothing here yet. Create the first course or practice set.")}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Link href="/tasks?tab=courses" className={primaryClass}>{t("Create a course")}</Link>
+                  <Link href="/practice-sets?tab=mine" className={actionClass}>{t("Create a practice set")}</Link>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-8 text-center">
               <p className="text-[13px] text-[var(--muted-foreground)]">
                 {query.favorites && !hasConditions(query)
@@ -142,6 +155,7 @@ export default function MarketBrowser() {
                 </button>
               )}
             </div>
+            )
           ) : (
             <div className={pageGridClass(3)} aria-busy={loading}>
               {(result?.items ?? []).map((entry) => (

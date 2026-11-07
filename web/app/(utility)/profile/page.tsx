@@ -28,6 +28,7 @@ import {
 import { parseAvatarMarker } from "@/lib/avatar";
 import { formatDate, type Language } from "@/lib/datetime";
 import { accountRoleLabelKey } from "@/lib/account-role";
+import { DeleteAccountCard } from "@/components/profile/DeleteAccountCard";
 
 const AVATAR_OUTPUT_SIZE = 256;
 // Decoding a huge photo just to throw away most pixels wastes memory; the
@@ -382,6 +383,9 @@ export default function ProfilePage() {
             </div>
 
             <PasswordCard />
+
+            {/* Polish batch §3: learners delete their own account; administrators cannot here. */}
+            {!isAdmin && <DeleteAccountCard />}
 
             {/* Sign out card */}
             <div className="mt-4 flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">

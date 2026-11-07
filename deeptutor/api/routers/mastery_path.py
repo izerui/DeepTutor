@@ -582,6 +582,21 @@ async def list_topic_index():
     return {"topics": await asyncio.to_thread(read)}
 
 
+@router.get("/topics/unavailable")
+async def list_unavailable_topics():
+    """Paths one joined that were taken down or archived (polish batch §1): read-only cards.
+
+    Declared above ``/topics/{path_id}`` for the same reason as the index.
+    """
+    from deeptutor.teaching.instances import unavailable_joined
+
+    def read() -> list[dict]:
+        snapshots = LearningStore().list_topic_snapshots(status="active")
+        return unavailable_joined(snapshot[0] for snapshot in snapshots)
+
+    return {"topics": await asyncio.to_thread(read)}
+
+
 @router.get("/reading/records", response_model=ReadingLearningRecords)
 async def list_reading_learning_records() -> ReadingLearningRecords:
     """Reading progress and extension activity for the current account."""

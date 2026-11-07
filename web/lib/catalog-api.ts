@@ -75,6 +75,8 @@ export interface CatalogEntry {
   rating_count?: number;
   /** In the viewer's favorites. */
   favorited?: boolean;
+  /** Polish batch §2: people who came in over the last 7 days (author page, "My listings"). */
+  recent_learners?: number;
 }
 
 export interface MarketFacets {
@@ -167,6 +169,8 @@ export interface AuthorPage {
   name: string;
   role: string;
   learners: number;
+  /** Polish batch §2: distinct people who joined any of them over the last 7 days. */
+  recent_learners?: number;
   /** Spec 2026-11-06 §2: items in the market, their average rating weighted by raters (``null`` when unrated). */
   item_count: number;
   rating: number | null;
@@ -279,6 +283,9 @@ export const rejectListing = (kind: string, id: string, reason: string) =>
   call<CatalogEntry>(`/review${item(kind, id)}/reject`, send("POST", { reason }));
 export const takeDownListing = (kind: string, id: string, reason: string) =>
   call<CatalogEntry>(`/review${item(kind, id)}/take-down`, send("POST", { reason }));
+/** Polish batch §3: content handed to an administrator when its author left goes back into the market. */
+export const relistHandedOver = (kind: string, id: string) =>
+  call<CatalogEntry>(`/review${item(kind, id)}/relist`, send("POST"));
 
 /** Platform batch 2 §8.3: an administrator changes another author's classification and tags. */
 export interface ClassificationFields {

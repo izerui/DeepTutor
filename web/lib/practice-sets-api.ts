@@ -55,6 +55,10 @@ export interface AssignedSet extends PracticeSetSummary {
   submissions: number;
   best_score: number | null;
   max_score: number | null;
+  /** Polish batch §1: taken down, or archived by its author; one's results stay, read-only. */
+  unavailable?: "taken_down" | "archived" | null;
+  /** Taken out of the market by its author: still answered. */
+  unlisted?: boolean;
 }
 
 /** ``pending``: graded, but withheld until the answers may show. */
@@ -86,6 +90,8 @@ export interface TakeView extends PracticeSetSummary {
   /** Version of the latest attempt, whose results ``latest_results`` are. */
   latest_revision: number | null;
   latest_results: QuestionResult[];
+  /** Polish batch §1: gone; the view is one's last attempt, read-only. */
+  unavailable?: "taken_down" | "archived" | null;
 }
 
 export interface SubmitResult {

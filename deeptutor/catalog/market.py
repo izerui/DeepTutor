@@ -261,6 +261,10 @@ def author_page(viewer: CurrentUser, author_id: str) -> dict[str, Any]:
         raise ListingNotFound("Not found.")
     joined = enrollment.joined_by(viewer.id)
     entries.sort(key=lambda e: -(e["listed_at"] or 0))
+    # Polish batch §2: who came in over the last week, per item and in all (each person once).
+    recent = enrollment.recent_joins([(e["kind"], e["id"]) for e in entries])
+    for e in entries:
+        e["recent_learners"] = recent[(e["kind"], e["id"])]
     rated = [e for e in entries if e["rating"] is not None and e["rating_count"]]
     rating_count = sum(e["rating_count"] for e in rated)
     # Spec 2026-11-06 §2: the average over rated items, weighted by how many rated each.
@@ -270,11 +274,29 @@ def author_page(viewer: CurrentUser, author_id: str) -> dict[str, Any]:
         "name": name,
         "role": author_role(author_id, accounts),
         "learners": sum(e["learners"] for e in entries),
+        "recent_learners": _recent_people(author_id, [(e["kind"], e["id"]) for e in entries]),
         "item_count": len(entries),
         "rating": rating,
         "rating_count": rating_count,
         "items": [_public(e, joined) for e in entries],
     }
+
+
+def _recent_people(author_id: str, keys: list[tuple[str, str]]) -> int:
+    """Distinct people who came into any of *keys* over the last week."""
+    import time
+
+    if not keys:
+        return 0
+    since = time.time() - enrollment.RECENT_DAYS * 86400
+    wanted = set(keys)
+    with db.read() as conn:
+        if conn is None:
+            return 0
+        rows = conn.execute(
+            "SELECT kind, item_id, user_id FROM enrollments WHERE left_at IS NULL AND joined_at >= ?", (since,)
+        ).fetchall()
+    return len({r["user_id"] for r in rows if (r["kind"], r["item_id"]) in wanted and r["user_id"] != author_id})
 
 
 FEATURED_LIMIT = 8

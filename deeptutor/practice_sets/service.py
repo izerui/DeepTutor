@@ -543,11 +543,15 @@ class PracticeSetService:
         from deeptutor.publishing.scope import named_items
 
         # What one joined, and what an older set named one for: no walk over every set.
+        joined = joined_by(self.actor.id)
         candidates = list(dict.fromkeys(
-            [item for kind, item in joined_by(self.actor.id) if kind == PRACTICE_SET]
+            [item for kind, item in joined if kind == PRACTICE_SET]
             + named_items(PRACTICE_SET, self.actor.id)
         ))
         ids = [i for i in candidates if self._reaches_me(i)]
+        # Polish batch §1: a set one joined oneself that was taken down or archived stays, read-only.
+        gone = self._unavailable(candidates, joined)
+        ids = list(dict.fromkeys([*ids, *gone]))
         if not ids:
             return []
         marks = ",".join("?" for _ in ids)
@@ -555,10 +559,11 @@ class PracticeSetService:
             if conn is None:
                 return []
             rows = conn.execute(
-                f"SELECT * FROM practice_sets WHERE id IN ({marks}) AND status = 'published' "
+                f"SELECT * FROM practice_sets WHERE id IN ({marks}) AND status IN ('published', 'archived') "
                 "ORDER BY updated_at DESC",
                 ids,
             ).fetchall()
+            rows = [r for r in rows if r["status"] == "published" or r["id"] in gone]
             mine = conn.execute(
                 f"SELECT set_id, score, max_score FROM practice_submissions "
                 f"WHERE student_id = ? AND set_id IN ({marks}) ORDER BY submitted_at",
@@ -572,6 +577,9 @@ class PracticeSetService:
         for submission in mine:
             progress.setdefault(submission["set_id"], []).append(submission)
         names = _usernames()
+        from deeptutor.catalog.listings import withdrawal
+
+        withdrawn = withdrawal(PRACTICE_SET, [row["id"] for row in rows])
         out = []
         for row in rows:
             done = progress.get(row["id"], [])
@@ -585,10 +593,84 @@ class PracticeSetService:
                 "submissions": len(done),
                 "best_score": best["score"] if best else None,
                 "max_score": best["max_score"] if best else None,
+                "unavailable": gone.get(row["id"]),
+                "unlisted": withdrawn.get(row["id"]) == "unlisted",
             })
         return out
 
+    def _unavailable(self, set_ids: list[str], joined: dict[tuple[str, str], str]) -> dict[str, str]:
+        """Of *set_ids*, those one joined oneself that are gone: id -> ``taken_down`` | ``archived``."""
+        from deeptutor.catalog.enrollment import DIRECT
+        from deeptutor.catalog.listings import withdrawal
+        from deeptutor.publishing.scope import PRACTICE_SET
+
+        mine = [i for i in set_ids if joined.get((PRACTICE_SET, i)) in DIRECT]
+        if not mine:
+            return {}
+        how = withdrawal(PRACTICE_SET, mine)
+        marks = ",".join("?" for _ in mine)
+        with store.read() as conn:
+            rows = conn.execute(
+                f"SELECT id, status, owner_user_id FROM practice_sets WHERE id IN ({marks})", mine  # nosec B608
+            ).fetchall() if conn else []
+        out: dict[str, str] = {}
+        for row in rows:
+            if row["owner_user_id"] == self.actor.id:
+                continue
+            if how.get(row["id"]) == "taken_down":
+                out[row["id"]] = "taken_down"
+            elif row["status"] == "archived":
+                out[row["id"]] = "archived"
+        return out
+
+    def _readonly(self, set_id: str) -> dict[str, Any]:
+        """Polish batch §1: a set one joined that went away; one's own results, nothing to answer."""
+        from deeptutor.catalog.enrollment import joined_by
+
+        gone = self._unavailable([set_id], joined_by(self.actor.id)).get(set_id)
+        if gone is None:
+            raise PracticeNotFound("Practice set not found.")
+        with store.read() as conn:
+            row = conn.execute("SELECT * FROM practice_sets WHERE id = ?", (set_id,)).fetchone() if conn else None
+            submissions = conn.execute(
+                "SELECT id, revision, submitted_at, score, max_score, results_json "
+                "FROM practice_submissions WHERE set_id = ? AND student_id = ? ORDER BY submitted_at",
+                (set_id, self.actor.id),
+            ).fetchall() if conn else []
+            latest = submissions[-1] if submissions else None
+            # Only what one answered: the questions of one's latest attempt, with its answers.
+            revision = conn.execute(
+                "SELECT * FROM practice_set_revisions WHERE set_id = ? AND revision = ?", (set_id, latest["revision"])
+            ).fetchone() if latest is not None else None
+        if row is None:
+            raise PracticeNotFound("Practice set not found.")
+        questions = json.loads(revision["questions_json"]) if revision is not None else []
+        latest_rows = _results_only(json.loads(latest["results_json"])) if latest else []
+        return {
+            **self._summary(row),
+            "title": revision["title"] if revision is not None else row["title"],
+            "description": revision["description"] if revision is not None else row["description"],
+            "current_revision": latest["revision"] if latest else row["current_revision"],
+            "teacher": _usernames().get(row["owner_user_id"], ""),
+            "attempts_left": 0,
+            "answers_revealed": latest is not None,
+            "class_average": None,
+            "questions": [_for_student(q, reveal=True) for q in questions],
+            "submissions": [
+                {**{k: s[k] for k in ("id", "revision", "submitted_at", "max_score")}, "score": s["score"]}
+                for s in submissions
+            ],
+            "latest_revision": latest["revision"] if latest else None,
+            "latest_results": latest_rows,
+            "unavailable": gone,
+        }
+
     def take(self, set_id: str) -> dict[str, Any]:
+        try:
+            with store.read() as conn:
+                self._published(conn, set_id)
+        except PracticeNotFound:
+            return self._readonly(set_id)
         with store.read() as conn:
             row, revision = self._published(conn, set_id)
             submissions = conn.execute(

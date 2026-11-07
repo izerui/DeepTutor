@@ -26,7 +26,11 @@ import { TopicAtlas } from "@/components/space/learning/TopicAtlas";
 import { activeWorkspaceId } from "@/lib/workspace-scope";
 import { learningLibrary } from "@/lib/learning-library";
 import { useLearningCreation, requestedLearningCreation } from "@/components/learning/LibraryWorkspace";
-import { type MasteryTopic } from "@/lib/learning-api";
+import {
+  fetchUnavailableMasteryTopics,
+  type MasteryTopic,
+  type UnavailableMasteryTopic,
+} from "@/lib/learning-api";
 import { listAuthorTemplates, type AuthorTemplate } from "@/lib/teaching-api";
 import {
   MASTERY_OPENING_SCOPE,
@@ -94,6 +98,18 @@ function MasteryPathRoute() {
     void loadTopics();
   }, [loadTopics]);
 
+  // Polish batch §1: paths one joined that went away stay listed, read-only.
+  const [unavailable, setUnavailable] = useState<UnavailableMasteryTopic[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchUnavailableMasteryTopics()
+      .then((rows) => alive && setUnavailable(rows))
+      .catch(() => alive && setUnavailable([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // A course that references no path yet scopes the atlas to nothing, and the
   // empty state then invites building the first one — which is the move that
   // was previously a dead end.
@@ -120,6 +136,7 @@ function MasteryPathRoute() {
       {creation.dialog}
       <TopicAtlas
         topics={scopedTopics}
+        unavailableTopics={scope ? [] : unavailable}
         loading={loading}
         error={error}
         scopeChip={scope ? <CourseScopeChip scope={scope} /> : null}

@@ -162,7 +162,9 @@ def notify_withdrawn(kind: str, item_id: str, how: str, *, title: str = "", owne
     """Tell the people in an item that it was taken down, unlisted or withdrawn (audit fix B §2).
 
     *how*: ``taken_down`` (an administrator), ``unlisted`` (out of the market,
-    still studied) or ``archived`` (its author archived it or made it private).
+    still studied), ``author_deleted`` (out of the market because its author's account
+    was deleted, still studied; polish batch §3) or ``archived`` (its author archived
+    it or made it private).
     Best effort: a notice never makes the change that caused it fail.
     """
     try:
@@ -187,6 +189,29 @@ def notify_withdrawn(kind: str, item_id: str, how: str, *, title: str = "", owne
         )
     except Exception:
         logger.warning("Could not tell the people in %s %s that it went", kind, item_id, exc_info=True)
+
+
+def withdrawal(kind: str, item_ids: list[str]) -> dict[str, str]:
+    """How each item went, for the people in it (polish batch §1): ``taken_down`` (an
+    administrator) or ``unlisted`` (out of the market, still studied); absent otherwise.
+    Whether its author archived it is the content's own state."""
+    if not item_ids:
+        return {}
+    with db.read() as conn:
+        if conn is None:
+            return {}
+        marks = ",".join("?" for _ in item_ids)
+        rows = conn.execute(
+            f"SELECT item_id, status, blocked FROM listings WHERE kind = ? AND item_id IN ({marks})",  # nosec B608
+            (kind, *item_ids),
+        ).fetchall()
+    out: dict[str, str] = {}
+    for row in rows:
+        if row["blocked"]:
+            out[row["item_id"]] = "taken_down"
+        elif row["status"] == "unlisted":
+            out[row["item_id"]] = "unlisted"
+    return out
 
 
 def _event(conn, kind: str, item_id: str, actor_id: str, action: str, reason: str = "") -> None:
@@ -411,8 +436,14 @@ class ListingService:
         with db.read() as conn:
             rows = conn.execute("SELECT * FROM listings ORDER BY updated_at DESC").fetchall() if conn else []
         rows = [r for r in rows if r["owner_user_id"] in mine]
-        counts = enrollment.joined_counts([(r["kind"], r["item_id"]) for r in rows])
-        return [describe(r, learners=counts[(r["kind"], r["item_id"])]) for r in rows]
+        keys = [(r["kind"], r["item_id"]) for r in rows]
+        counts = enrollment.joined_counts(keys)
+        recent = enrollment.recent_joins(keys)
+        # Polish batch §2: how many came in over the last week, beside how many are in.
+        return [
+            {**describe(r, learners=counts[(r["kind"], r["item_id"])]), "recent_learners": recent[(r["kind"], r["item_id"])]}
+            for r in rows
+        ]
 
     # ── administrators ────────────────────────────────────
 
@@ -486,6 +517,28 @@ class ListingService:
 
         resolve(kind, item_id, "", TAKEN_DOWN, self.actor.id, title=row["title"])
         return describe(row)
+
+    def relist_handed_over(self, kind: str, item_id: str) -> dict[str, Any]:
+        """Back into the market: an item that came to an administrator when its author's
+        account was deleted (polish batch §3). Any administrator may; the author's own
+        decision to take something out is never overridden here.
+        """
+        self._require_admin()
+        with db.read() as conn:
+            row = _row(conn, kind, item_id) if conn else None
+        if row is None:
+            raise ListingNotFound("Not found.")
+        if row["status"] != "unlisted" or author_role(row["owner_user_id"]) != "admin":
+            raise ListingConflict("Only content handed over to an administrator can be put back here.")
+        if not row["approved_once"]:
+            raise ListingConflict("Submit it for review first.")
+        info = items.info(kind, item_id)
+        if info is None:
+            raise ListingNotFound("Not found.")
+        if info.not_ready:
+            raise ListingError(info.not_ready)
+        row = self._move(kind, item_id, ("unlisted",), "listed", "relisted")
+        return _with_author(describe(row))
 
     def classify(
         self, kind: str, item_id: str, *, stages: list[str], subjects: list[str], difficulty: str, tags: list[str],
@@ -627,6 +680,36 @@ def forget(kind: str, item_id: str) -> None:
         logger.exception("Could not forget the listing of %s %s", kind, item_id)
 
 
+def withdraw_departed(user_id: str) -> int:
+    """The author's account was deleted (polish batch §3): what they had in the market
+    leaves it, and the people in it are told. Pending requests go back to drafts.
+
+    Taken out, not taken down: those who joined keep studying, as when an author
+    takes something out themselves. Runs before :func:`follow_owners` hands the
+    listings to the successor; an administrator can put them back later.
+    """
+    if not db.path().exists():
+        return 0
+    now = time.time()
+    withdrawn = []
+    with db.write() as conn:
+        rows = conn.execute(
+            "SELECT * FROM listings WHERE owner_user_id = ? AND status IN ('listed', 'pending')", (user_id,)
+        ).fetchall()
+        for row in rows:
+            target = "unlisted" if row["status"] == "listed" else "draft"
+            conn.execute(
+                "UPDATE listings SET status = ?, updated_at = ? WHERE kind = ? AND item_id = ?",
+                (target, now, row["kind"], row["item_id"]),
+            )
+            _event(conn, row["kind"], row["item_id"], "system", "author_deleted")
+            if target == "unlisted":
+                withdrawn.append(row)
+    for row in withdrawn:
+        notify_withdrawn(row["kind"], row["item_id"], "author_deleted", title=row["title"], owner=user_id)
+    return len(rows)
+
+
 def follow_owners(from_user_id: str) -> int:
     """Content handed over when its author left (roadmap 6.1): each listing follows its item."""
     if not db.path().exists():
@@ -652,4 +735,5 @@ def follow_owners(from_user_id: str) -> int:
 __all__ = [
     "ListingConflict", "ListingError", "ListingForbidden", "ListingNotFound", "ListingService", "author_name",
     "author_role", "clean_tags", "content_closed", "describe", "follow_owners", "forget", "notify_withdrawn", "status",
+    "withdraw_departed", "withdrawal",
 ]

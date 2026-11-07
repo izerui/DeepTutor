@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { primaryClass } from "@/components/common/form-styles";
 import { useAuthStatus } from "@/hooks/useAuthStatus";
 import { getAssignedTask, listAssignedTasks, type AssignedCourse, type AssignedTask } from "@/lib/tasks-api";
 
@@ -127,7 +129,11 @@ function JoinedView() {
       {selected && <LearnerLessonDetail key={selected.key} task={selected} onChanged={(next) => { setSelected(next); refresh(); setChanges((n) => n + 1); }} />}
       <LearnerCourses courseId={courseParam} openTaskKey={taskParam} onOpenTask={setSelected} reload={changes} onLoaded={onCourses} />
       {inCourses !== null && inCourses.size === 0 && loose.length === 0 && (
-        <p className="text-[12.5px] text-[var(--muted-foreground)]">{t("Nothing to do right now.")}</p>
+        // Polish batch §4: nothing joined yet: lead to the market.
+        <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-6 text-center" data-testid="learning-courses-empty">
+          <p className="text-[13px] text-[var(--muted-foreground)]">{t("Courses you join from the learning market appear here.")}</p>
+          <Link href="/market?kind=course" className={primaryClass}>{t("Find a course in the market")}</Link>
+        </div>
       )}
       {loose.length > 0 && (
         <section className="space-y-2" aria-label={t("Other lessons")}>

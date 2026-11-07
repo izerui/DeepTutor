@@ -18,6 +18,7 @@ import {
   type AssignedSet,
   type PracticeSetSummary,
 } from "@/lib/practice-sets-api";
+import { WithdrawnBadge, withdrawnText } from "@/components/catalog/Withdrawn";
 import { SetEditor } from "./SetEditor";
 import { TakeSet } from "./TakeSet";
 
@@ -272,11 +273,14 @@ function JoinedView({ initialSet }: { initialSet: string | null }) {
   if (error) return <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>;
   if (sets === null) return <div aria-busy="true" className="h-24 animate-pulse rounded-xl bg-[var(--muted)]" />;
   if (sets.length === 0) {
+    // Polish batch §4: an empty list leads to the market.
     return (
-      <p className="text-[13px] text-[var(--muted-foreground)]">
-        {t("Practice sets you join from the learning market appear here.")}{" "}
-        <Link href="/market" className="text-[var(--primary)] hover:underline">{t("Learning market")}</Link>
-      </p>
+      <div className="space-y-2 rounded-xl border border-dashed border-[var(--border)] p-6 text-center" data-testid="joined-sets-empty">
+        <p className="text-[13px] text-[var(--muted-foreground)]">
+          {t("Practice sets you join from the learning market appear here.")}
+        </p>
+        <Link href="/market?kind=practice_set" className={primaryClass}>{t("Find practice sets in the market")}</Link>
+      </div>
     );
   }
   return (
@@ -286,6 +290,7 @@ function JoinedView({ initialSet }: { initialSet: string | null }) {
           <p className="text-[14px] font-medium text-[var(--foreground)]">{set.title}</p>
           <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]">
             <SourceBadge provenance={set.provenance ?? { kind: "shared", name: set.teacher }} />
+            {(set.unavailable || set.unlisted) && <WithdrawnBadge unavailable={set.unavailable} />}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
             {set.submissions === 0
@@ -294,9 +299,23 @@ function JoinedView({ initialSet }: { initialSet: string | null }) {
                 ? t("Submitted")
                 : t("Best score {{score}} / {{max}}", { score: set.best_score, max: set.max_score })}
           </p>
-          <button type="button" className={primaryClass} onClick={() => setSelected(set.id)}>
-            {set.submissions > 0 ? t("Answer again") : t("Start")}
-          </button>
+          {set.unavailable ? (
+            // Polish batch §1: kept with why; one's results stay readable, nothing to answer.
+            <>
+              <p className="text-[12px] text-[var(--muted-foreground)]" data-testid="set-unavailable">
+                {withdrawnText(set.unavailable, t)}
+              </p>
+              {set.submissions > 0 && (
+                <button type="button" className={actionClass} onClick={() => setSelected(set.id)}>
+                  {t("View my results")}
+                </button>
+              )}
+            </>
+          ) : (
+            <button type="button" className={primaryClass} onClick={() => setSelected(set.id)}>
+              {set.submissions > 0 ? t("Answer again") : t("Start")}
+            </button>
+          )}
         </li>
       ))}
     </ul>

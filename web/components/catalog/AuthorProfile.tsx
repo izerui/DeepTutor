@@ -84,6 +84,13 @@ export default function AuthorProfile() {
           <dt className={statLabel}>{t("Learners")}</dt>
           <dd className={`${statValue} tabular-nums`}>{author.learners}</dd>
         </div>
+        {author.recent_learners !== undefined && (
+          // Polish batch §2: new people over the last week, each counted once.
+          <div className={stat}>
+            <dt className={statLabel}>{t("Joined in the last 7 days")}</dt>
+            <dd className={`${statValue} tabular-nums`} data-testid="author-recent-learners">{author.recent_learners}</dd>
+          </div>
+        )}
       </dl>
       {author.items.length === 0 ? (
         <p className="text-[13px] text-[var(--muted-foreground)]">{t("Nothing in the market yet.")}</p>

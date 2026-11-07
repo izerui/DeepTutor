@@ -325,11 +325,67 @@ def describe_instances(progresses: Iterable[LearningProgress]) -> dict[str, dict
     if not instances:
         return {}
     opened = _open_templates(progress.origin.template_id for progress in instances)  # type: ignore[union-attr]
+    from deeptutor.catalog.listings import withdrawal
+
+    # Polish batch §1: out of the market by its author, still studied.
+    withdrawn = withdrawal("mastery_path", list(opened))
     return {
-        progress.book_id: origin_payload(progress, opened[progress.origin.template_id])  # type: ignore[union-attr]
+        progress.book_id: {
+            **origin_payload(progress, opened[progress.origin.template_id]),  # type: ignore[union-attr]
+            "unlisted": withdrawn.get(progress.origin.template_id) == "unlisted",  # type: ignore[union-attr]
+        }
         for progress in instances
         if progress.origin.template_id in opened  # type: ignore[union-attr]
     }
+
+
+def unavailable_joined(progresses: Iterable[LearningProgress]) -> list[dict[str, Any]]:
+    """Polish batch §1: closed copies of paths the learner joined themselves.
+
+    A path one joined from the market that an administrator took down or its
+    author archived stays in one's list, read-only: its name, why, and how far
+    one got. Copies closed any other way (left, handed out by name) do not.
+    """
+    from deeptutor.catalog.enrollment import DIRECT, joined_by
+    from deeptutor.catalog.listings import withdrawal
+    from deeptutor.learning import policy
+
+    instances = [progress for progress in progresses if progress.origin is not None]
+    if not instances:
+        return []
+    joined = joined_by(get_current_user().id)
+    closed = [
+        progress for progress in instances
+        if joined.get(("mastery_path", progress.origin.template_id)) in DIRECT  # type: ignore[union-attr]
+    ]
+    if not closed:
+        return []
+    opened = _open_templates(progress.origin.template_id for progress in closed)  # type: ignore[union-attr]
+    closed = [p for p in closed if p.origin.template_id not in opened]  # type: ignore[union-attr]
+    how = withdrawal("mastery_path", [p.origin.template_id for p in closed])  # type: ignore[union-attr]
+    teaching = TeachingStore()
+    out: list[dict[str, Any]] = []
+    for progress in closed:
+        template_id = progress.origin.template_id  # type: ignore[union-attr]
+        template = teaching.get_template(template_id)
+        if how.get(template_id) == "taken_down":
+            reason = "taken_down"
+        elif template is None or template.status == "archived":
+            reason = "archived"
+        else:
+            continue  # closed for this learner only (e.g. a revoked assignment)
+        counts = policy.map_summary(progress)["counts"]
+        out.append({
+            "path_id": progress.book_id,
+            "template_id": template_id,
+            "name": policy.path_display_name(progress),
+            "unavailable": reason,
+            "objectives": counts["total"],
+            "mastered": counts["mastered"],
+            "updated_at": progress.updated_at,
+        })
+    out.sort(key=lambda entry: entry["updated_at"], reverse=True)
+    return out
 
 
 def closed_instance_ids(progresses: Iterable[LearningProgress]) -> set[str]:

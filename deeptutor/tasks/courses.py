@@ -390,11 +390,16 @@ def assigned_courses(actor: CurrentUser | None = None) -> list[dict[str, Any]]:
     if not reached:
         return []
     entries = {e["key"]: e for e in StudentTasks(actor).assigned()}
+    from deeptutor.catalog.listings import withdrawal
+
+    # Polish batch §1: out of the market by its author (or as its author left), still studied.
+    withdrawn = withdrawal(scopes.COURSE, [r["id"] for r, _ in reached])
     return [
         {
             "id": r["id"], "title": r["title"], "description": r["description"],
             "provenance": provenance(r["owner_user_id"], actor), "published_at": r["published_at"],
             "unavailable": unavailable,
+            "unlisted": not unavailable and withdrawn.get(r["id"]) == "unlisted",
             "tasks": [entries[t] for t in items[r["id"]] if t in entries],
         }
         for r, unavailable in reached

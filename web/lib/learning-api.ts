@@ -519,6 +519,28 @@ export interface MasteryTopicOrigin {
   update_notice: AuthorUpdateNoticeData | null;
   /** Null when not checked (lists); false means the tutor will not continue. */
   materials_available: boolean | null;
+  /** Polish batch §1: taken out of the market by its author; still studied. */
+  unlisted?: boolean;
+}
+
+/** Polish batch §1: a path one joined that was taken down or archived, kept read-only. */
+export interface UnavailableMasteryTopic {
+  path_id: string;
+  template_id: string;
+  name: string;
+  unavailable: "taken_down" | "archived";
+  objectives: number;
+  mastered: number;
+  updated_at: number;
+}
+
+export async function fetchUnavailableMasteryTopics(): Promise<UnavailableMasteryTopic[]> {
+  const result = await masteryJson<{ topics: UnavailableMasteryTopic[] }>(
+    "/api/mastery-paths/topics/unavailable",
+    undefined,
+    "load topics",
+  );
+  return Array.isArray(result.topics) ? result.topics : [];
 }
 
 export type PassStandard = "relaxed" | "standard" | "strict";

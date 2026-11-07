@@ -70,6 +70,12 @@ export function ItemCard({
           <Users size={12} aria-hidden />
           {t("{{count}} learners", { count: entry.learners ?? 0 })}
         </span>
+        {entry.recent_learners !== undefined && (
+          // Polish batch §2: on the author page, how many came in over the last week.
+          <span data-testid="card-recent-learners">
+            {t("{{count}} joined in the last 7 days", { count: entry.recent_learners })}
+          </span>
+        )}
         {rated && (
           <span className="inline-flex items-center gap-1" data-testid="card-rating"
             aria-label={t("Rated {{rating}} out of 5 by {{count}}", { rating: formatRating(entry.rating ?? 0), count: entry.rating_count })}>

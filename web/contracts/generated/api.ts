@@ -301,6 +301,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/auth/profile/delete": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Delete Own Account
+     * @description Delete one's own account after confirming the password; this browser is signed out.
+     */
+    readonly post: operations["delete_own_account_api_auth_profile_delete_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/auth/profile/learner-profile": {
     readonly parameters: {
       readonly query?: never;
@@ -1914,6 +1934,26 @@ export interface paths {
     readonly put?: never;
     /** Reject */
     readonly post: operations["reject_api_catalog_review__kind___item_id__reject_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/review/{kind}/{item_id}/relist": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Relist Handed Over
+     * @description Polish batch §3: content handed to an administrator when its author left goes back.
+     */
+    readonly post: operations["relist_handed_over_api_catalog_review__kind___item_id__relist_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -4936,6 +4976,28 @@ export interface paths {
      *     segment, so a literal path below it would never be reached.
      */
     readonly get: operations["list_topic_index_api_mastery_paths_topics_index_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/mastery-paths/topics/unavailable": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * List Unavailable Topics
+     * @description Paths one joined that were taken down or archived (polish batch §1): read-only cards.
+     *
+     *     Declared above ``/topics/{path_id}`` for the same reason as the index.
+     */
+    readonly get: operations["list_unavailable_topics_api_mastery_paths_topics_unavailable_get"];
     readonly put?: never;
     readonly post?: never;
     readonly delete?: never;
@@ -14183,6 +14245,11 @@ export interface components {
       /** Name */
       readonly name: string;
     };
+    /** DeleteOwnAccount */
+    readonly DeleteOwnAccount: {
+      /** Password */
+      readonly password: string;
+    };
     /** DeviceInfo */
     readonly DeviceInfo: {
       /** Active */
@@ -19355,6 +19422,7 @@ export type SchemaDeleteBlockRequest =
   components["schemas"]["DeleteBlockRequest"];
 export type SchemaDeleteKnowledgeBaseRequest =
   components["schemas"]["DeleteKnowledgeBaseRequest"];
+export type SchemaDeleteOwnAccount = components["schemas"]["DeleteOwnAccount"];
 export type SchemaDeviceInfo = components["schemas"]["DeviceInfo"];
 export type SchemaDoclingRemoteTest =
   components["schemas"]["DoclingRemoteTest"];
@@ -20342,6 +20410,45 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_own_account_api_auth_profile_delete_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["DeleteOwnAccount"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -24254,6 +24361,44 @@ export interface operations {
         readonly "application/json": components["schemas"]["ReasonBody"];
       };
     };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly relist_handed_over_api_catalog_review__kind___item_id__relist_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
@@ -30501,6 +30646,39 @@ export interface operations {
     };
   };
   readonly list_topic_index_api_mastery_paths_topics_index_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly list_unavailable_topics_api_mastery_paths_topics_unavailable_get: {
     readonly parameters: {
       readonly query?: never;
       readonly header?: {

@@ -62,6 +62,19 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
   if (!res.ok) throw new Error(extractDetail(await res.json().catch(() => ({})), "Failed to change password"));
 }
 
+/**
+ * Polish batch §3: a learner deletes their own account after confirming the
+ * password. What they made goes to an administrator; this browser is signed out.
+ */
+export async function deleteOwnAccount(password: string): Promise<void> {
+  const res = await apiFetch(apiUrl("/api/auth/profile/delete"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error(extractDetail(await res.json().catch(() => ({})), "Failed to delete the account"));
+}
+
 /** Fetch the signed-in user's own profile. */
 export async function getProfile(): Promise<ProfileInfo> {
   const res = await apiFetch(apiUrl("/api/auth/profile"));

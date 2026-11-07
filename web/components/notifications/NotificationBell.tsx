@@ -74,6 +74,9 @@ export function notificationText(item: AppNotification, t: Translate): string {
     case "content_withdrawn":
       if (p.how === "taken_down") return t("“{{title}}” was taken down. Your learning records are kept.", { title });
       if (p.how === "unlisted") return t("“{{title}}” was taken out of the market. You can keep studying it.", { title });
+      // Polish batch §3: its author's account was deleted; it went to an administrator.
+      if (p.how === "author_deleted")
+        return t("“{{title}}” was taken out of the market because its author left. You can keep studying it.", { title });
       return t("“{{title}}” is no longer available: its author withdrew it. Your learning records are kept.", { title });
     // Audit fix B §1: reports, for administrators and for whoever reported.
     case "report_submitted":
@@ -86,6 +89,11 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return p.target === "review"
         ? t("The review of “{{title}}” you reported was checked and kept.", { title })
         : t("You reported “{{title}}”: it was checked and kept.", { title });
+    // Polish batch §2: people joined one's item, at most one notification a day (counted).
+    case "content_joined":
+      return (item.count ?? 1) > 1
+        ? t("{{count}} people joined “{{title}}” today", { title, count: item.count })
+        : t("Someone joined “{{title}}”", { title });
     // Follow-ups §1: new reviews of one's item, at most one notification a day (counted).
     case "listing_reviewed":
       return (item.count ?? 1) > 1

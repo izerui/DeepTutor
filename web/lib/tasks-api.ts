@@ -171,6 +171,8 @@ export interface AssignedCourse {
   published_at: number | null;
   /** Audit fix B §2: taken down, or withdrawn by its author; the learner's records stay. */
   unavailable?: "taken_down" | "archived" | null;
+  /** Polish batch §1: taken out of the market by its author; still studied. */
+  unlisted?: boolean;
   tasks: AssignedTask[];
 }
 

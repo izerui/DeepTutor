@@ -1652,6 +1652,24 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
         # Spec 2026-10-29 §3: the first administrator is fixed (and owns the legacy admin root).
         return 400, "The first administrator cannot be deleted."
 
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    successor = (current.user_id if current else "") or LOCAL_ADMIN_ID
+    status_code, detail = _remove_account(username, info, successor)
+    if status_code != 200:
+        return status_code, detail
+    actor = current.username if current else "local"
+    logger.info("Admin '%s' deleted user '%s'", actor, username)
+    return 200, ""
+
+
+def _remove_account(username: str, info: dict | None, successor: str) -> tuple[int, str]:
+    """Delete the account, then hand what it made to *successor* (B2-9). Blocking.
+
+    Shared by an administrator's deletion and a learner's own (polish batch §3):
+    the same stages run, so the deleted author's listings leave the market and
+    go to the successor in both.
+    """
     removed = delete_user(username)
     if not removed:
         return 404, "User not found"
@@ -1664,9 +1682,7 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
 
     if user_id:
         from deeptutor.multi_user import account_handoff
-        from deeptutor.multi_user.models import LOCAL_ADMIN_ID
 
-        successor = (current.user_id if current else "") or LOCAL_ADMIN_ID
         # The account is already deleted; a failed stage is nonfatal and stays
         # recorded as a pending hand-over for a retry (B2-9).
         failed = account_handoff.hand_over_deleted_account(
@@ -1676,10 +1692,60 @@ def _delete_admin_user(username: str, current: TokenPayload | None) -> tuple[int
             logger.warning(
                 "Hand-over of deleted user '%s' is pending for: %s", username, ", ".join(failed)
             )
-
-    actor = current.username if current else "local"
-    logger.info("Admin '%s' deleted user '%s'", actor, username)
     return 200, ""
+
+
+class DeleteOwnAccount(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+def _delete_own_account(username: str) -> tuple[int, str]:
+    """A learner deletes their own account (polish batch §3). Blocking.
+
+    Administrators cannot (the existing rule: nobody deletes their own account
+    as an administrator). What the learner made goes to the primary
+    administrator, exactly as when an administrator deletes the account.
+    """
+    from deeptutor.multi_user.admin_accounts import primary_admin_id
+    from deeptutor.multi_user.models import LOCAL_ADMIN_ID
+
+    info = get_user_info(username)
+    if info is None:
+        return 404, "User not found"
+    if str(info.get("role") or "") == "admin":
+        return 403, "Administrators cannot delete their own account."
+    successor = primary_admin_id() or LOCAL_ADMIN_ID
+    status_code, detail = _remove_account(username, info, successor)
+    if status_code == 200:
+        logger.info("User '%s' deleted their own account", username)
+    return status_code, detail
+
+
+@router.post("/profile/delete")
+async def delete_own_account(
+    body: DeleteOwnAccount,
+    response: Response,
+    payload: TokenPayload | None = Depends(require_auth),
+) -> dict:
+    """Delete one's own account after confirming the password; this browser is signed out."""
+    current = _require_profile_identity(payload)
+    if POCKETBASE_ENABLED or not AUTH_ENABLED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not available in this deployment.")
+    if authenticate(current.username, body.password) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The password is incorrect.")
+    import contextvars
+
+    # The hand-over runs as the system, not as the account it is removing:
+    # a fresh context has no current user (like the startup retries).
+    loop = asyncio.get_running_loop()
+    status_code, detail = await loop.run_in_executor(
+        None, contextvars.Context().run, _delete_own_account, current.username
+    )
+    if status_code != 200:
+        raise HTTPException(status_code=status_code, detail=detail)
+    response.delete_cookie(**_cookie_attrs())
+    _no_store(response)
+    return {"ok": True}
 
 
 async def _delete_admin_user_off_loop(

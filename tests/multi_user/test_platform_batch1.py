@@ -63,6 +63,13 @@ def _list(as_account, kind, item_id, owner="tina", approve=True, **meta):
     return result
 
 
+def _set_states(as_account, name):
+    from deeptutor.practice_sets.service import PracticeSetService
+
+    with as_account(name):
+        return {s["id"]: s["unavailable"] for s in PracticeSetService().assigned()}
+
+
 def _assigned_sets(as_account, name):
     from deeptutor.practice_sets.service import PracticeSetService
 
@@ -201,13 +208,14 @@ def test_take_down_cuts_members_off_until_approved_again(as_account, teaching_us
             _listings().take_down("practice_set", set_id, "")
         assert _listings().take_down("practice_set", set_id, "Copied content.")["status"] == "taken_down"
     assert "listing_taken_down" in _kinds(teaching_users["tina"]["id"])
-    assert _assigned_sets(as_account, "sara") == []
+    # Polish batch §1: it stays in her list, marked taken down, read-only.
+    assert _set_states(as_account, "sara") == {set_id: "taken_down"}
     with as_account("tina"):
         assert _listings().submit("practice_set", set_id)["status"] == "pending"  # reviewed again
-    assert _assigned_sets(as_account, "sara") == []
+    assert _set_states(as_account, "sara") == {set_id: "taken_down"}
     with as_account("adam"):
         _listings().approve("practice_set", set_id)
-    assert _assigned_sets(as_account, "sara") == [set_id]  # back, with her records
+    assert _set_states(as_account, "sara") == {set_id: None}  # back, with her records
 
 
 def test_administrator_lists_without_review(as_account):

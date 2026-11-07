@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 import { ArrowRight, Compass, Plus, Sparkles } from 'lucide-react'
 
-import type { MasteryTopic } from '@/lib/learning-api'
+import type { MasteryTopic, UnavailableMasteryTopic } from '@/lib/learning-api'
 import {
   MASTERY_OPENING_SCOPE,
   masteryOpeningMessage,
@@ -28,6 +28,7 @@ import { topicDisplayName } from './format'
 import { AuthorCardActions, UnlistedAuthorTemplates } from './AuthorCardActions'
 import { isAuthorInstance, splitAssignedTopics, templateForTopic } from './teaching'
 import { SourceBadge } from '@/components/common/SourceBadge'
+import { WithdrawnBadge, withdrawnText } from '@/components/catalog/Withdrawn'
 import { groupByProvenance, provenanceGroupTitle, type Provenance } from '@/lib/provenance'
 
 /** A published path's copy comes from its author, or the school once handed over (§3.1). */
@@ -46,8 +47,11 @@ export function TopicAtlas({
   unlistedTemplates,
   onPublish,
   onManage,
+  unavailableTopics = [],
 }: {
   topics: MasteryTopic[]
+  /** Polish batch §1: paths one joined that were taken down or archived, kept read-only. */
+  unavailableTopics?: UnavailableMasteryTopic[]
   loading: boolean
   error: string | null
   /** Absent when this account may not create personal paths. */
@@ -183,7 +187,13 @@ export function TopicAtlas({
                       '',
                       topic.content_workspace_id ?? ''
                     )}
-                    badge={<SourceBadge provenance={topicProvenance(topic)} className="text-[10px]" />}
+                    badge={
+                      <>
+                        <SourceBadge provenance={topicProvenance(topic)} className="text-[10px]" />
+                        {/* Polish batch §1: out of the market by its author; still studied. */}
+                        {topic.origin?.unlisted && <WithdrawnBadge unavailable={null} />}
+                      </>
+                    }
                     footer={
                       topic.next.knowledge_point_name ? (
                         <div className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--muted-foreground)]">
@@ -253,6 +263,30 @@ export function TopicAtlas({
           }
         />
       ) : null}
+      {!loading && unavailableTopics.length > 0 && (
+        <section aria-labelledby="mastery-unavailable-heading" className="mt-9" data-testid="unavailable-topics">
+          <h2 id="mastery-unavailable-heading" className="text-[12px] font-semibold text-[var(--foreground)]">
+            {t('No longer available')}
+          </h2>
+          <ul className={`mt-3 ${pageGridClass(3)}`}>
+            {unavailableTopics.map(topic => (
+              <li key={topic.path_id} className="space-y-1.5 rounded-xl border border-[var(--border)] p-4" data-testid="unavailable-topic">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+                  {topic.name}
+                  <WithdrawnBadge unavailable={topic.unavailable} />
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)]">{withdrawnText(topic.unavailable, t)}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {t('{{mastered}} of {{total}} objectives mastered', {
+                    mastered: topic.mastered,
+                    total: topic.objectives,
+                  })}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {/* Without the topics, own templates would be misreported as draftless. */}
       {unlistedTemplates && onManage && !loading && !error && (
         <UnlistedAuthorTemplates templates={unlistedTemplates} onManage={onManage} />

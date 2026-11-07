@@ -117,6 +117,31 @@ def joined_counts(keys: list[tuple[str, str]] | None = None) -> dict[tuple[str, 
     return {key: counts.get(key, 0) for key in keys}
 
 
+RECENT_DAYS = 7
+
+
+def recent_joins(keys: list[tuple[str, str]] | None = None, *, days: int = RECENT_DAYS,
+                 now: float | None = None) -> dict[tuple[str, str], int]:
+    """People who came into each item in the last *days* days (polish batch §2).
+
+    However they came in (themselves, through a course, the migration), each
+    person once; someone who left since is not counted.
+    """
+    since = (now if now is not None else time.time()) - days * 86400
+    with db.read() as conn:
+        if conn is None:
+            return {} if keys is None else {key: 0 for key in keys}
+        rows = conn.execute(
+            "SELECT kind, item_id, COUNT(DISTINCT user_id) FROM enrollments "
+            "WHERE left_at IS NULL AND joined_at >= ? GROUP BY kind, item_id",
+            (since,),
+        ).fetchall()
+    counts = {(r[0], r[1]): int(r[2]) for r in rows}
+    if keys is None:
+        return counts
+    return {key: counts.get(key, 0) for key in keys}
+
+
 def joined_by(user_id: str) -> dict[tuple[str, str], str]:
     """``{(kind, item_id): how}`` for everything the user is in now (``self``/``migrated``/``course``)."""
     with db.read() as conn:
@@ -154,13 +179,34 @@ def join(user, kind: str, item_id: str) -> dict[str, Any]:
         raise EnrollmentError("This is your own.")
     now = time.time()
     with db.write() as conn:
+        first = conn.execute(
+            "SELECT 1 FROM enrollments WHERE kind = ? AND item_id = ? AND user_id = ? LIMIT 1",
+            (kind, item_id, user.id),
+        ).fetchone() is None
         conn.execute(
             "INSERT INTO enrollments (kind, item_id, user_id, via, joined_at) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(kind, item_id, user_id, via) DO UPDATE SET left_at = NULL",
             (kind, item_id, user.id, SELF, now),
         )
     _after_change(kind, item_id)
+    if first:
+        _notify_joined(kind, item_id, info)
     return {"kind": kind, "id": item_id, "joined": True}
+
+
+def _notify_joined(kind: str, item_id: str, info) -> None:
+    """Polish batch §2: its author hears of new people, one notice per item and day, counted.
+
+    Only someone joining for the first time counts: leaving and joining again
+    is not news.
+    """
+    from deeptutor.notifications.service import notify
+
+    notify(
+        [info.owner], "content_joined", {"content": kind, "title": info.title},
+        link=f"/market/item?kind={kind}&id={item_id}",
+        dedupe_key=f"content_joined:{kind}:{item_id}:{time.strftime('%Y-%m-%d')}", bump=True,
+    )
 
 
 def leave(user, kind: str, item_id: str) -> dict[str, Any]:
@@ -285,5 +331,5 @@ def forget_item(kind: str, item_id: str) -> None:
 __all__ = [
     "DIRECT", "EnrollmentError", "EnrollmentForbidden", "EnrollmentNotFound", "MIGRATED", "SELF",
     "access_state", "courses_citing", "forget_item", "forget_user", "join", "joined_by", "joined_count",
-    "joined_counts", "leave", "members", "reconcile_path", "refresh_course",
+    "joined_counts", "leave", "recent_joins", "members", "reconcile_path", "refresh_course",
 ]

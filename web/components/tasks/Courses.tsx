@@ -2,13 +2,14 @@
 
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
+import { WithdrawnBadge } from "@/components/catalog/Withdrawn";
 import {
   addCourseTask,
   archiveCourse,
@@ -62,6 +63,7 @@ export function CourseAuthorView({
   const [error, setError] = useState("");
   // One's lessons that no course holds (made before courses, or taken out of one).
   const [loose, setLoose] = useState<MyTask[]>([]);
+  const titleInput = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(() => {
     listMyCourses().then(setCourses).catch((err) => setError(errorText(err, t)));
@@ -80,7 +82,7 @@ export function CourseAuthorView({
             .then((created) => { setTitle(""); setSelected(created.id); refresh(); })
             .catch((err) => setError(errorText(err, t)));
         }}>
-          <input className={inputClass} value={title} maxLength={200} placeholder={t("New course title")}
+          <input ref={titleInput} className={inputClass} value={title} maxLength={200} placeholder={t("New course title")}
             onChange={(e) => setTitle(e.target.value)} />
           <button type="submit" className={primaryClass} disabled={!title.trim()} aria-label={t("Create")}>
             <Plus size={14} />
@@ -146,6 +148,14 @@ export function CourseAuthorView({
         ) : selected ? (
           <CourseEditor key={selected} courseId={selected} isAdmin={isAdmin} onChanged={refresh}
             onOpenTask={setLesson} onDeleted={() => { setSelected(null); refresh(); }} />
+        ) : courses !== null && courses.length === 0 ? (
+          // Polish batch §4: nothing created yet: lead to making the first course.
+          <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]" data-testid="created-courses-empty">
+            <p>{t("You have not created a course yet. Give it a title, then add lessons.")}</p>
+            <button type="button" className={primaryClass} onClick={() => titleInput.current?.focus()}>
+              {t("Create your first course")}
+            </button>
+          </div>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--muted-foreground)]">
             {t("Pick a course or create one.")}
@@ -389,6 +399,8 @@ export function LearnerCourses({
                   {t("Course no longer available")}
                 </span>
               )}
+              {/* Polish batch §1: out of the market by its author; still studied. */}
+              {!course.unavailable && course.unlisted && <WithdrawnBadge unavailable={null} />}
               <span className="text-[11.5px] text-[var(--muted-foreground)]">
                 {t("{{done}} / {{total}} done", { done, total: course.tasks.length })}
               </span>

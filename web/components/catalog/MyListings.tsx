@@ -52,6 +52,11 @@ export function MyListings() {
                   {statusLabel(entry.status, t)}
                 </span>
                 <span className="text-[11.5px] text-[var(--muted-foreground)]">{t("{{count}} learners", { count: entry.learners ?? 0 })}</span>
+                {entry.recent_learners !== undefined && (
+                  <span className="text-[11.5px] text-[var(--muted-foreground)]" data-testid="listing-recent-learners">
+                    {t("{{count}} joined in the last 7 days", { count: entry.recent_learners })}
+                  </span>
+                )}
               </Link>
             </li>
           ))}

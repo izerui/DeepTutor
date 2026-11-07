@@ -173,7 +173,10 @@ def test_admins_withdraw_and_read_but_never_edit_others_practice_sets(as_account
         assert service.report(set_id)["set_id"] == set_id
         service.delete(set_id)  # an administrator's "delete" withdraws
     with as_account("sara"):
-        assert PracticeSetService().assigned() == []
+        # Polish batch §1: kept among what she joined, marked, nothing more to answer.
+        [kept] = PracticeSetService().assigned()
+        assert kept["id"] == set_id and kept["unavailable"] == "archived"
+        assert PracticeSetService().take(set_id)["unavailable"] == "archived"
     with as_account("tina"):
         assert PracticeSetService().get(set_id)["status"] == "archived"
 

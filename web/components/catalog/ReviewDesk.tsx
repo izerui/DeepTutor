@@ -13,6 +13,7 @@ import {
   listReviewListed,
   listReviewQueue,
   rejectListing,
+  relistHandedOver,
   takeDownListing,
   type CatalogEntry,
   type ReviewItem,
@@ -55,6 +56,8 @@ function eventLabel(action: string, t: (key: string) => string): string {
       return t("Request withdrawn");
     case "closed":
       return t("Closed by the author");
+    case "author_deleted":
+      return t("Taken out of the market: the author's account was deleted");
     default:
       return action;
   }
@@ -255,6 +258,12 @@ export function ReviewDetail({
                 <button type="button" className={primaryClass} onClick={() => void run(() => approveListing(item.kind, item.id))}>{t("Approve")}</button>
                 <button type="button" className={actionClass} onClick={() => setDeciding("reject")}>{t("Reject")}</button>
               </>
+            )}
+            {item.status === "unlisted" && item.author_role === "admin" && item.approved_once && (
+              // Polish batch §3: handed to an administrator when its author left; back into the market.
+              <button type="button" className={primaryClass} onClick={() => void run(() => relistHandedOver(item.kind, item.id))}>
+                {t("Put back in the market")}
+              </button>
             )}
             {(item.status === "listed" || item.status === "unlisted") && (
               <button type="button" className={actionClass} onClick={() => setDeciding("take-down")}>{t("Take down")}</button>

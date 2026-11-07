@@ -54,6 +54,7 @@ STAGES: tuple[str, ...] = (
     # Batch 3 §11: the answers they handed in for review go too.
     "practice_answers",
     # Platform batch 1: listings follow their content; what the account joined goes.
+    # Polish batch §3: what was in the market leaves it first.
     "catalog",
 )
 _TEACHING_STAGES = frozenset({"teacher_paths", "student_assignments", "path_materials"})
@@ -202,6 +203,8 @@ def _catalog_forget(user_id: str) -> None:
 
     from deeptutor.catalog import reviews
 
+    # Polish batch §3: out of the market first (its people told), then to the successor.
+    listings.withdraw_departed(user_id)
     listings.follow_owners(user_id)
     enrollment.forget_user(user_id)
     reviews.forget_user(user_id)

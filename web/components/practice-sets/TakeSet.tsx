@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { primaryClass } from "@/components/common/form-styles";
 import { submitSet, takeSet, type ResultValue, type SubmitResult, type TakeView } from "@/lib/practice-sets-api";
+import { withdrawnText } from "@/components/catalog/Withdrawn";
 import { QuestionAnswer } from "./QuestionAnswer";
 
 const RESULT_LABEL: Record<ResultValue, string> = {
@@ -108,6 +109,12 @@ export function TakeSet({ setId }: { setId: string }) {
             ` · ${t("Submitted {{count}} times", { count: view.submissions.length })}`}
         </p>
         {view.description && <p className="whitespace-pre-line text-[13px]">{view.description}</p>}
+        {view.unavailable && (
+          // Polish batch §1: one's own last attempt, read-only; nothing more to answer.
+          <p role="status" className="rounded-lg bg-[var(--muted)] px-3 py-2 text-[12.5px] text-[var(--muted-foreground)]" data-testid="take-unavailable">
+            {withdrawnText(view.unavailable, t)}
+          </p>
+        )}
       </header>
 
       {result && (
@@ -143,7 +150,7 @@ export function TakeSet({ setId }: { setId: string }) {
               <QuestionAnswer
                 question={question}
                 value={answers[question.question_id] ?? ""}
-                disabled={busy || result !== null}
+                disabled={busy || result !== null || Boolean(view.unavailable)}
                 onChange={(value) => setAnswers((current) => ({ ...current, [question.question_id]: value }))}
               />
               {graded && (
@@ -172,7 +179,7 @@ export function TakeSet({ setId }: { setId: string }) {
       </ol>
 
       {error && <p role="alert" className="text-[12px] text-[var(--destructive)]">{error}</p>}
-      {result ? (
+      {view.unavailable ? null : result ? (
         <button type="button" className={primaryClass} onClick={again}>
           {t("Answer again")}
         </button>

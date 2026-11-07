@@ -188,6 +188,12 @@ async def take_down(kind: str, item_id: str, body: ReasonBody) -> dict[str, Any]
     return await _call(_listings().take_down, kind, item_id, body.reason)
 
 
+@router.post("/review/{kind}/{item_id}/relist")
+async def relist_handed_over(kind: str, item_id: str) -> dict[str, Any]:
+    """Polish batch §3: content handed to an administrator when its author left goes back."""
+    return await _call(_listings().relist_handed_over, kind, item_id)
+
+
 class ClassificationBody(BaseModel):
     stages: list[str] = Field(default_factory=list, max_length=10)
     subjects: list[str] = Field(default_factory=list, max_length=10)
