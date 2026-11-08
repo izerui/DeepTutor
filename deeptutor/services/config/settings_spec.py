@@ -149,6 +149,7 @@ _RESPONSE_LANGUAGE_CHOICES: tuple[tuple[str, str, str], ...] = (
     ("ar", "العربية", "Replies in Arabic."),
     ("pl", "Polski", "Replies in Polish."),
     ("ms", "Bahasa Melayu", "Replies in Malay."),
+    ("hi", "हिन्दी", "Replies in Hindi."),
 )
 
 _THEME_CHOICES: tuple[tuple[str, str, str], ...] = (

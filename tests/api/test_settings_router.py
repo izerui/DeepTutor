@@ -130,6 +130,12 @@ async def test_ui_accepts_extended_response_languages(
     assert response["response_language"] == "ms"
     assert settings_router.load_ui_settings()["response_language"] == "ms"
 
+    response = await settings_router.update_ui_settings(
+        settings_router.UISettingsUpdate(response_language="hi")
+    )
+    assert response["response_language"] == "hi"
+    assert settings_router.load_ui_settings()["response_language"] == "hi"
+
 
 class _FakeEmbeddingAdapter:
     def __init__(self, config: dict[str, Any]):

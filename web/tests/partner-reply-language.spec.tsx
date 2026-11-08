@@ -36,4 +36,7 @@ it("labels Auto with the account response language and offers every language", a
   expect(
     screen.getByRole("option", { name: "Français" }),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: "हिन्दी" }),
+  ).toBeInTheDocument();
 });
