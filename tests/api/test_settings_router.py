@@ -2210,3 +2210,10 @@ def test_display_read_requires_auth_and_returns_only_display_fields(monkeypatch,
     response = client.get("/api/settings/display")
     assert response.status_code == 200
     assert response.json() == {"content_font_scale": 125, "content_line_spacing": "normal"}
+
+
+def test_llm_provider_choices_include_standardcompute() -> None:
+    llm = {item["value"]: item for item in settings_router._provider_choices()["llm"]}
+
+    assert llm["standardcompute"]["label"] == "Standard Compute"
+    assert llm["standardcompute"]["base_url"] == "https://api.stdcmpt.com/v1"
