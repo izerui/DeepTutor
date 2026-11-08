@@ -18,7 +18,13 @@ def qualified_kb_id(name: str, workspace_id: str = "") -> str:
 
 
 def workspace_id_for_kb_base_dir(base_dir: str | Path) -> str | None:
-    """Find the owned storage scope for a KB directory used by a background job."""
+    """Find the owned storage scope for a KB directory used by a background job.
+
+    A registration can outlive its folder (archived leftovers, a directory the
+    user moved or deleted). The scan compares catalog paths without entering
+    each scope, so one dead registration cannot break the write path of the
+    workspaces that are healthy.
+    """
     from deeptutor.multi_user.paths import get_account_path_service
     from deeptutor.services.workspace import get_content_workspace_service
 
