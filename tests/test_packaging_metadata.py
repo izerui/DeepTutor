@@ -43,13 +43,16 @@ def test_docling_parser_avoids_source_only_build_dependencies() -> None:
     """The official image has no compiler (upstream e3380f375, #2327).
 
     ``format-video`` pulls ``resemblyzer`` -> ``webrtcvad``, which ships only an
-    sdist. The document parser does not use Docling's video extras.
+    sdist. The document parser does not use Docling's video extras, so keep the
+    one-click install runnable in the published image: every requirement pip is
+    asked to build for the parser must stay wheel-only.
     """
     from deeptutor.services.parsing.engines._install import ENGINE_PIP_SPECS
 
     extras = _project(REPOSITORY_ROOT / "pyproject.toml")["optional-dependencies"]
     for requirement in [*extras["parse-docling"], *ENGINE_PIP_SPECS["docling"]]:
-        assert "format-video" not in requirement
+        for source_only in ("format-video", "resemblyzer", "webrtcvad"):
+            assert source_only not in requirement
 
 
 def test_python_314_is_supported_by_both_distributions() -> None:
