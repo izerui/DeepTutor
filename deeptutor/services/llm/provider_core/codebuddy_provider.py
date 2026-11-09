@@ -758,6 +758,26 @@ def _result_text(message: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _result_errors(message: Any) -> list[str]:
+    """The CLI's own prose for a failed turn (``errors: [...]``).
+
+    ``ResultMessage.errors`` is where the CLI puts the sentence a human should
+    read — ``"Reached maximum number of turns (1)"``, the unavailable-tool
+    rejection, an API failure. It is normally the *only* place: a turn that
+    ends on ``error_max_turns`` carries ``result=None``.
+    """
+    if isinstance(message, dict):
+        raw = message.get("errors")
+    else:
+        raw = getattr(message, "errors", None)
+    if isinstance(raw, str):
+        raw = [raw]
+    elif not isinstance(raw, list):
+        return []
+    # Older or buggy emitters may put non-strings in the list.
+    return [str(item).strip() for item in raw if isinstance(item, str) and item.strip()]
+
+
 def _result_subtype(message: Any) -> str:
     """The CLI's own one-word verdict for the turn (``error_max_turns`` …)."""
     if isinstance(message, dict):
@@ -767,9 +787,18 @@ def _result_subtype(message: Any) -> str:
     return str(value or "").strip()
 
 
-# Why a failed turn ended. The CLI reports these in ``subtype`` and leaves
-# ``result`` empty, so without this table the operator only ever saw
-# ``"Error calling CodeBuddy: "`` with nothing after the colon.
+def _result_api_status(message: Any) -> int | None:
+    """HTTP status of the failing API call, when the CLI reports one."""
+    if isinstance(message, dict):
+        value = message.get("api_error_status")
+    else:
+        value = getattr(message, "api_error_status", None)
+    return value if isinstance(value, int) else None
+
+
+# Why a failed turn ended. The CLI reports these in ``subtype``; ``errors[]``
+# is preferred when present, so this table is the fallback for frames that
+# carry the subtype only.
 _RESULT_FAILURES: dict[str, str] = {
     "error_max_turns": "the turn hit its maximum number of turns",
     "error_during_execution": "the CLI reported an error while running the turn",
@@ -780,11 +809,18 @@ _RESULT_FAILURES: dict[str, str] = {
 def _result_detail(message: Any) -> str:
     """An operator-facing reason for a failed SDK turn that is never blank.
 
-    The SDK fills ``result`` only when the CLI produced assistant text. A turn
-    that dies on a rejected tool call or a turn limit ends with an empty
-    ``result`` plus the error flag, and echoing that empty string left the
-    cause nowhere on screen (#2539).
+    Sources, in the order the agent SDK itself prefers them: ``errors[]``,
+    then ``result``, then a non-``success`` ``subtype``, then the HTTP status.
+
+    A turn that dies on the turn limit or on a rejected tool call ends with
+    ``result=None`` and the prose in ``errors[]``; reading only ``result``
+    left the cause nowhere on screen (#2539). Such a frame arrives as
+    ``subtype: "success"`` when the run ended on an API failure, which is why
+    the subtype is not the primary source.
     """
+    errors = _result_errors(message)
+    if errors:
+        return "; ".join(errors)
     text = _result_text(message).strip()
     subtype = _result_subtype(message)
     if text:
@@ -794,6 +830,9 @@ def _result_detail(message: Any) -> str:
         return f"{_RESULT_FAILURES[subtype]} ({subtype})"
     if subtype and subtype != "success":
         return f"the CLI ended the turn without a result ({subtype})"
+    status = _result_api_status(message)
+    if status is not None:
+        return f"the provider API call failed (HTTP {status})"
     return "the CLI ended the turn without a result and reported no reason"
 
 
