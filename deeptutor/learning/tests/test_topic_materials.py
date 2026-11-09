@@ -77,6 +77,33 @@ def test_each_book_chapter_becomes_its_own_readable_source(two_chapter_book: Non
     assert "1. Beyond the Linear Pipeline" in manifest
 
 
+def test_shared_book_uses_storage_selected_by_access_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A learner's assigned admin book lives outside their personal store."""
+    chapters = [_chapter("ch_shared", "Shared chapter", 0, ["p_shared"])]
+    shared_storage = _book_storage(chapters)
+    resolved_ids: list[str] = []
+    context_storages: list[object] = []
+    monkeypatch.setattr(
+        "deeptutor.multi_user.book_access.readable_book_storage",
+        lambda book_id: resolved_ids.append(book_id) or shared_storage,
+    )
+    monkeypatch.setattr(
+        "deeptutor.book.context.build_book_context",
+        lambda refs, storage, **kwargs: (
+            context_storages.append(storage)
+            or SimpleNamespace(text="SHARED CONTENT", references=[], warnings=[])
+        ),
+    )
+
+    materials = build_topic_materials([_source(TopicSourceKind.BOOK, "bk_shared", "Shared")])
+
+    assert resolved_ids == ["bk_shared"]
+    assert context_storages == [shared_storage]
+    assert materials.source_index() == {"bk-bk_shared-ch_shared": "SHARED CONTENT"}
+
+
 def test_goal_source_is_not_offered_as_readable_material() -> None:
     """The goal is the objective, not something to 'read'."""
     materials = build_topic_materials(
