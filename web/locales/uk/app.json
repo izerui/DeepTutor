@@ -6153,5 +6153,12 @@
   "Render files changed. Review the storage preview again.": "Файли рендерингу змінилися. Перевірте огляд ще раз.",
   "Wait for running conversations to finish before cleanup.": "Зачекайте, доки завершаться активні розмови, перш ніж очищати.",
   "Workspace data is busy. Wait for active requests and tasks before retrying.": "Дані робочого простору зайняті. Зачекайте завершення активних запитів і завдань, а потім повторіть спробу.",
-  "The original artifact is unavailable; render files were preserved.": "Оригінальний файл недоступний; файли рендерингу збережено."
+  "The original artifact is unavailable; render files were preserved.": "Оригінальний файл недоступний; файли рендерингу збережено.",
+  "Web fetch backend": "Служба завантаження сторінок",
+  "Which service fetches and extracts pages for web_fetch calls.": "Служба, яка завантажує та витягує сторінки для викликів web_fetch.",
+  "Failed to load web fetch settings.": "Не вдалося завантажити налаштування завантаження сторінок.",
+  "Failed to save web fetch settings.": "Не вдалося зберегти налаштування завантаження сторінок.",
+  "Loading web fetch settings...": "Завантаження налаштувань завантаження сторінок…",
+  "Applies from the next web_fetch onwards.": "Діє з наступного виклику web_fetch.",
+  "DEEPTUTOR_FETCH_BACKEND is overriding the saved choice for this deployment.": "DEEPTUTOR_FETCH_BACKEND перевизначає збережений вибір для цього розгортання."
 }

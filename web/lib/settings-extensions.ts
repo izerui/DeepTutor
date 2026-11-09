@@ -29,6 +29,7 @@ export const EXTENSION_ENDPOINTS = {
   "video-lesson": "/api/capabilities/video-lesson/settings",
   memory: "/api/memory/settings",
   network: "/api/settings/network",
+  "web-fetch": "/api/settings/web-fetch",
 } as const;
 
 export type ExtensionKey = keyof typeof EXTENSION_ENDPOINTS;

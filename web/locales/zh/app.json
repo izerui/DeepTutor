@@ -6109,5 +6109,12 @@
   "Render files changed. Review the storage preview again.": "渲染文件已发生变化，请重新查看清理预览。",
   "Wait for running conversations to finish before cleanup.": "请等待正在运行的对话完成后再清理。",
   "Workspace data is busy. Wait for active requests and tasks before retrying.": "工作区正在使用中，请等待活动请求和任务完成后重试。",
-  "The original artifact is unavailable; render files were preserved.": "原始文件已不可用，渲染文件已保留。"
+  "The original artifact is unavailable; render files were preserved.": "原始文件已不可用，渲染文件已保留。",
+  "Web fetch backend": "网页抓取后端",
+  "Which service fetches and extracts pages for web_fetch calls.": "选择为 web_fetch 调用抓取并提取网页的服务。",
+  "Failed to load web fetch settings.": "加载网页抓取设置失败。",
+  "Failed to save web fetch settings.": "保存网页抓取设置失败。",
+  "Loading web fetch settings...": "正在加载网页抓取设置…",
+  "Applies from the next web_fetch onwards.": "从下一次 web_fetch 调用开始生效。",
+  "DEEPTUTOR_FETCH_BACKEND is overriding the saved choice for this deployment.": "此部署中的 DEEPTUTOR_FETCH_BACKEND 正在覆盖已保存的选择。"
 }

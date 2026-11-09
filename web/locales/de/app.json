@@ -6109,5 +6109,12 @@
   "Render files changed. Review the storage preview again.": "Die Render-Dateien haben sich geändert. Prüfe die Vorschau erneut.",
   "Wait for running conversations to finish before cleanup.": "Warte, bis laufende Unterhaltungen abgeschlossen sind, bevor du aufräumst.",
   "Workspace data is busy. Wait for active requests and tasks before retrying.": "Die Arbeitsbereichsdaten werden gerade verwendet. Warte, bis aktive Anfragen und Aufgaben abgeschlossen sind, und versuche es dann erneut.",
-  "The original artifact is unavailable; render files were preserved.": "Die ursprüngliche Datei ist nicht verfügbar; die Render-Dateien wurden behalten."
+  "The original artifact is unavailable; render files were preserved.": "Die ursprüngliche Datei ist nicht verfügbar; die Render-Dateien wurden behalten.",
+  "Web fetch backend": "Web-Fetch-Backend",
+  "Which service fetches and extracts pages for web_fetch calls.": "Welcher Dienst Seiten für web_fetch-Aufrufe lädt und extrahiert.",
+  "Failed to load web fetch settings.": "Die Web-Fetch-Einstellungen konnten nicht geladen werden.",
+  "Failed to save web fetch settings.": "Die Web-Fetch-Einstellungen konnten nicht gespeichert werden.",
+  "Loading web fetch settings...": "Web-Fetch-Einstellungen werden geladen…",
+  "Applies from the next web_fetch onwards.": "Gilt ab dem nächsten web_fetch-Aufruf.",
+  "DEEPTUTOR_FETCH_BACKEND is overriding the saved choice for this deployment.": "DEEPTUTOR_FETCH_BACKEND überschreibt in dieser Bereitstellung die gespeicherte Auswahl."
 }
