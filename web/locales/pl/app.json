@@ -6031,5 +6031,8 @@
   "settings.modelImport.draftHint": "Modele są dodawane do wersji roboczej. Zastosuj zmiany, aby je zapisać; model domyślny pozostaje bez zmian.",
   "settings.modelImport.selected": "Wybrano: {{count}}",
   "Search models…": "Szukaj modeli…",
-  "Playback speed": "Prędkość odtwarzania"
+  "Playback speed": "Prędkość odtwarzania",
+  "Recorded help: {{count}}": "Zapisana pomoc: {{count}}",
+  "Select text from this question's reading section first.": "Najpierw zaznacz tekst w sekcji czytania dotyczącej tego pytania.",
+  "Failed to record help. Please try again.": "Nie udało się zapisać pomocy. Spróbuj ponownie."
 }

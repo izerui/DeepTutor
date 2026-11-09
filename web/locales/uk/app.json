@@ -6031,5 +6031,8 @@
   "settings.modelImport.draftHint": "Моделі додаються до чернетки. Застосуйте зміни, щоб зберегти їх; типова модель залишається незмінною.",
   "settings.modelImport.selected": "Вибрано: {{count}}",
   "Search models…": "Пошук моделей…",
-  "Playback speed": "Швидкість відтворення"
+  "Playback speed": "Швидкість відтворення",
+  "Recorded help: {{count}}": "Записана допомога: {{count}}",
+  "Select text from this question's reading section first.": "Спочатку виберіть текст у розділі читання цього запитання.",
+  "Failed to record help. Please try again.": "Не вдалося записати допомогу. Спробуйте ще раз."
 }

@@ -5987,5 +5987,8 @@
   "settings.modelImport.draftHint": "Models are added to your draft. Apply changes to save them; the default model stays the same.",
   "settings.modelImport.selected": "Selected: {{count}}",
   "Search models…": "Search models…",
-  "Playback speed": "Playback speed"
+  "Playback speed": "Playback speed",
+  "Recorded help: {{count}}": "Recorded help: {{count}}",
+  "Select text from this question's reading section first.": "Select text from this question's reading section first.",
+  "Failed to record help. Please try again.": "Failed to record help. Please try again."
 }

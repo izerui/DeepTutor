@@ -473,6 +473,7 @@ export function ReadingCompanion({
           <CompanionWelcome hasMaterial={Boolean(material)} />
         )}
         <ReadingActionCards
+          selection={selection}
           sessionId={state.sessionId}
           onFollowUp={followUpCard}
         />

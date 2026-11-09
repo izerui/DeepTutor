@@ -5987,5 +5987,8 @@
   "settings.modelImport.draftHint": "Modelle werden zum Entwurf hinzugefügt. Änderungen anwenden, um sie zu speichern; das Standardmodell bleibt gleich.",
   "settings.modelImport.selected": "Ausgewählt: {{count}}",
   "Search models…": "Modelle suchen…",
-  "Playback speed": "Wiedergabegeschwindigkeit"
+  "Playback speed": "Wiedergabegeschwindigkeit",
+  "Recorded help: {{count}}": "Aufgezeichnete Hilfen: {{count}}",
+  "Select text from this question's reading section first.": "Wähle zuerst Text aus dem Leseabschnitt dieser Frage aus.",
+  "Failed to record help. Please try again.": "Die Hilfe konnte nicht aufgezeichnet werden. Bitte versuche es erneut."
 }
