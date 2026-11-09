@@ -535,7 +535,7 @@ async def _consume_messages(
     async for message in messages:
         if _is_error_result(message):
             return LLMResponse(
-                content=f"Error calling CodeBuddy: {_result_text(message)}",
+                content=f"Error calling CodeBuddy: {_result_detail(message)}",
                 finish_reason="error",
             )
         if _is_result_message(message):
@@ -758,8 +758,47 @@ def _result_text(message: Any) -> str:
     return "" if value is None else str(value)
 
 
+def _result_subtype(message: Any) -> str:
+    """The CLI's own one-word verdict for the turn (``error_max_turns`` …)."""
+    if isinstance(message, dict):
+        value = message.get("subtype")
+    else:
+        value = getattr(message, "subtype", None)
+    return str(value or "").strip()
+
+
+# Why a failed turn ended. The CLI reports these in ``subtype`` and leaves
+# ``result`` empty, so without this table the operator only ever saw
+# ``"Error calling CodeBuddy: "`` with nothing after the colon.
+_RESULT_FAILURES: dict[str, str] = {
+    "error_max_turns": "the turn hit its maximum number of turns",
+    "error_during_execution": "the CLI reported an error while running the turn",
+    "error_max_budget_usd": "the turn hit its budget limit",
+}
+
+
+def _result_detail(message: Any) -> str:
+    """An operator-facing reason for a failed SDK turn that is never blank.
+
+    The SDK fills ``result`` only when the CLI produced assistant text. A turn
+    that dies on a rejected tool call or a turn limit ends with an empty
+    ``result`` plus the error flag, and echoing that empty string left the
+    cause nowhere on screen (#2539).
+    """
+    text = _result_text(message).strip()
+    subtype = _result_subtype(message)
+    if text:
+        # Keep the CLI's wording first; the subtype is a machine-readable hint.
+        return f"{text} ({subtype})" if subtype and subtype != "success" else text
+    if subtype in _RESULT_FAILURES:
+        return f"{_RESULT_FAILURES[subtype]} ({subtype})"
+    if subtype and subtype != "success":
+        return f"the CLI ended the turn without a result ({subtype})"
+    return "the CLI ended the turn without a result and reported no reason"
+
+
 def _friendly_error(exc: Exception) -> str:
-    message = str(exc)
+    message = str(exc).strip()
     if "Authentication required" in message:
         return (
             "Error calling CodeBuddy: authentication required. Run "
@@ -771,6 +810,11 @@ def _friendly_error(exc: Exception) -> str:
             "Error calling CodeBuddy: the SDK session was closed from a different "
             "async task than it was opened on. Retry the message; if it persists, "
             "restart the backend."
+        )
+    if not message:
+        return (
+            f"Error calling CodeBuddy: the SDK raised {type(exc).__name__} "
+            "without a message. Retry, and check the CodeBuddy CLI log if it persists."
         )
     return f"Error calling CodeBuddy: {message}"
 
