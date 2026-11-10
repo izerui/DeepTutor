@@ -1605,3 +1605,75 @@ async def test_selection_tutoring_never_mounts_the_learning_journal(
 
     assert captured["learning_journal_context"] == ""
     assert journal_reads == []
+
+
+def _patch_turn_services(monkeypatch, orchestrator) -> None:
+    class FakeContextBuilder:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        async def build(self, **_kwargs):
+            return SimpleNamespace(
+                conversation_history=[],
+                conversation_summary="",
+                context_text="",
+                token_count=0,
+                budget=0,
+            )
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+    )
+    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", orchestrator)
+    monkeypatch.setattr("deeptutor.services.skill.get_skill_service", _fake_skill_service)
+    monkeypatch.setattr("deeptutor.services.persona.get_persona_service", _fake_persona_service)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capability", ["deep_solve", "visualize"])
+async def test_attached_reading_sections_reach_non_chat_capabilities(
+    monkeypatch, tmp_path, capability
+) -> None:
+    """Chat reads attached Reading units through ``read_source``; capabilities
+    without that tool get them inline, like attached documents and books."""
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    captured: dict[str, object] = {}
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            captured["message"] = context.user_message
+            yield StreamEvent(type=StreamEventType.DONE, source=capability)
+
+    _patch_turn_services(monkeypatch, FakeOrchestrator)
+    resolved: list[object] = []
+
+    def fake_resolve(references):
+        resolved.append(references)
+        return [SimpleNamespace(full_text="Lecture 3, page 2\n\nA sequence converges if ...")]
+
+    monkeypatch.setattr("deeptutor.reading.references.resolve_reading_sources", fake_resolve)
+    _session, turn = await runtime.start_turn(
+        {
+            "type": "start_turn",
+            "content": "Solve exercise 4",
+            "session_id": None,
+            "capability": capability,
+            "tools": [],
+            "knowledge_bases": [],
+            "attachments": [],
+            "reading_references": [
+                {"material_id": "0123456789abcdef", "revision": 1, "locators": [2]}
+            ],
+            "language": "en",
+            "config": {},
+        }
+    )
+    async for _event in runtime.subscribe_turn(turn["id"], after_seq=0):
+        pass
+
+    message = str(captured["message"])
+    assert "[Reading Sections]\nLecture 3, page 2\n\nA sequence converges if ..." in message
+    assert message.rstrip().endswith("[User Question]\nSolve exercise 4")
+    assert resolved == [[{"material_id": "0123456789abcdef", "revision": 1, "locators": [2]}]]
