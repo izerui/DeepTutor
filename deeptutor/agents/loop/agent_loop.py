@@ -531,6 +531,22 @@ class AgentLoop:
                 state.settlement_rounds += 1
             else:
                 state.exploration_rounds += 1
+            if str(result.finish_reason or "").strip().lower() == "context_length_exceeded":
+                # The input context is full, so resuming (``continue_truncated``) would
+                # resend the same history. Finish the round and tell the reader why.
+                await self.stream.progress(
+                    self.pipeline._t(
+                        "notices.context_length_exceeded",
+                        default=(
+                            "The conversation filled the model's context window, so the "
+                            "answer was cut off. Start a new chat or shorten the history "
+                            "and try again."
+                        ),
+                    ),
+                    source=self.source,
+                    stage=self.stage,
+                    metadata={"trace_kind": "warning"},
+                )
             if recovery_tools is not None and any(
                 str(call.get("name") or "").strip() not in recovery_tools
                 for call in result.tool_calls
