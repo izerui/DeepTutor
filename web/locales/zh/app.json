@@ -5994,5 +5994,7 @@
   "Playback speed": "播放速度",
   "Recorded help: {{count}}": "已记录帮助：{{count}} 次",
   "Select text from this question's reading section first.": "请先选择本题所在阅读段落中的文字。",
-  "Failed to record help. Please try again.": "帮助记录失败，请重试。"
+  "Failed to record help. Please try again.": "帮助记录失败，请重试。",
+  "Fit text": "适应文字",
+  "Fit page": "适应页面"
 }

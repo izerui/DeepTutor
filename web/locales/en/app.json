@@ -5994,5 +5994,7 @@
   "Playback speed": "Playback speed",
   "Recorded help: {{count}}": "Recorded help: {{count}}",
   "Select text from this question's reading section first.": "Select text from this question's reading section first.",
-  "Failed to record help. Please try again.": "Failed to record help. Please try again."
+  "Failed to record help. Please try again.": "Failed to record help. Please try again.",
+  "Fit text": "Fit text",
+  "Fit page": "Fit page"
 }

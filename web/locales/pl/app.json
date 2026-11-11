@@ -6038,5 +6038,7 @@
   "Playback speed": "Prędkość odtwarzania",
   "Recorded help: {{count}}": "Zapisana pomoc: {{count}}",
   "Select text from this question's reading section first.": "Najpierw zaznacz tekst w sekcji czytania dotyczącej tego pytania.",
-  "Failed to record help. Please try again.": "Nie udało się zapisać pomocy. Spróbuj ponownie."
+  "Failed to record help. Please try again.": "Nie udało się zapisać pomocy. Spróbuj ponownie.",
+  "Fit text": "Dopasuj do tekstu",
+  "Fit page": "Dopasuj do strony"
 }

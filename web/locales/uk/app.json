@@ -6038,5 +6038,7 @@
   "Playback speed": "Швидкість відтворення",
   "Recorded help: {{count}}": "Записана допомога: {{count}}",
   "Select text from this question's reading section first.": "Спочатку виберіть текст у розділі читання цього запитання.",
-  "Failed to record help. Please try again.": "Не вдалося записати допомогу. Спробуйте ще раз."
+  "Failed to record help. Please try again.": "Не вдалося записати допомогу. Спробуйте ще раз.",
+  "Fit text": "За розміром тексту",
+  "Fit page": "За розміром сторінки"
 }

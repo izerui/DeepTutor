@@ -5994,5 +5994,7 @@
   "Playback speed": "Wiedergabegeschwindigkeit",
   "Recorded help: {{count}}": "Aufgezeichnete Hilfen: {{count}}",
   "Select text from this question's reading section first.": "Wähle zuerst Text aus dem Leseabschnitt dieser Frage aus.",
-  "Failed to record help. Please try again.": "Die Hilfe konnte nicht aufgezeichnet werden. Bitte versuche es erneut."
+  "Failed to record help. Please try again.": "Die Hilfe konnte nicht aufgezeichnet werden. Bitte versuche es erneut.",
+  "Fit text": "An Text anpassen",
+  "Fit page": "An Seite anpassen"
 }
