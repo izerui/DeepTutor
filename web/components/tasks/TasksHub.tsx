@@ -38,13 +38,15 @@ export default function TasksHub() {
 type Tab = "joined" | "courses";
 
 /**
- * Where the links lead: ``?course=`` and ``?tab=joined`` (``&task=``) open
+ * Where the links lead: ``?edit=`` opens one's own course (its intro page's "Open");
+ * ``?course=`` and ``?tab=joined`` (``&task=``) open
  * what one joined; ``?tab=courses`` (and the older ``?tab=tasks``) one's own
  * courses; ``?task=`` alone one's own lesson inside its course, or — when it
  * is not one's own — that lesson among what one joined.
  */
 function tabFor(params: URLSearchParams | null, isAdmin: boolean): Tab {
   const tab = params?.get("tab");
+  if (params?.get("edit")) return "courses";
   if (params?.get("course") || tab === "joined") return "joined";
   if (tab === "courses" || tab === "tasks" || params?.get("task") || isAdmin) return "courses";
   return "joined";
@@ -57,6 +59,7 @@ function CourseTabs({ isAdmin }: { isAdmin: boolean }) {
   // Set once ``?task=`` proved not to be one's own: it is looked for among what one joined.
   const [notMine, setNotMine] = useState(false);
   const ownLesson = params.get("tab") === "joined" || notMine ? null : taskParam;
+  const ownCourse = params.get("edit");
   const [tab, setTab] = useState<Tab>(() => tabFor(params, isAdmin));
   // A new link while already here (a notification) moves to where it leads.
   const query = params.toString();
@@ -79,7 +82,8 @@ function CourseTabs({ isAdmin }: { isAdmin: boolean }) {
         </button>
       </div>
       {tab === "courses" ? (
-        <CourseAuthorView key={ownLesson ?? ""} isAdmin={isAdmin} initialLesson={ownLesson}
+        <CourseAuthorView key={`${ownLesson ?? ""}:${ownCourse ?? ""}`} isAdmin={isAdmin} initialLesson={ownLesson}
+          initialCourse={ownCourse}
           onLessonMissing={() => { setNotMine(true); setTab("joined"); }} />
       ) : (
         <JoinedView />

@@ -38,6 +38,7 @@ import {
   masterySessionRoute,
 } from "@/lib/mastery-mode";
 import { currentTemplate } from "@/lib/mastery-templates";
+import { useFinishedUnreviewed } from "@/components/catalog/FinishedReview";
 import { setPendingPrompt } from "@/lib/pending-prompt";
 
 function MasteryPathRoute() {
@@ -60,6 +61,8 @@ function MasteryPathRoute() {
   const [managing, setManaging] = useState<AuthorTemplate | null>(null);
   const authorTriggerRef = useRef<HTMLElement | null>(null);
   const templatesRequest = useRef(0);
+  // Spec 2026-11-11 §2: finished paths one has not reviewed ask for a review.
+  const finishedUnreviewed = useFinishedUnreviewed();
 
   const loadTemplates = useCallback(async () => {
     // Overlapping reloads (after each change) settle on the newest.
@@ -158,6 +161,7 @@ function MasteryPathRoute() {
           authorTriggerRef.current = trigger;
           setManaging(template);
         }}
+        finishedUnreviewed={finishedUnreviewed}
       />
       {wizardOpen && (
         <CreateTopicWizard

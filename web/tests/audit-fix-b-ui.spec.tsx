@@ -184,7 +184,7 @@ it("reports and their outcome read in the reader's language", () => {
 it("joined content that went says why instead of Go study", () => {
   const { rerender } = render(<JoinButton item={item({ joined: "self", closed: true, unavailable: "taken_down" })} onChanged={vi.fn()} />);
   expect(screen.getByTestId("item-unavailable").textContent).toBe("This was taken down. Your learning records are kept.");
-  expect(screen.queryByRole("link", { name: "Go study" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Continue studying" })).toBeNull();
   rerender(<JoinButton item={item({ joined: "self", closed: true, unavailable: "archived" })} onChanged={vi.fn()} />);
   expect(screen.getByTestId("item-unavailable").textContent).toBe("Its author withdrew this. Your learning records are kept.");
 });

@@ -17,7 +17,7 @@ export function withdrawnLabel(unavailable: WithdrawnHow, t: Translate): string 
   return t("Taken out of the market by its author");
 }
 
-/** The sentence in place of "Go study" / "Start" when it can no longer be studied. */
+/** The sentence in place of "Continue studying" / "Start" when it can no longer be studied. */
 export function withdrawnText(unavailable: WithdrawnHow, t: Translate): string {
   return unavailable === "taken_down"
     ? t("This was taken down. Your learning records are kept.")

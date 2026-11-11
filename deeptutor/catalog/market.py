@@ -171,13 +171,43 @@ def search(viewer: CurrentUser, f: Filters) -> dict[str, Any]:
     page = max(1, int(f.page or 1))
     start = (page - 1) * PAGE_SIZE
     joined = enrollment.joined_by(viewer.id)
+    shown = [_public(e, joined, favorites) for e in results[start:start + PAGE_SIZE]]
+    if f.favorites:
+        # Spec 2026-11-11 §7: "My favorites" tells which changed since one last looked.
+        from deeptutor.catalog.reviews import updated_favorites
+
+        updated = updated_favorites(viewer.id, [(e["kind"], e["id"]) for e in shown], set(joined))
+        for e in shown:
+            e["updated"] = (e["kind"], e["id"]) in updated
     return {
         "total": len(results),
         "page": page,
         "page_size": PAGE_SIZE,
-        "items": [_public(e, joined, favorites) for e in results[start:start + PAGE_SIZE]],
+        "items": shown,
         "facets": facets,
     }
+
+
+def updated_favorites(viewer: CurrentUser) -> list[dict[str, Any]]:
+    """Spec 2026-11-11 §7: one's listed favorites whose content changed, newest first (the home page)."""
+    from deeptutor.multi_user.accounts import accounts as _accounts
+
+    from deeptutor.catalog.reviews import favorites_of, updated_favorites as changed
+
+    favorites = favorites_of(viewer.id)
+    if not favorites:
+        return []
+    entries = [e for e in _entries(_accounts()) if (e["kind"], e["id"]) in favorites]
+    joined = enrollment.joined_by(viewer.id)
+    updated = changed(viewer.id, [(e["kind"], e["id"]) for e in entries], set(joined))
+    entries = [e for e in entries if (e["kind"], e["id"]) in updated]
+    entries.sort(key=lambda e: -(e["listed_at"] or 0))
+    out = []
+    for e in entries:
+        public = _public(e, joined, favorites)
+        public["updated"] = True
+        out.append(public)
+    return out
 
 
 def recent(viewer: CurrentUser, *, since: float, limit: int) -> list[dict[str, Any]]:
@@ -231,14 +261,20 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
     blocked = bool(row["blocked"] if "blocked" in row.keys() else 0)
     admin = _role(viewer) == "admin"
     from deeptutor.catalog.flags import reported_by
+    from deeptutor.catalog import progress as progress_of
 
-    return {
+    closed = info.closed or blocked
+    reviewed = (kind, item_id) in progress_of.reviewed_by(viewer.id)
+    out = {
         **entry,
         "joined": joined.get((kind, item_id)),
         "mine": mine,
+        # Spec 2026-11-11 §5: its author, or an administrator on what the platform published, sees
+        # it as its author does (no favorite, no report).
+        "author_view": mine or (admin and entry["author_role"] == "admin"),
         # Taken down by an administrator, or archived / made private by its author:
         # nobody studies it now (audit fix B §2), whatever their records say.
-        "closed": info.closed or blocked,
+        "closed": closed,
         "unavailable": "taken_down" if blocked else ("archived" if info.closed else None),
         "can_join": row["status"] == "listed" and not mine and not info.closed,
         # Audit fix B §1: anyone but its author reports it, once while the report is open.
@@ -247,6 +283,122 @@ def detail(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
         # A taken-down item shows its contents to its author and administrators only (review L1).
         "preview": items.preview(kind, item_id) if not blocked or mine or admin else {},
         "study": _study_target(kind, item_id),
+        # Spec 2026-11-11 §1, §2: one's own progress, worked out now, and whether one reviewed it.
+        "progress": progress_of.mine(viewer, kind, item_id) if member and not mine and not closed else None,
+        "reviewed": reviewed,
+        "can_review": member and not mine,
+        # Spec 2026-11-11 §4: the first chapter of a book in the market, read before joining.
+        "can_try": (
+            kind == "book" and row["status"] == "listed" and not closed and not member and not mine
+        ),
+    }
+    if kind == "practice_set" and row["status"] == "listed" and not blocked and out["preview"]:
+        # Spec 2026-11-11 §4: the first questions, without answers, before joining.
+        out["preview"] = {**out["preview"], "sample_questions": items.sample_questions(item_id)}
+    if entry["favorited"]:
+        from deeptutor.catalog.reviews import seen_favorite
+
+        seen_favorite(viewer.id, kind, item_id)  # spec 2026-11-11 §7: seen now, no longer "updated"
+    if mine:
+        out["open"] = _open_target(kind, item_id)
+    # Spec 2026-11-11 §5: the numbers are for its author and administrators only.
+    if mine or admin:
+        out["stats"] = _stats(kind, item_id, row["owner_user_id"], entry["learners"])
+    return out
+
+
+NEXT_LIMIT = 6
+
+
+def _difficulty_rank(value: str) -> int | None:
+    order = [key for key, _, _ in taxonomy.DIFFICULTIES]
+    return order.index(value) if value in order else None
+
+
+def next_items(viewer: CurrentUser, kind: str, item_id: str) -> dict[str, Any]:
+    """Spec 2026-11-11 §3: what to study next, or what is related, below an introduction.
+
+    Listed items only, never the item itself, one's own or what one joined: its
+    author's other items (newest first), then the same subject one difficulty
+    up, then the same subject by learners. At most :data:`NEXT_LIMIT`.
+    """
+    from deeptutor.multi_user.accounts import accounts as _accounts, live_role as _role
+    from deeptutor.multi_user.ownership import owns
+
+    from deeptutor.catalog.reviews import favorites_of
+
+    with db.read() as conn:
+        row = conn.execute(
+            "SELECT * FROM listings WHERE kind = ? AND item_id = ?", (kind, item_id)
+        ).fetchone() if conn else None
+    if row is None:
+        raise ListingNotFound("Not found.")
+    joined = enrollment.joined_by(viewer.id)
+    if row["status"] != "listed" and not (
+        owns(row["owner_user_id"], viewer) or _role(viewer) == "admin" or (kind, item_id) in joined
+    ):
+        raise ListingNotFound("Not found.")
+    item = describe(row, learners=0)
+    subjects = {a for s in item["subjects"] for a in taxonomy.ancestors(s)}
+    rank = _difficulty_rank(item["difficulty"])
+    candidates = [
+        e for e in _entries(_accounts())
+        if (e["kind"], e["id"]) != (kind, item_id)
+        and (e["kind"], e["id"]) not in joined
+        and not owns(e["owner_id"], viewer)
+    ]
+
+    def newest(e: dict[str, Any]) -> float:
+        return -(e["listed_at"] or 0)
+
+    same_author = sorted((e for e in candidates if e["owner_id"] == row["owner_user_id"]), key=newest)
+    same_subject = [e for e in candidates if subjects and subjects & e["_subjects"]]
+    harder = sorted(
+        (e for e in same_subject if rank is not None and _difficulty_rank(e["difficulty"]) == rank + 1),
+        key=lambda e: (-e["learners"], newest(e)),
+    )
+    popular = sorted(same_subject, key=lambda e: (-e["learners"], newest(e)))
+    picked: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for e in [*same_author, *harder, *popular]:
+        key = (e["kind"], e["id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        picked.append(e)
+        if len(picked) == NEXT_LIMIT:
+            break
+    favorites = favorites_of(viewer.id)
+    return {"items": [_public(e, joined, favorites) for e in picked]}
+
+
+def _open_target(kind: str, item_id: str) -> dict[str, Any]:
+    """Where its author's "Open" leads: the editor, or for a path the author's own draft."""
+    target = _study_target(kind, item_id)
+    if kind == "mastery_path":
+        from deeptutor.teaching.store import TeachingStore
+
+        template = TeachingStore().get_template(item_id)
+        target["path_id"] = template.draft_path_id if template else ""
+        target["workspace_id"] = template.draft_workspace_id if template else ""
+    return target
+
+
+def _stats(kind: str, item_id: str, owner: str, learners: int) -> dict[str, Any]:
+    """Spec 2026-11-11 §5: learners, newcomers this week, who finished, and the reviews."""
+    from deeptutor.catalog import progress as progress_of
+
+    with db.read() as conn:
+        rows = conn.execute(
+            "SELECT stars, reply FROM reviews WHERE kind = ? AND item_id = ?", (kind, item_id)
+        ).fetchall() if conn else []
+    return {
+        "learners": learners,
+        "recent_learners": enrollment.recent_joins([(kind, item_id)])[(kind, item_id)],
+        "finished": progress_of.finished_count(kind, item_id, owner),
+        "rating": round(sum(r["stars"] for r in rows) / len(rows), 2) if rows else None,
+        "rating_count": len(rows),
+        "unanswered": sum(1 for r in rows if not (r["reply"] or "").strip()),
     }
 
 
@@ -325,4 +477,7 @@ def parse_list(value: str | None) -> list[str]:
     return [part for part in (value or "").split(",") if part][:50]
 
 
-__all__ = ["Filters", "PAGE_SIZE", "SORTS", "author_page", "detail", "featured", "parse_list", "recent", "search"]
+__all__ = [
+    "Filters", "NEXT_LIMIT", "PAGE_SIZE", "SORTS", "author_page", "detail", "featured", "next_items", "parse_list",
+    "recent", "search", "updated_favorites",
+]

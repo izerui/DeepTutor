@@ -59,6 +59,61 @@ def favorites_of(user_id: str) -> set[tuple[str, str]]:
             return set()
 
 
+def _stored_fingerprints(user_id: str, keys: list[tuple[str, str]] | None = None) -> dict[tuple[str, str], str]:
+    """What each favorite held when last seen: ``(kind, id) -> fingerprint`` (``""`` unknown)."""
+    with db.read() as conn:
+        if conn is None:
+            return {}
+        try:
+            rows = conn.execute(
+                "SELECT kind, item_id, fingerprint FROM favorites WHERE user_id = ?", (user_id,)
+            ).fetchall()
+        except Exception:
+            return {}  # a store from before fingerprints (read-only reads do not migrate)
+    found = {(r[0], r[1]): r[2] or "" for r in rows}
+    return found if keys is None else {key: found[key] for key in keys if key in found}
+
+
+def _store_fingerprints(user_id: str, values: dict[tuple[str, str], str]) -> None:
+    values = {key: value for key, value in values.items() if value}
+    if not values:
+        return
+    with db.write() as conn:
+        conn.executemany(
+            "UPDATE favorites SET fingerprint = ? WHERE kind = ? AND item_id = ? AND user_id = ?",
+            [(value, kind, item_id, user_id) for (kind, item_id), value in values.items()],
+        )
+
+
+def seen_favorite(user_id: str, kind: str, item_id: str) -> None:
+    """Spec 2026-11-11 §7: opening its introduction page makes a favorite current again."""
+    if (kind, item_id) not in _stored_fingerprints(user_id):
+        return
+    _store_fingerprints(user_id, {(kind, item_id): items.fingerprint(kind, item_id)})
+
+
+def updated_favorites(user_id: str, keys: list[tuple[str, str]], joined: set[tuple[str, str]]) -> set[tuple[str, str]]:
+    """Which of *keys* (one's favorites) changed since one favorited or last opened them.
+
+    Joined ones never count: who joined hears of changes otherwise. A favorite
+    with nothing stored yet (made before fingerprints) is not updated; what it
+    holds now is stored for next time.
+    """
+    stored = _stored_fingerprints(user_id, keys)
+    out: set[tuple[str, str]] = set()
+    backfill: dict[tuple[str, str], str] = {}
+    for key, before in stored.items():
+        if key in joined:
+            continue
+        now = items.fingerprint(*key)
+        if not before:
+            backfill[key] = now
+        elif now and now != before:
+            out.add(key)
+    _store_fingerprints(user_id, backfill)
+    return out
+
+
 class ReviewService:
     def __init__(self, actor: CurrentUser | None = None) -> None:
         self.actor = actor or get_current_user()
@@ -177,13 +232,23 @@ class ReviewService:
         text = _clean(text, REPLY_MAX)
         with db.write() as conn:
             row = conn.execute(
-                "SELECT 1 FROM reviews WHERE kind = ? AND item_id = ? AND user_id = ?", (kind, item_id, user_id)
+                "SELECT reply FROM reviews WHERE kind = ? AND item_id = ? AND user_id = ?", (kind, item_id, user_id)
             ).fetchone()
             if row is None:
                 raise ListingNotFound("Review not found.")
             conn.execute(
                 "UPDATE reviews SET reply = ?, reply_at = ? WHERE kind = ? AND item_id = ? AND user_id = ?",
                 (text, time.time() if text else None, kind, item_id, user_id),
+            )
+        if text and text != (row["reply"] or "") and user_id != self.actor.id:
+            from deeptutor.notifications.service import notify
+
+            # Spec 2026-11-11 §6: the reviewer hears of the answer; a changed answer raises the
+            # same notification again instead of adding another.
+            notify(
+                [user_id], "review_replied", {"content": kind, "title": info.title},
+                link=f"/market/item?kind={kind}&id={item_id}#reviews",
+                dedupe_key=f"review_replied:{kind}:{item_id}:{user_id}", bump=True,
             )
         return self.list_for(kind, item_id)
 
@@ -193,12 +258,14 @@ class ReviewService:
         self._item(kind, item_id)
         if on and status(kind, item_id) != "listed":
             raise ListingNotFound("This is not in the market.")
+        fingerprint = items.fingerprint(kind, item_id) if on else ""
         with db.write() as conn:
             if on:
+                # Spec 2026-11-11 §7: what it holds now, to tell later whether it changed.
                 conn.execute(
-                    "INSERT INTO favorites (kind, item_id, user_id, created_at) VALUES (?, ?, ?, ?) "
+                    "INSERT INTO favorites (kind, item_id, user_id, created_at, fingerprint) VALUES (?, ?, ?, ?, ?) "
                     "ON CONFLICT(kind, item_id, user_id) DO NOTHING",
-                    (kind, item_id, self.actor.id, time.time()),
+                    (kind, item_id, self.actor.id, time.time(), fingerprint),
                 )
             else:
                 conn.execute(
@@ -228,4 +295,6 @@ def forget_item(kind: str, item_id: str) -> None:
         flags.forget_item(kind, item_id)
 
 
-__all__ = ["ReviewService", "favorites_of", "forget_item", "forget_user", "ratings"]
+__all__ = [
+    "ReviewService", "favorites_of", "forget_item", "forget_user", "ratings", "seen_favorite", "updated_favorites",
+]

@@ -10,7 +10,7 @@ import { joinItem, leaveItem, type CatalogItemDetail } from "@/lib/catalog-api";
 import { catalogError, studyHref } from "./catalog-format";
 
 /**
- * Join, go study, leave (platform batch 1 §5.1). Leaving keeps every record;
+ * Join, continue studying, leave (platform batch 1 §5.1). Leaving keeps every record;
  * joining again brings it all back. ``onChanged`` reloads the item.
  */
 export function JoinButton({ item, onChanged }: { item: CatalogItemDetail; onChanged: () => void }) {
@@ -33,7 +33,7 @@ export function JoinButton({ item, onChanged }: { item: CatalogItemDetail; onCha
 
   if (item.mine) return null;
   if (item.joined && item.closed) {
-    // Audit fix B §2: instead of "Go study", why it cannot be studied; the records stay.
+    // Audit fix B §2: instead of "Continue studying", why it cannot be studied; the records stay.
     return (
       <p className="text-[12.5px] text-[var(--muted-foreground)]" data-testid="item-unavailable">
         {item.unavailable === "taken_down"
@@ -51,7 +51,7 @@ export function JoinButton({ item, onChanged }: { item: CatalogItemDetail; onCha
         {item.joined ? (
           <>
             <Link href={studyHref(item.study)} className={primaryClass}>
-              {t("Go study")}
+              {t("Continue studying")}
             </Link>
             {item.joined === "course" ? (
               <span className="text-[12px] text-[var(--muted-foreground)]">{t("Joined through a course")}</span>

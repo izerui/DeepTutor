@@ -169,6 +169,15 @@ export function ReviewsSection({ kind, itemId, onRated }: { kind: string; itemId
     }
   };
 
+  // Spec 2026-11-11 §2: "Finished · Review it" links here (``#reviews``): the form, ready to rate.
+  const loaded = data !== null;
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined" || window.location.hash !== "#reviews") return;
+    const section = document.getElementById("reviews");
+    section?.scrollIntoView?.({ block: "start" });
+    section?.querySelector<HTMLElement>('[data-testid="review-form"] [role="radio"]')?.focus({ preventScroll: true });
+  }, [loaded]);
+
   if (!data) {
     return error ? <p role="alert" className="text-[12px] text-red-600">{error}</p> : null;
   }
@@ -176,7 +185,7 @@ export function ReviewsSection({ kind, itemId, onRated }: { kind: string; itemId
   const showForm = data.can_review && (!mine || editing);
 
   return (
-    <section aria-labelledby="item-reviews" className="space-y-3" data-testid="item-reviews">
+    <section id="reviews" aria-labelledby="item-reviews" className="scroll-mt-4 space-y-3" data-testid="item-reviews">
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="item-reviews" className="text-[14px] font-semibold">{t("Reviews")}</h2>
         {data.average != null && data.count > 0 ? (

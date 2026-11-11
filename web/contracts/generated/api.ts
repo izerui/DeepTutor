@@ -1476,6 +1476,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/catalog/favorites/updated": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Updated Favorites
+     * @description Spec 2026-11-11 §7: one's favorites whose content changed since one last looked (home page).
+     */
+    readonly get: operations["updated_favorites_api_catalog_favorites_updated_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/catalog/featured": {
     readonly parameters: {
       readonly query?: never;
@@ -1485,6 +1505,26 @@ export interface paths {
     };
     /** Featured */
     readonly get: operations["featured_api_catalog_featured_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/finished-unreviewed": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Finished Unreviewed
+     * @description Spec 2026-11-11 §2: what one finished and has not reviewed, for "Finished · Review it" in one's lists.
+     */
+    readonly get: operations["finished_unreviewed_api_catalog_finished_unreviewed_get"];
     readonly put?: never;
     readonly post?: never;
     readonly delete?: never;
@@ -1576,6 +1616,26 @@ export interface paths {
     readonly post: operations["join_api_catalog_items__kind___item_id__join_post"];
     /** Leave */
     readonly delete: operations["leave_api_catalog_items__kind___item_id__join_delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/{kind}/{item_id}/next": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Next Items
+     * @description Spec 2026-11-11 §3: "Next to study" (or "Related") below an introduction.
+     */
+    readonly get: operations["next_items_api_catalog_items__kind___item_id__next_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
     readonly patch?: never;
@@ -1679,6 +1739,26 @@ export interface paths {
     readonly post?: never;
     /** Delete My Review */
     readonly delete: operations["delete_my_review_api_catalog_items__kind___item_id__reviews_mine_delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/catalog/items/book/{item_id}/trial": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Book Trial
+     * @description Spec 2026-11-11 §4: a listed book's first chapter, read only, before joining.
+     */
+    readonly get: operations["book_trial_api_catalog_items_book__item_id__trial_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
     readonly patch?: never;
@@ -23127,7 +23207,77 @@ export interface operations {
       };
     };
   };
+  readonly updated_favorites_api_catalog_favorites_updated_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly featured_api_catalog_featured_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly finished_unreviewed_api_catalog_finished_unreviewed_get: {
     readonly parameters: {
       readonly query?: never;
       readonly header?: {
@@ -23479,6 +23629,44 @@ export interface operations {
       };
     };
   };
+  readonly next_items_api_catalog_items__kind___item_id__next_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
+        readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly report_item_api_catalog_items__kind___item_id__report_post: {
     readonly parameters: {
       readonly query?: never;
@@ -23737,6 +23925,45 @@ export interface operations {
       readonly path: {
         readonly item_id: string;
         readonly kind: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly book_trial_api_catalog_items_book__item_id__trial_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly chapter?: string;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly item_id: string;
       };
       readonly cookie?: {
         readonly dt_token?: string | null;

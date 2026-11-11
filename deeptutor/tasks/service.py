@@ -224,31 +224,44 @@ def _first_submission(set_id: str, learner_id: str) -> float | None:
     return float(row[0]) if row and row[0] else None
 
 
+def practice_submitted(set_id: str, learner_id: str) -> bool:
+    """A practice set is done once the learner submitted it."""
+    from deeptutor.practice_sets import store as practice_store
+
+    with practice_store.read() as conn:
+        return bool(conn and conn.execute(
+            "SELECT 1 FROM practice_submissions WHERE set_id = ? AND student_id = ? LIMIT 1",
+            (set_id, learner_id),
+        ).fetchone())
+
+
+def path_counts(template_id: str, learner: CurrentUser) -> dict[str, int] | None:
+    """Knowledge points of the learner's copy of a Mastery Path (``None`` before it was opened)."""
+    from deeptutor.learning import policy
+    from deeptutor.learning.storage import LearningStore
+    from deeptutor.teaching.instances import instance_path_id
+    from deeptutor.teaching.store import TeachingStore
+
+    assignment = TeachingStore().get_assignment(template_id, learner.id)
+    path_id = (assignment.instance_path_id if assignment else "") or instance_path_id(template_id)
+    progress = LearningStore().load(path_id)
+    if progress is None:
+        return None
+    return policy.map_summary(progress)["counts"]
+
+
+def ratio_met(counts: dict[str, int] | None, ratio: float = 1.0) -> bool:
+    """A path is done once the share of mastered points reaches *ratio* (all by default)."""
+    return bool(counts) and counts["total"] > 0 and counts["mastered"] >= ratio * counts["total"] - 1e-9
+
+
 def _completed_now(kind: str, target_id: str, settings: dict[str, Any], learner: CurrentUser) -> bool:
     """Whether what the learner did meets the task (notes are stored, not detected)."""
     try:
         if kind == "practice_set":
-            from deeptutor.practice_sets import store as practice_store
-
-            with practice_store.read() as conn:
-                return bool(conn and conn.execute(
-                    "SELECT 1 FROM practice_submissions WHERE set_id = ? AND student_id = ? LIMIT 1",
-                    (target_id, learner.id),
-                ).fetchone())
+            return practice_submitted(target_id, learner.id)
         if kind == "mastery_path":
-            from deeptutor.learning import policy
-            from deeptutor.learning.storage import LearningStore
-            from deeptutor.teaching.instances import instance_path_id
-            from deeptutor.teaching.store import TeachingStore
-
-            assignment = TeachingStore().get_assignment(target_id, learner.id)
-            path_id = (assignment.instance_path_id if assignment else "") or instance_path_id(target_id)
-            progress = LearningStore().load(path_id)
-            if progress is None:
-                return False
-            counts = policy.map_summary(progress)["counts"]
-            ratio = float(settings.get("ratio") or 1.0)
-            return counts["total"] > 0 and counts["mastered"] >= ratio * counts["total"] - 1e-9
+            return ratio_met(path_counts(target_id, learner), float(settings.get("ratio") or 1.0))
         if kind == "book":
             from deeptutor.multi_user.book_access import resolve_book
 

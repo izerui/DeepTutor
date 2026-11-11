@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS favorites (
     item_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     created_at REAL NOT NULL,
+    -- Spec 2026-11-11 §7: what the content held when favorited or last opened ('' unknown).
+    fingerprint TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (kind, item_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id, created_at DESC);
@@ -161,6 +163,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     columns={
         "listings": {"grades_json": "TEXT NOT NULL DEFAULT '[]'", "blocked": "INTEGER NOT NULL DEFAULT 0"},
         "taxonomy_nodes": {"names_json": "TEXT NOT NULL DEFAULT '{}'"},
+        "favorites": {"fingerprint": "TEXT NOT NULL DEFAULT ''"},
     },
 )
 

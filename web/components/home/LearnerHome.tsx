@@ -13,7 +13,7 @@ import { authorTaskHref, isContentKey } from "./task-links";
 import { formatWhen, KIND_LABEL, STATE_LABEL, STATE_TONE } from "@/components/tasks/task-format";
 import { authorLabel, itemHref, kindLabel, studyHref } from "@/components/catalog/catalog-format";
 import { useFeatured } from "@/components/catalog/FeaturedRows";
-import type { CatalogEntry, HomeAnnouncement } from "@/lib/catalog-api";
+import { listUpdatedFavorites, type CatalogEntry, type HomeAnnouncement } from "@/lib/catalog-api";
 import { MASTERY_HOME, masteryTopicRoute } from "@/lib/learning-routes";
 import {
   getAssignedTask,
@@ -196,6 +196,23 @@ export function MarketRows({ recent, popular }: { recent: HomeMarketItem[]; popu
   );
 }
 
+/** Spec 2026-11-11 §7: favorites whose content changed since one last looked; hidden when none. */
+export function FavoriteUpdates() {
+  const { t } = useTranslation();
+  const [items, setItems] = useState<HomeMarketItem[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listUpdatedFavorites()
+      .then((next) => alive && setItems(next))
+      .catch(() => alive && setItems([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (items.length === 0) return null;
+  return <MarketCards id="home-favorite-updates" title={t("Favorites with updates")} items={items.slice(0, 6)} />;
+}
+
 /**
  * Every learner's home (spec 2026-11-03 batch 1 §6; spec 2026-11-05): tasks from
  * the courses one joined, what one sent out and listed, what is new in the
@@ -298,6 +315,8 @@ export default function LearnerHome() {
           <MyListings />
 
           <JoinedSection items={home.joined ?? []} />
+
+          <FavoriteUpdates />
 
           <MarketRows recent={home.market ?? []} popular={popular} />
 

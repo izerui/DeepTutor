@@ -29,6 +29,7 @@ import { AuthorCardActions, UnlistedAuthorTemplates } from './AuthorCardActions'
 import { isAuthorInstance, splitAssignedTopics, templateForTopic } from './teaching'
 import { SourceBadge } from '@/components/common/SourceBadge'
 import { WithdrawnBadge, withdrawnText } from '@/components/catalog/Withdrawn'
+import { ReviewItLink } from '@/components/catalog/FinishedReview'
 import { groupByProvenance, provenanceGroupTitle, type Provenance } from '@/lib/provenance'
 
 /** A published path's copy comes from its author, or the school once handed over (§3.1). */
@@ -48,6 +49,7 @@ export function TopicAtlas({
   onPublish,
   onManage,
   unavailableTopics = [],
+  finishedUnreviewed,
 }: {
   topics: MasteryTopic[]
   /** Polish batch §1: paths one joined that were taken down or archived, kept read-only. */
@@ -69,6 +71,8 @@ export function TopicAtlas({
     trigger: HTMLButtonElement
   ) => void
   onManage?: (template: AuthorTemplate, trigger: HTMLButtonElement) => void
+  /** Spec 2026-11-11 §2: whether one finished a joined path and has not reviewed it yet. */
+  finishedUnreviewed?: (kind: string, id: string) => boolean
 }) {
   const { t } = useTranslation()
   const { rows: topics, control } = useLibraryFilter(allTopics)
@@ -195,7 +199,12 @@ export function TopicAtlas({
                       </>
                     }
                     footer={
-                      topic.next.knowledge_point_name ? (
+                      topic.origin?.template_id && finishedUnreviewed?.('mastery_path', topic.origin.template_id) ? (
+                        // Spec 2026-11-11 §2: finished, not reviewed yet.
+                        <div className="border-t border-[var(--border)] px-4 py-2.5">
+                          <ReviewItLink kind="mastery_path" id={topic.origin.template_id} />
+                        </div>
+                      ) : topic.next.knowledge_point_name ? (
                         <div className="border-t border-[var(--border)] px-4 py-2.5 text-[11px] text-[var(--muted-foreground)]">
                           {t('Next: {{name}}', { name: topic.next.knowledge_point_name })}
                         </div>

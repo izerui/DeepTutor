@@ -21080,6 +21080,74 @@
         ]
       }
     },
+    "/api/catalog/favorites/updated": {
+      "get": {
+        "description": "Spec 2026-11-11 §7: one's favorites whose content changed since one last looked (home page).",
+        "operationId": "updated_favorites_api_catalog_favorites_updated_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Updated Favorites Api Catalog Favorites Updated Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Updated Favorites",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/featured": {
       "get": {
         "operationId": "featured_api_catalog_featured_get",
@@ -21142,6 +21210,74 @@
           }
         },
         "summary": "Featured",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/finished-unreviewed": {
+      "get": {
+        "description": "Spec 2026-11-11 §2: what one finished and has not reviewed, for \"Finished · Review it\" in one's lists.",
+        "operationId": "finished_unreviewed_api_catalog_finished_unreviewed_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Finished Unreviewed Api Catalog Finished Unreviewed Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finished Unreviewed",
         "tags": [
           "catalog"
         ]
@@ -21330,6 +21466,94 @@
           }
         },
         "summary": "Items",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/items/book/{item_id}/trial": {
+      "get": {
+        "description": "Spec 2026-11-11 §4: a listed book's first chapter, read only, before joining.",
+        "operationId": "book_trial_api_catalog_items_book__item_id__trial_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chapter",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Chapter",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Book Trial Api Catalog Items Book  Item Id  Trial Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Book Trial",
         "tags": [
           "catalog"
         ]
@@ -21929,6 +22153,92 @@
           }
         },
         "summary": "Join",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/items/{kind}/{item_id}/next": {
+      "get": {
+        "description": "Spec 2026-11-11 §3: \"Next to study\" (or \"Related\") below an introduction.",
+        "operationId": "next_items_api_catalog_items__kind___item_id__next_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Next Items Api Catalog Items  Kind   Item Id  Next Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Next Items",
         "tags": [
           "catalog"
         ]

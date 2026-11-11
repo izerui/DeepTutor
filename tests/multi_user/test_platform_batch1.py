@@ -331,8 +331,12 @@ def test_detail_and_author_page(as_account, teaching_users):
     with as_account("sam"):
         shown = detail(get_current_user(), "practice_set", set_id)
         assert shown["can_join"] and shown["joined"] is None
-        assert shown["preview"] == {"question_count": 1, "types": {"choice": 1}, "total_points": 2.0}
-        assert "questions" not in shown["preview"]  # learners never see the questions here
+        # Spec 2026-11-11 §4: the first questions, stem and options only, never answers.
+        assert shown["preview"] == {
+            "question_count": 1, "types": {"choice": 1}, "total_points": 2.0,
+            "sample_questions": [{"question": "2 + 2 = ?", "question_type": "choice", "options": {"A": "3", "B": "4"}}],
+        }
+        assert "questions" not in shown["preview"]  # learners never see the answers here
         page = author_page(get_current_user(), teaching_users["tina"]["id"])
     assert page["name"] == "tina" and page["learners"] == 1
     assert [i["id"] for i in page["items"]] == [set_id]

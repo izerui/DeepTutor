@@ -86,11 +86,43 @@ async def featured() -> dict[str, Any]:
     return await _call(featured_items, get_current_user())
 
 
+@router.get("/finished-unreviewed")
+async def finished_unreviewed() -> dict[str, Any]:
+    """Spec 2026-11-11 §2: what one finished and has not reviewed, for "Finished · Review it" in one's lists."""
+    from deeptutor.catalog.progress import finished_unreviewed as finished
+
+    return {"items": await _call(finished, get_current_user())}
+
+
 @router.get("/items/{kind}/{item_id}")
 async def item(kind: str, item_id: str) -> dict[str, Any]:
     from deeptutor.catalog.market import detail
 
     return await _call(detail, get_current_user(), kind, item_id)
+
+
+@router.get("/items/{kind}/{item_id}/next")
+async def next_items(kind: str, item_id: str) -> dict[str, Any]:
+    """Spec 2026-11-11 §3: "Next to study" (or "Related") below an introduction."""
+    from deeptutor.catalog.market import next_items as following
+
+    return await _call(following, get_current_user(), kind, item_id)
+
+
+@router.get("/items/book/{item_id}/trial")
+async def book_trial(item_id: str, chapter: str = Query(default="", max_length=200)) -> dict[str, Any]:
+    """Spec 2026-11-11 §4: a listed book's first chapter, read only, before joining."""
+    from deeptutor.catalog.trial import first_chapter
+
+    return await _call(first_chapter, get_current_user(), item_id, chapter)
+
+
+@router.get("/favorites/updated")
+async def updated_favorites() -> dict[str, Any]:
+    """Spec 2026-11-11 §7: one's favorites whose content changed since one last looked (home page)."""
+    from deeptutor.catalog.market import updated_favorites as updated
+
+    return {"items": await _call(updated, get_current_user())}
 
 
 @router.post("/items/{kind}/{item_id}/join")

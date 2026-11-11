@@ -77,6 +77,8 @@ export interface CatalogEntry {
   favorited?: boolean;
   /** Polish batch §2: people who came in over the last 7 days (author page, "My listings"). */
   recent_learners?: number;
+  /** Spec 2026-11-11 §7: a favorite whose content changed since one favorited or last opened it. */
+  updated?: boolean;
 }
 
 export interface MarketFacets {
@@ -135,6 +137,13 @@ export interface PracticeSetPreview {
     explanation: string;
     points: number;
   }[];
+  /** Spec 2026-11-11 §4: a listed set's first questions, stem and options only. */
+  sample_questions?: SampleQuestion[];
+}
+export interface SampleQuestion {
+  question: string;
+  question_type: string;
+  options: Record<string, string>;
 }
 export interface CoursePreview {
   items?: { kind: string; title: string }[];
@@ -146,6 +155,32 @@ export interface StudyTarget {
   id: string;
   path_id?: string;
   name?: string;
+  /** A path's "Open" for its author: the workspace of the author's own draft. */
+  workspace_id?: string;
+}
+
+/** Spec 2026-11-11 §1: one's own progress, worked out when the page opens. */
+export interface ItemProgress {
+  done: number;
+  total: number;
+  unit: "lessons" | "points" | "pages" | "submissions";
+  percent: number;
+  finished: boolean;
+  /** Practice sets: how often one submitted, and the score that counts. */
+  submissions?: number;
+  best_score?: number | null;
+  max_score?: number | null;
+}
+
+/** Spec 2026-11-11 §5: the numbers its author (and administrators) see. */
+export interface ItemStats {
+  learners: number;
+  recent_learners: number;
+  /** ``null`` for knowledge bases: nobody "finishes" one. */
+  finished: number | null;
+  rating: number | null;
+  rating_count: number;
+  unanswered: number;
 }
 
 /** Why nobody studies it now (audit fix B §2): an administrator took it down, or its author withdrew it. */
@@ -162,6 +197,34 @@ export interface CatalogItemDetail extends CatalogEntry {
   reported?: boolean;
   preview: CatalogPreview;
   study: StudyTarget;
+  /** Its author, or an administrator on what the platform published: no favorite, no report. */
+  author_view?: boolean;
+  /** For who joined it (``null`` for knowledge bases and everyone else). */
+  progress?: ItemProgress | null;
+  /** The viewer wrote a review of it. */
+  reviewed?: boolean;
+  can_review?: boolean;
+  /** Its author's "Open": the editor, or a path's own draft. */
+  open?: StudyTarget;
+  /** Only for its author and administrators. */
+  stats?: ItemStats;
+  /** Spec 2026-11-11 §4: a listed book's first chapter can be read before joining. */
+  can_try?: boolean;
+}
+
+/** Spec 2026-11-11 §4: a listed book's first chapter, read only. Blocks keep only what a reader shows. */
+export interface BookTrial {
+  book: { id: string; title: string; language: string };
+  chapter: { id: string; title: string };
+  chapters: { id: string; title: string; trial: boolean }[];
+  pages: {
+    id: string;
+    chapter_id: string;
+    title: string;
+    order: number;
+    status: string;
+    blocks: { id: string; type: string; status: string; title: string; payload: Record<string, unknown> }[];
+  }[];
 }
 
 export interface AuthorPage {
@@ -263,6 +326,16 @@ export const leaveItem = (kind: string, id: string) =>
   call<{ joined: unknown }>(`/items${item(kind, id)}/join`, send("DELETE"));
 export const getAuthor = (authorId: string) => call<AuthorPage>(`/authors/${encodeURIComponent(authorId)}`);
 export const getFeatured = () => call<FeaturedItems>("/featured");
+/** Spec 2026-11-11 §3: below an introduction, "Next to study" (or "Related"), at most six. */
+export const listNextItems = (kind: string, id: string) =>
+  call<{ items: CatalogEntry[] }>(`/items${item(kind, id)}/next`).then((r) => r.items);
+/** Spec 2026-11-11 §4: a listed book's first chapter, before joining. */
+export const getBookTrial = (id: string) => call<BookTrial>(`/items/book/${encodeURIComponent(id)}/trial`);
+/** Spec 2026-11-11 §7: one's favorites whose content changed since one last looked. */
+export const listUpdatedFavorites = () => call<{ items: CatalogEntry[] }>("/favorites/updated").then((r) => r.items);
+/** Spec 2026-11-11 §2: what one finished and has not reviewed yet, of what is in the market. */
+export const listFinishedUnreviewed = () =>
+  call<{ items: { kind: CatalogKind; id: string }[] }>("/finished-unreviewed").then((r) => r.items);
 
 export const listMyListings = () => call<{ listings: CatalogEntry[] }>("/listings/mine").then((r) => r.listings);
 export const getListing = (kind: string, id: string) => call<AuthorListing>(`/listings${item(kind, id)}`);

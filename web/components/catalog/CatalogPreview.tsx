@@ -5,17 +5,13 @@ import { useTranslation } from "react-i18next";
 
 import type { CatalogPreview as Preview } from "@/lib/catalog-api";
 import { bookRoute } from "@/lib/learning-routes";
+import { trialHref } from "./catalog-format";
 import type { TaskKind } from "@/lib/tasks-api";
 import { KIND_LABEL } from "@/components/tasks/task-format";
 
 
 const box = "rounded-xl border border-[var(--border)] p-3 text-[12.5px]";
 
-/**
- * What an item holds (§5.1). The intro page never shows a practice set's
- * questions; ``full`` (the review page) shows them with their answers, the
- * path's goal, and opens a book's chapters.
- */
 /** The practice-set editor's names for question types (keys already translated). */
 const QUESTION_TYPE_LABELS: Record<string, string> = {
   choice: "Single choice",
@@ -27,18 +23,41 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   coding: "Coding",
 };
 
-export function CatalogPreview({ kind, itemId, preview, full = false }: { kind: string; itemId: string; preview: Preview; full?: boolean }) {
+/**
+ * What an item holds (§5.1). The intro page shows a listed practice set's
+ * first questions without answers, and a link to try a listed book's first
+ * chapter (``canTry``; spec 2026-11-11 §4); ``full`` (the review page) shows
+ * every question with its answer, the path's goal, and opens a book's chapters.
+ */
+export function CatalogPreview({ kind, itemId, preview, full = false, canTry = false }: {
+  kind: string;
+  itemId: string;
+  preview: Preview;
+  full?: boolean;
+  canTry?: boolean;
+}) {
   const { t } = useTranslation();
   const empty = <p className="text-[var(--muted-foreground)]">{t("Nothing to preview yet.")}</p>;
 
   if (kind === "book") {
     const chapters = preview.chapters ?? [];
+    // The first chapter with pages is the one to try (the trial reader serves that one).
+    const trialId = canTry ? chapters.find((c) => (c.pages ?? 0) > 0)?.id : undefined;
     return (
       <div className={box}>
         <h3 className="mb-2 font-semibold">{t("Chapters")}</h3>
         {chapters.length === 0 ? empty : (
           <ol className="list-decimal space-y-0.5 pl-5">
-            {chapters.map((c) => <li key={c.id}>{c.title}</li>)}
+            {chapters.map((c) => (
+              <li key={c.id}>
+                {c.title}
+                {c.id === trialId && (
+                  <Link href={trialHref(itemId)} className="ml-2 text-[var(--primary)] hover:underline" data-testid="try-reading">
+                    {t("Try reading")}
+                  </Link>
+                )}
+              </li>
+            ))}
           </ol>
         )}
         {full && (
@@ -91,6 +110,23 @@ export function CatalogPreview({ kind, itemId, preview, full = false }: { kind: 
         </p>
         {types.length > 0 && (
           <p className="text-[var(--muted-foreground)]">{types.map(([type, n]) => `${QUESTION_TYPE_LABELS[type] ? t(QUESTION_TYPE_LABELS[type]) : type || "—"} × ${n}`).join(" · ")}</p>
+        )}
+        {!full && (preview.sample_questions ?? []).length > 0 && (
+          <div className="space-y-2" data-testid="sample-questions">
+            <h4 className="font-medium">{t("Sample questions")}</h4>
+            <ol className="list-decimal space-y-2 pl-5">
+              {(preview.sample_questions ?? []).map((q, i) => (
+                <li key={i} className="space-y-1">
+                  <p className="whitespace-pre-line">{q.question}</p>
+                  {Object.keys(q.options ?? {}).length > 0 && (
+                    <ul className="pl-2 text-[var(--muted-foreground)]">
+                      {Object.entries(q.options).map(([key, text]) => <li key={key}>{key}. {text}</li>)}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
         {full && (preview.questions ?? []).length > 0 && (
           <ol className="list-decimal space-y-3 pl-5">

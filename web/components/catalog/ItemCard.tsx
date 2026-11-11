@@ -46,8 +46,14 @@ export function ItemCard({
       <span className="flex items-center gap-1.5 pr-7 text-[11px] text-[var(--muted-foreground)]">
         <Icon size={13} aria-hidden />
         {kindLabel(entry.kind, t)}
+        {entry.updated && (
+          // Spec 2026-11-11 §7: a favorite whose content changed since one last looked.
+          <span className="ml-auto rounded-full bg-sky-500/15 px-2 py-0.5 font-medium text-sky-700 dark:text-sky-300" data-testid="card-updated">
+            {t("Has updates")}
+          </span>
+        )}
         {entry.joined && (
-          <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
+          <span className={`${entry.updated ? "" : "ml-auto "}rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300`}>
             {t("Joined")}
           </span>
         )}

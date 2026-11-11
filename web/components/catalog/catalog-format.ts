@@ -63,8 +63,10 @@ export function authorLabel(entry: Pick<CatalogEntry, "author" | "author_role">,
 export const itemHref = (kind: string, id: string) =>
   `/market/item?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`;
 export const authorHref = (id: string) => `/market/author?id=${encodeURIComponent(id)}`;
+/** Spec 2026-11-11 §4: a listed book's first chapter, read before joining. */
+export const trialHref = (bookId: string) => `/market/try?id=${encodeURIComponent(bookId)}`;
 
-/** Where "Go study" leads once joined. */
+/** Where "Continue studying" leads once joined. */
 export function studyHref(target: StudyTarget): string {
   switch (target.kind) {
     case "book":
@@ -79,6 +81,19 @@ export function studyHref(target: StudyTarget): string {
       return `/tasks?course=${encodeURIComponent(target.id)}`;
     default:
       return "/market";
+  }
+}
+
+/** Where its author's "Open" leads (spec 2026-11-11 §5): the editor, or a path's own draft. */
+export function openHref(target: StudyTarget): string {
+  switch (target.kind) {
+    case "course":
+      return `/tasks?tab=courses&edit=${encodeURIComponent(target.id)}`;
+    case "mastery_path":
+      return target.path_id ? masteryTopicRoute(target.path_id, target.workspace_id ?? "") : MASTERY_HOME;
+    default:
+      // A practice set opens in its editor for its author; a book or a knowledge base is its own page.
+      return studyHref(target);
   }
 }
 

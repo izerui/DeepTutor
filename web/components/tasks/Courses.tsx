@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { actionClass, inputClass, primaryClass } from "@/components/common/form-styles";
 import { SourceBadge } from "@/components/common/SourceBadge";
 import { AnnouncementsPanel } from "@/components/catalog/Announcements";
+import { ReviewItLink, useFinishedUnreviewed } from "@/components/catalog/FinishedReview";
 import { ListingPanel } from "@/components/catalog/ListingPanel";
 import { WithdrawnBadge } from "@/components/catalog/Withdrawn";
 import {
@@ -47,9 +48,12 @@ const errorText = (err: unknown, t: (key: string, values?: Record<string, unknow
 export function CourseAuthorView({
   isAdmin,
   initialLesson = null,
+  initialCourse = null,
   onLessonMissing,
 }: {
   isAdmin: boolean;
+  /** ``?edit=``: one's own course to open. */
+  initialCourse?: string | null;
   /** ``?task=``: one's own lesson to open. */
   initialLesson?: string | null;
   /** That lesson is not one's own: look for it among what one joined. */
@@ -57,7 +61,7 @@ export function CourseAuthorView({
 }) {
   const { t } = useTranslation();
   const [courses, setCourses] = useState<CourseSummary[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialCourse);
   const [lesson, setLesson] = useState<string | null>(initialLesson);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -374,6 +378,8 @@ export function LearnerCourses({
     setSeen(courseId);
     setOpen(courseId);
   }
+  // Spec 2026-11-11 §2: a finished course one has not reviewed asks for a review.
+  const finishedUnreviewed = useFinishedUnreviewed(reload);
   useEffect(() => {
     listAssignedCourses()
       .catch(() => [] as AssignedCourse[])
@@ -405,6 +411,11 @@ export function LearnerCourses({
                 {t("{{done}} / {{total}} done", { done, total: course.tasks.length })}
               </span>
             </button>
+            {!course.unavailable && finishedUnreviewed("course", course.id) && (
+              <div className="mt-1.5">
+                <ReviewItLink kind="course" id={course.id} />
+              </div>
+            )}
             {course.unavailable && (
               // Audit fix B §2: kept among what one learns, with why, instead of vanishing.
               <p className="mt-1 text-[12px] text-[var(--muted-foreground)]">

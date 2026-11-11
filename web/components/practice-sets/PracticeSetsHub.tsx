@@ -18,6 +18,7 @@ import {
   type AssignedSet,
   type PracticeSetSummary,
 } from "@/lib/practice-sets-api";
+import { ReviewItLink, useFinishedUnreviewed } from "@/components/catalog/FinishedReview";
 import { WithdrawnBadge, withdrawnText } from "@/components/catalog/Withdrawn";
 import { SetEditor } from "./SetEditor";
 import { TakeSet } from "./TakeSet";
@@ -29,7 +30,7 @@ import { TakeSet } from "./TakeSet";
 export default function PracticeSetsHub() {
   const { t } = useTranslation();
   const { isAdmin, loading } = useAuthStatus();
-  // ``?set=`` opens one directly (a notification, the market's "Go study", a report).
+  // ``?set=`` opens one directly (a notification, the market's "Continue studying", a report).
   const params = useSearchParams();
   const setParam = params?.get("set") ?? null;
 
@@ -249,9 +250,12 @@ function WithdrawSection() {
 function JoinedView({ initialSet }: { initialSet: string | null }) {
   const { t } = useTranslation();
   const [sets, setSets] = useState<AssignedSet[] | null>(null);
-  // ``?set=`` opens one directly (a notification, or the market's "Go study").
+  // ``?set=`` opens one directly (a notification, or the market's "Continue studying").
   const [selected, setSelected] = useState<string | null>(initialSet);
   const [error, setError] = useState("");
+  // Spec 2026-11-11 §2: read again on coming back from answering a set.
+  const [visits, setVisits] = useState(0);
+  const finishedUnreviewed = useFinishedUnreviewed(visits);
 
   const refresh = useCallback(() => {
     listAssigned()
@@ -263,7 +267,7 @@ function JoinedView({ initialSet }: { initialSet: string | null }) {
   if (selected) {
     return (
       <div className="space-y-3">
-        <button type="button" className={actionClass} onClick={() => { setSelected(null); refresh(); }}>
+        <button type="button" className={actionClass} onClick={() => { setSelected(null); setVisits((n) => n + 1); refresh(); }}>
           {t("Back to practice sets")}
         </button>
         <TakeSet setId={selected} />
@@ -291,6 +295,7 @@ function JoinedView({ initialSet }: { initialSet: string | null }) {
           <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]">
             <SourceBadge provenance={set.provenance ?? { kind: "shared", name: set.teacher }} />
             {(set.unavailable || set.unlisted) && <WithdrawnBadge unavailable={set.unavailable} />}
+            {!set.unavailable && finishedUnreviewed("practice_set", set.id) && <ReviewItLink kind="practice_set" id={set.id} />}
           </p>
           <p className="text-[12px] text-[var(--muted-foreground)]">
             {set.submissions === 0

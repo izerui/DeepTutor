@@ -312,7 +312,8 @@ def _path_preview(item_id: str, *, full: bool) -> dict[str, Any]:
     return out
 
 
-def _set_preview(item_id: str, *, full: bool) -> dict[str, Any]:
+def _set_questions(item_id: str) -> list[dict[str, Any]]:
+    """The questions of the set's current revision."""
     from deeptutor.practice_sets import store as practice_store
 
     with practice_store.read() as conn:
@@ -323,7 +324,32 @@ def _set_preview(item_id: str, *, full: bool) -> dict[str, Any]:
             "SELECT questions_json FROM practice_set_revisions WHERE set_id = ? AND revision = ?",
             (item_id, row["current_revision"]),
         ).fetchone() if row is not None else None
-    questions = json.loads(revision["questions_json"]) if revision is not None else []
+    return json.loads(revision["questions_json"]) if revision is not None else []
+
+
+SAMPLE_QUESTIONS = 3
+
+
+def sample_questions(item_id: str) -> list[dict[str, Any]]:
+    """Spec 2026-11-11 §4: the first questions, stem and options only — never answers or scoring."""
+    try:
+        questions = _set_questions(item_id)
+    except Exception:
+        logger.exception("Could not read the questions of practice set %s", item_id)
+        return []
+    out = []
+    for q in questions[:SAMPLE_QUESTIONS]:
+        options = q.get("options") or {}
+        out.append({
+            "question": str(q.get("question") or ""),
+            "question_type": str(q.get("question_type") or ""),
+            "options": {str(k): str(v) for k, v in options.items()} if isinstance(options, dict) else {},
+        })
+    return out
+
+
+def _set_preview(item_id: str, *, full: bool) -> dict[str, Any]:
+    questions = _set_questions(item_id)
     out: dict[str, Any] = {
         "question_count": len(questions),
         "types": dict(Counter(str(q.get("question_type") or "") for q in questions)),
@@ -341,4 +367,49 @@ def _set_preview(item_id: str, *, full: bool) -> dict[str, Any]:
     return out
 
 
-__all__ = ["KINDS", "ItemInfo", "course_tasks", "info", "preview"]
+# ── what the content holds (spec 2026-11-11 §7) ───────────
+
+
+def fingerprint(kind: str, item_id: str) -> str:
+    """The counts that change when the content itself changes; ``""`` when it cannot be read.
+
+    Course lessons, a path's published revision, a book's chapters and pages,
+    a practice set's questions, a knowledge base's documents. Titles,
+    descriptions and tags are left out.
+    """
+    try:
+        if kind == scopes.COURSE:
+            from deeptutor.tasks.store import db as task_db
+
+            with task_db.read() as conn:
+                if conn is None:
+                    return ""
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM course_items WHERE course_id = ?", (item_id,)
+                ).fetchone()[0]
+            return f"lessons:{count}"
+        if kind == scopes.MASTERY_PATH:
+            from deeptutor.teaching.store import TeachingStore
+
+            template = TeachingStore().get_template(item_id)
+            return f"revision:{template.current_revision}" if template else ""
+        if kind == scopes.BOOK:
+            from deeptutor.book import registry as book_registry
+
+            record = book_registry.get_book(item_id)
+            if record is None:
+                return ""
+            chapters = _book_chapters(record)
+            return f"chapters:{len(chapters)},pages:{sum(c['pages'] for c in chapters)}"
+        if kind == scopes.PRACTICE_SET:
+            return f"questions:{len(_set_questions(item_id))}"
+        if kind == scopes.KNOWLEDGE_BASE:
+            from deeptutor.knowledge import registry as kb_registry
+
+            return f"documents:{len(kb_registry.list_documents(item_id))}"
+    except Exception:
+        logger.debug("No fingerprint for %s %s", kind, item_id, exc_info=True)
+    return ""
+
+
+__all__ = ["KINDS", "ItemInfo", "course_tasks", "fingerprint", "info", "preview", "sample_questions"]

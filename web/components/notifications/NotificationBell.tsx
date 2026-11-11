@@ -99,6 +99,9 @@ export function notificationText(item: AppNotification, t: Translate): string {
       return (item.count ?? 1) > 1
         ? t("{{count}} new reviews of “{{title}}”", { title, count: item.count })
         : t("Someone reviewed “{{title}}”", { title });
+    // Spec 2026-11-11 §6: the author answered one's review.
+    case "review_replied":
+      return t("The author replied to your review of “{{title}}”", { title });
     default:
       return item.kind;
   }

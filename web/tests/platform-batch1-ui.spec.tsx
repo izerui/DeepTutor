@@ -190,7 +190,7 @@ it("joins, then offers to go study and to leave", async () => {
   expect(changed).toHaveBeenCalled();
 
   rerender(<JoinButton item={detail({ joined: "self" })} onChanged={changed} />);
-  expect(screen.getByRole("link", { name: "Go study" }).getAttribute("href")).toBe("/practice-sets?set=set_1");
+  expect(screen.getByRole("link", { name: "Continue studying" }).getAttribute("href")).toBe("/practice-sets?set=set_1");
   vi.spyOn(window, "confirm").mockReturnValue(true);
   api.leaveItem.mockResolvedValue({ joined: null });
   fireEvent.click(screen.getByRole("button", { name: "Leave" }));
