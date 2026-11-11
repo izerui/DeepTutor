@@ -6012,5 +6012,7 @@
   "Playback speed": "Vitesse de lecture",
   "Recorded help: {{count}}": "Aides enregistrées : {{count}}",
   "Select text from this question's reading section first.": "Sélectionnez d’abord du texte dans la section de lecture de cette question.",
-  "Failed to record help. Please try again.": "Impossible d’enregistrer l’aide. Veuillez réessayer."
+  "Failed to record help. Please try again.": "Impossible d’enregistrer l’aide. Veuillez réessayer.",
+  "Reset zoom": "Réinitialiser le zoom",
+  "Zoom level": "Niveau de zoom"
 }
