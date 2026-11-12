@@ -26,6 +26,7 @@ export interface FailedSubmissionRecord {
   /** Extra structured data from the refusal event (e.g. the material names
    *  that were unavailable). Bounded to avoid bloating local storage. */
   failureDetails?: Record<string, unknown>;
+  noLlmAccess?: boolean;
 }
 
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -324,6 +325,19 @@ export function annotateFailureCode(
   const sanitized = sanitizeFailureDetails(details);
   if (sanitized) record.failureDetails = sanitized;
   return persistRecord(sessionId, record) !== null;
+}
+
+/** Update existing copies without reviving a discarded submission. */
+export function markFailedSubmissionNoLlmAccess(sessionId: string, submissionId: string): void {
+  if (recoveryPrincipal() === null) return;
+  const key = recordKey(sessionId, submissionId);
+  for (const scope of ["local", "session"] as const) {
+    const record = storedRecords(scope, sessionId)
+      .find((item) => item.submissionId === submissionId);
+    if (record) {
+      browserStorage.writeRaw(scope, key, JSON.stringify({ ...record, noLlmAccess: true }));
+    }
+  }
 }
 
 /** Read this owner's local and tab fallback records. Unowned legacy data is

@@ -170,6 +170,7 @@ interface ChatMessageItem {
   /** The server never accepted this submission (#1594) — rendered as an
    *  unsent message, not an ordinary sent one. */
   failedSubmission?: boolean;
+  failedSubmissionNoLlmAccess?: boolean;
   failedSubmissionNeedsReview?: boolean;
   /** Stable author-path failure code preserved across reloads (B2-16). */
   failureCode?: string;
@@ -1783,7 +1784,8 @@ export const UserMessage = memo(function UserMessage({
                 : null;
               return refusal ? t(refusal.key, refusal.values) : t("Not sent");
             })()}
-            {onRetryFailedSubmission && !msg.failedSubmissionNeedsReview && typeof msg.id === "number" && (
+            {onRetryFailedSubmission && !msg.failedSubmissionNeedsReview &&
+              !msg.failedSubmissionNoLlmAccess && typeof msg.id === "number" && (
               <button type="button" disabled={editDisabled || retrying} onClick={async () => {
                 if (retrying || typeof msg.id !== "number") return;
                 setRetrying(true);
