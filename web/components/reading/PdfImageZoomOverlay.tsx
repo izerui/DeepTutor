@@ -1,15 +1,15 @@
-"use client";
+'use client'
 
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Loader2, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
-import { loadPdfjs, outputScale, type PdfDocument } from "@/lib/pdfjs-loader";
-import type { NormalisedBox } from "@/lib/pdf-page-geometry";
-import { MAX_PAGE_CANVAS_PIXELS } from "@/lib/reading-zoom";
-import Tooltip from "@/shared/ui/Tooltip";
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Loader2, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { loadPdfjs, outputScale, type PdfDocument } from '@/lib/pdfjs-loader'
+import type { NormalisedBox } from '@/lib/pdf-page-geometry'
+import { MAX_PAGE_CANVAS_PIXELS } from '@/lib/reading-zoom'
+import Tooltip from '@/shared/ui/Tooltip'
 
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 4;
+const MIN_ZOOM = 1
+const MAX_ZOOM = 4
 
 /**
  * Longest side the preview bitmap may take, in device pixels.
@@ -24,17 +24,17 @@ const MAX_ZOOM = 4;
  * passes the 0.3% area threshold — asks for a bitmap a hundred thousand pixels
  * tall on the vertical axis alone.
  */
-export const MAX_PREVIEW_CANVAS_AXIS = 8192;
+export const MAX_PREVIEW_CANVAS_AXIS = 8192
 
 export interface PreviewCanvasPlan {
   /** Scale to render the page at. */
-  scale: number;
+  scale: number
   /** CSS size of the canvas on the stage. */
-  cssWidth: number;
-  cssHeight: number;
+  cssWidth: number
+  cssHeight: number
   /** Device-pixel size of the bitmap. */
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 /**
@@ -51,8 +51,8 @@ export interface PreviewCanvasPlan {
  */
 export interface PreviewStage {
   /** CSS pixels the stage can show, already net of its own padding. */
-  width: number;
-  height: number;
+  width: number
+  height: number
 }
 
 export function previewCanvasPlan(
@@ -60,55 +60,51 @@ export function previewCanvasPlan(
   regionHeight: number,
   requestedScale: number,
   dpr: number,
-  stage?: PreviewStage,
+  stage?: PreviewStage
 ): PreviewCanvasPlan {
-  const width = Math.max(1, regionWidth);
-  const height = Math.max(1, regionHeight);
-  const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
-  let requested =
-    Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1;
+  const width = Math.max(1, regionWidth)
+  const height = Math.max(1, regionHeight)
+  const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1
+  let requested = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 1
   // A picture must open *whole*. Fitting only its width made a scanned page —
   // one full-page image hotspot — open at 2.7x, showing the middle third with
   // no way to zoom out below 1. The stage is the other half of "fit".
   if (stage && stage.width > 0 && stage.height > 0) {
-    requested = Math.min(
-      requested,
-      Math.min(stage.width / width, stage.height / height),
-    );
+    requested = Math.min(requested, Math.min(stage.width / width, stage.height / height))
   }
-  const deviceWidth = width * requested * ratio;
-  const deviceHeight = height * requested * ratio;
+  const deviceWidth = width * requested * ratio
+  const deviceHeight = height * requested * ratio
 
-  let fit = 1;
-  const area = deviceWidth * deviceHeight;
+  let fit = 1
+  const area = deviceWidth * deviceHeight
   if (area > MAX_PAGE_CANVAS_PIXELS) {
-    fit = Math.sqrt(MAX_PAGE_CANVAS_PIXELS / area);
+    fit = Math.sqrt(MAX_PAGE_CANVAS_PIXELS / area)
   }
-  const longest = Math.max(deviceWidth, deviceHeight);
+  const longest = Math.max(deviceWidth, deviceHeight)
   if (longest * fit > MAX_PREVIEW_CANVAS_AXIS) {
-    fit = MAX_PREVIEW_CANVAS_AXIS / longest;
+    fit = MAX_PREVIEW_CANVAS_AXIS / longest
   }
 
-  const scale = requested * fit;
+  const scale = requested * fit
   // Floor the CSS box first and derive the bitmap from it: the canvas can only
   // end up smaller than the fitted size, never a rounding step past the caps.
-  const cssWidth = Math.max(1, Math.floor(width * scale));
-  const cssHeight = Math.max(1, Math.floor(height * scale));
+  const cssWidth = Math.max(1, Math.floor(width * scale))
+  const cssHeight = Math.max(1, Math.floor(height * scale))
   return {
     scale,
     cssWidth,
     cssHeight,
     width: Math.max(1, Math.floor(cssWidth * ratio)),
     height: Math.max(1, Math.floor(cssHeight * ratio)),
-  };
+  }
 }
 
 export interface PdfImageZoomOverlayProps {
-  doc: PdfDocument;
-  locator: number;
+  doc: PdfDocument
+  locator: number
   /** Picture rectangle in page-normalised coordinates. */
-  box: NormalisedBox;
-  onClose: () => void;
+  box: NormalisedBox
+  onClose: () => void
 }
 
 /**
@@ -120,52 +116,43 @@ export interface PdfImageZoomOverlayProps {
  * Further magnification is a CSS transform: the bitmap already holds more
  * pixels than the enlarged view asks for.
  */
-export function PdfImageZoomOverlay({
-  doc,
-  locator,
-  box,
-  onClose,
-}: PdfImageZoomOverlayProps) {
-  const { t } = useTranslation();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
+export function PdfImageZoomOverlay({ doc, locator, box, onClose }: PdfImageZoomOverlayProps) {
+  const { t } = useTranslation()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{
-    pointer: number;
-    x: number;
-    y: number;
-    panX: number;
-    panY: number;
-  } | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+    pointer: number
+    x: number
+    y: number
+    panX: number
+    panY: number
+  } | null>(null)
+  const suppressStageClickRef = useRef(false)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
-    let cancelled = false;
-    let renderTask: { cancel: () => void } | null = null;
+    let cancelled = false
+    let renderTask: { cancel: () => void } | null = null
 
-    (async () => {
-      const page = await doc.getPage(locator);
-      if (cancelled) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const base = page.getViewport({ scale: 1 });
-      const regionWidth = Math.max(1, (box.x1 - box.x0) * base.width);
-      const regionHeight = Math.max(1, (box.y1 - box.y0) * base.height);
-      const target = Math.min(
-        1600,
-        Math.max(480, window.innerWidth * 0.82),
-      );
+    ;(async () => {
+      const page = await doc.getPage(locator)
+      if (cancelled) return
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const base = page.getViewport({ scale: 1 })
+      const regionWidth = Math.max(1, (box.x1 - box.x0) * base.width)
+      const regionHeight = Math.max(1, (box.y1 - box.y0) * base.height)
+      const target = Math.min(1600, Math.max(480, window.innerWidth * 0.82))
       // Rendered at least 1.5× so a narrow picture still looks like a preview
       // rather than a stretched thumbnail. `previewCanvasPlan` then reduces the
       // scale when that request would ask for a bitmap past the page reader's
       // budget or past the single-axis cap — a legal 2%-wide full-height
       // hotspot would otherwise allocate hundreds of MiB.
-      const requestedScale = Math.max(1.5, target / regionWidth);
-      const dpr = outputScale();
-      const stage = stageRef.current?.getBoundingClientRect();
+      const requestedScale = Math.max(1.5, target / regionWidth)
+      const dpr = outputScale()
+      const stage = stageRef.current?.getBoundingClientRect()
       const plan = previewCanvasPlan(
         regionWidth,
         regionHeight,
@@ -176,87 +163,84 @@ export function PdfImageZoomOverlay({
           : {
               width: window.innerWidth * 0.86,
               height: window.innerHeight * 0.72,
-            },
-      );
-      canvas.width = plan.width;
-      canvas.height = plan.height;
-      canvas.style.width = `${plan.cssWidth}px`;
-      canvas.style.height = `${plan.cssHeight}px`;
-      const viewport = page.getViewport({ scale: plan.scale });
-      const shiftX = -box.x0 * base.width * plan.scale * dpr;
-      const shiftY = -box.y0 * base.height * plan.scale * dpr;
+            }
+      )
+      canvas.width = plan.width
+      canvas.height = plan.height
+      canvas.style.width = `${plan.cssWidth}px`
+      canvas.style.height = `${plan.cssHeight}px`
+      const viewport = page.getViewport({ scale: plan.scale })
+      const shiftX = -box.x0 * base.width * plan.scale * dpr
+      const shiftY = -box.y0 * base.height * plan.scale * dpr
       renderTask = page.render({
         canvas,
         viewport,
         transform: [dpr, 0, 0, dpr, shiftX, shiftY],
-      });
-      await (renderTask as unknown as { promise: Promise<void> }).promise;
-      if (!cancelled) setStatus("ready");
+      })
+      await (renderTask as unknown as { promise: Promise<void> }).promise
+      if (!cancelled) setStatus('ready')
     })().catch(() => {
-      if (!cancelled) setStatus("error");
-    });
+      if (!cancelled) setStatus('error')
+    })
 
     return () => {
-      cancelled = true;
+      cancelled = true
       try {
-        renderTask?.cancel();
+        renderTask?.cancel()
       } catch {
         // Already settled.
       }
-    };
-  }, [doc, locator, box.x0, box.y0, box.x1, box.y1]);
+    }
+  }, [doc, locator, box.x0, box.y0, box.x1, box.y1])
 
   // Wheel zoom needs a non-passive listener: React attaches wheel handlers
   // passively, so `preventDefault` there would only log a warning and the page
   // behind the overlay would scroll.
   useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
+    const stage = stageRef.current
+    if (!stage) return
     const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      setZoom((current) =>
-        Math.min(
-          MAX_ZOOM,
-          Math.max(MIN_ZOOM, current * Math.exp(-event.deltaY * 0.0015)),
-        ),
-      );
-    };
-    stage.addEventListener("wheel", onWheel, { passive: false });
-    return () => stage.removeEventListener("wheel", onWheel);
-  }, []);
+      event.preventDefault()
+      setZoom(current =>
+        Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current * Math.exp(-event.deltaY * 0.0015)))
+      )
+    }
+    stage.addEventListener('wheel', onWheel, { passive: false })
+    return () => stage.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Focus belongs to the overlay while it is open. Without this the trigger
   // (a hotspot button behind the dialog) kept focus, so ⌘+/− and arrow keys
   // acted on the page underneath a modal the reader was looking at. The
   // previously focused element gets focus back on close.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus({ preventScroll: true });
-    return () => previous?.focus?.({ preventScroll: true });
-  }, []);
+    const previous = document.activeElement as HTMLElement | null
+    dialogRef.current?.focus({ preventScroll: true })
+    return () => previous?.focus?.({ preventScroll: true })
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         // `preventDefault` alone cannot stop the reader's own Escape handling:
         // both listeners sit on `window`, so stopping propagation from a
         // capture-phase listener is what actually keeps one Escape from
         // closing this overlay and leaving learning mode.
-        event.stopPropagation();
-        onClose();
+        event.stopPropagation()
+        onClose()
       }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onClose])
 
   return (
     <div
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label={t("Image preview")}
+      aria-label={t('Image preview')}
       // Focusable so the overlay can hold focus; `-1` keeps it out of the tab
       // order itself.
       tabIndex={-1}
@@ -265,55 +249,49 @@ export function PdfImageZoomOverlay({
     >
       <div
         className="flex shrink-0 items-center justify-end gap-1 px-3 py-2 text-white/90"
-        onClick={(event) => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
       >
         <span className="mr-auto text-[12px] tabular-nums text-white/60">
-          {t("Page {{n}}", { n: locator })}
-          <span className="ml-2 text-white/40">
-            {t("Drag to pan, scroll to zoom")}
-          </span>
+          {t('Page {{n}}', { n: locator })}
+          <span className="ml-2 text-white/40">{t('Drag to pan, scroll to zoom')}</span>
         </span>
-        <Tooltip label={t("Zoom out")}>
+        <Tooltip label={t('Zoom out')}>
           <button
             type="button"
-            aria-label={t("Zoom out")}
-            onClick={() =>
-              setZoom((current) => Math.max(MIN_ZOOM, current / 1.3))
-            }
+            aria-label={t('Zoom out')}
+            onClick={() => setZoom(current => Math.max(MIN_ZOOM, current / 1.3))}
             className="inline-flex size-7 items-center justify-center rounded-lg transition hover:bg-white/15"
           >
             <ZoomOut size={15} />
           </button>
         </Tooltip>
-        <Tooltip label={t("Zoom in")}>
+        <Tooltip label={t('Zoom in')}>
           <button
             type="button"
-            aria-label={t("Zoom in")}
-            onClick={() =>
-              setZoom((current) => Math.min(MAX_ZOOM, current * 1.3))
-            }
+            aria-label={t('Zoom in')}
+            onClick={() => setZoom(current => Math.min(MAX_ZOOM, current * 1.3))}
             className="inline-flex size-7 items-center justify-center rounded-lg transition hover:bg-white/15"
           >
             <ZoomIn size={15} />
           </button>
         </Tooltip>
-        <Tooltip label={t("Reset zoom")}>
+        <Tooltip label={t('Reset zoom')}>
           <button
             type="button"
-            aria-label={t("Reset zoom")}
+            aria-label={t('Reset zoom')}
             onClick={() => {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
+              setZoom(1)
+              setPan({ x: 0, y: 0 })
             }}
             className="inline-flex size-7 items-center justify-center rounded-lg transition hover:bg-white/15"
           >
             <RotateCcw size={15} />
           </button>
         </Tooltip>
-        <Tooltip label={t("Close")}>
+        <Tooltip label={t('Close')}>
           <button
             type="button"
-            aria-label={t("Close")}
+            aria-label={t('Close')}
             onClick={onClose}
             className="inline-flex size-7 items-center justify-center rounded-lg transition hover:bg-white/15"
           >
@@ -329,54 +307,67 @@ export function PdfImageZoomOverlay({
         // on the empty stage around it closes the overlay, which is what the
         // backdrop promises. Stopping every click here made the surrounding
         // area dead and left Escape as the only way out.
-        onClick={(event) => {
-          if (event.target !== event.currentTarget) event.stopPropagation();
+        onClick={event => {
+          if (suppressStageClickRef.current || event.target !== event.currentTarget) {
+            event.stopPropagation()
+          }
+          suppressStageClickRef.current = false
         }}
-        onPointerDown={(event) => {
+        onPointerDown={event => {
+          if (event.button !== 0) return
+          // Pointer capture retargets the later click to the stage. Remember
+          // picture presses so they cannot accidentally dismiss the preview.
+          suppressStageClickRef.current = event.target !== event.currentTarget
           dragRef.current = {
             pointer: event.pointerId,
             x: event.clientX,
             y: event.clientY,
             panX: pan.x,
             panY: pan.y,
-          };
-          event.currentTarget.setPointerCapture(event.pointerId);
+          }
+          event.currentTarget.setPointerCapture(event.pointerId)
         }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag || drag.pointer !== event.pointerId) return;
+        onPointerMove={event => {
+          const drag = dragRef.current
+          if (!drag || drag.pointer !== event.pointerId) return
+          if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 3) {
+            suppressStageClickRef.current = true
+          }
           setPan({
             x: drag.panX + event.clientX - drag.x,
             y: drag.panY + event.clientY - drag.y,
-          });
+          })
         }}
-        onPointerUp={(event) => {
-          if (dragRef.current?.pointer !== event.pointerId) return;
-          dragRef.current = null;
-          event.currentTarget.releasePointerCapture(event.pointerId);
+        onPointerUp={event => {
+          if (dragRef.current?.pointer !== event.pointerId) return
+          dragRef.current = null
+          event.currentTarget.releasePointerCapture(event.pointerId)
         }}
-        style={{ cursor: zoom > 1 ? "grab" : "default", touchAction: "none" }}
+        onPointerCancel={() => {
+          dragRef.current = null
+        }}
+        style={{ cursor: zoom > 1 ? 'grab' : 'default', touchAction: 'none' }}
       >
-        {status === "loading" && (
+        {status === 'loading' && (
           <span className="flex items-center gap-2 text-[12px] text-white/60">
             <Loader2 size={14} className="animate-spin" />
-            {t("Loading image…")}
+            {t('Loading image…')}
           </span>
         )}
-        {status === "error" && (
+        {status === 'error' && (
           <span className="text-[12px] text-white/60">
-            {t("This image could not be rendered.")}
+            {t('This image could not be rendered.')}
           </span>
         )}
         <canvas
           ref={canvasRef}
           className="rounded-[6px] bg-white shadow-2xl"
           style={{
-            display: status === "ready" ? "block" : "none",
+            display: status === 'ready' ? 'block' : 'none',
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           }}
         />
       </div>
     </div>
-  );
+  )
 }
