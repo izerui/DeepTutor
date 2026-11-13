@@ -159,7 +159,7 @@ def sanitize_url(base_url: str, model: str = "") -> str:
         base_url = f"http://{base_url}"
 
     url = base_url.rstrip("/")
-    if url and not url.startswith(("http://", "https://")):
+    if url and not url.lower().startswith(("http://", "https://")):
         url = "http://" + url
 
     for suffix in [
