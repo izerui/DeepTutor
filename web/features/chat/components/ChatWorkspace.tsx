@@ -2697,7 +2697,11 @@ export default function ChatWorkspace() {
                         ? t("Message text was saved, but its attachments or settings could not be restored. Copy it and send again.")
                         : state.submissionNoLlmAccess
                         ? null
-                        : t("Couldn't reach the server. Please check your connection and retry.")}
+                        // An admission rejection carries the server's own
+                        // reason (#2637): show it rather than claiming a
+                        // network failure the server never reported.
+                        : state.submissionErrorMessage ||
+                          t("Couldn't reach the server. Please check your connection and retry.")}
                     </span>
                     {!state.submissionNeedsReview && !state.submissionNoLlmAccess ? (
                       <button

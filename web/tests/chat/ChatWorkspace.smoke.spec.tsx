@@ -251,6 +251,7 @@ function emptyChatState(): ChatState {
     lastTurnFailed: false,
     submissionFailed: false,
     submissionNoLlmAccess: false,
+    submissionErrorMessage: '',
     submissionNeedsReview: false,
     submissionNotSaved: false,
   }

@@ -232,6 +232,7 @@ function Harness() {
         {String(state.submissionFailed)}
       </div>
       <div data-testid="submissionNoLlmAccess">{String(state.submissionNoLlmAccess)}</div>
+      <div data-testid="submissionError">{state.submissionErrorMessage}</div>
       <div data-testid="lastTurnFailed">{String(state.lastTurnFailed)}</div>
       <div data-testid="capability">{state.activeCapability}</div>
       <div data-testid="submissionNeedsReview">{String(state.submissionNeedsReview)}</div>
@@ -1136,6 +1137,38 @@ it("keeps a model-access rejection non-retryable across reload without a second 
   await act(async () => fireEvent.click(screen.getByText("Resend")));
   await act(async () => fireEvent.click(screen.getByText("Retry first unsent")));
   expect(fixture.sent.filter(message => message.type === "start_turn")).toHaveLength(0);
+});
+
+it("carries the server's rejection text into the submission banner state (#2637)", async () => {
+  fixture.connected = true;
+  fixture.session = completedServerSession();
+  render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
+  await act(async () => { fireEvent.click(screen.getByText("Load")); });
+  fireEvent.click(screen.getByText("Send"));
+  await act(async () => {
+    fixture.emit?.({
+      type: "error", source: "transport", stage: "",
+      content: "No LLM model is assigned to your account. Please contact an administrator.",
+      timestamp: Date.now() / 1000,
+      metadata: { reason: "start_turn_rejected", turn_terminal: true, status: "failed" },
+    });
+  });
+  expect(screen.getByTestId("submissionFailed").textContent).toBe("true");
+  // The server's own explanation reaches the banner state, so the composer-
+  // adjacent banner shows the reason instead of a network claim.
+  expect(screen.getByTestId("submissionError").textContent).toBe(
+    "No LLM model is assigned to your account. Please contact an administrator.",
+  );
+  // The transport give-up path keeps its connection copy as the row text.
+  fixture.connected = false;
+  vi.useFakeTimers();
+  fireEvent.click(screen.getByText("Send"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(GIVE_UP_MS); });
+  expect(readMessages().at(-1)?.failed).toBe(true);
+  expect(screen.getByTestId("submissionError").textContent).toBe(
+    "Couldn't reach the server. Please check your connection and retry.",
+  );
+  vi.useRealTimers();
 });
 
 it("retries the original wire request after reload even when the transcript advances", async () => {
