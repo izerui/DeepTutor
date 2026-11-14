@@ -96,6 +96,7 @@ BUILTIN_TOOL_SPECS: tuple[BuiltinToolSpec, ...] = (
             ("workspace_export", "WorkspaceExportTool"),
         ),
     ),
+    BuiltinToolSpec("propose_book_edit", "deeptutor.book.authoring_tool:ProposeBookEditTool"),
     BuiltinToolSpec("submit_visualization", "deeptutor.visualizers.tool:SubmitVisualizationTool"),
     BuiltinToolSpec("imagegen", "deeptutor.tools.media_gen_tool:ImagegenTool"),
     BuiltinToolSpec("videogen", "deeptutor.tools.media_gen_tool:VideogenTool"),

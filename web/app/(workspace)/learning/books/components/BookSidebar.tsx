@@ -62,6 +62,8 @@ export interface BookSidebarProps {
   selectedPageId?: string | null;
   onSelectPage?: (id: string) => void;
   onRebuild?: () => void;
+  /** Opens the reviewed chapter/section structure editor. */
+  onEditStructure?: () => void;
   rebuilding?: boolean;
   visitedPageIds?: string[];
   bookmarkedPageIds?: string[];
@@ -75,6 +77,7 @@ export default function BookSidebar({
   selectedPageId = null,
   onSelectPage,
   onRebuild,
+  onEditStructure,
   rebuilding = false,
   visitedPageIds,
   bookmarkedPageIds,
@@ -183,6 +186,16 @@ export default function BookSidebar({
           icon
           className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)] disabled:opacity-50"
         />
+      )}
+
+      {onEditStructure && (
+        <button
+          type="button"
+          onClick={onEditStructure}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
+        >
+          {t("Edit book structure")}
+        </button>
       )}
 
       {/* Rebuild deletes every page AND resets progress — reading position,

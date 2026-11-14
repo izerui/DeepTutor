@@ -767,6 +767,13 @@ class AgenticLoopPipeline:
         is_partner = self._is_partner_turn(context)
         from deeptutor.tools.research_tools import scientific_context
 
+        def has_book_authoring():
+            if not context.metadata.get("book_references"):
+                return False
+            from deeptutor.book.authoring_tool import authoring_scope
+
+            return bool(authoring_scope(context))
+
         composed = compose_enabled_tools(
             registry=self.tool_lookup,
             requested_tools=context.enabled_tools,
@@ -785,6 +792,7 @@ class AgenticLoopPipeline:
                 # the investigation over attached sources), not the answer loop.
                 # Keep it off the answer surface even when sources are present.
                 has_sources=False,
+                has_book_authoring=has_book_authoring(),
                 has_memory=user_has_memory(),
                 has_notebooks=user_has_notebooks(),
                 # A partner turn mounts the bank even when it is still empty:
@@ -1439,6 +1447,15 @@ class AgenticLoopPipeline:
         args: dict[str, Any],
         context: UnifiedContext,
     ) -> dict[str, Any]:
+        if tool_name == "propose_book_edit":
+            from deeptutor.book.authoring_tool import authoring_scope
+
+            return {
+                **args,
+                "_book_scope": authoring_scope(context),
+                "_source_session_id": context.session_id,
+                "_source_turn_id": str(context.metadata.get("turn_id", "")),
+            }
         runtime_workspace = context.runtime.workspace
         if runtime_workspace is not None:
             task_dir = None

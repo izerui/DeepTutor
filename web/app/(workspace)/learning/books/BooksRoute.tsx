@@ -35,6 +35,7 @@ import { RESET_BOOK_PROGRESS, emptyBookProgress, reduceBookEvent } from '@/lib/b
 import { bookEventKind, bookEventPageId, useBookStream } from '@/lib/use-book-stream'
 
 import BookChatPanel from './components/BookChatPanel'
+import BookStructureEditor from './components/BookStructureEditor'
 import BookCreator from './components/BookCreator'
 import BookHealthBanner from './components/BookHealthBanner'
 import BookLibrary from './components/BookLibrary'
@@ -145,6 +146,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
   )
   const [view, setView] = useState<View>(requestedBookId ? 'opening' : requestedLearningCreation() ? 'creator' : 'list')
 
+  const [structureOpen, setStructureOpen] = useState(false)
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null)
   const selectionRequestRef = useRef(0)
   const [detail, setDetail] = useState<BookDetail | null>(null)
@@ -1155,6 +1157,14 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       )
     })
 
+  const refreshAfterEdit = async () => {
+    if (!selectedBookId) return
+    const data = await loadBookDetail(selectedBookId)
+    if (!data) return
+    if (selectedPageId && data.pages.some(page => page.id === selectedPageId)) await hydratePage(selectedPageId)
+    else setSelectedPageId(data.pages[0]?.id || null)
+  }
+
   // ── Render ─────────────────────────────────────────────────────────
 
   // A client-side route change may arrive before the next book's detail.
@@ -1173,6 +1183,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
           selectedPageId={selectedPageId}
           onSelectPage={handleSelectPage}
           onRebuild={detail && canEditBook ? () => void handleRebuildBook() : undefined}
+          onEditStructure={detail?.spine && canEditBook ? () => setStructureOpen(true) : undefined}
           rebuilding={rebuildingBook}
           visitedPageIds={detail?.progress.visited_page_ids}
           bookmarkedPageIds={detail?.progress.bookmarked_page_ids}
@@ -1180,6 +1191,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
       )}
 
       <main className="relative flex flex-1 overflow-hidden bg-[var(--background)]">
+        {structureOpen && detail?.spine && canEditBook && <BookStructureEditor key={detail.book.id} detail={detail} onChanged={refreshAfterEdit} onClose={() => setStructureOpen(false)} />}
         {/* One slot, one place, every view. The predecessor put a gradient
             progress card *inside* the creator's scrolling content and a
             second chip floating over the corner, so starting generation
@@ -1419,6 +1431,7 @@ function BookPageInner({ workspaceId }: { workspaceId: string }) {
             onClose={() => setChatOpen(false)}
             initialSessionId={selectedPageChatSessionId}
             onSessionResolved={sessionId => void handlePageChatSession(sessionId)}
+            onBookChanged={refreshAfterEdit}
           />
         )}
       </main>
