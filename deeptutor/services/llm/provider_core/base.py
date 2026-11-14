@@ -388,6 +388,8 @@ class LLMProvider(ABC):
                 # A learner over today's AI limit is told so, not retried or reworded.
                 raise
             except Exception as exc:
+                if getattr(exc, "retryable", None) is False:
+                    raise
                 status_code = self._status_code_from_exception(exc)
                 caught_exception = exc
                 response = LLMResponse(
