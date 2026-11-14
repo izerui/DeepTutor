@@ -456,7 +456,7 @@ export default function MasteryTopicPage() {
     // no second column to balance, and a fixed-height stack there would just
     // be three tiny scrollers.
     <main className="mastery-shell flex h-full flex-col overflow-y-auto [scrollbar-gutter:stable]">
-      <PageContainer className="flex flex-none flex-col pb-40 sm:pb-10 lg:min-h-0 lg:flex-1">
+      <PageContainer className="flex flex-none flex-col pb-10 lg:min-h-0 lg:flex-1">
         <div className="flex items-center justify-between gap-3">
           <Link
             href={scopedUrl(MASTERY_HOME)}
@@ -572,7 +572,7 @@ export default function MasteryTopicPage() {
           </div>
         </header>
 
-        <section className="fixed bottom-3 left-4 right-4 z-20 flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-4 backdrop-blur sm:static sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:rounded-none sm:border-0 sm:border-y sm:border-[var(--border)] sm:bg-transparent sm:px-0 sm:py-4 sm:backdrop-blur-none">
+        <section className="mt-6 flex flex-col gap-3 border-y border-[var(--border)] py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="shrink-0 text-[12px] text-[var(--muted-foreground)]">
               {t("Next up")}
