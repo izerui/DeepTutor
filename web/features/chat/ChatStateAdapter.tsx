@@ -194,6 +194,8 @@ export interface ChatState {
   /** Stable product surface; per-turn capability selection is orthogonal. */
   workspaceMode: WorkspaceMode | null;
   knowledgeBases: string[];
+  /** A saved or explicit choice, including an explicit empty selection. */
+  knowledgeBasesInitialized: boolean;
   llmSelection: LLMSelection | null;
   /** Persistent mastery state associated with this conversation. */
   masteryPathId: string | null;
@@ -420,6 +422,7 @@ type Action =
   | { type: "SET_TOOLS"; tools: string[] }
   | { type: "SET_CAPABILITY"; cap: string | null }
   | { type: "SET_KB"; kbs: string[] }
+  | { type: "INITIALIZE_KB"; key: string; workspaceId: string | null; kbs: string[] }
   | { type: "SET_LLM_SELECTION"; selection: LLMSelection | null }
   // ``key`` targets a specific conversation — a backend push belongs to the
   // session that produced it, which may no longer be the selected one. The
@@ -526,6 +529,7 @@ function createSessionEntry(
     activeCapability: null,
     workspaceMode: null,
     knowledgeBases: [],
+    knowledgeBasesInitialized: sessionId !== null,
     llmSelection: null,
     masteryPathId: null,
     masterySessionMode: null,
@@ -658,6 +662,8 @@ function applySessionConfiguration(
       configuration.knowledgeBases !== undefined
         ? [...configuration.knowledgeBases]
         : session.knowledgeBases,
+    knowledgeBasesInitialized:
+      configuration.knowledgeBases !== undefined || session.knowledgeBasesInitialized,
     masteryPathId:
       configuration.masteryPathId !== undefined
         ? configuration.masteryPathId
@@ -727,7 +733,16 @@ function reducer(state: ProviderState, action: Action): ProviderState {
       return updateSelectedSession(state, (session) => ({
         ...session,
         knowledgeBases: action.kbs,
+        knowledgeBasesInitialized: true,
       }));
+    case "INITIALIZE_KB": {
+      const session = state.sessions[action.key];
+      if (!session || session.knowledgeBasesInitialized || session.sessionId ||
+          session.messages.length || session.workspaceId !== action.workspaceId) return state;
+      return { ...state, sessions: { ...state.sessions, [action.key]: {
+        ...session, knowledgeBases: action.kbs, knowledgeBasesInitialized: true,
+      } } };
+    }
     case "SET_LLM_SELECTION":
       return updateSelectedSession(state, (session) => ({
         ...session,
@@ -1278,6 +1293,7 @@ function reducer(state: ProviderState, action: Action): ProviderState {
                 ? action.workspaceMode
                 : existing.workspaceMode,
             knowledgeBases: action.knowledgeBases ?? existing.knowledgeBases,
+            knowledgeBasesInitialized: true,
             llmSelection:
               action.llmSelection !== undefined
                 ? action.llmSelection
@@ -1598,6 +1614,7 @@ interface ChatContextValue {
   setTools: (tools: string[]) => void;
   setCapability: (cap: string | null) => void;
   setKBs: (kbs: string[]) => void;
+  initializeKBs: (key: string, workspaceId: string | null, kbs: string[]) => void;
   setLLMSelection: (selection: LLMSelection | null) => void;
   setMasteryPathId: (masteryPathId: string | null) => void;
   /** What this mastery conversation is doing — see lib/mastery-mode. */
@@ -3655,6 +3672,7 @@ export function ChatStateAdapterProvider({
       activeCapability: current.activeCapability,
       workspaceMode: current.workspaceMode,
       knowledgeBases: current.knowledgeBases,
+      knowledgeBasesInitialized: current.knowledgeBasesInitialized,
       llmSelection: current.llmSelection,
       masteryPathId: current.masteryPathId,
       masterySessionMode: current.masterySessionMode,
@@ -3724,6 +3742,10 @@ export function ChatStateAdapterProvider({
 
   const setKBs = useCallback((kbs: string[]) => {
     dispatch({ type: "SET_KB", kbs });
+  }, []);
+
+  const initializeKBs = useCallback((key: string, workspaceId: string | null, kbs: string[]) => {
+    dispatch({ type: "INITIALIZE_KB", key, workspaceId, kbs });
   }, []);
 
   const setLLMSelection = useCallback((selection: LLMSelection | null) => {
@@ -4060,6 +4082,7 @@ export function ChatStateAdapterProvider({
       setTools,
       setCapability,
       setKBs,
+      initializeKBs,
       setLLMSelection,
       setMasteryPathId,
       setMasterySessionMode,
@@ -4094,6 +4117,7 @@ export function ChatStateAdapterProvider({
       setTools,
       setCapability,
       setKBs,
+      initializeKBs,
       setLLMSelection,
       setMasteryPathId,
       setMasterySessionMode,

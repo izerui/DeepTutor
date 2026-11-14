@@ -27,6 +27,7 @@ const fixture = vi.hoisted(() => ({
     setCapability: vi.fn(),
     configureSession: vi.fn(),
     setKBs: vi.fn(),
+    initializeKBs: vi.fn(),
     setLLMSelection: vi.fn(),
     setPersonaSelection: vi.fn(),
     setResourceSelection: vi.fn(),
@@ -48,6 +49,7 @@ const fixture = vi.hoisted(() => ({
     setCourseId: vi.fn(),
   },
   routeSessionId: null as string | null,
+  listKnowledgeBases: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
   composerProps: null as Record<string, unknown> | null,
   listProps: null as {
     messages: MessageItem[]
@@ -145,7 +147,7 @@ vi.mock('@/lib/session-api', () => ({
 }))
 
 vi.mock('@/features/knowledge/api/catalog', () => ({
-  listKnowledgeBases: vi.fn(async () => []),
+  listKnowledgeBases: fixture.listKnowledgeBases,
 }))
 
 vi.mock('@/lib/subagents-api', () => ({
@@ -235,6 +237,7 @@ function emptyChatState(): ChatState {
     activeCapability: '',
     workspaceMode: null,
     knowledgeBases: [],
+    knowledgeBasesInitialized: true,
     llmSelection: null,
     masteryPathId: null,
     masterySessionMode: null,
@@ -285,9 +288,62 @@ describe('ChatWorkspace smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fixture.routeSessionId = null
+    fixture.listKnowledgeBases.mockResolvedValue([])
     fixture.composerProps = null
     fixture.listProps = null
     fixture.adapter.state = emptyChatState()
+  })
+
+  it('initializes an untouched draft from its only ready default KB', async () => {
+    applyState({ knowledgeBasesInitialized: false })
+    fixture.listKnowledgeBases.mockResolvedValue([
+      { id: 'workspace:kb:physics', name: 'physics', is_default: true, status: 'ready' },
+    ])
+    renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.initializeKBs).toHaveBeenCalledWith(
+      'draft:general', null, ['workspace:kb:physics'],
+    ))
+  })
+
+  it('does not replace an explicit empty selection', async () => {
+    fixture.listKnowledgeBases.mockResolvedValue([
+      { id: 'workspace:kb:physics', name: 'physics', is_default: true, status: 'ready' },
+    ])
+    renderWorkspace()
+    await waitFor(() => expect(fixture.listKnowledgeBases).toHaveBeenCalled())
+    expect(fixture.adapter.initializeKBs).not.toHaveBeenCalled()
+  })
+
+  it('does not invent a selection for multiple KBs', async () => {
+    applyState({ knowledgeBasesInitialized: false })
+    fixture.listKnowledgeBases.mockResolvedValue([
+      { name: 'physics', is_default: true, status: 'ready' },
+      { name: 'chemistry', is_default: false, status: 'ready' },
+    ])
+    renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.initializeKBs).toHaveBeenCalledWith(
+      'draft:general', null, [],
+    ))
+  })
+
+  it('does not select an unavailable default', async () => {
+    applyState({ knowledgeBasesInitialized: false })
+    fixture.listKnowledgeBases.mockResolvedValue([
+      { name: 'physics', is_default: true, status: 'unavailable', available: false },
+    ])
+    renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.initializeKBs).toHaveBeenCalledWith(
+      'draft:general', null, [],
+    ))
+  })
+
+  it('does not send an unresolved untouched draft', async () => {
+    applyState({ knowledgeBasesInitialized: false })
+    fixture.listKnowledgeBases.mockImplementation(() => new Promise(() => {}))
+    renderWorkspace()
+    fireEvent.click(screen.getByText('Send'))
+    await waitFor(() => expect(fixture.listKnowledgeBases).toHaveBeenCalled())
+    expect(fixture.adapter.sendMessage).not.toHaveBeenCalled()
   })
 
   it('renders the empty draft home and bootstraps a new session', async () => {
