@@ -75,7 +75,7 @@ export function ReadingPanelSeparator({
         event.preventDefault()
         resize(next)
       }}
-      className="group/resize relative z-10 hidden cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-[var(--primary)] xl:block"
+      className="group/resize relative z-10 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
     >
       <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--border)] transition-colors group-hover/resize:bg-[var(--primary)] group-active/resize:bg-[var(--primary)]" />
     </div>

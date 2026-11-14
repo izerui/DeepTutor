@@ -197,6 +197,13 @@ export function ReadingWorkspacePage() {
   } | null>(null);
   const prefillInputRef = useRef<((text: string) => void) | null>(null);
   const [isDesktopWide, setIsDesktopWide] = useState(false);
+  // Where each panel stops being a sheet over the document and takes its own
+  // column. Two thresholds, because the two panels dock at different widths:
+  // the navigator at `lg`, the companion at `xl` — the same two screens the
+  // grid's `lg:`/`xl:` classes use. The layout hook needs them as state rather
+  // than as CSS, since it reserves columns in pixels and must not do that while
+  // the panel it would size is still an overlay.
+  const [isDocked, setIsDocked] = useState(false);
 
   // A Course Study hand-off may have written the opening line before sending
   // the learner here. Consumed once, so a refresh does not retype it.
@@ -206,11 +213,19 @@ export function ReadingWorkspacePage() {
   }, []);
 
   useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1280px)");
-    const update = () => setIsDesktopWide(mql.matches);
+    const docked = window.matchMedia("(min-width: 1024px)");
+    const wide = window.matchMedia("(min-width: 1280px)");
+    const update = () => {
+      setIsDocked(docked.matches);
+      setIsDesktopWide(wide.matches);
+    };
     update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
+    docked.addEventListener("change", update);
+    wide.addEventListener("change", update);
+    return () => {
+      docked.removeEventListener("change", update);
+      wide.removeEventListener("change", update);
+    };
   }, []);
   const [showSessions, setShowSessions] = useState(false);
   const [showLinker, setShowLinker] = useState(false);
@@ -258,9 +273,11 @@ export function ReadingWorkspacePage() {
     setNavigatorOpen,
   } = useReadingLearningMode(workspaceId);
   const { gridRef, ...panels } = useReadingPanelLayout({
-    enabled: isDesktopWide,
+    // The navigator owns a column from `lg`; the companion only from `xl`.
+    enabled: isDocked,
     navigatorOpen: preferredNavigatorOpen,
     companionOpen,
+    companionDocked: isDesktopWide,
   });
   const { navigatorOpen, exitFocus } = panels;
   const setCompanionOpen = useCallback(
