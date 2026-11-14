@@ -153,3 +153,28 @@ def test_build_auth_headers() -> None:
     assert build_auth_headers("key", binding="anthropic")["x-api-key"] == "key"
     assert build_auth_headers("key", binding="azure")["api-key"] == "key"
     assert build_auth_headers("key")["Authorization"] == "Bearer key"
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "Example:\n```xml\n<think>\n```\nThis is literal code.",
+        "Example:\n~~~xml\n<think>private</thinking>\n~~~\nKeep this answer.",
+        "Use `<think>secret</think>` to illustrate the format.",
+        "``<think>`` is an inline marker.",
+        "```xml\n<think>\n````\nAfter the longer closing fence.",
+    ],
+)
+def test_clean_thinking_tags_preserves_literal_code(literal: str) -> None:
+    assert clean_thinking_tags(literal) == literal
+
+
+def test_clean_thinking_tags_discards_code_inside_real_reasoning() -> None:
+    assert (
+        clean_thinking_tags("<think>secret\n```python\nprivate()\n```\n</thinking>Answer")
+        == "Answer"
+    )
+    assert (
+        clean_thinking_tags("```xml\n<think>\n```\n<think>secret</think>Answer")
+        == "```xml\n<think>\n```\nAnswer"
+    )
