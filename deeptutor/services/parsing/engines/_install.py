@@ -51,8 +51,8 @@ ENGINE_PIP_SPECS: dict[str, list[str]] = {
     # official image has no compiler (upstream e3380f375, #2327).  Legacy
     # Office still needs LibreOffice on the host, per Docling.
     "docling": [
-        "docling[xbrl]>=2.123.1",
-        "docling-slim[format-iwork,format-opendocument]>=2.123.1",
+        "docling[xbrl]>=2.148.0",
+        "docling-slim[format-iwork,format-opendocument]>=2.148.0",
     ],
     "liteparse": ["liteparse>=2.14.2"],
 }

@@ -235,8 +235,8 @@ parse-markitdown = [
 # upstream format list. Legacy Office needs LibreOffice and video needs ffmpeg
 # on the host in addition to these Python packages.
 parse-docling = [
-    "docling[xbrl]>=2.123.1",
-    "docling-slim[format-iwork,format-opendocument]>=2.123.1",
+    "docling[xbrl]>=2.148.0",
+    "docling-slim[format-iwork,format-opendocument]>=2.148.0",
 ]
 # Current PyMuPDF4LLM includes CPU-only layout/OCR and image extraction on its
 # public conversion path. Keep it upgradeable so format and layout gains land

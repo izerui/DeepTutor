@@ -34,8 +34,8 @@ def test_parser_extras_track_current_upstream_floors() -> None:
     assert extras["parse-pymupdf4llm"] == ["pymupdf4llm>=1.28.2"]
     assert extras["parse-liteparse"] == ["liteparse>=2.14.2"]
     assert extras["parse-docling"] == [
-        "docling[xbrl]>=2.123.1",
-        "docling-slim[format-iwork,format-opendocument]>=2.123.1",
+        "docling[xbrl]>=2.148.0",
+        "docling-slim[format-iwork,format-opendocument]>=2.148.0",
     ]
 
 
