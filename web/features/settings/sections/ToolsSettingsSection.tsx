@@ -2,7 +2,7 @@
 
 import Tooltip from "@/shared/ui/Tooltip";
 import { useStagedSettings } from "@/features/settings/store/useStagedSettings";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2, Lock, Search, Wrench, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
@@ -81,6 +81,19 @@ export default function ToolsSettingsPage() {
   const access = useSettingsAccess();
   const { language, draftRevision } = useSettings();
   const hintLanguage = language === "zh" ? "zh" : "en";
+  const localizedHints = useCallback((tool: BuiltinTool): ToolHints => {
+    const hints = tool.hints[language] ?? tool.hints[hintLanguage] ?? tool.hints.en;
+    if (language === "en" || language === "zh" || tool.hints[language]) return hints;
+    const translate = (text: string) => text ? t(text, { defaultValue: text }) : text;
+    return { ...hints,
+      short_description: translate(hints.short_description),
+      when_to_use: translate(hints.when_to_use),
+      input_format: translate(hints.input_format),
+      guideline: translate(hints.guideline),
+      note: translate(hints.note),
+      aliases: hints.aliases.map(alias => ({ ...alias, description: translate(alias.description) })),
+    };
+  }, [language, hintLanguage, t]);
   const [tools, setTools] = useState<BuiltinTool[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -189,7 +202,7 @@ export default function ToolsSettingsPage() {
       .map((section) => ({
         ...section,
         tools: section.tools.filter((tool) => {
-          const hints = tool.hints[hintLanguage] ?? tool.hints.en;
+          const hints = localizedHints(tool);
           const alternateHints =
             tool.hints[hintLanguage === "zh" ? "en" : "zh"] ?? tool.hints.en;
           const searchableText = [
@@ -225,7 +238,7 @@ export default function ToolsSettingsPage() {
         }),
       }))
       .filter((section) => section.tools.length > 0);
-  }, [hintLanguage, query, sections]);
+  }, [hintLanguage, localizedHints, query, sections]);
 
   const toggleExpanded = (name: string) => {
     setExpanded((prev) => {
@@ -321,7 +334,7 @@ export default function ToolsSettingsPage() {
                 <div className="border-t border-[var(--border)]/60">
                   {list.map((tool, idx) => {
                     const isOpen = expanded.has(tool.name);
-                    const hints = tool.hints[hintLanguage] ?? tool.hints.en;
+                    const hints = localizedHints(tool);
                     const isPending = pending.has(tool.name);
                     const isComingSoon = !!tool.coming_soon;
                     const isAvailable = tool.available !== false;
