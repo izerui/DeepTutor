@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   AlertCircle,
   Brain,
@@ -159,19 +159,29 @@ export function SourcesStep({
   const [tab, setTab] = useState<string>('knowledgeBases')
   const tabId = useId()
   const [search, setSearch] = useState('')
+  const searchQuestions = library.questionPage?.search
+  useEffect(() => {
+    if (tab !== 'questionSets' || !searchQuestions) return
+    const timer = window.setTimeout(() => searchQuestions(search), 250)
+    return () => window.clearTimeout(timer)
+  }, [tab, search, searchQuestions])
   const all = groups.flatMap(group => library[group.key])
   const { rows, control } = useLibraryFilter(all)
   const group = groups.find(group => group.key === tab)!
   const ids = new Set(library[group.key].map(item => item.key))
+  // The question bank is searched and paged on the server, so its rows are
+  // shown as returned instead of filtered again by the local search box.
+  const pagedQuestions = tab === 'questionSets' && Boolean(library.questionPage)
   const visible = rows.filter(
     item =>
       ids.has(item.key) &&
-      `${item.label} ${item.detail}`.toLowerCase().includes(search.toLowerCase())
+      (pagedQuestions ||
+        `${item.label} ${item.detail}`.toLowerCase().includes(search.toLowerCase()))
   )
   // Gate on the active tab's own request, not the whole library: a ready KB
   // renders while a large question bank is still loading. Falls back to the
   // aggregate for a library built without per-kind loading info.
-  const groupLoading = library.loadingKinds?.includes(tab) ?? loading
+  const groupLoading = (tab === 'questionSets' && library.questionPage?.loading && !library.questionSets.length) || (library.loadingKinds?.includes(tab) ?? loading)
   const tabFailed = library.failures.includes(FIELD_REQUEST_KIND[tab] ?? tab)
   return (
     <div className="space-y-4">
@@ -274,6 +284,9 @@ export function SourcesStep({
             opened={opened}
             onToggleOpen={toggleOpen}
           />
+        )}
+        {tab === 'questionSets' && library.questionPage && (library.questionPage.hasMore || library.questionPage.loading) && (
+          <button type="button" disabled={library.questionPage.loading} onClick={library.questionPage.more} className="mt-3 rounded-lg border px-3 py-2 text-sm">{t(library.questionPage.loading ? 'Loading...' : 'Load more')}</button>
         )}
       </div>
     </div>

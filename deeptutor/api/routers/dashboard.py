@@ -124,7 +124,7 @@ async def get_learning_index():
 
 
 @router.get("/source-library/{kind}")
-async def get_source_library(kind: str):
+async def get_source_library(kind: str, limit: int = 50, offset: int = 0, search: str = ""):
     """Read account-owned source indexes; preserve the workspace on every row."""
     from deeptutor.services.workspace.navigation import read_workspace_indexes
 
@@ -156,7 +156,7 @@ async def get_source_library(kind: str):
         ]
         return {"items": items, "unavailable_workspaces": []}
     if kind in {"books", "practice"}:
-        return await get_learning_library(kind)
+        return await get_learning_library(kind, limit=limit, offset=offset, search=search)
     if kind not in {"notebooks", "chats", "drafts"}:
         raise HTTPException(404, "Unknown source library")
     items, unavailable = await read_workspace_indexes(read)
@@ -164,14 +164,19 @@ async def get_source_library(kind: str):
 
 
 @router.get("/learning-library/{kind}")
-async def get_learning_library(kind: str):
+async def get_learning_library(kind: str, limit: int = 50, offset: int = 0, search: str = ""):
     """Account-wide discovery. Items retain their source for scoped follow-up requests."""
     from deeptutor.services.workspace.navigation import read_workspace_indexes
 
     can_create = True
+    total = 0
+    if not 1 <= limit <= 200 or offset < 0 or len(search) > 500:
+        raise HTTPException(
+            422, "Use limit 1–200, a nonnegative offset, and search up to 500 characters."
+        )
 
     async def read():
-        nonlocal can_create
+        nonlocal can_create, total
         if kind == "books":
             from deeptutor.api.routers.book import list_books
 
@@ -196,14 +201,13 @@ async def get_learning_library(kind: str):
             from deeptutor.services.session import get_sqlite_session_store
 
             store = get_sqlite_session_store()
-            items = []
-            offset = 0
-            while True:
-                result = await store.list_notebook_entries(limit=200, offset=offset)
-                items.extend(result["items"])
-                offset += len(result["items"])
-                if not result["items"] or offset >= result["total"]:
-                    return items
+            # Pages span every workspace of the account, so each one supplies
+            # its newest ``offset + limit`` rows and the merge below cuts the page.
+            result = await store.list_notebook_entries(
+                limit=offset + limit, offset=0, search=search
+            )
+            total += int(result["total"])
+            return result["items"]
         from deeptutor.services.session.organization import list_all_sessions_snapshot
 
         rows = await list_all_sessions_snapshot(get_session_store())
@@ -225,7 +229,29 @@ async def get_learning_library(kind: str):
 
         # B3-P16: an own public book in another workspace is listed once.
         rows = dedupe_account_book_rows(rows)
-    return {"items": rows, "unavailable_workspaces": unavailable, "can_create": can_create}
+    if kind == "practice":
+        # Each workspace returned its first ``offset + limit`` newest entries;
+        # merge them in the store's own order and cut the requested page.
+        rows.sort(
+            key=lambda row: (float(row.get("created_at") or 0), int(row.get("id") or 0)),
+            reverse=True,
+        )
+        rows = rows[offset : offset + limit]
+    return {
+        "items": rows,
+        "unavailable_workspaces": unavailable,
+        "can_create": can_create,
+        **(
+            {
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+                "has_more": offset + len(rows) < total,
+            }
+            if kind == "practice"
+            else {}
+        ),
+    }
 
 
 @router.get("/{entry_id}")
