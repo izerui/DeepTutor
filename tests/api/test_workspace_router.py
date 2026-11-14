@@ -232,3 +232,21 @@ def test_workspace_folder_migration_is_retired(workspace_api, tmp_path):
     assert not destination.exists()
     assert service.validate_chat_binding(row["workspace_id"]).root == Path(row["path"])
     assert client.post("/api/settings/workspace/registrations/system-snapshot").status_code == 200
+
+
+def test_successful_workspace_write_probe_ignores_cleanup_failures(
+    workspace_api, tmp_path, monkeypatch
+):
+    _, service = workspace_api
+    root = tmp_path / "custom"
+    root.mkdir()
+    original = Path.unlink
+
+    def locked_probe(self, *args, **kwargs):
+        if self.name.startswith(".dt-wp-"):
+            raise RuntimeError("antivirus cleanup hook failed")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", locked_probe)
+    service.set_workspace(root)
+    assert service.current_binding().root == root.resolve()
