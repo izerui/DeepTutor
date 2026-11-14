@@ -246,3 +246,14 @@ based on evidence; there is no need to run every command for every problem.
    hypotheses. If unresolved, provide a concise handoff: environment/version,
    reproduction, expected versus actual behavior, relevant redacted errors,
    checks already tried, and the next useful investigation.
+
+### Legacy text encodings
+
+Prefer UTF-8 for knowledge-base text and chat attachments. For legacy Windows
+ANSI files, the importer tries UTF-8 first, then the GBK/GB18030 fallback, then
+Windows-1252 before Latin-1 (so French and German smart quotes survive). A
+Turkish interface language would prefer Windows-1254 after UTF-8. The bytes
+alone cannot always distinguish those encodings, so for mixed-language legacy
+collections convert files to UTF-8 before uploading; Python callers may pass a
+strict `encoding="cp1254"` or `encoding="gbk"` to `FileTypeRouter.decode_bytes`
+/ `read_text_file`. No decoding step rewrites the original uploaded file.
