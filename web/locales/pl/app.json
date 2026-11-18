@@ -5794,5 +5794,6 @@
   "Could not save review strategy. Try again.": "Nie udało się zapisać strategii powtórek. Spróbuj ponownie.",
   "Could not duplicate review strategy. Try again.": "Nie udało się zduplikować strategii powtórek. Spróbuj ponownie.",
   "Could not delete review strategy. Try again.": "Nie udało się usunąć strategii powtórek. Spróbuj ponownie.",
-  "System follows the device's light or dark appearance.": "System podąża za jasnym lub ciemnym wyglądem urządzenia."
+  "System follows the device's light or dark appearance.": "System podąża za jasnym lub ciemnym wyglądem urządzenia.",
+  "You are still using the password an administrator gave you. Please set your own below.": "Nadal używasz hasła nadanego przez administratora. Ustaw własne poniżej."
 }

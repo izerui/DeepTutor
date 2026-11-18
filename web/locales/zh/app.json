@@ -5750,5 +5750,6 @@
   "Could not save review strategy. Try again.": "无法保存复习策略，请重试。",
   "Could not duplicate review strategy. Try again.": "无法复制复习策略，请重试。",
   "Could not delete review strategy. Try again.": "无法删除复习策略，请重试。",
-  "System follows the device's light or dark appearance.": "系统跟随设备的浅色或深色外观。"
+  "System follows the device's light or dark appearance.": "系统跟随设备的浅色或深色外观。",
+  "You are still using the password an administrator gave you. Please set your own below.": "你仍在使用管理员分配的初始密码，请在下方设置你自己的密码。"
 }

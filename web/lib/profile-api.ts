@@ -40,6 +40,8 @@ export interface ProfileInfo {
   role: AccountRole;
   created_at: string;
   disabled?: boolean;
+  /** True while the account still uses an administrator-assigned password. */
+  must_change_password?: boolean;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */
   avatar?: string;
 }

@@ -73,6 +73,7 @@ def _canonical_record(
             "created_at": utc_now(),
             "disabled": False,
             "avatar": "",
+            "must_change_password": False,
         }
     if not isinstance(value, dict):
         return None
@@ -91,6 +92,9 @@ def _canonical_record(
         "disabled": bool(value.get("disabled", False)),
         "avatar": str(value.get("avatar") or ""),
         "preset": preset,
+        # Still holding a password an administrator chose (set on admin
+        # creation or reset, cleared when the owner picks their own).
+        "must_change_password": bool(value.get("must_change_password", False)),
     }
     if "book_permission" in value:
         record["book_permission"] = _stored_book_permission(value.get("book_permission"))
@@ -307,6 +311,7 @@ def list_user_info(  # nosec B107 - empty defaults mean "no env fallback supplie
             "disabled": bool(record.get("disabled", False)),
             "avatar": str(record.get("avatar") or ""),
             "preset": str(record.get("preset") or "standard"),
+            "must_change_password": bool(record.get("must_change_password", False)),
             "book_permission": public_permission_dict(
                 normalize_book_permission(record.get("book_permission"))
             ),
@@ -376,8 +381,17 @@ def delete_user(username: str) -> bool:
     return True
 
 
-def set_password(username: str, hashed_password: str) -> dict[str, Any] | None:
-    """Replace one account's password hash without changing its identity fields."""
+def set_password(
+    username: str,
+    hashed_password: str,
+    *,
+    must_change_password: bool | None = None,
+) -> dict[str, Any] | None:
+    """Replace one account's password hash without changing its identity fields.
+
+    ``must_change_password`` (when given) is written in the same update: an
+    administrator's reset sets it, the owner's own change clears it.
+    """
     if not USERS_FILE.exists():
         return None
     with _USERS_WRITE_LOCK:
@@ -389,8 +403,28 @@ def set_password(username: str, hashed_password: str) -> dict[str, Any] | None:
         # Sessions signed in with the old password end (see services.auth.decode_token).
         record["credentials_changed_at"] = time.time()
         record["credentials_version"] = int(record.get("credentials_version") or 0) + 1
+        if must_change_password is not None:
+            record["must_change_password"] = bool(must_change_password)
         _write_users(users)
         return deepcopy(record)
+
+
+def set_must_change_password(username: str, required: bool) -> bool:
+    """Flag an account as still using an administrator-assigned password.
+
+    Set when an admin provisions the account, cleared once the owner proves
+    they know the password and picks a new one.
+    """
+    if not USERS_FILE.exists():
+        return False
+    with _USERS_WRITE_LOCK:
+        users = load_users()
+        record = users.get(username)
+        if record is None:
+            return False
+        record["must_change_password"] = bool(required)
+        _write_users(users)
+        return True
 
 
 def set_avatar(username: str, avatar: str) -> bool:

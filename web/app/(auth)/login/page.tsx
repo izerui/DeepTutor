@@ -58,7 +58,11 @@ function LoginPageContent() {
 
     if (result.ok) {
       // Account changes must discard providers, module caches and router state.
-      window.location.replace(browserPath(resolvedNext()));
+      // A password an admin assigned is temporary by definition — send the
+      // owner straight to the form rather than letting them settle in with it.
+      window.location.replace(
+        browserPath(result.mustChangePassword ? "/profile" : resolvedNext()),
+      );
     } else {
       setError(result.error ?? t("Login failed"));
       setLoading(false);

@@ -344,6 +344,7 @@ class UserInfo(BaseModel):
     created_at: str
     disabled: bool = False
     avatar: str = ""
+    must_change_password: bool = False
     preset: AccountPreset = "standard"
 
 
@@ -791,6 +792,9 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
         "username": result.username,
         "role": role_label(result.role),
         "is_admin": result.role == "admin",
+        "must_change_password": bool(
+            (get_user_info(result.username) or {}).get("must_change_password", False)
+        ),
     }
 
 
@@ -1194,7 +1198,12 @@ async def change_own_password(
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
-    record = await asyncio.to_thread(set_password, current.username, hash_password(body.new_password))
+    record = await asyncio.to_thread(
+        set_password,
+        current.username,
+        hash_password(body.new_password),
+        must_change_password=False,
+    )
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     user_id = str(record.get("id") or "")
@@ -1480,6 +1489,11 @@ def _create_admin_user(
             detail="Only non-admin users can be provisioned by this endpoint.",
         )
 
+    # An admin-chosen password is temporary by definition: flag the account so
+    # the UI sends its owner to the password form on first use.
+    from deeptutor.multi_user.identity import set_must_change_password
+
+    set_must_change_password(body.username, True)
     logger.info(
         "Admin '%s' created user '%s' (role=%r, preset=%r)",
         actor,
@@ -1494,6 +1508,7 @@ def _create_admin_user(
         "role": role_label(role),
         "is_admin": False,
         "preset": preset,
+        "must_change_password": True,
     }
 
 
@@ -1855,7 +1870,14 @@ async def admin_reset_password(
 
     # Any account, the first administrator's included: otherwise a forgotten
     # first-admin password could never be recovered (D20, 2026-11-02).
-    record = await asyncio.to_thread(set_password, username, hash_password(body.new_password))
+    # An admin-chosen password is temporary: the owner is asked to replace it,
+    # unless the administrator just reset their own.
+    record = await asyncio.to_thread(
+        set_password,
+        username,
+        hash_password(body.new_password),
+        must_change_password=username != current.username,
+    )
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     logger.info("Admin '%s' reset the password of '%s'", current.username, username)

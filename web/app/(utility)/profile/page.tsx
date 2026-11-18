@@ -382,7 +382,20 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <PasswordCard />
+            {profile.must_change_password && (
+              <div
+                role="status"
+                className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
+              >
+                {t("You are still using the password an administrator gave you. Please set your own below.")}
+              </div>
+            )}
+
+            <PasswordCard
+              onChanged={() =>
+                setProfile((prev) => (prev ? { ...prev, must_change_password: false } : prev))
+              }
+            />
 
             {/* Polish batch §3: learners delete their own account; administrators cannot here. */}
             {!isAdmin && <DeleteAccountCard />}
@@ -414,7 +427,7 @@ export default function ProfilePage() {
 }
 
 /** Change one's own password (spec 2026-10-29 D20: after a reset, set your own). */
-function PasswordCard() {
+function PasswordCard({ onChanged }: { onChanged?: () => void }) {
   const { t } = useTranslation();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -434,6 +447,7 @@ function PasswordCard() {
             setCurrent("");
             setNext("");
             setMessage({ ok: true, text: t("Password changed. Other devices were signed out.") });
+            onChanged?.();
           })
           .catch((err) => setMessage({ ok: false, text: err instanceof Error ? t(err.message) : String(err) }))
           .finally(() => setBusy(false));

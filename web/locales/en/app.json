@@ -5750,5 +5750,6 @@
   "Could not save review strategy. Try again.": "Could not save review strategy. Try again.",
   "Could not duplicate review strategy. Try again.": "Could not duplicate review strategy. Try again.",
   "Could not delete review strategy. Try again.": "Could not delete review strategy. Try again.",
-  "System follows the device's light or dark appearance.": "System follows the device's light or dark appearance."
+  "System follows the device's light or dark appearance.": "System follows the device's light or dark appearance.",
+  "You are still using the password an administrator gave you. Please set your own below.": "You are still using the password an administrator gave you. Please set your own below."
 }
