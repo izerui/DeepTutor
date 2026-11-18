@@ -521,7 +521,6 @@ async def test_context_budget_reports_effective_reasoning_effort(
             user_message="Explain gradient descent",
             language="en",
             metadata={"turn_id": "t1"},
-            runtime=TurnRuntimeContext(workspace=WorkspaceRuntimeContext()),
         ),
         bus,
     )
