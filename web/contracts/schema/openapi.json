@@ -14015,6 +14015,11 @@
             "title": "Avatar",
             "type": "string"
           },
+          "can_change_password": {
+            "default": false,
+            "title": "Can Change Password",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
