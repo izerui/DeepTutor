@@ -25,6 +25,7 @@ from deeptutor.services.memory.evaluation_rag import (
 )
 
 FIXTURES = Path(__file__).parents[2] / "fixtures" / "memory_evaluation" / "cases.jsonl"
+RUN_SCRIPT = Path(__file__).parents[3] / "examples" / "memory_evaluation" / "run.py"
 
 
 def context(*texts):
@@ -333,7 +334,7 @@ def test_default_cli_needs_no_optional_model_sdk(tmp_path, monkeypatch):
     )
     output = tmp_path / "report.json"
     monkeypatch.setattr(sys, "argv", ["run.py", "--cases", str(FIXTURES), "--output", str(output)])
-    runpy.run_path("examples/memory_evaluation/run.py", run_name="__main__")
+    runpy.run_path(str(RUN_SCRIPT), run_name="__main__")
     report = json.loads(output.read_text())
     assert set(report["summary"]) == {"raw_recent", "lexical_top2", "native_l3_snapshot"}
     assert not report["reader_executed"]
@@ -364,7 +365,7 @@ def test_opt_in_cli_adds_both_baselines_and_records_model_configuration(
             "2",
         ],
     )
-    runpy.run_path("examples/memory_evaluation/run.py", run_name="__main__")
+    runpy.run_path(str(RUN_SCRIPT), run_name="__main__")
     report = json.loads(output.read_text())
     assert {"raw_dense", "raw_dense_reranked"} <= set(report["summary"])
     assert not any(row["error"] for row in report["rows"])
@@ -407,6 +408,6 @@ def test_cli_setup_errors_are_actionable_without_model_downloads(
         ],
     )
     with pytest.raises(SystemExit) as error:
-        runpy.run_path("examples/memory_evaluation/run.py", run_name="__main__")
+        runpy.run_path(str(RUN_SCRIPT), run_name="__main__")
     assert error.value.code == 2
     assert message in capsys.readouterr().err

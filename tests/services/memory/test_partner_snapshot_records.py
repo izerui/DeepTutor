@@ -125,7 +125,7 @@ def test_private_scope_preserves_own_valid_history_without_reading_admin_content
     path = _history(partner_root / "users" / "u1")
     _append(path, {"content": ["bad private record"]})
     _history(partner_root / "users" / "u2", "other")
-    monkeypatch.setattr(access, "load_grant", lambda uid: {"partners": [{"partner_id": "bot1"}]})
+    monkeypatch.setattr(access, "assigned_partner_ids", lambda user_id=None: {"bot1"})
     root = partner_root.parent.parent / "users" / "u1"
     user = CurrentUser("u1", "alice", "user", UserScope("user", "u1", root))
 

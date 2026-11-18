@@ -136,7 +136,7 @@ def test_regular_user_archive_flags_come_from_their_own_sessions(
     admin_store.set_archived("web:study", not archived)
     private_store = _session(partner_root / "users" / "u1")
     private_store.set_archived("web:study", archived)
-    monkeypatch.setattr(access, "load_grant", lambda uid: {"partners": [{"partner_id": "bot1"}]})
+    monkeypatch.setattr(access, "assigned_partner_ids", lambda user_id=None: {"bot1"})
     root = partner_root.parent.parent / "users" / "u1"
     user = CurrentUser("u1", "alice", "user", UserScope("user", "u1", root))
 
