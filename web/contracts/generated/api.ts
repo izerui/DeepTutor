@@ -9345,6 +9345,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/settings/display": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Get Display Settings
+     * @description Read learning typography through the authenticated, request-scoped router.
+     */
+    readonly get: operations["get_display_settings_api_settings_display_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/settings/document-parsing": {
     readonly parameters: {
       readonly query?: never;
@@ -14439,6 +14459,24 @@ export interface components {
       readonly paired_at: string;
     };
     /**
+     * DisplaySettings
+     * @description Account-scoped learning text preferences; no interface chrome settings.
+     */
+    readonly DisplaySettings: {
+      /**
+       * Content Font Scale
+       * @default 100
+       * @enum {integer}
+       */
+      readonly content_font_scale: 90 | 100 | 110 | 125 | 150;
+      /**
+       * Content Line Spacing
+       * @default normal
+       * @enum {string}
+       */
+      readonly content_line_spacing: "compact" | "normal" | "relaxed";
+    };
+    /**
      * DoclingRemoteTest
      * @description Draft Docling remote-server test. ``api_token`` is tri-state: ``None``
      *     falls back to the stored key, ``""`` clears it, a string supplies it (so
@@ -18653,8 +18691,8 @@ export interface components {
      * UISettingsUpdate
      * @description Partial UI settings for user-initiated PATCH/PUT updates via /api/settings/ui.
      *
-     *     All fields have None defaults so `model_dump(exclude_unset=True)` naturally
-     *     excludes fields not provided in the frontend payload, while explicitly provided
+     *     `model_dump(exclude_unset=True)` excludes fields not provided in the
+     *     frontend payload, while explicitly provided
      *     defaults (e.g., `theme: "snow"`) still update the backend. This separates
      *     the semantic contract: `/ui` endpoint only merges whatever explicitly arrives
      *     from the frontend.
@@ -18666,6 +18704,18 @@ export interface components {
       readonly code_block_theme?: string | null;
       /** Code Block Wrap Long Lines */
       readonly code_block_wrap_long_lines?: boolean | null;
+      /**
+       * Content Font Scale
+       * @default 100
+       * @enum {integer}
+       */
+      readonly content_font_scale: 90 | 100 | 110 | 125 | 150;
+      /**
+       * Content Line Spacing
+       * @default normal
+       * @enum {string}
+       */
+      readonly content_line_spacing: "compact" | "normal" | "relaxed";
       /** Language */
       readonly language?: ("en" | "zh" | "fr" | "de" | "uk" | "pl") | null;
       /** Response Language */
@@ -19171,6 +19221,11 @@ export interface components {
        */
       readonly id: string;
       /**
+       * Must Change Password
+       * @default false
+       */
+      readonly must_change_password: boolean;
+      /**
        * Preset
        * @default standard
        * @enum {string}
@@ -19635,6 +19690,7 @@ export type SchemaDeleteKnowledgeBaseRequest =
   components["schemas"]["DeleteKnowledgeBaseRequest"];
 export type SchemaDeleteOwnAccount = components["schemas"]["DeleteOwnAccount"];
 export type SchemaDeviceInfo = components["schemas"]["DeviceInfo"];
+export type SchemaDisplaySettings = components["schemas"]["DisplaySettings"];
 export type SchemaDoclingRemoteTest =
   components["schemas"]["DoclingRemoteTest"];
 export type SchemaDocumentParsingInstall =
@@ -41123,6 +41179,39 @@ export interface operations {
         };
         content: {
           readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly get_display_settings_api_settings_display_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["DisplaySettings"];
         };
       };
       /** @description Validation Error */

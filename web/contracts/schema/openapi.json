@@ -3446,6 +3446,35 @@
         "title": "DeviceInfo",
         "type": "object"
       },
+      "DisplaySettings": {
+        "description": "Account-scoped learning text preferences; no interface chrome settings.",
+        "properties": {
+          "content_font_scale": {
+            "default": 100,
+            "enum": [
+              90,
+              100,
+              110,
+              125,
+              150
+            ],
+            "title": "Content Font Scale",
+            "type": "integer"
+          },
+          "content_line_spacing": {
+            "default": "normal",
+            "enum": [
+              "compact",
+              "normal",
+              "relaxed"
+            ],
+            "title": "Content Line Spacing",
+            "type": "string"
+          }
+        },
+        "title": "DisplaySettings",
+        "type": "object"
+      },
       "DocWriteRequest": {
         "properties": {
           "content": {
@@ -12574,7 +12603,7 @@
         "type": "object"
       },
       "UISettingsUpdate": {
-        "description": "Partial UI settings for user-initiated PATCH/PUT updates via /api/settings/ui.\n\nAll fields have None defaults so `model_dump(exclude_unset=True)` naturally\nexcludes fields not provided in the frontend payload, while explicitly provided\ndefaults (e.g., `theme: \"snow\"`) still update the backend. This separates\nthe semantic contract: `/ui` endpoint only merges whatever explicitly arrives\nfrom the frontend.",
+        "description": "Partial UI settings for user-initiated PATCH/PUT updates via /api/settings/ui.\n\n`model_dump(exclude_unset=True)` excludes fields not provided in the\nfrontend payload, while explicitly provided\ndefaults (e.g., `theme: \"snow\"`) still update the backend. This separates\nthe semantic contract: `/ui` endpoint only merges whatever explicitly arrives\nfrom the frontend.",
         "properties": {
           "code_block_show_line_numbers": {
             "anyOf": [
@@ -12608,6 +12637,28 @@
               }
             ],
             "title": "Code Block Wrap Long Lines"
+          },
+          "content_font_scale": {
+            "default": 100,
+            "enum": [
+              90,
+              100,
+              110,
+              125,
+              150
+            ],
+            "title": "Content Font Scale",
+            "type": "integer"
+          },
+          "content_line_spacing": {
+            "default": "normal",
+            "enum": [
+              "compact",
+              "normal",
+              "relaxed"
+            ],
+            "title": "Content Line Spacing",
+            "type": "string"
           },
           "language": {
             "anyOf": [
@@ -13977,6 +14028,11 @@
             "default": "",
             "title": "Id",
             "type": "string"
+          },
+          "must_change_password": {
+            "default": false,
+            "title": "Must Change Password",
+            "type": "boolean"
           },
           "preset": {
             "default": "standard",
@@ -58793,6 +58849,72 @@
           }
         },
         "summary": "Update Chat Starter Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/display": {
+      "get": {
+        "description": "Read learning typography through the authenticated, request-scoped router.",
+        "operationId": "get_display_settings_api_settings_display_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisplaySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Display Settings",
         "tags": [
           "settings"
         ]
