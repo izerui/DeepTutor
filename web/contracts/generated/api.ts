@@ -695,6 +695,70 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/books/{book_id}/chapters": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Add Chapter
+     * @description Append an empty chapter shell after generation, without recompiling.
+     */
+    readonly post: operations["add_chapter_api_books__book_id__chapters_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/books/{book_id}/chapters/{chapter_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /**
+     * Delete Chapter
+     * @description Delete a chapter and only its pages; other compiled pages are untouched.
+     */
+    readonly delete: operations["delete_chapter_api_books__book_id__chapters__chapter_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    /**
+     * Update Chapter
+     * @description Rename a chapter (and carry the title onto its pages) without recompiling.
+     */
+    readonly patch: operations["update_chapter_api_books__book_id__chapters__chapter_id__patch"];
+    readonly trace?: never;
+  };
+  readonly "/api/books/{book_id}/chapters/{chapter_id}/move": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Move Chapter
+     * @description Reorder a chapter and carry the new order onto its pages.
+     */
+    readonly post: operations["move_chapter_api_books__book_id__chapters__chapter_id__move_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/books/{book_id}/export": {
     readonly parameters: {
       readonly query?: never;
@@ -12806,12 +12870,22 @@ export interface components {
     /** ActionPayload */
     readonly ActionPayload: {
       /**
+       * Help Request Id
+       * @default
+       */
+      readonly help_request_id: string;
+      /**
        * Locale
        * @default en
        */
       readonly locale: string;
       /** Locator */
       readonly locator: number;
+      /**
+       * Question Id
+       * @default
+       */
+      readonly question_id: string;
       /**
        * Selection
        * @default
@@ -12829,6 +12903,30 @@ export interface components {
       readonly model_id: string;
       /** Profile Id */
       readonly profile_id: string;
+    };
+    /** AddChapterRequest */
+    readonly AddChapterRequest: {
+      /**
+       * Content Type
+       * @default theory
+       */
+      readonly content_type: string;
+      /** Expected Revision */
+      readonly expected_revision?: number | null;
+      /** Learning Objectives */
+      readonly learning_objectives?: readonly string[];
+      /** Position */
+      readonly position?: number | null;
+      /**
+       * Summary
+       * @default
+       */
+      readonly summary: string;
+      /**
+       * Title
+       * @default
+       */
+      readonly title: string;
     };
     /** AddGitHubSourceRequest */
     readonly AddGitHubSourceRequest: {
@@ -16205,6 +16303,13 @@ export interface components {
       /** Page Id */
       readonly page_id: string;
     };
+    /** MoveChapterRequest */
+    readonly MoveChapterRequest: {
+      /** Expected Revision */
+      readonly expected_revision?: number | null;
+      /** New Position */
+      readonly new_position: number;
+    };
     /** MoveFilePayload */
     readonly MoveFilePayload: {
       /**
@@ -18788,6 +18893,17 @@ export interface components {
       /** Workspace Id */
       readonly workspace_id?: string | null;
     };
+    /** UpdateChapterRequest */
+    readonly UpdateChapterRequest: {
+      /** Expected Revision */
+      readonly expected_revision?: number | null;
+      /** Learning Objectives */
+      readonly learning_objectives?: readonly string[] | null;
+      /** Summary */
+      readonly summary?: string | null;
+      /** Title */
+      readonly title?: string | null;
+    };
     /** UpdateCourseRequest */
     readonly UpdateCourseRequest: {
       /** Color */
@@ -19518,6 +19634,8 @@ export interface components {
 export type SchemaActionPayload = components["schemas"]["ActionPayload"];
 export type SchemaActiveModelUpdate =
   components["schemas"]["ActiveModelUpdate"];
+export type SchemaAddChapterRequest =
+  components["schemas"]["AddChapterRequest"];
 export type SchemaAddGitHubSourceRequest =
   components["schemas"]["AddGitHubSourceRequest"];
 export type SchemaAddRecordRequest = components["schemas"]["AddRecordRequest"];
@@ -19850,6 +19968,8 @@ export type SchemaModelCapabilitiesQuery =
 export type SchemaModelUsage = components["schemas"]["ModelUsage"];
 export type SchemaModuleInput = components["schemas"]["ModuleInput"];
 export type SchemaMoveBlockRequest = components["schemas"]["MoveBlockRequest"];
+export type SchemaMoveChapterRequest =
+  components["schemas"]["MoveChapterRequest"];
 export type SchemaMoveFilePayload = components["schemas"]["MoveFilePayload"];
 export type SchemaMoveRecordRequest =
   components["schemas"]["MoveRecordRequest"];
@@ -20083,6 +20203,8 @@ export type SchemaUnitText = components["schemas"]["UnitText"];
 export type SchemaUpdateBlockRequest =
   components["schemas"]["UpdateBlockRequest"];
 export type SchemaUpdateCard = components["schemas"]["UpdateCard"];
+export type SchemaUpdateChapterRequest =
+  components["schemas"]["UpdateChapterRequest"];
 export type SchemaUpdateCourseRequest =
   components["schemas"]["UpdateCourseRequest"];
 export type SchemaUpdateDocumentRequest =
@@ -21586,6 +21708,171 @@ export interface operations {
       };
     };
     readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly add_chapter_api_books__book_id__chapters_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["AddChapterRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_chapter_api_books__book_id__chapters__chapter_id__delete: {
+    readonly parameters: {
+      readonly query?: {
+        readonly expected_revision?: number | null;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+        readonly chapter_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_chapter_api_books__book_id__chapters__chapter_id__patch: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+        readonly chapter_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["UpdateChapterRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly move_chapter_api_books__book_id__chapters__chapter_id__move_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+        readonly chapter_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["MoveChapterRequest"];
+      };
+    };
     readonly responses: {
       /** @description Successful Response */
       readonly 200: {
