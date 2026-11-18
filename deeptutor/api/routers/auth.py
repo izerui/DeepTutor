@@ -1868,10 +1868,12 @@ async def admin_reset_password(
 
     Sessions signed in with the old password stop working.
     """
-    if POCKETBASE_ENABLED or not AUTH_ENABLED:
+    # PocketBase owns its passwords; a local hash would never be used (upstream
+    # 42cf57bf9). Local records stay resettable even with auth switched off.
+    if POCKETBASE_ENABLED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password changes are only available for local authenticated accounts.",
+            detail="Password changes are only available for local accounts.",
         )
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
