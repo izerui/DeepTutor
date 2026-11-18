@@ -4740,6 +4740,63 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/mastery-paths/review-strategies": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * List Review Strategies
+     * @description Every strategy the learner can bind: presets first, then their own.
+     */
+    readonly get: operations["list_review_strategies_api_mastery_paths_review_strategies_get"];
+    readonly put?: never;
+    /** Create Review Strategy */
+    readonly post: operations["create_review_strategy_api_mastery_paths_review_strategies_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/mastery-paths/review-strategies/{template_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Get Review Strategy */
+    readonly get: operations["get_review_strategy_api_mastery_paths_review_strategies__template_id__get"];
+    /** Update Review Strategy */
+    readonly put: operations["update_review_strategy_api_mastery_paths_review_strategies__template_id__put"];
+    readonly post?: never;
+    /** Delete Review Strategy */
+    readonly delete: operations["delete_review_strategy_api_mastery_paths_review_strategies__template_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/mastery-paths/review-strategies/{template_id}/duplicate": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Duplicate Review Strategy */
+    readonly post: operations["duplicate_review_strategy_api_mastery_paths_review_strategies__template_id__duplicate_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/mastery-paths/teaching/templates": {
     readonly parameters: {
       readonly query?: never;
@@ -4949,6 +5006,32 @@ export interface paths {
     readonly get: operations["get_review_settings_api_mastery_paths_topics__path_id__review_settings_get"];
     /** Update Review Settings */
     readonly put: operations["update_review_settings_api_mastery_paths_topics__path_id__review_settings_put"];
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/mastery-paths/topics/{path_id}/review-strategy": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    /**
+     * Update Path Review Strategy
+     * @description Bind which strategy a mastery path schedules with.
+     *
+     *     The binding snapshots the template's intervals onto the path, so later
+     *     edits to the template do not rewrite existing schedules. A strategy that
+     *     carries a recall target applies it. Every bind or switch replays durable
+     *     evidence under the new interval snapshot; unbinding keeps the learner's
+     *     current target.
+     */
+    readonly put: operations["update_path_review_strategy_api_mastery_paths_topics__path_id__review_strategy_put"];
     readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
@@ -11183,7 +11266,11 @@ export interface paths {
      *     Deliberately side-effect free: nothing is written, so the incoming config is
      *     probed as given (any literal credential in it is used in memory only). That
      *     also means a caller may probe under a scratch name the store would refuse,
-     *     which is how the UI tests a draft before it has one.
+     *     which is how the UI tests a draft before it has one — with one exception:
+     *     an OAuth-backed server's grant lives under the name it is saved under, so
+     *     its probe addresses the OAuth store by the path name. A scratch name no
+     *     grant could live under is answered the way an unauthorized server is, not
+     *     with the store's refusal.
      */
     readonly post: operations["test_server_api_space_mcp_servers__name__test_post"];
     readonly delete?: never;
@@ -14465,6 +14552,14 @@ export interface components {
        */
       readonly size_bytes: number;
     };
+    /** DuplicateReviewStrategyRequest */
+    readonly DuplicateReviewStrategyRequest: {
+      /**
+       * Name
+       * @default
+       */
+      readonly name: string;
+    };
     /** EditRequest */
     readonly EditRequest: {
       /**
@@ -16486,6 +16581,17 @@ export interface components {
        */
       readonly pass_standard: "relaxed" | "standard" | "strict";
     };
+    /**
+     * PathReviewStrategyRequest
+     * @description Bind a path to a strategy; an empty template_id restores the default.
+     */
+    readonly PathReviewStrategyRequest: {
+      /**
+       * Template Id
+       * @default
+       */
+      readonly template_id: string;
+    };
     /** PauseBookRequest */
     readonly PauseBookRequest: {
       /** Book Id */
@@ -17273,6 +17379,25 @@ export interface components {
     readonly ReviewSettingsRequest: {
       /** Desired Retention */
       readonly desired_retention: number;
+    };
+    /**
+     * ReviewStrategyRequest
+     * @description Create/edit a custom review strategy: per-round intervals per type.
+     */
+    readonly ReviewStrategyRequest: {
+      /**
+       * Description
+       * @default
+       */
+      readonly description: string;
+      /** Desired Retention */
+      readonly desired_retention?: number | null;
+      /** Intervals */
+      readonly intervals: {
+        readonly [key: string]: readonly number[];
+      };
+      /** Name */
+      readonly name: string;
     };
     /** RoundSummaryRequest */
     readonly RoundSummaryRequest: {
@@ -19520,6 +19645,8 @@ export type SchemaDuplicateCheckRequest =
   components["schemas"]["DuplicateCheckRequest"];
 export type SchemaDuplicateFileQuery =
   components["schemas"]["DuplicateFileQuery"];
+export type SchemaDuplicateReviewStrategyRequest =
+  components["schemas"]["DuplicateReviewStrategyRequest"];
 export type SchemaEditRequest = components["schemas"]["EditRequest"];
 export type SchemaEditResponse = components["schemas"]["EditResponse"];
 export type SchemaEditTopicMapRequest =
@@ -19686,6 +19813,8 @@ export type SchemaPartnerSeatRetryRequest =
   components["schemas"]["PartnerSeatRetryRequest"];
 export type SchemaPassStandardRequest =
   components["schemas"]["PassStandardRequest"];
+export type SchemaPathReviewStrategyRequest =
+  components["schemas"]["PathReviewStrategyRequest"];
 export type SchemaPauseBookRequest = components["schemas"]["PauseBookRequest"];
 export type SchemaPositionInfo = components["schemas"]["PositionInfo"];
 export type SchemaPositionPayload = components["schemas"]["PositionPayload"];
@@ -19767,6 +19896,8 @@ export type SchemaReviewBody = components["schemas"]["ReviewBody"];
 export type SchemaReviewRequest = components["schemas"]["ReviewRequest"];
 export type SchemaReviewSettingsRequest =
   components["schemas"]["ReviewSettingsRequest"];
+export type SchemaReviewStrategyRequest =
+  components["schemas"]["ReviewStrategyRequest"];
 export type SchemaRoundSummaryRequest =
   components["schemas"]["RoundSummaryRequest"];
 export type SchemaRunStartRequest = components["schemas"]["RunStartRequest"];
@@ -30177,6 +30308,224 @@ export interface operations {
       };
     };
   };
+  readonly list_review_strategies_api_mastery_paths_review_strategies_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly create_review_strategy_api_mastery_paths_review_strategies_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReviewStrategyRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 201: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly get_review_strategy_api_mastery_paths_review_strategies__template_id__get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly template_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_review_strategy_api_mastery_paths_review_strategies__template_id__put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly template_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReviewStrategyRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_review_strategy_api_mastery_paths_review_strategies__template_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly template_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly duplicate_review_strategy_api_mastery_paths_review_strategies__template_id__duplicate_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly template_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["DuplicateReviewStrategyRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 201: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly list_templates_api_mastery_paths_teaching_templates_get: {
     readonly parameters: {
       readonly query?: never;
@@ -30702,6 +31051,45 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["ReviewSettingsRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_path_review_strategy_api_mastery_paths_topics__path_id__review_strategy_put: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly path_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["PathReviewStrategyRequest"];
       };
     };
     readonly responses: {
