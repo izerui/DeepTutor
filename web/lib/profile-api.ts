@@ -42,6 +42,8 @@ export interface ProfileInfo {
   disabled?: boolean;
   /** True while the account still uses an administrator-assigned password. */
   must_change_password?: boolean;
+  /** False where passwords are not managed locally (PocketBase or auth off). */
+  can_change_password?: boolean;
   /** Avatar marker: "", "icon:<name>:<color>", or "img:<version>". */
   avatar?: string;
 }

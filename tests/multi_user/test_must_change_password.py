@@ -122,3 +122,28 @@ def test_login_and_profile_report_the_flag(teaching_users, auth_on, monkeypatch)
 
     profile = asyncio.run(auth_router.get_profile(payload=_token(teaching_users, "sam", "student")))
     assert profile.must_change_password is True
+    assert profile.can_change_password is True
+
+
+def test_pocketbase_mode_hides_and_refuses_password_changes(teaching_users, auth_on, monkeypatch):
+    """Upstream 42cf57bf9: PocketBase owns its passwords; local resets must not apply."""
+    from deeptutor.api.routers import auth as auth_router
+    from deeptutor.multi_user.identity import get_user
+
+    monkeypatch.setattr(auth_router, "POCKETBASE_ENABLED", True)
+    before = get_user("sara")["hash"]
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            auth_router.admin_reset_password(
+                "sara",
+                auth_router.AdminPasswordReset(new_password="fresh-password"),
+                current=_token(teaching_users, "adam", "admin"),
+            )
+        )
+    assert exc.value.status_code == 400
+    assert get_user("sara")["hash"] == before
+    assert _flag("sara") is False
+
+    profile = asyncio.run(auth_router.get_profile(payload=_token(teaching_users, "sam", "student")))
+    assert profile.can_change_password is False

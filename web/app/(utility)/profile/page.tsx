@@ -382,7 +382,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {profile.must_change_password && (
+            {profile.can_change_password && profile.must_change_password && (
               <div
                 role="status"
                 className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400"
@@ -391,11 +391,13 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <PasswordCard
-              onChanged={() =>
-                setProfile((prev) => (prev ? { ...prev, must_change_password: false } : prev))
-              }
-            />
+            {profile.can_change_password && (
+              <PasswordCard
+                onChanged={() =>
+                  setProfile((prev) => (prev ? { ...prev, must_change_password: false } : prev))
+                }
+              />
+            )}
 
             {/* Polish batch §3: learners delete their own account; administrators cannot here. */}
             {!isAdmin && <DeleteAccountCard />}

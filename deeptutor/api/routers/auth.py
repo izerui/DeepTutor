@@ -345,6 +345,9 @@ class UserInfo(BaseModel):
     disabled: bool = False
     avatar: str = ""
     must_change_password: bool = False
+    # False where passwords are not managed locally (PocketBase, auth off):
+    # the profile page then hides the password form.
+    can_change_password: bool = False
     preset: AccountPreset = "standard"
 
 
@@ -1171,7 +1174,7 @@ async def get_profile(
             role=current.role,
             created_at="",
         )
-    return UserInfo(**info)
+    return UserInfo(**info, can_change_password=AUTH_ENABLED and not POCKETBASE_ENABLED)
 
 
 class ChangeOwnPassword(BaseModel):
@@ -1865,6 +1868,11 @@ async def admin_reset_password(
 
     Sessions signed in with the old password stop working.
     """
+    if POCKETBASE_ENABLED or not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password changes are only available for local authenticated accounts.",
+        )
     from deeptutor.multi_user.identity import set_password
     from deeptutor.services.auth import hash_password
 
