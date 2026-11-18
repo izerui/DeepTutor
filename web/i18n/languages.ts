@@ -29,3 +29,21 @@ export function normalizeLanguage(value: unknown): AppLanguage {
   if (base === "pl" || code === "polish" || code === "polski") return "pl";
   return "en";
 }
+
+/** Model output can use more languages than the app UI locale supports. */
+export type ResponseLanguage =
+  | "en"
+  | "zh"
+  | "zh-tw"
+  | "ja"
+  | "ko"
+  | "es"
+  | "fr"
+  | "de"
+  | "ru"
+  | "pt"
+  | "it"
+  | "ar"
+  | "pl"
+  | "uk"
+  | "ms";

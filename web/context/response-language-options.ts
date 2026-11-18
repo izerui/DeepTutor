@@ -1,4 +1,4 @@
-import type { ResponseLanguage } from "@/context/app-shell-storage";
+import type { ResponseLanguage } from "@/i18n/languages";
 
 export type ResponseLanguageOption = {
   value: ResponseLanguage;
