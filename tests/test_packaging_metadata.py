@@ -35,8 +35,21 @@ def test_parser_extras_track_current_upstream_floors() -> None:
     assert extras["parse-liteparse"] == ["liteparse>=2.14.2"]
     assert extras["parse-docling"] == [
         "docling[xbrl]>=2.123.1",
-        "docling-slim[format-iwork,format-opendocument,format-video]>=2.123.1",
+        "docling-slim[format-iwork,format-opendocument]>=2.123.1",
     ]
+
+
+def test_docling_parser_avoids_source_only_build_dependencies() -> None:
+    """The official image has no compiler (upstream e3380f375, #2327).
+
+    ``format-video`` pulls ``resemblyzer`` -> ``webrtcvad``, which ships only an
+    sdist. The document parser does not use Docling's video extras.
+    """
+    from deeptutor.services.parsing.engines._install import ENGINE_PIP_SPECS
+
+    extras = _project(REPOSITORY_ROOT / "pyproject.toml")["optional-dependencies"]
+    for requirement in [*extras["parse-docling"], *ENGINE_PIP_SPECS["docling"]]:
+        assert "format-video" not in requirement
 
 
 def test_python_314_is_supported_by_both_distributions() -> None:

@@ -46,12 +46,13 @@ ENGINE_PIP_SPECS: dict[str, list[str]] = {
         "docx,outlook,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.7"
     ],
     # Keep the base converter and every format-specific dependency aligned
-    # with the Docling compatibility floor.  ``format-video`` also brings the
-    # ASR dependencies used by audio; legacy Office still needs LibreOffice
-    # and video conversion still needs ffmpeg on the host, per Docling.
+    # with the Docling compatibility floor.  ``format-video`` is left out: it
+    # pulls ``resemblyzer`` -> ``webrtcvad``, which ships only an sdist, and the
+    # official image has no compiler (upstream e3380f375, #2327).  Legacy
+    # Office still needs LibreOffice on the host, per Docling.
     "docling": [
         "docling[xbrl]>=2.123.1",
-        "docling-slim[format-iwork,format-opendocument,format-video]>=2.123.1",
+        "docling-slim[format-iwork,format-opendocument]>=2.123.1",
     ],
     "liteparse": ["liteparse>=2.14.2"],
 }
