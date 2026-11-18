@@ -226,13 +226,19 @@ class RegisterRequest(BaseModel):
 
         v = v.strip()
         if not v:
-            raise ValueError("Email cannot be empty")
+            raise ValueError("Username or email cannot be empty")
         # Accept standard email addresses (used by PocketBase mode) or plain
         # usernames (used by the built-in SQLite/JSON auth mode).
+        #
+        # Usernames may be written in Chinese: deployments that create
+        # accounts from a staff roster use real names like "于冬阳", and the
+        # ASCII-only charset rejected every one of them. CJK-only names allow
+        # two characters (张伟) where Latin usernames require three (abc).
         email_re = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
         plain_re = re.compile(r"^[A-Za-z0-9_\-.]{3,64}$")
-        if not email_re.match(v) and not plain_re.match(v):
-            raise ValueError("Enter a valid email address")
+        cjk_re = re.compile(r"^[\u4e00-\u9fff]{2,64}$")
+        if not (email_re.match(v) or plain_re.match(v) or cjk_re.match(v)):
+            raise ValueError("Enter a valid email address or username")
         return v
 
     @field_validator("password")
