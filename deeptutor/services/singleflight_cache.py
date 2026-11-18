@@ -75,11 +75,40 @@ class AsyncSingleFlightTTLCache(Generic[K, V]):
                     completed.exception()
 
             pending.add_done_callback(producer_done)
-        value = await asyncio.shield(pending)
+        value = await self._await_shielded(pending)
 
         if cache_when(value):
             self.remember(key, value)
         return value
+
+
+    @staticmethod
+    async def _await_shielded(pending: asyncio.Future[V]) -> V:
+        """Await ``pending`` without letting this caller's cancellation reach it.
+
+        Like ``asyncio.shield``, but a producer that fails after every caller
+        left is not reported as an "exception in shielded future" (Python 3.14
+        logs those); ``producer_done`` already retrieves its exception.
+        """
+        waiter: asyncio.Future[V] = asyncio.get_running_loop().create_future()
+
+        def relay(done: asyncio.Future[V]) -> None:
+            if waiter.done():
+                return
+            if done.cancelled():
+                waiter.cancel()
+                return
+            exc = done.exception()
+            if exc is not None:
+                waiter.set_exception(exc)
+            else:
+                waiter.set_result(done.result())
+
+        pending.add_done_callback(relay)
+        try:
+            return await waiter
+        finally:
+            pending.remove_done_callback(relay)
 
 
 __all__ = ["AsyncSingleFlightTTLCache"]
