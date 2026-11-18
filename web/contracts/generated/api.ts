@@ -759,6 +759,74 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/books/{book_id}/edits": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Get Book Edits */
+    readonly get: operations["get_book_edits_api_books__book_id__edits_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/books/{book_id}/edits/{edit_id}/apply": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Apply Book Edit */
+    readonly post: operations["apply_book_edit_api_books__book_id__edits__edit_id__apply_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/books/{book_id}/edits/{edit_id}/undo": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Undo Book Edit */
+    readonly post: operations["undo_book_edit_api_books__book_id__edits__edit_id__undo_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/books/{book_id}/edits/preview": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Preview Book Edit */
+    readonly post: operations["preview_book_edit_api_books__book_id__edits_preview_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/books/{book_id}/export": {
     readonly parameters: {
       readonly query?: never;
@@ -13220,6 +13288,11 @@ export interface components {
        */
       readonly answer: string;
     };
+    /** ApplyBookEditRequest */
+    readonly ApplyBookEditRequest: {
+      /** Expected Revision */
+      readonly expected_revision: number;
+    };
     /** ApplyOpsRequest */
     readonly ApplyOpsRequest: {
       /** Ops */
@@ -13505,6 +13578,51 @@ export interface components {
     readonly Body_upload_material_api_reading_materials_post: {
       /** File */
       readonly file: string;
+    };
+    /** BookEdit */
+    readonly BookEdit: {
+      /**
+       * Action
+       * @enum {string}
+       */
+      readonly action:
+        | "add_chapter"
+        | "rename_chapter"
+        | "move_chapter"
+        | "delete_chapter"
+        | "add_page"
+        | "rename_page"
+        | "move_page"
+        | "delete_page"
+        | "insert_block"
+        | "extend_page";
+      /**
+       * Body
+       * @default
+       */
+      readonly body: string;
+      /**
+       * Chapter Id
+       * @default
+       */
+      readonly chapter_id: string;
+      /** Learning Objectives */
+      readonly learning_objectives?: readonly string[];
+      /**
+       * Page Id
+       * @default
+       */
+      readonly page_id: string;
+      /**
+       * Position
+       * @default 0
+       */
+      readonly position: number;
+      /**
+       * Title
+       * @default
+       */
+      readonly title: string;
     };
     /** BookmarkInfo */
     readonly BookmarkInfo: {
@@ -14426,6 +14544,8 @@ export interface components {
        * @default false
        */
       readonly include_historical: boolean;
+      /** Session Ids */
+      readonly session_ids?: readonly string[] | null;
       /**
        * Source Workspace Id
        * @default
@@ -19657,6 +19777,8 @@ export type SchemaAnswerImageItem = components["schemas"]["AnswerImageItem"];
 export type SchemaAnswerImageUpload =
   components["schemas"]["AnswerImageUpload"];
 export type SchemaAnswerRequest = components["schemas"]["AnswerRequest"];
+export type SchemaApplyBookEditRequest =
+  components["schemas"]["ApplyBookEditRequest"];
 export type SchemaApplyOpsRequest = components["schemas"]["ApplyOpsRequest"];
 export type SchemaApprovalRequest = components["schemas"]["ApprovalRequest"];
 export type SchemaAssetAddRequest = components["schemas"]["AssetAddRequest"];
@@ -19693,6 +19815,7 @@ export type SchemaBodyUploadFilesApiKnowledgeBasesKbNameUploadPost =
   components["schemas"]["Body_upload_files_api_knowledge_bases__kb_name__upload_post"];
 export type SchemaBodyUploadMaterialApiReadingMaterialsPost =
   components["schemas"]["Body_upload_material_api_reading_materials_post"];
+export type SchemaBookEdit = components["schemas"]["BookEdit"];
 export type SchemaBookmarkInfo = components["schemas"]["BookmarkInfo"];
 export type SchemaBookmarkList = components["schemas"]["BookmarkList"];
 export type SchemaBookmarkPayload = components["schemas"]["BookmarkPayload"];
@@ -21871,6 +21994,170 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["MoveChapterRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly get_book_edits_api_books__book_id__edits_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly page_id?: string | null;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly apply_book_edit_api_books__book_id__edits__edit_id__apply_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+        readonly edit_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ApplyBookEditRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly undo_book_edit_api_books__book_id__edits__edit_id__undo_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+        readonly edit_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ApplyBookEditRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly preview_book_edit_api_books__book_id__edits_preview_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly book_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["BookEdit"];
       };
     };
     readonly responses: {
@@ -25784,7 +26071,11 @@ export interface operations {
   };
   readonly get_learning_library_api_dashboard_learning_library__kind__get: {
     readonly parameters: {
-      readonly query?: never;
+      readonly query?: {
+        readonly limit?: number;
+        readonly offset?: number;
+        readonly search?: string;
+      };
       readonly header?: {
         readonly Authorization?: string | null;
       };
@@ -25855,7 +26146,11 @@ export interface operations {
   };
   readonly get_source_library_api_dashboard_source_library__kind__get: {
     readonly parameters: {
-      readonly query?: never;
+      readonly query?: {
+        readonly limit?: number;
+        readonly offset?: number;
+        readonly search?: string;
+      };
       readonly header?: {
         readonly Authorization?: string | null;
       };
