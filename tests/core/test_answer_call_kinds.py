@@ -28,7 +28,7 @@ def _client_answer_call_kinds() -> set[str]:
     source = _CLIENT_STREAM_TS.read_text(encoding="utf-8")
     start = source.index("export function shouldAppendEventContent")
     end = source.index("\n}", start)
-    return set(re.findall(r'meta\.call_kind === "([a-z_]+)"', source[start:end]))
+    return set(re.findall(r'meta\.call_kind\s*===\s*[\'"]([a-z_]+)[\'"]', source[start:end]))
 
 
 def test_client_and_backend_agree_on_which_rounds_carry_the_answer() -> None:
