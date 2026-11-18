@@ -281,9 +281,9 @@ export function visibleGroups(
 export { GROUPS as DASHBOARD_GROUPS };
 
 export default function SpaceDashboard() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const zh = i18n.language?.toLowerCase().startsWith("zh");
-  const tr = useCallback((l: Lang) => (zh ? l.zh : l.en), [zh]);
+  const tr = useCallback((l: Lang) => (zh ? l.zh : t(l.en)), [zh, t]);
 
   const [counts, setCounts] = useState<Partial<Record<DashKey, number>>>({});
 
