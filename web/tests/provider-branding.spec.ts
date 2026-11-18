@@ -23,7 +23,7 @@ describe('provider branding', () => {
     // retain the generic fallback.
     const generic = new Set([
       'none', 'custom', 'custom_anthropic', 'custom_openai_sdk', 'custom_chat', 'y_api',
-      'google_browser_scraper',
+      'google_browser_scraper', 'xai', // No bundled verified xAI brand asset yet.
     ])
     expect(ids.size).toBeGreaterThan(50)
     for (const id of ids) {
