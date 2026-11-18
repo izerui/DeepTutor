@@ -230,12 +230,9 @@ async def get_learning_library(kind: str, limit: int = 50, offset: int = 0, sear
         # B3-P16: an own public book in another workspace is listed once.
         rows = dedupe_account_book_rows(rows)
     if kind == "practice":
-        # Each workspace returned its first ``offset + limit`` newest entries;
-        # merge them in the store's own order and cut the requested page.
-        rows.sort(
-            key=lambda row: (float(row.get("created_at") or 0), int(row.get("id") or 0)),
-            reverse=True,
-        )
+        # The account-wide list is every workspace's bank in workspace order.
+        # Each workspace returned its first ``offset + limit`` rows, which is
+        # all this page can need from it, so the concatenation is cut here.
         rows = rows[offset : offset + limit]
     return {
         "items": rows,
