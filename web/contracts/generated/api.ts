@@ -18736,6 +18736,7 @@ export interface components {
             | "pl"
             | "uk"
             | "ms"
+            | "hi"
           )
         | null;
       /** Sidebar Description */
