@@ -129,7 +129,7 @@ export function resolveResponseLanguage(
   value: string | null | undefined,
   legacyLanguage: string | null | undefined = "en",
 ): ResponseLanguage {
-  const code = value?.trim().toLowerCase();
+  const code = value?.trim().toLowerCase().replaceAll("_", "-");
   if ((SUPPORTED_RESPONSE_LANGUAGE_CODES as readonly string[]).includes(code ?? "")) {
     return code as ResponseLanguage;
   }
