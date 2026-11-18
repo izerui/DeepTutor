@@ -16,6 +16,25 @@ from deeptutor.core.context import Attachment, UnifiedContext
 from deeptutor.runtime.stream_bus import StreamBus
 
 # ---------------------------------------------------------------------------
+# Loopback fixtures bypass the developer's proxy
+# ---------------------------------------------------------------------------
+#
+# Several tests serve a fake provider on 127.0.0.1 and talk to it through a
+# real SDK client. httpx/requests honour proxies from the environment and, on
+# macOS, from the system configuration (``urllib.request.getproxies``), so a
+# desktop proxy such as 127.0.0.1:7890 used to swallow those requests and
+# answer 502 / ConnectError. A non-empty ``no_proxy`` makes the environment the
+# proxy source and exempts loopback; real proxy behaviour stays testable
+# through explicit monkeypatching.
+for _key in ("NO_PROXY", "no_proxy"):
+    _hosts = [item for item in os.environ.get(_key, "").split(",") if item.strip()]
+    for _host in ("localhost", "127.0.0.1", "::1"):
+        if _host not in _hosts:
+            _hosts.append(_host)
+    os.environ[_key] = ",".join(_hosts)
+
+
+# ---------------------------------------------------------------------------
 # Multi-user legacy migration guard
 # ---------------------------------------------------------------------------
 
