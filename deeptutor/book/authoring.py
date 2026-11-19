@@ -67,6 +67,32 @@ def _record_path(storage, book_id, edit_id):
     return storage.book_root(book_id) / "edits" / (_safe_page_id(edit_id) + ".json")
 
 
+_EDIT_HISTORY_LIMIT = 1000
+#: Proposals never applied are dropped oldest first once the history reaches this size.
+_PROPOSAL_KEEP = 900
+
+
+def _prune_proposals(storage, book_id, revision):
+    """Drop proposals that can no longer apply, then the oldest unapplied ones near the limit.
+
+    A proposal records the revision it was made against; once the book moved on it
+    can never apply, so it is only clutter. Applied and undone edits stay as history.
+    """
+    paths = list((storage.book_root(book_id) / "edits").glob("*.json"))
+    proposed = []
+    for path in paths:
+        record = _read_json(path)
+        if not record or record.get("status") != "proposed":
+            continue
+        if record.get("expected_revision") != revision:
+            path.unlink(missing_ok=True)
+        else:
+            proposed.append((record.get("created_at") or 0, path))
+    excess = len(list((storage.book_root(book_id) / "edits").glob("*.json"))) - _PROPOSAL_KEEP
+    for _created, path in sorted(proposed)[: max(0, excess)]:
+        path.unlink(missing_ok=True)
+
+
 def _write_files(storage, book_id, values):
     for name, value in values.items():
         path = _path(storage, book_id, name)
@@ -221,7 +247,8 @@ def preview_edit(storage, book_id, edit: BookEdit, *, source_session_id="", sour
     changed = [name for name in before.keys() | after.keys() if before.get(name) != after.get(name)]
     if not changed:
         raise ValueError("The proposed edit does not change the book")
-    if len(list((storage.book_root(book_id) / "edits").glob("*.json"))) >= 1000:
+    _prune_proposals(storage, book_id, book.revision)
+    if len(list((storage.book_root(book_id) / "edits").glob("*.json"))) >= _EDIT_HISTORY_LIMIT:
         raise ValueError("Book edit history limit reached; export an archive before further edits")
     record = dict(
         id="edit_" + uuid4().hex,

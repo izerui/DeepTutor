@@ -202,3 +202,25 @@ async def test_reconfirming_spine_keeps_independent_sections_and_compiled_conten
     assert saved.blocks[0].payload["body"] == "Keep this explanation"
     assert storage.load_page("bk", "pg_0").blocks[0].payload["body"] == "compiled prose 0"
     assert len(storage.load_spine("bk").chapter_by_id("ch_0").page_ids) == 2
+
+
+def test_stale_and_surplus_proposals_never_block_editing(tmp_path, monkeypatch):
+    """Unapplied proposals are pruned: stale ones at once, the oldest near the limit."""
+    from deeptutor.book import authoring
+
+    storage = _storage(tmp_path)
+    _seed(storage)
+    stale = preview_edit(storage, "bk", BookEdit(action="rename_page", page_id="pg_0", title="Old"))
+    applied = preview_edit(storage, "bk", BookEdit(action="rename_page", page_id="pg_1", title="Kept"))
+    apply_edit(storage, "bk", applied["id"], 1)
+    edits = storage.book_root("bk") / "edits"
+    preview_edit(storage, "bk", BookEdit(action="rename_page", page_id="pg_0", title="New"))
+    ids = {p.stem for p in edits.glob("*.json")}
+    assert stale["id"] not in ids and applied["id"] in ids  # stale gone, history kept
+
+    monkeypatch.setattr(authoring, "_EDIT_HISTORY_LIMIT", 4)
+    monkeypatch.setattr(authoring, "_PROPOSAL_KEEP", 3)
+    for n in range(6):
+        preview_edit(storage, "bk", BookEdit(action="rename_page", page_id="pg_0", title=f"T{n}"))
+    assert len(list(edits.glob("*.json"))) <= 4
+    assert applied["id"] in {p.stem for p in edits.glob("*.json")}
