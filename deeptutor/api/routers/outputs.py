@@ -17,6 +17,30 @@ from deeptutor.services.path_service import PathService
 
 router = APIRouter()
 
+# Video lessons are pages of model-written script. Served under this CSP they
+# run in an opaque origin even when opened directly (no cookies, no same-origin
+# access to the API), may only run their own inline script, and cannot reach the
+# network except for the page's web fonts. Spec 2026-11-20 §5: script-only.
+SANDBOXED_LESSON_CSP = "; ".join(
+    (
+        "sandbox allow-scripts",
+        "default-src 'none'",
+        "script-src 'unsafe-inline' blob:",
+        "style-src 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com data:",
+        "img-src data: blob:",
+        "media-src data: blob:",
+        "connect-src data: blob:",
+        "worker-src blob:",
+        "base-uri 'none'",
+        "form-action 'none'",
+    )
+)
+
+
+def _is_video_lesson_page(path: Path) -> bool:
+    return path.suffix.lower() == ".html" and "video_lesson" in path.parts
+
 
 def _request_path_service() -> PathService:
     """Resolve the workspace installed by ``require_auth`` without fallback.
@@ -85,4 +109,13 @@ async def read_output(
         path = _resolve_partner_output(output_path)
         if path is None:
             raise
+    if _is_video_lesson_page(path):
+        return FileResponse(
+            path,
+            headers={
+                "Content-Security-Policy": SANDBOXED_LESSON_CSP,
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private",
+            },
+        )
     return FileResponse(path)

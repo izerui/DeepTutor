@@ -35,6 +35,10 @@ _CAPABILITY_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "en": "Read a document with the assistant, cited page by page.",
         "zh": "与助手一起阅读文档，逐页标明出处。",
     },
+    "video_lesson": {
+        "en": "Generate a narrated 1-2 minute explainer animation that plays in the browser.",
+        "zh": "生成一段 1～2 分钟、带字幕和旁白的讲解动画，在浏览器里直接播放。",
+    },
 }
 
 _TOOL_DESCRIPTIONS: dict[str, dict[str, str]] = {

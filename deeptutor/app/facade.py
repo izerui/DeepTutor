@@ -57,6 +57,40 @@ class CapabilityAvailability:
     install_hint: str = ""
 
 
+def _video_lesson_availability(name: str) -> CapabilityAvailability:
+    """Node.js + npm on the server, and (for learners) the admin switch on.
+
+    Checked again in the capability itself; this only lets the UI explain.
+    """
+    from deeptutor.agents.video_lesson.runtime import (
+        MIN_NODE_MAJOR,
+        UNAVAILABLE_MESSAGE,
+        tools_present,
+    )
+
+    if not tools_present():
+        return CapabilityAvailability(
+            name=name,
+            available=False,
+            install_hint=UNAVAILABLE_MESSAGE.format(major=MIN_NODE_MAJOR),
+        )
+    try:
+        from deeptutor.agents.video_lesson.capability import (
+            DISABLED_FOR_LEARNERS_MESSAGE,
+            VideoLessonDisabled,
+            ensure_allowed,
+        )
+
+        ensure_allowed()
+    except VideoLessonDisabled:
+        return CapabilityAvailability(
+            name=name, available=False, install_hint=DISABLED_FOR_LEARNERS_MESSAGE
+        )
+    except Exception:
+        pass
+    return CapabilityAvailability(name=name, available=True)
+
+
 class DeepTutorApp:
     """Facade around runtime, session, notebook, and capability contracts."""
 
@@ -126,6 +160,8 @@ class DeepTutorApp:
                     "or `pip install -r requirements/math-animator.txt`."
                 ),
             )
+        if resolved == "video_lesson":
+            return _video_lesson_availability(resolved)
         return CapabilityAvailability(name=resolved, available=True)
 
     async def start_turn(

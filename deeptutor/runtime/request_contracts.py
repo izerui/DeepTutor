@@ -44,6 +44,10 @@ class CourseStudyRequestConfig(EmptyConfig):
     pass
 
 
+class VideoLessonRequestConfig(EmptyConfig):
+    """No per-request knobs: length and frame size are fixed (spec 2026-11-20 §8)."""
+
+
 class DeepQuestionRequestConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -159,6 +163,7 @@ CAPABILITY_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "mastery_path": MasteryPathRequestConfig,
     "immersive_reading": ImmersiveReadingRequestConfig,
     "course_study": CourseStudyRequestConfig,
+    "video_lesson": VideoLessonRequestConfig,
 }
 
 

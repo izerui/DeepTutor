@@ -44,6 +44,7 @@ BUILTIN_CAPABILITY_CLASSES: dict[str, str] = {
     "immersive_reading": "deeptutor.capabilities.reading.mode:ImmersiveReadingCapability",
     "course_study": "deeptutor.capabilities.course_study.mode:CourseStudyCapability",
     "audio_overview": ("deeptutor.capabilities.audio_overview.capability:AudioOverviewCapability"),
+    "video_lesson": "deeptutor.agents.video_lesson.capability:VideoLessonCapability",
 }
 
 
@@ -252,6 +253,17 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "expert_voice": None,
                 "max_context_chunks": 6,
             },
+        ),
+    ),
+    "video_lesson": BuiltinCapabilitySpec(
+        BUILTIN_CAPABILITY_CLASSES["video_lesson"],
+        _manifest(
+            "video_lesson",
+            "Generate a narrated, captioned 1-2 minute explainer animation (Remotion) "
+            "that plays in the browser.",
+            stages=["code_generation", "render_check", "render_output"],
+            tools_used=[],
+            cli_aliases=["lesson"],
         ),
     ),
 }

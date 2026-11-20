@@ -49,6 +49,7 @@ _AGENTS_YAML_CAPABILITY_SECTIONS: dict[str, tuple[str, ...]] = {
     "co_writer": ("capabilities", "co_writer"),
     "vision_solver": ("plugins", "vision_solver"),
     "math_animator": ("plugins", "math_animator"),
+    "video_lesson": ("plugins", "video_lesson"),
 }
 
 _SIMPLE_LLM_DEFAULTS: dict[str, dict[str, Any]] = {
@@ -63,6 +64,9 @@ _SIMPLE_LLM_DEFAULTS: dict[str, dict[str, Any]] = {
     "co_writer": {"temperature": 0.6, "max_tokens": 4096},
     "vision_solver": {"temperature": 0.3, "max_tokens": 12000},
     "math_animator": {"temperature": 0.2, "max_tokens": 16834},
+    # Spec 2026-11-20 §2: lower than upstream (48000) because every attempt
+    # counts against a learner's AI daily usage.
+    "video_lesson": {"temperature": 0.5, "max_tokens": 24000},
 }
 
 # main.yaml subtrees that capabilities read at runtime (besides LLM params).
@@ -98,7 +102,15 @@ _MAIN_YAML_RUNTIME_DEFAULTS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    # Admin policy for video lessons (spec 2026-11-20 §2), enforced by the
+    # capability on the server. Upstream wrote up to 4 attempts.
+    "video_lesson": {
+        "learners_allowed": True,
+        "max_attempts": 3,
+    },
 }
+
+VIDEO_LESSON_MAX_ATTEMPTS_LIMIT = 6
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -282,6 +294,19 @@ def _build_main_runtime_block(main_cfg: dict[str, Any], capability: str) -> dict
                 ),
             },
         }
+    if capability == "video_lesson":
+        cfg = _get_at(main_cfg, ("capabilities", "video_lesson"))
+        return {
+            "learners_allowed": _coerce_bool(
+                cfg.get("learners_allowed"), defaults["learners_allowed"]
+            ),
+            "max_attempts": _coerce_int(
+                cfg.get("max_attempts"),
+                defaults["max_attempts"],
+                lo=1,
+                hi=VIDEO_LESSON_MAX_ATTEMPTS_LIMIT,
+            ),
+        }
     if capability == "question":
         exploring_cfg = _get_at(main_cfg, ("capabilities", "question", "exploring"))
         d = defaults["exploring"]
@@ -406,6 +431,21 @@ def _apply_main_runtime(
                 r.get("paper_search_years_limit"), d["paper_search_years_limit"], lo=1, hi=50
             ),
         }
+    if capability == "video_lesson":
+        section: dict[str, Any] = {}
+        if "learners_allowed" in block:
+            section["learners_allowed"] = _coerce_bool(
+                block.get("learners_allowed"), defaults["learners_allowed"]
+            )
+        if "max_attempts" in block:
+            section["max_attempts"] = _coerce_int(
+                block.get("max_attempts"),
+                defaults["max_attempts"],
+                lo=1,
+                hi=VIDEO_LESSON_MAX_ATTEMPTS_LIMIT,
+            )
+        if section:
+            main_payload.setdefault("capabilities", {})["video_lesson"] = section
     if capability == "question" and isinstance(block.get("exploring"), dict):
         d = defaults["exploring"]
         e = block["exploring"]
@@ -457,6 +497,21 @@ def get_visualize_params() -> dict[str, Any]:
     return _build_simple_llm_block(_read_agents_yaml(), "visualize")
 
 
+def get_video_lesson_params() -> dict[str, Any]:
+    """``temperature``/``max_tokens`` (agents.yaml) + admin policy (main.yaml).
+
+    The single source the video lesson capability reads, so the admin
+    settings actually bind: ``learners_allowed``, the writer's ``max_tokens``
+    and ``max_attempts``.
+    """
+    agents_cfg = _read_agents_yaml()
+    main_cfg = ConfigManager().load_config()
+    return {
+        **_build_simple_llm_block(agents_cfg, "video_lesson"),
+        **_build_main_runtime_block(main_cfg, "video_lesson"),
+    }
+
+
 def get_solve_params() -> dict[str, Any]:
     """Runtime solve params, read through the same coerce path as the UI.
 
@@ -476,6 +531,7 @@ def get_solve_params() -> dict[str, Any]:
 __all__ = [
     "capabilities_settings_dict",
     "get_solve_params",
+    "get_video_lesson_params",
     "get_visualize_params",
     "save_capabilities_settings",
 ]
