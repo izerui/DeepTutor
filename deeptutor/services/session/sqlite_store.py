@@ -2345,9 +2345,55 @@ class SQLiteSessionStore:
             messages,
         )
 
+    def _detach_threads_for_messages_sync(
+        self,
+        conn: sqlite3.Connection,
+        session_id: str,
+        message_ids: list[int],
+    ) -> list[str]:
+        """Detach Little Tutor threads opened from messages this delete removed.
+
+        The thread is a conversation of its own and survives; only its anchor
+        goes, so it no longer hangs under a message that does not exist. The
+        ``tutor_source_deleted`` flag lets the thread say why it has no source.
+        """
+        deleted = {str(message_id) for message_id in message_ids}
+        if not deleted:
+            return []
+        rows = conn.execute(
+            """
+            SELECT id, preferences_json FROM sessions
+            WHERE id != ? AND json_extract(preferences_json, '$.parent_session_id') = ?
+            """,
+            (session_id, session_id),
+        ).fetchall()
+        detached: list[str] = []
+        for row in rows:
+            preferences = _json_loads(row["preferences_json"], {})
+            if str(preferences.get("tutor_source_message_id") or "") not in deleted:
+                continue
+            preferences["tutor_source_message_id"] = ""
+            preferences["tutor_source_deleted"] = True
+            conn.execute(
+                "UPDATE sessions SET preferences_json = ? WHERE id = ?",
+                (_json_dumps(preferences), row["id"]),
+            )
+            detached.append(row["id"])
+        return detached
+
     def _delete_message_sync(self, message_id: int | str) -> bool:
         with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT session_id FROM messages WHERE id = ?", (int(message_id),)
+            ).fetchone()
             cur = conn.execute("DELETE FROM messages WHERE id = ?", (int(message_id),))
+            if cur.rowcount > 0 and row is not None:
+                # Regenerate replaces an answer through here; a tutor thread
+                # opened from the old answer keeps going, detached.
+                self._detach_threads_for_messages_sync(
+                    conn, str(row["session_id"]), [int(message_id)]
+                )
             conn.commit()
         return cur.rowcount > 0
 
@@ -2512,6 +2558,9 @@ class SQLiteSessionStore:
                 f"DELETE FROM messages WHERE id IN ({','.join('?' * len(ids_to_delete))})",  # nosec B608
                 tuple(ids_to_delete),
             )
+            detached_thread_ids = self._detach_threads_for_messages_sync(
+                conn, session_id, ids_to_delete
+            )
 
             session_row = conn.execute(
                 "SELECT summary_up_to_msg_id FROM sessions WHERE id = ?",
@@ -2536,6 +2585,8 @@ class SQLiteSessionStore:
             "attachment_ids": attachment_ids,
             "turn_id": turn_id,
             "was_active": was_active,
+            "deleted_message_ids": ids_to_delete,
+            "detached_thread_ids": detached_thread_ids,
         }
 
     async def delete_turn_by_message(self, session_id: str, message_id: int) -> dict[str, Any]:
@@ -3196,6 +3247,9 @@ class SQLiteSessionStore:
         self, session_id: str, preferences: dict[str, Any]
     ) -> bool:
         with self._connect() as conn:
+            # Read-merge-write as one write transaction so a concurrent merge
+            # (e.g. a tutor thread being detached) is never overwritten.
+            conn.execute("BEGIN IMMEDIATE")
             current = conn.execute(
                 "SELECT preferences_json FROM sessions WHERE id = ?",
                 (session_id,),

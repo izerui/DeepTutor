@@ -1190,6 +1190,11 @@ def _extract_followup_question_context(
     }
 
 
+SELECTION_TUTOR_SCOPE_SELECTION = "selection"
+SELECTION_TUTOR_SCOPE_MESSAGE = "message"
+SELECTION_TUTOR_SOURCE_DETACHED = "source_detached"
+
+
 def _extract_selection_tutor_context(
     config: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -1200,13 +1205,28 @@ def _extract_selection_tutor_context(
     if not isinstance(raw, dict):
         return None
 
+    scope = SELECTION_TUTOR_SCOPE_MESSAGE if (
+        str(raw.get("scope", "") or "").strip() == SELECTION_TUTOR_SCOPE_MESSAGE
+    ) else SELECTION_TUTOR_SCOPE_SELECTION
     selected_text = _clip_text(str(raw.get("selected_text", "") or "").strip())
-    if not selected_text:
+    # Set only by the server (request preparation strips it from the page's
+    # payload): the thread outlived its source message, so there is nothing
+    # left to read or ground against.
+    source_detached = raw.get(SELECTION_TUTOR_SOURCE_DETACHED) is True
+    if scope == SELECTION_TUTOR_SCOPE_MESSAGE:
+        # A whole-reply question has no passage: the server reads the message
+        # itself by id, so nothing the page sends stands in for the text.
+        selected_text = ""
+    elif not selected_text and not source_detached:
         return None
     context: dict[str, Any] = {
+        "scope": scope,
         "selected_text": selected_text,
         "parent_session_id": str(raw.get("parent_session_id", "") or "").strip(),
     }
+    if source_detached:
+        context[SELECTION_TUTOR_SOURCE_DETACHED] = True
+        return context
     raw_source_message_id = raw.get("source_message_id")
     if isinstance(raw_source_message_id, int) and not isinstance(raw_source_message_id, bool):
         context["source_message_id"] = raw_source_message_id
@@ -1214,7 +1234,7 @@ def _extract_selection_tutor_context(
         context["source_message_id"] = int(str(raw_source_message_id).strip())
 
     source_message_text = str(raw.get("source_message_text", "") or "").strip()
-    if source_message_text:
+    if source_message_text and scope == SELECTION_TUTOR_SCOPE_SELECTION:
         context["source_message_text"] = source_message_text
     source_message_role = str(raw.get("source_message_role", "") or "").strip()
     if source_message_role in {"user", "assistant", "system"}:
@@ -1330,12 +1350,19 @@ async def _resolve_selection_tutor_context(
 ) -> dict[str, Any]:
     """Resolve the selected passage's containing message from its parent chat."""
     resolved = dict(context)
+    if resolved.get(SELECTION_TUTOR_SOURCE_DETACHED) is True:
+        resolved.pop("source_message_id", None)
+        resolved["source_message_text"] = ""
+        return resolved
     parent_session_id = str(resolved.get("parent_session_id") or "").strip()
     source_message_id = resolved.get("source_message_id")
 
     authoritative_source_required = bool(
         parent_session_id and isinstance(source_message_id, int) and source_message_id > 0
     )
+    whole_message = resolved.get("scope") == SELECTION_TUTOR_SCOPE_MESSAGE
+    if whole_message and not authoritative_source_required:
+        raise ValueError("Asking about a whole reply requires its conversation and message id")
     source_message = None
     if authoritative_source_required:
         try:
@@ -1363,6 +1390,12 @@ async def _resolve_selection_tutor_context(
 
     source_text = str(resolved.get("source_message_text") or "").strip()
     selected_text = str(resolved.get("selected_text") or "")
+    if whole_message:
+        if not source_text:
+            raise ValueError("The source message has no text to ask about")
+        resolved["selected_text"] = ""
+        resolved["source_message_text"] = _selection_source_excerpt(source_text, "")
+        return resolved
     if not _selection_is_grounded(source_text, selected_text):
         qualifier = "authoritative " if authoritative_source_required else ""
         raise ValueError(f"Selected text was not found in the {qualifier}source message")
@@ -1533,11 +1566,61 @@ def _format_followup_question_context(context: dict[str, Any], language: str = "
     return "\n".join(lines).strip()
 
 
+def _format_whole_message_tutor_context(
+    source_message_text: str,
+    source_message_role: str,
+    parent_session_id: str,
+    language: str,
+) -> str:
+    role_label = source_message_role or "unknown"
+    zh = str(language or "en").lower().startswith("zh")
+    if not source_message_text:
+        source_message_text = (
+            "（原消息已被删除；请依据本对话之前的内容继续回答。）"
+            if zh
+            else "(The message has since been deleted; continue from this conversation so far.)"
+        )
+    if zh:
+        lines = [
+            "你是侧栏中的“小老师”，学习者想就聊天里的一整条消息继续追问。",
+            "下面这条原消息就是学习者问题里“这个/它/上面”所指的内容；请围绕它解释、补充和纠错。",
+            "不要读取、引用或写入全局记忆；不要把用户问题里的“这个/它/上述内容”解释成记忆系统。",
+            "回答要简明、循序渐进；原消息没有提供的信息不要臆造。",
+            "",
+            "[原消息]",
+            f"消息角色：{role_label}",
+            source_message_text,
+            "",
+            f"来源会话：{parent_session_id}",
+        ]
+        return "\n".join(lines).strip()
+    lines = [
+        "You are the Little Tutor in a sidebar. The learner is asking about one whole message from their chat.",
+        "The message below is what words such as 'this', 'it', or 'the above' refer to; explain, extend, and correct around it.",
+        "Do not read, cite, or write global memory. Never reinterpret those words as referring to the memory system.",
+        "Answer clearly and step by step; do not invent information absent from the message.",
+        "",
+        "[Message]",
+        f"Message role: {role_label}",
+        source_message_text,
+        "",
+        f"Source session: {parent_session_id}",
+    ]
+    return "\n".join(lines).strip()
+
+
 def _format_selection_tutor_context(context: dict[str, Any], language: str = "en") -> str:
     selected_text = context.get("selected_text", "").strip()
     parent_session_id = context.get("parent_session_id", "").strip() or "(none)"
     source_message_text = str(context.get("source_message_text") or "").strip()
     source_message_role = str(context.get("source_message_role") or "").strip()
+    if context.get("scope") == SELECTION_TUTOR_SCOPE_MESSAGE:
+        return _format_whole_message_tutor_context(
+            source_message_text,
+            source_message_role,
+            parent_session_id,
+            language,
+        )
     if str(language or "en").lower().startswith("zh"):
         lines = [
             "你是侧栏中的“小老师”，负责回答学习者对聊天内容的局部追问。",

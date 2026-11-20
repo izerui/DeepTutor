@@ -9307,6 +9307,29 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/sessions/{session_id}/threads": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * List Session Threads
+     * @description Little Tutor threads opened from this conversation, newest first.
+     *
+     *     The store is the signed-in user's own, so only their threads under their
+     *     own conversation can ever be listed.
+     */
+    readonly get: operations["list_session_threads_api_sessions__session_id__threads_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/sessions/capabilities": {
     readonly parameters: {
       readonly query?: never;
@@ -18008,6 +18031,8 @@ export interface components {
       /** Session Kind */
       readonly session_kind?:
         ("chat" | "selection_tutor" | "immersive_reading") | null;
+      /** Tutor Source Message Id */
+      readonly tutor_source_message_id?: number | null;
       /** Workspace Id */
       readonly workspace_id?: string | null;
     };
@@ -41534,6 +41559,41 @@ export interface operations {
     };
   };
   readonly restore_session_api_sessions__session_id__restore_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly session_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly list_session_threads_api_sessions__session_id__threads_get: {
     readonly parameters: {
       readonly query?: never;
       readonly header?: {

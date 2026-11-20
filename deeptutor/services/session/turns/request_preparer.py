@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
 from typing import TYPE_CHECKING, Any
 import uuid
@@ -26,6 +27,7 @@ from deeptutor.services.session.workspace_preferences import (
 from deeptutor.services.workspace.activity import workspace_writer
 
 from .._turn_runtime_shared import (
+    SELECTION_TUTOR_SOURCE_DETACHED,
     _apply_course_defaults,
     _coerce_bool,
     _course_conventions_block,
@@ -47,6 +49,33 @@ from .._turn_runtime_shared import (
 if TYPE_CHECKING:
     from deeptutor.runtime.coordination import RuntimeCoordinator
     from deeptutor.services.session.protocol import SessionStoreProtocol
+
+logger = logging.getLogger(__name__)
+
+TUTOR_SELECTED_TEXT_LIMIT = 2_000
+
+
+def _tutor_source_preferences(context: dict[str, Any]) -> dict[str, Any]:
+    """Where a Little Tutor thread was opened from, recorded on the thread.
+
+    ``source_message_id`` has already been resolved against the parent
+    conversation by ``_resolve_selection_tutor_context``, so it is a message
+    of the parent and not a value taken on trust from the page.
+    """
+    source_message_id = context.get("source_message_id")
+    scope = context.get("scope") or "selection"
+    return {
+        "tutor_scope": scope,
+        "tutor_selected_text": (
+            "" if scope == "message" else str(context.get("selected_text") or "")
+        )[:TUTOR_SELECTED_TEXT_LIMIT],
+        "tutor_source_message_id": (
+            source_message_id
+            if isinstance(source_message_id, int) and not isinstance(source_message_id, bool)
+            else ""
+        ),
+        "tutor_source_deleted": False,
+    }
 
 
 # Request snapshots use the browser's display keys. Only these saved turn
@@ -635,18 +664,52 @@ class TurnRequestPreparer:
 
         raw_selection_context = payload.get("selection_tutor_context")
         if isinstance(raw_selection_context, dict):
-            selection_tutor_context = _extract_selection_tutor_context(
-                {"selection_tutor_context": dict(raw_selection_context)}
+            raw_selection_context = dict(raw_selection_context)
+            # Only the server decides that a thread's source is gone.
+            raw_selection_context.pop(SELECTION_TUTOR_SOURCE_DETACHED, None)
+            stored = session.get("preferences") or {}
+            # A thread whose source was deleted or detached keeps that state:
+            # later turns neither re-anchor it nor fail on the missing message.
+            source_was_detached = (
+                stored.get("session_kind") == "selection_tutor"
+                and "tutor_source_message_id" in stored
+                and stored.get("tutor_source_message_id") in ("", None)
             )
-            if selection_tutor_context is None:
+            selection_tutor_context = _extract_selection_tutor_context(
+                {"selection_tutor_context": raw_selection_context}
+            )
+            if selection_tutor_context is None and not source_was_detached:
                 raise RuntimeError("Selection tutor context requires selected text")
-            try:
+            resolve_error: ValueError | None = None
+            if selection_tutor_context is not None and not (
+                source_was_detached and stored.get("tutor_source_deleted")
+            ):
+                try:
+                    selection_tutor_context = await _resolve_selection_tutor_context(
+                        self.store,
+                        selection_tutor_context,
+                    )
+                except ValueError as exc:
+                    resolve_error = exc
+            else:
+                resolve_error = ValueError("source detached")
+            if resolve_error is not None:
+                if not source_was_detached:
+                    raise RuntimeError(str(resolve_error)) from resolve_error
                 selection_tutor_context = await _resolve_selection_tutor_context(
                     self.store,
-                    selection_tutor_context,
+                    _extract_selection_tutor_context(
+                        {
+                            "selection_tutor_context": {
+                                "scope": stored.get("tutor_scope") or "selection",
+                                "selected_text": stored.get("tutor_selected_text") or "",
+                                "parent_session_id": stored.get("parent_session_id") or "",
+                                SELECTION_TUTOR_SOURCE_DETACHED: True,
+                            }
+                        }
+                    )
+                    or {},
                 )
-            except ValueError as exc:
-                raise RuntimeError(str(exc)) from exc
             payload["selection_tutor_context"] = selection_tutor_context
             parent_session_id = str(selection_tutor_context.get("parent_session_id") or "").strip()
             if parent_session_id == session["id"]:
@@ -664,25 +727,18 @@ class TurnRequestPreparer:
                     )
                 except (LookupError, ValueError) as exc:
                     raise RuntimeError(str(exc)) from exc
-                parent_preferences = parent_session.get("preferences") or {}
-                if "workspace_id" in parent_preferences:
-                    inherited_id = str(parent_preferences.get("workspace_id") or "")
-                    preference_update["workspace_id"] = inherited_id or None
-                    workspace_service = get_content_workspace_service()
-                    inherited_binding = (
-                        workspace_service.validate_chat_binding(inherited_id, existing=True)
-                        if inherited_id
-                        else workspace_service.session_binding(parent_session_id)
-                    )
-                    payload["_content_workspace_id"] = inherited_binding.workspace_id
-                    payload["_workspace_instructions"] = workspace_service.workspace_instructions(
-                        inherited_binding.workspace_id
-                    )
+                self._inherit_parent_placement(
+                    parent_session, parent_session_id, preference_update, payload
+                )
                 preference_update.update(
                     {
                         "parent_session_id": parent_session_id,
                         "session_kind": "selection_tutor",
-                        "course_id": str(parent_preferences.get("course_id") or ""),
+                        **(
+                            {}
+                            if source_was_detached
+                            else _tutor_source_preferences(selection_tutor_context)
+                        ),
                     }
                 )
         if llm_selection:
@@ -931,6 +987,30 @@ class TurnRequestPreparer:
                     await self.coordinator.release_turn(lease)
             raise
         return session, turn
+
+    def _inherit_parent_placement(
+        self,
+        parent_session: dict[str, Any],
+        parent_session_id: str,
+        preference_update: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> None:
+        """A child conversation lives where its parent lives (workspace, course)."""
+        parent_preferences = parent_session.get("preferences") or {}
+        if "workspace_id" in parent_preferences:
+            inherited_id = str(parent_preferences.get("workspace_id") or "")
+            preference_update["workspace_id"] = inherited_id or None
+            workspace_service = get_content_workspace_service()
+            inherited_binding = (
+                workspace_service.validate_chat_binding(inherited_id, existing=True)
+                if inherited_id
+                else workspace_service.session_binding(parent_session_id)
+            )
+            payload["_content_workspace_id"] = inherited_binding.workspace_id
+            payload["_workspace_instructions"] = workspace_service.workspace_instructions(
+                inherited_binding.workspace_id
+            )
+        preference_update["course_id"] = str(parent_preferences.get("course_id") or "")
 
     async def regenerate_last_turn(
         self,

@@ -281,6 +281,7 @@ class TestSelectionTutorContext:
         }
         result = _extract_selection_tutor_context(config)
         assert result == {
+            "scope": "selection",
             "selected_text": "fork() returns in two processes.",
             "parent_session_id": "main-1",
         }

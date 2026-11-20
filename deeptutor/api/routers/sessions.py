@@ -99,6 +99,10 @@ class SessionOrganizationRequest(BaseModel):
     session_kind: Literal["chat", "selection_tutor", "immersive_reading"] | None = None
     pinned: bool | None = None
     archived: bool | None = None
+    # Little Tutor threads only: ``null`` detaches the thread from its source
+    # message (the thread stays); an id moves it to another message of the
+    # same parent conversation.
+    tutor_source_message_id: int | None = None
 
 
 class SessionReplyLanguageRequest(BaseModel):
@@ -457,6 +461,35 @@ async def get_session(session_id: str):
     return session
 
 
+@router.get("/{session_id}/threads")
+async def list_session_threads(session_id: str):
+    """Little Tutor threads opened from this conversation, newest first.
+
+    The store is the signed-in user's own, so only their threads under their
+    own conversation can ever be listed.
+    """
+    store = get_session_store()
+    if await store.get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    candidates = await list_all_sessions_snapshot(store)
+    threads = [
+        row
+        for row in candidates
+        if str((row.get("preferences") or {}).get("parent_session_id") or "") == session_id
+        and (row.get("preferences") or {}).get("session_kind") == "selection_tutor"
+    ]
+    threads.sort(key=lambda row: float(row.get("updated_at") or 0), reverse=True)
+    return {"threads": threads}
+
+
+async def _message_belongs_to_session(store: Any, session_id: str, message_id: int) -> bool:
+    try:
+        path = await store.get_messages_for_context(session_id, message_id)
+    except Exception:
+        return False
+    return any(str(message.get("id")) == str(message_id) for message in path)
+
+
 @router.get("/{session_id}/messages/{message_id}/events")
 async def get_message_events(
     session_id: str,
@@ -599,6 +632,28 @@ async def update_session_organization(
         updates["pinned"] = bool(payload.pinned)
     if "archived" in fields:
         updates["archived"] = bool(payload.archived)
+    if "tutor_source_message_id" in fields:
+        preferences = session.get("preferences") or {}
+        if preferences.get("session_kind") != "selection_tutor":
+            raise HTTPException(
+                status_code=400, detail="Only a Little Tutor thread has a source message"
+            )
+        source = payload.tutor_source_message_id
+        if source is not None:
+            parent_id = str(preferences.get("parent_session_id") or "").strip()
+            if (
+                source <= 0
+                or not parent_id
+                or not await _message_belongs_to_session(store, parent_id, source)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="The source message does not belong to this thread's conversation",
+                )
+            updates["tutor_source_message_id"] = source
+            updates["tutor_source_deleted"] = False
+        else:
+            updates["tutor_source_message_id"] = ""
 
     if updates:
         await store.update_session_preferences(session_id, updates)
