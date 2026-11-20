@@ -9,6 +9,7 @@ import {
   Clapperboard,
   Database,
   FileScan,
+  Film,
   FolderOpen,
   Image as ImageIcon,
   Info,
@@ -299,6 +300,20 @@ const CHAT_CHILDREN: SettingsLeaf[] = [
     },
     icon: SlidersHorizontal,
     tile: "bg-lime-500/10 text-lime-600 dark:text-lime-400",
+  },
+  {
+    // Spec 2026-11-20: the generated explainer animations (not "Video
+    // Learning" above). Runtime, npm mirror and budgets are deployment-wide.
+    key: "video-lesson",
+    href: "/settings#video-lesson",
+    label: { zh: "视频讲解", en: "Video Lesson" },
+    blurb: {
+      zh: "谁能用、单次预算、布局检查与 Node.js 运行环境。",
+      en: "Who may use it, per-lesson budget, layout check and the Node.js runtime.",
+    },
+    icon: Film,
+    tile: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400",
+    adminOnly: true,
   },
   {
     key: "starters",
@@ -641,6 +656,7 @@ const STORAGE_PATHS: Record<string, string> = {
   tools: "data/user/settings/interface.json",
   attachments: "data/user/settings/system.json",
   capabilities: "data/user/settings/main.yaml · agents.yaml",
+  "video-lesson": "data/user/settings/main.yaml · agents.yaml",
   "agent-claude-code": "data/user/settings/subagent.json",
   "agent-codex": "data/user/settings/subagent.json",
   "agent-grok": "data/user/settings/subagent.json",

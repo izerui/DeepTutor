@@ -57,6 +57,7 @@ const ADMIN_ONLY_PAGES = [
   "capabilities",
   "attachments",
   "video-learning",
+  "video-lesson",
   "workspace",
   "data-migration",
 ];

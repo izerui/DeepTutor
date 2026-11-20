@@ -136,6 +136,16 @@ export const CHAT_CAPABILITIES: ChatCapabilityDef[] = [
     defaultTools: [],
   },
   {
+    // Upstream 6b7897a32. Not the "Video Learning" reader (YouTube watching):
+    // this one generates a narrated explainer animation that plays in place.
+    value: "video_lesson",
+    label: "Video Lesson",
+    description: "A narrated 1-2 minute explainer animation that plays in the chat",
+    icon: Clapperboard,
+    allowedTools: [],
+    defaultTools: [],
+  },
+  {
     value: "course_study",
     label: "Subject Study",
     description: "See where a subject stands and what to do next",

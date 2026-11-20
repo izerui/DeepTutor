@@ -26,6 +26,7 @@ export const EXTENSION_ENDPOINTS = {
   "chat-attachments": "/api/settings/chat-attachments",
   "chat-timeout": "/api/settings/chat-response-timeout",
   capabilities: "/api/capabilities/settings",
+  "video-lesson": "/api/capabilities/video-lesson/settings",
   memory: "/api/memory/settings",
   network: "/api/settings/network",
 } as const;
@@ -34,6 +35,19 @@ export type ExtensionKey = keyof typeof EXTENSION_ENDPOINTS;
 
 export function isExtensionKey(value: string): value is ExtensionKey {
   return value in EXTENSION_ENDPOINTS;
+}
+
+/**
+ * The Capabilities page's payload without the Video Lesson block.
+ *
+ * Video Lesson has its own admin page (with the runtime and the npm mirror);
+ * a Capabilities snapshot taken earlier must not write its stale copy back.
+ */
+export function withoutVideoLesson<T>(payload: T): T {
+  if (!payload || typeof payload !== "object") return payload;
+  const rest = { ...(payload as Record<string, unknown>) };
+  delete rest.video_lesson;
+  return rest as T;
 }
 
 /** Write one drafted payload to the endpoint that owns it. */
@@ -57,6 +71,7 @@ export async function applyExtensionPayload(
   const endpoint = isExtensionKey(key) ? EXTENSION_ENDPOINTS[key] : null;
   if (!endpoint) throw new Error(`Unknown settings section: ${key}`);
   let body = payload;
+  if (key === "capabilities") body = withoutVideoLesson(payload);
   if (key === "document-parsing") {
     const { engine, engines, image_description_model } = payload as {
       engine: string;

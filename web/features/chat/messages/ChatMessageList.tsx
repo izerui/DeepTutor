@@ -65,6 +65,7 @@ import {
   extractStreamingQuizQuestions,
 } from "@/lib/quiz-types";
 import { extractVisualizeResult } from "@/lib/visualize-types";
+import { extractVideoLessonResult } from "@/lib/video-lesson-types";
 import type { StreamEvent } from "@/features/chat/model/protocol";
 import { hasVisibleMarkdownContent } from "@/lib/markdown-display";
 import type { SelectedBookReference } from "@/lib/book-references";
@@ -155,6 +156,14 @@ const VisualizationViewer = dynamic(
   () => import("@/components/visualize/VisualizationViewer"),
   { ssr: false },
 );
+const VideoLessonViewer = dynamic(
+  () => import("@/components/video-lesson/VideoLessonViewer"),
+  { ssr: false },
+);
+const VideoLessonProgress = dynamic(
+  () => import("@/components/video-lesson/VideoLessonProgress"),
+  { ssr: false },
+);
 
 
 interface ChatMessageItem {
@@ -193,6 +202,7 @@ const MODE_BADGE_LABELS: Record<string, string> = {
   deep_research: "Deep Research",
   math_animator: "Math Animator",
   visualize: "Visualize",
+  video_lesson: "Video Lesson",
   mastery_path: "Mastery Path",
   immersive_reading: "Immersive Reading",
 };
@@ -827,6 +837,28 @@ export const AssistantMessage = memo(function AssistantMessage({
     return extractVisualizeResult(resultEvent.metadata);
   }, [msg.capability, resultEvent]);
 
+  const videoLessonResult = useMemo(() => {
+    // A one-turn capability or a resumed turn may still have the composer's
+    // chat label. The capability that emitted the result is authoritative.
+    // Ignore earlier intermediate results that do not carry a playable page.
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (
+        event.type !== "result" ||
+        (event.source !== "video_lesson" && msg.capability !== "video_lesson")
+      )
+        continue;
+      const lesson = extractVideoLessonResult(event.metadata);
+      if (lesson) return lesson;
+    }
+    return null;
+  }, [msg.capability, events]);
+  const videoLessonRunning =
+    Boolean(isStreaming) &&
+    !videoLessonResult &&
+    (msg.capability === "video_lesson" ||
+      events.some((event) => event.source === "video_lesson"));
+
   // Detect the ``ask_user`` terminator payload: when the assistant turn
   // ended via the ``ask_user`` tool, this is the question the user is
   // expected to answer next. Render option chips below the message.
@@ -945,6 +977,7 @@ export const AssistantMessage = memo(function AssistantMessage({
     !outlinePreview &&
     !mathAnimatorResult &&
     !visualizeResult &&
+    !videoLessonResult &&
     !(quizQuestions && quizQuestions.length > 0);
   const messageSegments = useMemo(
     () =>
@@ -1116,6 +1149,7 @@ export const AssistantMessage = memo(function AssistantMessage({
         }
         processSummary={headerProcessSummary}
       />
+      {videoLessonRunning ? <VideoLessonProgress events={events} /> : null}
       {outlinePreview && outlinePreview.sub_topics.length > 0 ? (
         <>
           {/* Layout for the merged research bubble:
@@ -1162,6 +1196,20 @@ export const AssistantMessage = memo(function AssistantMessage({
         <MathAnimatorViewer result={mathAnimatorResult} />
       ) : visualizeResult ? (
         <VisualizationViewer result={visualizeResult} />
+      ) : videoLessonResult ? (
+        <>
+          <VideoLessonViewer result={videoLessonResult} />
+          {msg.content ? (
+            <AssistantResponse
+              content={msg.content}
+              language={turnLanguage}
+              isStreaming={isStreaming}
+              readingMaterialId={readingMaterialId}
+              readingMaterialRevision={readingMaterialRevision}
+              events={events}
+            />
+          ) : null}
+        </>
       ) : quizQuestions && quizQuestions.length > 0 ? (
         <>
           {/* The quiz preface (the "I researched X, now let me quiz you on Y"

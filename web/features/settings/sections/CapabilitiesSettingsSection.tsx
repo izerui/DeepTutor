@@ -5,7 +5,10 @@ import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { apiFetch, apiUrl } from "@/lib/api";
-import { EXTENSION_ENDPOINTS } from "@/lib/settings-extensions";
+import {
+  EXTENSION_ENDPOINTS,
+  withoutVideoLesson,
+} from "@/lib/settings-extensions";
 import {
   SettingRow,
   SettingSection,
@@ -155,7 +158,8 @@ export default function CapabilitiesSettingsPage() {
     const res = await apiFetch(apiUrl(EXTENSION_ENDPOINTS.capabilities), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(current),
+      // Video Lesson is saved by its own page; never write a stale copy back.
+      body: JSON.stringify(withoutVideoLesson(current)),
     });
     if (!res.ok) {
       throw new Error(

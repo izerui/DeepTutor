@@ -23,7 +23,7 @@ export const SETTINGS_PAGE_GROUPS: { label: Lang; keys: string[] }[] = [
   },
   {
     label: { en: 'Features & integrations', zh: '功能与集成' },
-    keys: ['tools', 'capabilities', 'agent-claude-code', 'knowledge'],
+    keys: ['tools', 'capabilities', 'video-lesson', 'agent-claude-code', 'knowledge'],
   },
   {
     label: { en: 'System', zh: '系统' },

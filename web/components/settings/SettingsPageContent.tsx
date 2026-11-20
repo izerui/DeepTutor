@@ -127,6 +127,10 @@ const Capabilities = dynamic(
   () => import("@/features/settings/sections/CapabilitiesSettingsSection"),
   { loading },
 );
+const VideoLesson = dynamic(
+  () => import("@/features/settings/sections/VideoLessonSettingsSection"),
+  { loading },
+);
 const Starters = dynamic(
   () => import("@/features/settings/sections/StartersSettingsSection"),
   {
@@ -189,6 +193,7 @@ const PAGES: Record<string, React.ComponentType> = {
   "video-learning": VideoLearning,
   tools: Tools,
   capabilities: Capabilities,
+  "video-lesson": VideoLesson,
   starters: Starters,
   attachments: Attachments,
 };

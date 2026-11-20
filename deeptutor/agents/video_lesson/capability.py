@@ -104,6 +104,7 @@ class VideoLessonCapability(TurnCapability):
             tools_present,
             write_page,
         )
+        from deeptutor.services.config.capabilities_settings import video_lesson_npm_registry
         from deeptutor.services.llm.config import get_llm_config
         from deeptutor.services.model_selection.task_agent import task_model_agent
         from deeptutor.services.path_service import get_path_service
@@ -144,7 +145,9 @@ class VideoLessonCapability(TurnCapability):
             fixer.share_conversation(writer)
 
         # npm install (first use only) overlaps the first, much longer, LLM call.
-        runtime_ready = asyncio.create_task(ensure_runtime())
+        runtime_ready = asyncio.create_task(
+            ensure_runtime(registry=video_lesson_npm_registry())
+        )
         timings: dict[str, float] = {"code_generation": 0.0, "render_check": 0.0}
         voice_cache: dict = {}
         narrated = False

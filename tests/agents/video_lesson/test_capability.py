@@ -118,9 +118,13 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     )
     monkeypatch.setattr("deeptutor.services.path_service.get_path_service", lambda: paths)
     monkeypatch.setattr(runtime, "tools_present", lambda: True)
+    monkeypatch.setattr(
+        capabilities_settings, "video_lesson_npm_registry", lambda: "https://mirror.example/npm/"
+    )
 
-    async def ensure_runtime(**_kw):
+    async def ensure_runtime(**kw):
         state["installs"] += 1
+        state["registry"] = kw.get("registry")
         return tmp_path / "rt"
 
     async def build_lesson(lesson: Path, bundle: Path):
@@ -190,6 +194,8 @@ async def test_success_stores_the_page_and_emits_a_playable_result(pipeline) -> 
     )
     writer = FakeWriter.instances[0]
     assert writer.calls == [{"attempt": 1, "max_tokens": 24000, "temperature": 0.5}]
+    # The first install uses the admin's npm mirror.
+    assert pipeline["registry"] == "https://mirror.example/npm/"
 
 
 @pytest.mark.asyncio
@@ -365,3 +371,59 @@ def test_agent_params_read_the_video_lesson_section(settings_files: Path, monkey
         yaml.safe_dump({"plugins": {"video_lesson": {"max_tokens": 12345}}}), encoding="utf-8"
     )
     assert loader.get_agent_params("video_lesson")["max_tokens"] == 12345
+
+
+# ── npm mirror (batch 4) ─────────────────────────────────────────────
+
+
+def test_npm_registry_is_an_admin_setting_with_env_fallback(settings_files, monkeypatch) -> None:
+    monkeypatch.setenv("DEEPTUTOR_NPM_REGISTRY", "https://env.example/npm/")
+    assert capabilities_settings.get_video_lesson_admin_settings()["npm_registry"] == ""
+    assert capabilities_settings.video_lesson_npm_registry() == "https://env.example/npm/"
+
+    saved = capabilities_settings.save_video_lesson_admin_settings(
+        {
+            "npm_registry": "  https://registry.npmmirror.com  ",
+            "learners_allowed": False,
+            "layout_check": True,
+            "max_tokens": 9000,
+            "unknown": "dropped",
+        }
+    )
+    assert saved == {
+        "temperature": 0.5,
+        "max_tokens": 9000,
+        "learners_allowed": False,
+        "max_attempts": 3,
+        "layout_check": True,
+        "npm_registry": "https://registry.npmmirror.com",
+    }
+    assert capabilities_settings.video_lesson_npm_registry() == "https://registry.npmmirror.com"
+    # Learners can read /api/capabilities/settings; the mirror is not in it.
+    shared = capabilities_settings.capabilities_settings_dict()["video_lesson"]
+    assert "npm_registry" not in shared
+    # A partial save keeps the mirror; clearing it falls back to the env var.
+    capabilities_settings.save_video_lesson_admin_settings({"max_attempts": 2})
+    assert capabilities_settings.video_lesson_npm_registry() == "https://registry.npmmirror.com"
+    capabilities_settings.save_video_lesson_admin_settings({"npm_registry": ""})
+    assert capabilities_settings.video_lesson_npm_registry() == "https://env.example/npm/"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "registry.npmmirror.com",
+        "file:///etc/passwd",
+        "https://user:secret@registry.example",
+        "https://reg.example/ --foo",
+        "https://",
+        "https://x.example/" + "a" * 600,
+    ],
+)
+def test_invalid_npm_registry_is_refused(settings_files, value) -> None:
+    with pytest.raises(capabilities_settings.InvalidNpmRegistry):
+        capabilities_settings.save_video_lesson_admin_settings(
+            {"npm_registry": value, "learners_allowed": False}
+        )
+    # Nothing was written when the payload was refused.
+    assert capabilities_settings.get_video_lesson_params()["learners_allowed"] is True

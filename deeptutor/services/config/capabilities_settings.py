@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -520,6 +521,80 @@ def get_video_lesson_params() -> dict[str, Any]:
     }
 
 
+class InvalidNpmRegistry(ValueError):
+    """The npm mirror an admin entered is not a plain http(s) URL."""
+
+
+_NPM_REGISTRY_RE = re.compile(r"^https?://[^\s\"'<>]+$")
+_NPM_REGISTRY_MAX_LEN = 500
+
+
+def clean_npm_registry(value: Any) -> str:
+    """``""`` (the default registry) or a validated ``http(s)://`` URL."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) > _NPM_REGISTRY_MAX_LEN or not _NPM_REGISTRY_RE.match(text):
+        raise InvalidNpmRegistry("The npm registry must be an http(s):// URL.")
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(text)
+    if not parts.hostname:
+        raise InvalidNpmRegistry("The npm registry must be an http(s):// URL.")
+    if parts.username or parts.password:
+        raise InvalidNpmRegistry("Put npm credentials in .npmrc, not in the registry URL.")
+    return text
+
+
+def _stored_npm_registry() -> str:
+    cfg = _get_at(ConfigManager().load_config(), ("capabilities", "video_lesson"))
+    try:
+        return clean_npm_registry(cfg.get("npm_registry"))
+    except InvalidNpmRegistry:
+        return ""
+
+
+def video_lesson_npm_registry() -> str:
+    """The mirror for the first renderer install: admin setting, else the env var."""
+    from deeptutor.agents.video_lesson.runtime import npm_registry
+
+    return _stored_npm_registry() or npm_registry()
+
+
+_VIDEO_LESSON_ADMIN_KEYS = (
+    "learners_allowed",
+    "temperature",
+    "max_tokens",
+    "max_attempts",
+    "layout_check",
+)
+
+
+def get_video_lesson_admin_settings() -> dict[str, Any]:
+    """Everything on the admin Video Lesson page, including the npm mirror.
+
+    The mirror is kept out of :func:`capabilities_settings_dict` (whose GET is
+    readable by every account): learners never see runtime settings.
+    """
+    return {**get_video_lesson_params(), "npm_registry": _stored_npm_registry()}
+
+
+def save_video_lesson_admin_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate and store the admin page; unknown keys are dropped."""
+    if not isinstance(payload, dict):
+        payload = {}
+    registry_given = "npm_registry" in payload
+    registry = clean_npm_registry(payload.get("npm_registry")) if registry_given else None
+    block = {key: payload[key] for key in _VIDEO_LESSON_ADMIN_KEYS if key in payload}
+    if block:
+        save_capabilities_settings({"video_lesson": block})
+    if registry_given:
+        ConfigManager().save_config(
+            {"capabilities": {"video_lesson": {"npm_registry": registry}}}
+        )
+    return get_video_lesson_admin_settings()
+
+
 def get_solve_params() -> dict[str, Any]:
     """Runtime solve params, read through the same coerce path as the UI.
 
@@ -539,7 +614,12 @@ def get_solve_params() -> dict[str, Any]:
 __all__ = [
     "capabilities_settings_dict",
     "get_solve_params",
+    "get_video_lesson_admin_settings",
     "get_video_lesson_params",
+    "InvalidNpmRegistry",
+    "clean_npm_registry",
+    "save_video_lesson_admin_settings",
+    "video_lesson_npm_registry",
     "get_visualize_params",
     "save_capabilities_settings",
 ]
