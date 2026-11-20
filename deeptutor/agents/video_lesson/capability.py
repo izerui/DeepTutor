@@ -8,15 +8,18 @@ Ported from upstream (``6b7897a32`` .. ``c35eb7266``) with the develop rules:
 * every LLM call goes through ``BaseAgent.stream_llm`` and is therefore
   counted in the learner's AI daily usage like any other capability;
 * a server without Node.js fails fast with a clear "runtime unavailable"
-  error before a single token is spent.
-
-The browser layout check (upstream ``layout_check.py``) is a later batch and
-is not part of this pipeline yet.
+  error before a single token is spent;
+* the browser layout check (upstream ``d6fd29428``) runs only when an
+  administrator turned it on; it then loads the page isolated (see
+  ``layout_check.py``), is skipped when no Chrome is installed, and its repair
+  rounds share the same ``max_attempts`` budget.
 """
 
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+import shutil
 import time
 from typing import Any
 
@@ -28,6 +31,9 @@ from deeptutor.i18n import StatusI18n
 from deeptutor.runtime.agentic.usage import UsageTracker
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
+
+# Rounds of "your layout collides here" feedback after a lesson already builds.
+MAX_LAYOUT_ROUNDS = 2
 
 DISABLED_FOR_LEARNERS_MESSAGE = (
     "Video Lesson has been turned off for learners by an administrator."
@@ -107,6 +113,7 @@ class VideoLessonCapability(TurnCapability):
         if not tools_present():
             raise VideoLessonRuntimeUnavailable(UNAVAILABLE_MESSAGE.format(major=MIN_NODE_MAJOR))
         max_attempts = int(params["max_attempts"])
+        layout_check = bool(params.get("layout_check", False))
         max_tokens = int(params["max_tokens"])
         temperature = float(params["temperature"])
 
@@ -144,6 +151,9 @@ class VideoLessonCapability(TurnCapability):
         attempts: list[dict[str, Any]] = []
         draft = None
         build = None
+        good = None
+        good_bundle = base_dir / "source" / "player.good.js"
+        layout_rounds = 0
         try:
             for attempt in range(1, max_attempts + 1):
                 started = time.perf_counter()
@@ -200,7 +210,45 @@ class VideoLessonCapability(TurnCapability):
                 timings["render_check"] += round(time.perf_counter() - started, 3)
                 attempts.append({"attempt": attempt, "stage": build.stage, "errors": build.errors})
                 if build.ok:
-                    break
+                    if not layout_check:
+                        break
+                    # Keep the working bundle: a layout fix that then fails to compile
+                    # must not cost the learner a lesson that already played.
+                    shutil.copyfile(base_dir / "source" / "player.js", good_bundle)
+                    good = (draft, build)
+                    if attempt >= max_attempts or layout_rounds >= MAX_LAYOUT_ROUNDS:
+                        break
+                    layout_rounds += 1
+                    await stream.progress(
+                        message=i18n.t("layout", "Checking each scene's layout for overlaps."),
+                        source=self.name,
+                        stage="render_check",
+                    )
+                    started = time.perf_counter()
+                    issues = await asyncio.to_thread(
+                        self._layout_issues, base_dir, build, context.language
+                    )
+                    timings["render_check"] += round(time.perf_counter() - started, 3)
+                    if issues is None:
+                        attempts.append(
+                            {"attempt": attempt, "stage": "layout_unavailable", "errors": []}
+                        )
+                        break
+                    if not issues:
+                        break
+                    attempts.append({"attempt": attempt, "stage": "layout", "errors": issues})
+                    await stream.progress(
+                        message=i18n.t(
+                            "layout_retry",
+                            f"Layout check found {len(issues)} overlap(s); repositioning.",
+                            count=len(issues),
+                        ),
+                        source=self.name,
+                        stage="render_check",
+                        metadata={"trace_layer": "raw"},
+                    )
+                    writer.add_feedback(previous=draft.raw, stage="layout", errors=issues)
+                    continue
                 await stream.progress(
                     message=i18n.t(
                         "retry",
@@ -217,6 +265,11 @@ class VideoLessonCapability(TurnCapability):
             if not runtime_ready.done():
                 runtime_ready.cancel()
             await asyncio.gather(runtime_ready, return_exceptions=True)
+
+        if good is not None and (build is None or not build.ok):
+            draft, build = good
+            shutil.copyfile(good_bundle, base_dir / "source" / "player.js")
+        good_bundle.unlink(missing_ok=True)
 
         if draft is None or build is None or not build.ok:
             last = attempts[-1]["errors"] if attempts else []
@@ -271,6 +324,24 @@ class VideoLessonCapability(TurnCapability):
             usage=usage,
         )
 
+    @staticmethod
+    def _layout_issues(base_dir: Path, build: Any, language: str) -> list[str] | None:
+        """Browser layout check of the fresh bundle; empty when clean, None when unavailable."""
+        from deeptutor.agents.video_lesson.layout_check import check_layout, sample_frames
+        from deeptutor.agents.video_lesson.runtime import write_page
+
+        total = max((f.get("frame", 0) for f in build.frames), default=0) + 1
+        page = base_dir / "source" / "layout-check.html"
+        try:
+            write_page(
+                base_dir / "source" / "player.js", page, title="layout check", language=language
+            )
+            return check_layout(page, sample_frames(total))
+        except Exception:  # the check is advisory; a broken probe must not fail the lesson
+            return None
+        finally:
+            page.unlink(missing_ok=True)
+
     def _build_trace_bridge(self, stream: StreamBus, i18n: StatusI18n):
         async def _trace_bridge(update: dict[str, Any]) -> None:
             if str(update.get("event", "") or "") != "llm_call":
@@ -319,6 +390,7 @@ class VideoLessonCapability(TurnCapability):
 
 __all__ = [
     "DISABLED_FOR_LEARNERS_MESSAGE",
+    "MAX_LAYOUT_ROUNDS",
     "VideoLessonCapability",
     "VideoLessonDisabled",
     "acting_learner",

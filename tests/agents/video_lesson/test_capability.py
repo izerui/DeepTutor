@@ -93,7 +93,10 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
             "max_tokens": 24000,
             "learners_allowed": True,
             "max_attempts": 3,
+            "layout_check": False,
         },
+        "layout": [],
+        "layout_calls": 0,
         "builds": [],
         "build_ok": [True],
         "installs": 0,
@@ -134,6 +137,16 @@ def pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
         return {line.id: estimate(line.text, language) for line in lines}
 
+    def check_layout(page: Path, frames: list[int]):
+        assert page.name == "layout-check.html" and page.exists()
+        index = state["layout_calls"]
+        state["layout_calls"] += 1
+        replies = state["layout"]
+        return replies[min(index, len(replies) - 1)] if replies else []
+
+    monkeypatch.setattr(
+        "deeptutor.agents.video_lesson.layout_check.check_layout", check_layout
+    )
     monkeypatch.setattr(runtime, "ensure_runtime", ensure_runtime)
     monkeypatch.setattr(runtime, "build_lesson", build_lesson)
     monkeypatch.setattr("deeptutor.agents.video_lesson.narration.narrate", narrate)
@@ -222,6 +235,73 @@ async def test_learners_switch_off_refuses_learners_only(pipeline, monkeypatch) 
     assert any(e.type == StreamEventType.RESULT for e in events)
 
 
+# ── layout check (batch 3) ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_layout_check_is_off_by_default_and_never_opens_a_browser(pipeline) -> None:
+    pipeline["layout"] = [["text overlaps"]]
+    events = await _collect(lambda bus: VideoLessonCapability().run(_context(), bus))
+    assert pipeline["layout_calls"] == 0
+    result = next(e for e in events if e.type == StreamEventType.RESULT).metadata
+    assert [a["stage"] for a in result["render"]["attempts"]] == ["done"]
+
+
+@pytest.mark.asyncio
+async def test_layout_issues_are_fed_back_when_the_admin_turned_it_on(pipeline) -> None:
+    pipeline["params"]["layout_check"] = True
+    pipeline["layout"] = [['text "a" overlaps text "b"'], []]
+    events = await _collect(lambda bus: VideoLessonCapability().run(_context(), bus))
+    result = next(e for e in events if e.type == StreamEventType.RESULT).metadata
+    assert [a["stage"] for a in result["render"]["attempts"]] == ["done", "layout", "done"]
+    writer = FakeWriter.instances[0]
+    assert writer.feedback == [("layout", ['text "a" overlaps text "b"'])]
+    assert pipeline["layout_calls"] == 2
+    paths: PathService = pipeline["paths"]
+    source = paths.get_agent_dir("video_lesson") / "turn-1" / "source"
+    assert not (source / "player.good.js").exists()
+    assert not (source / "layout-check.html").exists()
+
+
+@pytest.mark.asyncio
+async def test_no_chrome_skips_the_layout_check(pipeline) -> None:
+    pipeline["params"]["layout_check"] = True
+    pipeline["layout"] = [None]
+    events = await _collect(lambda bus: VideoLessonCapability().run(_context(), bus))
+    result = next(e for e in events if e.type == StreamEventType.RESULT).metadata
+    assert [a["stage"] for a in result["render"]["attempts"]] == ["done", "layout_unavailable"]
+    assert len(FakeWriter.instances[0].calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_layout_rounds_share_the_attempt_budget_and_keep_the_good_lesson(pipeline) -> None:
+    pipeline["params"].update(layout_check=True, max_attempts=2)
+    pipeline["layout"] = [["overlap"]]
+    # Attempt 2 (the layout fix) no longer compiles: the lesson from attempt 1 ships.
+    pipeline["build_ok"] = [True, False]
+    events = await _collect(lambda bus: VideoLessonCapability().run(_context(), bus))
+    result = next(e for e in events if e.type == StreamEventType.RESULT).metadata
+    assert [a["stage"] for a in result["render"]["attempts"]] == ["done", "layout", "render"]
+    assert len(FakeWriter.instances[0].calls) == 2
+    page = pipeline["paths"].resolve_public_output_path(
+        result["artifacts"][0]["url"].removeprefix("/files/outputs/")
+    )
+    assert 'console.log("player")' in page.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_a_broken_probe_does_not_fail_the_lesson(pipeline, monkeypatch) -> None:
+    pipeline["params"]["layout_check"] = True
+
+    def boom(page, frames):
+        raise RuntimeError("probe crashed")
+
+    monkeypatch.setattr("deeptutor.agents.video_lesson.layout_check.check_layout", boom)
+    events = await _collect(lambda bus: VideoLessonCapability().run(_context(), bus))
+    result = next(e for e in events if e.type == StreamEventType.RESULT).metadata
+    assert result["render"]["attempts"][-1]["stage"] == "layout_unavailable"
+
+
 # ── admin settings storage ───────────────────────────────────────────
 
 
@@ -248,6 +328,7 @@ def test_defaults_are_lower_than_upstream(settings_files: Path) -> None:
         "max_tokens": 24000,
         "learners_allowed": True,
         "max_attempts": 3,
+        "layout_check": False,
     }
     assert (
         DEFAULT_AGENTS_SETTINGS["plugins"]["video_lesson"]
@@ -270,6 +351,10 @@ def test_admin_settings_round_trip_and_clamp(settings_files: Path) -> None:
     capabilities_settings.save_capabilities_settings({"video_lesson": {"max_attempts": 0}})
     params = capabilities_settings.get_video_lesson_params()
     assert params["max_attempts"] == 1 and params["learners_allowed"] is False
+    assert params["layout_check"] is False
+    capabilities_settings.save_capabilities_settings({"video_lesson": {"layout_check": True}})
+    params = capabilities_settings.get_video_lesson_params()
+    assert params["layout_check"] is True and params["max_attempts"] == 1
 
 
 def test_agent_params_read_the_video_lesson_section(settings_files: Path, monkeypatch) -> None:

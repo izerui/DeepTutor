@@ -107,6 +107,9 @@ _MAIN_YAML_RUNTIME_DEFAULTS: dict[str, dict[str, Any]] = {
     "video_lesson": {
         "learners_allowed": True,
         "max_attempts": 3,
+        # Opens model-written pages in the server's Chrome: off unless an
+        # admin turns it on (spec 2026-11-20 §4).
+        "layout_check": False,
     },
 }
 
@@ -306,6 +309,7 @@ def _build_main_runtime_block(main_cfg: dict[str, Any], capability: str) -> dict
                 lo=1,
                 hi=VIDEO_LESSON_MAX_ATTEMPTS_LIMIT,
             ),
+            "layout_check": _coerce_bool(cfg.get("layout_check"), defaults["layout_check"]),
         }
     if capability == "question":
         exploring_cfg = _get_at(main_cfg, ("capabilities", "question", "exploring"))
@@ -443,6 +447,10 @@ def _apply_main_runtime(
                 defaults["max_attempts"],
                 lo=1,
                 hi=VIDEO_LESSON_MAX_ATTEMPTS_LIMIT,
+            )
+        if "layout_check" in block:
+            section["layout_check"] = _coerce_bool(
+                block.get("layout_check"), defaults["layout_check"]
             )
         if section:
             main_payload.setdefault("capabilities", {})["video_lesson"] = section
