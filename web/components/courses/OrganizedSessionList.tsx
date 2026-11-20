@@ -365,6 +365,11 @@ export default function OrganizedSessionList({
               {t("Little Tutor")}
             </span>
           ) : null}
+          {child && session.preferences?.tutor_source_deleted ? (
+            <span className="shrink-0 text-[9px] text-[var(--muted-foreground)]">
+              {t("Original message deleted")}
+            </span>
+          ) : null}
           {editing ? (
             <input
               value={draftTitle}

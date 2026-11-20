@@ -2,11 +2,17 @@ const MAX_SELECTED_TEXT_LENGTH = 12_000;
 const MAX_SOURCE_MESSAGE_LENGTH = 24_000;
 
 export interface SelectionTutorContext {
+  /** "message" asks about a whole reply; the server reads it by id. */
+  scope?: "selection" | "message";
   selectedText: string;
   parentSessionId: string | null;
   sourceMessageId: number | null;
   sourceMessageText: string;
   sourceMessageRole: "user" | "assistant" | "system";
+  /** An existing thread to continue instead of starting a new one. */
+  threadSessionId?: string | null;
+  /** The thread's source message was deleted or regenerated. */
+  sourceDeleted?: boolean;
 }
 
 /** Collapse selection-only whitespace while preserving paragraph breaks. */
@@ -46,6 +52,17 @@ export function selectionTutorKey(
 export function buildSelectionTutorConfig(
   context: SelectionTutorContext,
 ): Record<string, unknown> {
+  if (context.scope === "message") {
+    // No passage and no text: the server reads the message by id.
+    return {
+      selection_tutor_context: {
+        scope: "message",
+        parent_session_id: context.parentSessionId ?? "",
+        source_message_id: context.sourceMessageId,
+        source_message_role: context.sourceMessageRole,
+      },
+    };
+  }
   return {
     selection_tutor_context: {
       selected_text: normalizeSelectedText(context.selectedText),

@@ -20,8 +20,9 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
-import { GraduationCap, Sparkles } from "lucide-react";
+import { CornerUpLeft, GraduationCap, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import FollowupChatComposer from "@/components/quiz/FollowupChatComposer";
@@ -39,6 +40,7 @@ import {
 } from "@/context/QuizFollowupContext";
 import { apiUrl } from "@/lib/api";
 import { getSession } from "@/lib/session-api";
+import { jumpToChatMessage } from "@/lib/message-jump";
 
 /** Resolve a possibly-relative AttachmentStore URL to an absolute one. */
 function resolveImageSrc(url: string | null | undefined): string {
@@ -125,7 +127,20 @@ export default function QuizFollowupTabBody({
 
   const visibleMessages = thread.messages.filter((m) => m.role !== "system");
   const isCoding = context.question.question_type === "coding";
-  const isSelectionTutor = Boolean(context.tutorSelection);
+  const tutorSelection = context.tutorSelection;
+  const isSelectionTutor = Boolean(tutorSelection);
+  const isWholeMessage = tutorSelection?.scope === "message";
+  const sourceDeleted = Boolean(tutorSelection?.sourceDeleted);
+  // Detached by hand: the thread no longer points at any message.
+  const hasSource = tutorSelection?.sourceMessageId != null;
+  const [sourceMissing, setSourceMissing] = useState(false);
+  const backToSource = useCallback(() => {
+    setSourceMissing(!jumpToChatMessage(tutorSelection?.sourceMessageId));
+  }, [tutorSelection?.sourceMessageId]);
+  const wholeMessageExcerpt = useMemo(() => {
+    const text = (tutorSelection?.sourceMessageText ?? "").trim();
+    return text.length > 600 ? `${text.slice(0, 600)}…` : text;
+  }, [tutorSelection?.sourceMessageText]);
 
   return (
     <div className="flex h-full flex-col bg-[var(--card)]">
@@ -152,14 +167,38 @@ export default function QuizFollowupTabBody({
           </div>
           <div className="truncate text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
             {isSelectionTutor
-              ? t("Ask about selected text")
+              ? t(isWholeMessage ? "Ask about this reply" : "Ask about selected text")
               : t("Follow-up Chat")}
             {!isSelectionTutor && context.question.question_type
               ? ` · ${context.question.question_type}`
               : ""}
           </div>
         </div>
+        {isSelectionTutor ? (
+          sourceDeleted ? (
+            <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]">
+              {t("Original message deleted")}
+            </span>
+          ) : !hasSource ? null : (
+            <button
+              type="button"
+              onClick={backToSource}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/50 hover:text-[var(--foreground)]"
+            >
+              <CornerUpLeft size={12} strokeWidth={1.8} aria-hidden="true" />
+              {t("Back to source")}
+            </button>
+          )
+        ) : null}
       </div>
+      {sourceMissing && !sourceDeleted ? (
+        <div
+          role="status"
+          className="shrink-0 border-b border-[var(--border)]/40 bg-[var(--muted)]/40 px-4 py-1.5 text-[11.5px] text-[var(--muted-foreground)]"
+        >
+          {t("The original message is no longer in this conversation")}
+        </div>
+      ) : null}
 
       {/* Scrollable body: pinned context + chat thread.
           ``data-chat-scroll-root`` opts this surface into the global
@@ -173,17 +212,30 @@ export default function QuizFollowupTabBody({
         className="flex-1 overflow-y-auto px-4 py-3"
       >
         <div className="mx-auto flex max-w-[640px] flex-col gap-3">
-          <div className="rounded-md border border-[var(--border)]/70 bg-[var(--background)]/70 px-3 py-2">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              {t(isSelectionTutor ? "Selected text" : "Question")}
+          {isWholeMessage ? (
+            <div className="rounded-md border border-[var(--border)]/70 bg-[var(--background)]/70 px-3 py-2">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {t("About this reply")}
+              </div>
+              {wholeMessageExcerpt ? (
+                <div className="max-h-40 overflow-hidden text-[12.5px] leading-relaxed text-[var(--foreground)]">
+                  <MarkdownRenderer content={wholeMessageExcerpt} variant="compact" />
+                </div>
+              ) : null}
             </div>
-            <div className="text-[13px] leading-relaxed text-[var(--foreground)]">
-              <MarkdownRenderer
-                content={context.question.question}
-                variant="compact"
-              />
+          ) : (
+            <div className="rounded-md border border-[var(--border)]/70 bg-[var(--background)]/70 px-3 py-2">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                {t(isSelectionTutor ? "Selected text" : "Question")}
+              </div>
+              <div className="text-[13px] leading-relaxed text-[var(--foreground)]">
+                <MarkdownRenderer
+                  content={context.question.question}
+                  variant="compact"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {!isSelectionTutor && (
             <div className="rounded-md border border-[var(--border)]/70 bg-[var(--background)]/70 px-3 py-2">
@@ -255,9 +307,11 @@ export default function QuizFollowupTabBody({
             {visibleMessages.length === 0 ? (
               <div className="rounded-md border border-dashed border-[var(--border)] bg-[var(--background)]/40 px-3 py-3 text-[12px] text-[var(--muted-foreground)]">
                 {t(
-                  isSelectionTutor
-                    ? "Ask anything about the selected text."
-                    : "Ask anything about this question, your answer, or the AI judgment.",
+                  isWholeMessage
+                    ? "Ask anything about this reply."
+                    : isSelectionTutor
+                      ? "Ask anything about the selected text."
+                      : "Ask anything about this question, your answer, or the AI judgment.",
                 )}
               </div>
             ) : (

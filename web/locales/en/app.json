@@ -6083,5 +6083,16 @@
   "You have no book with chapters to add it to.": "You have no book with chapters to add it to.",
   "Could not load your books.": "Could not load your books.",
   "Could not load the chapters.": "Could not load the chapters.",
-  "Could not add the video lesson to the book.": "Could not add the video lesson to the book."
+  "Could not add the video lesson to the book.": "Could not add the video lesson to the book.",
+  "Little Tutor · {{count}}": "Little Tutor · {{count}}",
+  "Little Tutor threads on this message": "Little Tutor threads on this message",
+  "Open Little Tutor thread": "Open Little Tutor thread",
+  "Delete Little Tutor thread": "Delete Little Tutor thread",
+  "Detach from this message": "Detach from this message",
+  "Back to source": "Back to source",
+  "The original message is no longer in this conversation": "The original message is no longer in this conversation",
+  "Original message deleted": "Original message deleted",
+  "About this reply": "About this reply",
+  "Ask about this reply": "Ask about this reply",
+  "Ask anything about this reply.": "Ask anything about this reply."
 }

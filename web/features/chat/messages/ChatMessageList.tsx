@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Copy,
   AlertCircle,
+  GraduationCap,
   Database,
   Loader2,
   MessageSquare,
@@ -111,7 +112,12 @@ import {
 } from "@/features/chat/trace/TracePresentation";
 import { hasSettledFinalRound } from "@/features/chat/trace/selectors";
 import type { MessageTraceMetadata } from "@/features/chat/trace/memory";
-import { supportsSubmissionReplacement, type OrphanedFailedTurn } from "@/lib/session-api";
+import {
+  supportsSubmissionReplacement,
+  type OrphanedFailedTurn,
+  type SessionSummary,
+} from "@/lib/session-api";
+import MessageThreadMarker from "./MessageThreadMarker";
 import { agentGlyph } from "@/components/agents/agent-icons";
 import { useConsultationReference } from "@/hooks/useConsultationReference";
 import { useConnectedAgentKinds } from "@/hooks/useConnectedAgentKinds";
@@ -1949,6 +1955,11 @@ export const ChatMessageList = memo(function ChatMessageList({
   showModeBadge = true,
   onLoadMessageTrace,
   onReleaseMessageTrace,
+  threadsByMessageId,
+  onAskTutor,
+  onOpenThread,
+  onDeleteThread,
+  onDetachThread,
 }: {
   messages: ChatMessageItem[];
   isStreaming: boolean;
@@ -2017,8 +2028,34 @@ export const ChatMessageList = memo(function ChatMessageList({
   showModeBadge?: boolean;
   onLoadMessageTrace?: (messageId: number) => Promise<void>;
   onReleaseMessageTrace?: (messageId: number) => void;
+  /** Little Tutor threads keyed by the message they were opened from. */
+  threadsByMessageId?: ReadonlyMap<string, SessionSummary[]>;
+  /** Ask the Little Tutor about a whole (persisted) assistant reply. */
+  onAskTutor?: (messageId: number) => void;
+  onOpenThread?: (thread: SessionSummary) => void;
+  onDeleteThread?: (thread: SessionSummary) => Promise<void>;
+  onDetachThread?: (thread: SessionSummary) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  const threadMarker = (
+    messageId: number | undefined,
+    align: "left" | "right",
+  ) => {
+    if (messageId == null || !threadsByMessageId || !onOpenThread || !onDeleteThread) {
+      return null;
+    }
+    const threads = threadsByMessageId.get(String(messageId));
+    if (!threads?.length) return null;
+    return (
+      <MessageThreadMarker
+        threads={threads}
+        align={align}
+        onOpen={onOpenThread}
+        onDelete={onDeleteThread}
+        onDetach={onDetachThread}
+      />
+    );
+  };
   // Visible path: when no branching has happened the result is identical
   // to the input. After an edit, sibling branches are filtered out so the
   // UI shows exactly one continuous thread, with arrow nav exposed on the
@@ -2262,6 +2299,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                   ? () => onOpenConsultation(consultationEvents)
                   : undefined}
               />
+              {threadMarker(msg.id, "right")}
               {orphanedFailure ? (
                 <div
                   role="alert"
@@ -2470,6 +2508,13 @@ export const ChatMessageList = memo(function ChatMessageList({
                         onClick={() => onResendLastTurn?.()}
                       />
                     )}
+                    {showActions && onAskTutor && typeof msg.id === "number" && msg.id > 0 && (
+                      <RoughActionButton
+                        icon={GraduationCap}
+                        label={t("Ask Little Tutor")}
+                        onClick={() => onAskTutor(msg.id as number)}
+                      />
+                    )}
                     {showDelete && (
                       <DeleteTurnButton
                         onDelete={() => onDeleteTurn?.(deletableTurnUserId)}
@@ -2484,6 +2529,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                 )}
               </div>
             )}
+            {threadMarker(msg.id, "left")}
           </div>
         );
       })}

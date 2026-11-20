@@ -104,9 +104,13 @@ import { useSetupSync } from "@/hooks/useSetupSync";
 import { listCourses, type StudyCourse } from "@/lib/courses-api";
 import { consumePendingPrompt } from "@/lib/pending-prompt";
 import {
+  deleteSession,
   fetchSessionAskHint,
   updateSessionOrganization,
+  type SessionSummary,
 } from "@/lib/session-api";
+import { useSessionThreads } from "@/hooks/useSessionThreads";
+import { findReusableThread } from "@/lib/session-threads";
 import {
   DEFAULT_QUIZ_CONFIG,
   buildQuizWSConfig,
@@ -1765,21 +1769,123 @@ export default function ChatWorkspace() {
     });
   }, [messagesContainerRef, state.messages]);
 
+  // Little Tutor threads opened from this conversation's messages.
+  const sessionThreads = useSessionThreads(state.sessionId);
+  const refreshSessionThreads = sessionThreads.refresh;
+  const wasStreamingRef = useRef(state.isStreaming);
+  useEffect(() => {
+    // A finished turn may have been a regenerate, which detaches threads
+    // opened from the answer it replaced.
+    if (wasStreamingRef.current && !state.isStreaming) refreshSessionThreads();
+    wasStreamingRef.current = state.isStreaming;
+  }, [refreshSessionThreads, state.isStreaming]);
+
+  /** Open the tutor, continuing the thread already asked about the same
+   *  message and passage (or the same whole message) when there is one. */
+  const openTutor = useCallback(
+    (selection: SelectionTutorContext) => {
+      const reusable = findReusableThread(
+        sessionThreads.threads,
+        selection.sourceMessageId,
+        selection.scope === "message" ? "message" : "selection",
+        selection.selectedText,
+      );
+      viewerPanelRef.current?.openSelectionTutorTab(
+        { ...selection, threadSessionId: reusable?.session_id ?? null },
+        state.language,
+      );
+    },
+    [sessionThreads.threads, state.language],
+  );
+
   const openSelectionTutor = useCallback(() => {
     if (!selectionTutorPrompt) return;
-    viewerPanelRef.current?.openSelectionTutorTab(
-      {
-        selectedText: selectionTutorPrompt.text,
-        parentSessionId: state.sessionId,
-        sourceMessageId: selectionTutorPrompt.sourceMessageId,
-        sourceMessageText: selectionTutorPrompt.sourceMessageText,
-        sourceMessageRole: selectionTutorPrompt.sourceMessageRole,
-      },
-      state.language,
-    );
+    openTutor({
+      selectedText: selectionTutorPrompt.text,
+      parentSessionId: state.sessionId,
+      sourceMessageId: selectionTutorPrompt.sourceMessageId,
+      sourceMessageText: selectionTutorPrompt.sourceMessageText,
+      sourceMessageRole: selectionTutorPrompt.sourceMessageRole,
+    });
     setSelectionTutorPrompt(null);
     window.getSelection()?.removeAllRanges();
-  }, [selectionTutorPrompt, state.language, state.sessionId]);
+  }, [openTutor, selectionTutorPrompt, state.sessionId]);
+
+  const askTutorAboutMessage = useCallback(
+    (messageId: number) => {
+      const message = state.messages.find((item) => item.id === messageId);
+      if (!message || !state.sessionId) return;
+      openTutor({
+        scope: "message",
+        selectedText: "",
+        parentSessionId: state.sessionId,
+        sourceMessageId: messageId,
+        sourceMessageText: message.content,
+        sourceMessageRole: message.role,
+      });
+    },
+    [openTutor, state.messages, state.sessionId],
+  );
+
+  const openTutorThread = useCallback(
+    (thread: SessionSummary) => {
+      const preferences = thread.preferences ?? {};
+      const rawSource = preferences.tutor_source_message_id;
+      const sourceMessageId =
+        rawSource == null || rawSource === "" || !Number.isFinite(Number(rawSource))
+          ? null
+          : Number(rawSource);
+      const source =
+        sourceMessageId == null
+          ? undefined
+          : state.messages.find((item) => item.id === sourceMessageId);
+      viewerPanelRef.current?.openSelectionTutorTab(
+        {
+          scope: preferences.tutor_scope === "message" ? "message" : "selection",
+          selectedText: preferences.tutor_selected_text ?? "",
+          parentSessionId: preferences.parent_session_id || state.sessionId,
+          sourceMessageId,
+          sourceMessageText: source?.content ?? "",
+          sourceMessageRole: source?.role ?? "assistant",
+          threadSessionId: thread.session_id,
+          sourceDeleted: Boolean(preferences.tutor_source_deleted),
+        },
+        state.language,
+      );
+    },
+    [state.language, state.messages, state.sessionId],
+  );
+
+  const deleteTutorThread = useCallback(
+    async (thread: SessionSummary) => {
+      try {
+        await deleteSession(thread.session_id);
+        viewerPanelRef.current?.closeTutorThread(thread.session_id);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : t("Action failed"), {
+          tone: "error",
+        });
+        throw error;
+      }
+    },
+    [t],
+  );
+
+  const detachTutorThread = useCallback(
+    async (thread: SessionSummary) => {
+      try {
+        await updateSessionOrganization(thread.session_id, {
+          tutor_source_message_id: null,
+        });
+      } catch (error) {
+        notify(error instanceof Error ? error.message : t("Action failed"), {
+          tone: "error",
+        });
+        throw error;
+      }
+    },
+    [t],
+  );
 
   const handleMessagesCopy = useCallback(
     (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -2655,6 +2761,11 @@ export default function ChatWorkspace() {
                         kbDisplayNames={
                           knowledgeBasesLoaded ? kbDisplayNames : undefined
                         }
+                        threadsByMessageId={sessionThreads.byMessageId}
+                        onAskTutor={state.sessionId ? askTutorAboutMessage : undefined}
+                        onOpenThread={openTutorThread}
+                        onDeleteThread={deleteTutorThread}
+                        onDetachThread={detachTutorThread}
                       />
                       <div
                         ref={messagesEndRef}

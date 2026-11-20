@@ -117,9 +117,18 @@ export interface SessionPreferences {
   selected_branches?: Record<string, number>;
   /** Study-course organization. Empty/absent means Unclassified. */
   course_id?: string;
-  /** Source conversation for nested selected-text tutor threads. */
+  /** Source conversation for nested Little Tutor threads. */
   parent_session_id?: string;
   session_kind?: "chat" | "selection_tutor" | "immersive_reading";
+  /** Little Tutor: asked about a selected passage or about a whole message. */
+  tutor_scope?: "selection" | "message";
+  /** Little Tutor: the selected passage (empty for a whole message). */
+  tutor_selected_text?: string;
+  /** Little Tutor: the parent message the thread was opened from; "" once
+   *  detached (the message was deleted or regenerated, or by hand). */
+  tutor_source_message_id?: number | string | null;
+  /** Little Tutor: the source message was deleted (not detached by hand). */
+  tutor_source_deleted?: boolean;
   /** Owning Immersive Reading workspace, present only for reading sessions. */
   reading_workspace_id?: string;
   /** Material active when the reading conversation was created. */
@@ -420,6 +429,8 @@ export type SessionOrganizationPatch = Partial<{
   session_kind: "chat" | "selection_tutor";
   pinned: boolean;
   archived: boolean;
+  /** Little Tutor threads only: ``null`` detaches the thread from its message. */
+  tutor_source_message_id: number | null;
 }>;
 
 export async function updateSessionOrganization(
@@ -471,14 +482,37 @@ export async function recordQuizResults(
 export async function deleteMessage(
   sessionId: string,
   messageId: number,
-): Promise<void> {
+): Promise<{ detachedThreadIds: string[] }> {
   const response = await apiFetch(
     apiUrl(`/api/sessions/${sessionId}/messages/${messageId}`),
     {
       method: "DELETE",
     },
   );
-  await expectJson<{ deleted: boolean }>(response);
+  const payload = await expectJson<{
+    deleted: boolean;
+    detached_thread_ids?: unknown;
+  }>(response);
+  const detachedThreadIds = Array.isArray(payload.detached_thread_ids)
+    ? payload.detached_thread_ids.map(String)
+    : [];
+  // Threads opened from the deleted messages lost their anchor.
+  if (detachedThreadIds.length) notifySessionsChanged();
+  return { detachedThreadIds };
+}
+
+/** Little Tutor threads opened from this conversation, newest first. */
+export async function listSessionThreads(
+  sessionId: string,
+  workspaceId?: string,
+  signal?: AbortSignal,
+): Promise<SessionSummary[]> {
+  const response = await apiFetch(
+    apiUrl(scopedUrl(`/api/sessions/${sessionId}/threads`, workspaceId)),
+    { cache: "no-store", signal },
+  );
+  const data = await expectJson<{ threads?: SessionSummary[] }>(response);
+  return data.threads ?? [];
 }
 
 export async function updateBranchSelection(

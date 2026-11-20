@@ -25,6 +25,7 @@ vi.mock("next/dynamic", async () => {
       openMarkdownNoteTab: () => fixture.calls.push("markdown"),
       openQuizFollowupTab: () => fixture.calls.push("quiz"),
       openSelectionTutorTab: () => fixture.calls.push("selection"),
+      closeTutorThread: () => fixture.calls.push("close-thread"),
       openGeogebraTab: () => fixture.calls.push("geogebra"),
       openSubagentTab: () => fixture.calls.push("subagent"),
       focusActivityHome: () => fixture.calls.push("activity"),

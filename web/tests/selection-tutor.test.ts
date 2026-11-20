@@ -67,3 +67,24 @@ test("KaTeX annotation remaps to math that grounds in Markdown source", () => {
   assert.equal(selected, source);
   assert.ok(source.includes(selected));
 });
+
+test("a whole-message question sends only the message id, never its text", () => {
+  assert.deepEqual(
+    buildSelectionTutorConfig({
+      scope: "message",
+      selectedText: "ignored",
+      parentSessionId: "parent-1",
+      sourceMessageId: 42,
+      sourceMessageText: "whatever the page shows",
+      sourceMessageRole: "assistant",
+    }),
+    {
+      selection_tutor_context: {
+        scope: "message",
+        parent_session_id: "parent-1",
+        source_message_id: 42,
+        source_message_role: "assistant",
+      },
+    },
+  );
+});

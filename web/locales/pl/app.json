@@ -6127,5 +6127,16 @@
   "You have no book with chapters to add it to.": "Nie masz książki z rozdziałami, do której można ją dodać.",
   "Could not load your books.": "Nie udało się wczytać twoich książek.",
   "Could not load the chapters.": "Nie udało się wczytać rozdziałów.",
-  "Could not add the video lesson to the book.": "Nie udało się dodać lekcji wideo do książki."
+  "Could not add the video lesson to the book.": "Nie udało się dodać lekcji wideo do książki.",
+  "Little Tutor · {{count}}": "Little Tutor · {{count}}",
+  "Little Tutor threads on this message": "Wątki Little Tutor przy tej wiadomości",
+  "Open Little Tutor thread": "Otwórz wątek Little Tutor",
+  "Delete Little Tutor thread": "Usuń wątek Little Tutor",
+  "Detach from this message": "Odłącz od tej wiadomości",
+  "Back to source": "Wróć do źródła",
+  "The original message is no longer in this conversation": "Oryginalnej wiadomości nie ma już w tej rozmowie",
+  "Original message deleted": "Oryginalna wiadomość usunięta",
+  "About this reply": "O tej odpowiedzi",
+  "Ask about this reply": "Zapytaj o tę odpowiedź",
+  "Ask anything about this reply.": "Zapytaj o cokolwiek w tej odpowiedzi."
 }

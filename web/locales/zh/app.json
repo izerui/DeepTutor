@@ -6083,5 +6083,16 @@
   "You have no book with chapters to add it to.": "你还没有可以插入的、带章节的书。",
   "Could not load your books.": "无法加载你的书。",
   "Could not load the chapters.": "无法加载章节。",
-  "Could not add the video lesson to the book.": "无法把视频讲解插入到书中。"
+  "Could not add the video lesson to the book.": "无法把视频讲解插入到书中。",
+  "Little Tutor · {{count}}": "小老师 · {{count}}",
+  "Little Tutor threads on this message": "这条消息的小老师对话",
+  "Open Little Tutor thread": "打开小老师对话",
+  "Delete Little Tutor thread": "删除小老师对话",
+  "Detach from this message": "解除与这条消息的关联",
+  "Back to source": "回到原文",
+  "The original message is no longer in this conversation": "原消息已不在当前对话中",
+  "Original message deleted": "原消息已删除",
+  "About this reply": "关于这条回复",
+  "Ask about this reply": "针对这条回复提问",
+  "Ask anything about this reply.": "关于这条回复，想问什么都可以。"
 }

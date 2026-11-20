@@ -431,6 +431,23 @@
   scroll-behavior: auto;
 }
 
+/* "Back to source" from a Little Tutor thread flashes the source message. */
+[data-tutor-source-highlight="true"] {
+  border-radius: 12px;
+  animation: tutor-source-flash 2s ease-out;
+}
+@keyframes tutor-source-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 22%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 7%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+    background-color: transparent;
+  }
+}
+
 /* ─── Prose: base ─── */
 .prose {
   @apply font-serif text-[16px];

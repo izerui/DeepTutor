@@ -6083,5 +6083,16 @@
   "You have no book with chapters to add it to.": "Du hast noch kein Buch mit Kapiteln, in das du sie einfügen kannst.",
   "Could not load your books.": "Deine Bücher konnten nicht geladen werden.",
   "Could not load the chapters.": "Die Kapitel konnten nicht geladen werden.",
-  "Could not add the video lesson to the book.": "Die Video-Lektion konnte nicht zum Buch hinzugefügt werden."
+  "Could not add the video lesson to the book.": "Die Video-Lektion konnte nicht zum Buch hinzugefügt werden.",
+  "Little Tutor · {{count}}": "Little Tutor · {{count}}",
+  "Little Tutor threads on this message": "Little-Tutor-Gespräche zu dieser Nachricht",
+  "Open Little Tutor thread": "Little-Tutor-Gespräch öffnen",
+  "Delete Little Tutor thread": "Little-Tutor-Gespräch löschen",
+  "Detach from this message": "Von dieser Nachricht lösen",
+  "Back to source": "Zurück zum Original",
+  "The original message is no longer in this conversation": "Die ursprüngliche Nachricht ist nicht mehr in diesem Gespräch",
+  "Original message deleted": "Ursprüngliche Nachricht gelöscht",
+  "About this reply": "Zu dieser Antwort",
+  "Ask about this reply": "Frage zu dieser Antwort stellen",
+  "Ask anything about this reply.": "Frag alles, was du zu dieser Antwort wissen willst."
 }

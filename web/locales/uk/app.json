@@ -6127,5 +6127,16 @@
   "You have no book with chapters to add it to.": "У вас немає книги з розділами, до якої його можна додати.",
   "Could not load your books.": "Не вдалося завантажити ваші книги.",
   "Could not load the chapters.": "Не вдалося завантажити розділи.",
-  "Could not add the video lesson to the book.": "Не вдалося додати відеоурок до книги."
+  "Could not add the video lesson to the book.": "Не вдалося додати відеоурок до книги.",
+  "Little Tutor · {{count}}": "Little Tutor · {{count}}",
+  "Little Tutor threads on this message": "Гілки Little Tutor до цього повідомлення",
+  "Open Little Tutor thread": "Відкрити гілку Little Tutor",
+  "Delete Little Tutor thread": "Видалити гілку Little Tutor",
+  "Detach from this message": "Відʼєднати від цього повідомлення",
+  "Back to source": "Повернутися до джерела",
+  "The original message is no longer in this conversation": "Початкового повідомлення вже немає в цій розмові",
+  "Original message deleted": "Початкове повідомлення видалено",
+  "About this reply": "Про цю відповідь",
+  "Ask about this reply": "Запитати про цю відповідь",
+  "Ask anything about this reply.": "Запитуй що завгодно про цю відповідь."
 }

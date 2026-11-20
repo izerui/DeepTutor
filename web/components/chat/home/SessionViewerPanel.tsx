@@ -63,7 +63,10 @@ import {
 } from "@/components/chat/home/SessionActivityPanel";
 import QuizFollowupTabBody from "@/components/quiz/QuizFollowupTabBody";
 import ConsultationTabBody from "@/components/chat/home/ConsultationTabBody";
-import type { QuizFollowupTabContext } from "@/context/QuizFollowupContext";
+import {
+  type QuizFollowupTabContext,
+  useOptionalQuizFollowupController,
+} from "@/context/QuizFollowupContext";
 import type { GeogebraTabPayload } from "@/context/GeogebraTabContext";
 import { apiUrl } from "@/lib/api";
 import type { MessageAttachment } from "@/features/chat/ChatStateAdapter";
@@ -191,11 +194,14 @@ export interface SessionViewerPanelHandle {
   openMarkdownNoteTab(): void;
   /** Opens (or focuses) the follow-up chat tab for a quiz question. */
   openQuizFollowupTab(context: QuizFollowupTabContext): void;
-  /** Opens an independent Little Tutor thread grounded in selected chat text. */
+  /** Opens a Little Tutor thread about selected chat text or a whole
+   *  message; with ``threadSessionId`` it continues that existing thread. */
   openSelectionTutorTab(
     selection: SelectionTutorContext,
     language: string,
   ): void;
+  /** Closes any tab showing this Little Tutor thread (it was deleted). */
+  closeTutorThread(threadSessionId: string): void;
   /** Opens (or focuses) an interactive GeoGebra applet tab. */
   openGeogebraTab(payload: GeogebraTabPayload): void;
   /** Opens (first time) or live-updates a connected subagent's run tab. */
@@ -479,15 +485,35 @@ function SessionViewerPanelInner(
     [onAutoOpen],
   );
 
+  const followupController = useOptionalQuizFollowupController();
+  /** The tab already bound to a server thread, whichever way it was opened. */
+  const tabShowingThread = useCallback(
+    (tabsNow: ViewerTab[], threadSessionId: string) =>
+      tabsNow.find(
+        (tab) =>
+          tab.kind === "selection-tutor" &&
+          (tab.context.followupSessionId === threadSessionId ||
+            followupController?.getThread(tab.context.questionKey).sessionId ===
+              threadSessionId),
+      ) ?? null,
+    [followupController],
+  );
+
   const openSelectionTutorTab = useCallback(
     (selection: SelectionTutorContext, language: string) => {
-      const selectedText = normalizeSelectedText(selection.selectedText);
-      if (!selectedText) return;
-      const questionKey = selectionTutorKey(
-        selectedText,
-        sessionId,
-        selection.sourceMessageId,
-      );
+      const scope = selection.scope === "message" ? "message" : "selection";
+      const selectedText =
+        scope === "message" ? "" : normalizeSelectedText(selection.selectedText);
+      if (scope === "selection" && !selectedText) return;
+      if (scope === "message" && selection.sourceMessageId == null) return;
+      const threadSessionId = selection.threadSessionId || null;
+      const questionKey = threadSessionId
+        ? `selection-tutor:thread:${threadSessionId}`
+        : selectionTutorKey(
+            scope === "message" ? "\u0000message" : selectedText,
+            sessionId,
+            selection.sourceMessageId,
+          );
       const id = selectionTutorTabIdFor(questionKey);
       const context: QuizFollowupTabContext = {
         questionKey,
@@ -504,19 +530,29 @@ function SessionViewerPanelInner(
         aiJudgment: "",
         parentQuizSessionId: null,
         notebookEntryId: null,
-        followupSessionId: null,
+        followupSessionId: threadSessionId,
         language,
         tabLabel: t("Little Tutor"),
         tutorSelection: {
+          scope,
           selectedText,
-          parentSessionId: sessionId,
+          parentSessionId: selection.parentSessionId ?? sessionId,
           sourceMessageId: selection.sourceMessageId,
           sourceMessageText: selection.sourceMessageText,
           sourceMessageRole: selection.sourceMessageRole,
+          threadSessionId,
+          sourceDeleted: Boolean(selection.sourceDeleted),
         },
       };
 
       setTabs((prev) => {
+        const bound = threadSessionId
+          ? tabShowingThread(prev, threadSessionId)
+          : null;
+        if (bound) {
+          setActiveTabId(bound.id);
+          return prev;
+        }
         const existingIdx = prev.findIndex((tab) => tab.id === id);
         const tab: ViewerTab = {
           kind: "selection-tutor",
@@ -535,7 +571,29 @@ function SessionViewerPanelInner(
       });
       onAutoOpen();
     },
-    [onAutoOpen, sessionId, t],
+    [onAutoOpen, sessionId, t, tabShowingThread],
+  );
+
+  const closeTutorThread = useCallback(
+    (threadSessionId: string) => {
+      setTabs((prev) => {
+        const next = prev.filter(
+          (tab) =>
+            !(
+              tab.kind === "selection-tutor" &&
+              tabShowingThread([tab], threadSessionId)
+            ),
+        );
+        if (next.length === prev.length) return prev;
+        setActiveTabId((current) =>
+          next.some((tab) => tab.id === current)
+            ? current
+            : (next[next.length - 1]?.id ?? null),
+        );
+        return next;
+      });
+    },
+    [tabShowingThread],
   );
 
   const openGeogebraTab = useCallback(
@@ -613,6 +671,7 @@ function SessionViewerPanelInner(
       openMarkdownNoteTab,
       openQuizFollowupTab,
       openSelectionTutorTab,
+      closeTutorThread,
       openGeogebraTab,
       openSubagentTab,
       focusActivityHome,
@@ -623,6 +682,7 @@ function SessionViewerPanelInner(
       openMarkdownNoteTab,
       openQuizFollowupTab,
       openSelectionTutorTab,
+      closeTutorThread,
       openGeogebraTab,
       openSubagentTab,
       focusActivityHome,

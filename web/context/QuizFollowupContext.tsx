@@ -28,6 +28,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { updateNotebookEntry } from "@/lib/notebook-api";
+import { notifySessionsChanged } from "@/lib/session-events";
 import { shouldAppendEventContent } from "@/lib/stream";
 import { hasPendingAskUser } from "@/lib/ask-user-state";
 import {
@@ -208,6 +209,11 @@ export interface QuizFollowupController {
   getAllThreads(): Record<string, FollowupThreadState>;
 }
 
+/** Little Tutor tabs key their threads ``selection-tutor:…``. */
+function isTutorThreadKey(key: string): boolean {
+  return key.startsWith("selection-tutor:");
+}
+
 const QuizFollowupCtx = createContext<QuizFollowupController | null>(null);
 // Public access to the threads state for components that want to react to
 // thread updates without keeping their own snapshot. Updating the inner
@@ -307,10 +313,14 @@ export function QuizFollowupProvider({ children }: ProviderProps) {
         if (entryId) {
           persistFollowupSessionId(key, entryId, nextSessionId);
         }
+        // A new Little Tutor thread now exists under its source message.
+        if (isTutorThreadKey(key)) notifySessionsChanged();
         return;
       }
 
       if (event.type === "done") {
+        // The thread's first turn names it; refresh the marker's titles.
+        if (isTutorThreadKey(key)) notifySessionsChanged();
         updateThread(key, (prev) => ({
           ...prev,
           isStreaming: false,
@@ -655,6 +665,11 @@ export function useQuizFollowupController(): QuizFollowupController {
     );
   }
   return ctx;
+}
+
+/** The controller when a provider is mounted, otherwise null. */
+export function useOptionalQuizFollowupController(): QuizFollowupController | null {
+  return useContext(QuizFollowupCtx);
 }
 
 /** Returns the live thread snapshot for a question key, re-rendering on

@@ -144,6 +144,8 @@ vi.mock('@/lib/courses-api', () => ({
 vi.mock('@/lib/session-api', () => ({
   fetchSessionAskHint: vi.fn(async () => ''),
   updateSessionOrganization: vi.fn(async () => ({})),
+  deleteSession: vi.fn(async () => {}),
+  listSessionThreads: vi.fn(async () => []),
 }))
 
 vi.mock('@/features/knowledge/api/catalog', () => ({
