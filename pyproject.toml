@@ -350,6 +350,10 @@ deeptutor = [
     "**/*.sh",
     "**/*.j2",
     "**/*.jinja",
+    # Video lesson: the Remotion kit/build script and the shared JS sandbox.
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.mjs",
 ]
 deeptutor_cli = ["**/*.md"]
 deeptutor_web = ["**/*", ".next/**/*"]
