@@ -6,10 +6,14 @@ import { useTranslation } from "react-i18next";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import { apiUrl } from "@/lib/api";
 import type { Block } from "@/lib/book-types";
+import { bookAnimationPath, bookMediaSrc } from "@/lib/book-media";
 import Tooltip from "@/shared/ui/Tooltip";
 
 export interface AnimationBlockProps {
   block: Block;
+  /** The book and page the block is on: its clip is read through the book. */
+  bookId?: string;
+  pageId?: string;
 }
 
 interface Artifact {
@@ -23,10 +27,12 @@ interface Artifact {
 function resolveAssetUrl(url: string): string {
   if (!url) return url;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  // Published with the book (spec 2026-11-20 §6): every reader may play it.
+  if (url.startsWith("/api/books/")) return bookMediaSrc(url);
   return apiUrl(url);
 }
 
-export default function AnimationBlock({ block }: AnimationBlockProps) {
+export default function AnimationBlock({ block, bookId, pageId }: AnimationBlockProps) {
   const { t } = useTranslation();
   const payload = (block.payload || {}) as Record<string, unknown>;
   const rawVideoUrl = String(payload.video_url || "");
@@ -43,7 +49,10 @@ export default function AnimationBlock({ block }: AnimationBlockProps) {
   }
 
   const primaryRaw = rawVideoUrl || artifacts[0]?.url || "";
-  const primary = resolveAssetUrl(primaryRaw);
+  // Older blocks name the author's own outputs; read those through the book too.
+  const primary = resolveAssetUrl(
+    bookAnimationPath(primaryRaw, bookId, pageId, block.id),
+  );
   const isVideo =
     primaryRaw.endsWith(".mp4") ||
     primaryRaw.endsWith(".webm") ||

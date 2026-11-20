@@ -26,6 +26,8 @@ export interface CapabilityDescriptor {
   id: string;
   kind: string;
   available: boolean;
+  /** Why the caller cannot start it (e.g. `disabled_by_admin`); "" when available. */
+  unavailableReason?: string;
   manifest: CapabilityManifest | null;
   configSchema: CapabilityConfigSchema | null;
 }
@@ -52,6 +54,9 @@ function descriptorFrom(value: unknown): CapabilityDescriptor | null {
     kind:
       typeof value.kind === "string" && value.kind ? value.kind : "capability",
     available: value.available !== false,
+    ...(typeof value.unavailable_reason === "string" && value.unavailable_reason
+      ? { unavailableReason: value.unavailable_reason }
+      : {}),
     manifest: isRecord(value.manifest) ? value.manifest : null,
     configSchema: isRecord(value.config_schema)
       ? (value.config_schema as CapabilityConfigSchema)

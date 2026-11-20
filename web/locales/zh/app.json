@@ -6071,5 +6071,17 @@
   "Install now": "立即安装",
   "npm registry mirror": "npm 镜像地址",
   "Optional. Used for the first install, for example https://registry.npmmirror.com. Leave empty for the default registry.": "可选，首次安装时使用，例如 https://registry.npmmirror.com。留空则使用默认地址。",
-  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "谁能用、单次预算、布局检查与 Node.js 运行环境。"
+  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "谁能用、单次预算、布局检查与 Node.js 运行环境。",
+  "video_lesson": "视频讲解",
+  "Video lessons are turned off by the administrator": "视频讲解已被管理员关闭",
+  "Video lessons need a runtime the server does not have yet. Please contact your administrator.": "服务器未安装视频讲解所需的运行环境，请联系管理员。",
+  "This video lesson is no longer available.": "这个视频讲解已不可用。",
+  "Add to book": "插入到书",
+  "Added to “{{book}}”": "已插入《{{book}}》",
+  "Open the chapter": "打开这一章",
+  "Everyone who can read the book can play it.": "能阅读这本书的人都能播放它。",
+  "You have no book with chapters to add it to.": "你还没有可以插入的、带章节的书。",
+  "Could not load your books.": "无法加载你的书。",
+  "Could not load the chapters.": "无法加载章节。",
+  "Could not add the video lesson to the book.": "无法把视频讲解插入到书中。"
 }

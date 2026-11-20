@@ -132,6 +132,30 @@ function CapMenuItem({
   const { t } = useTranslation();
 
   const Icon = cap.icon;
+  if (cap.unavailableNote) {
+    // Shown where the entry would be, so its absence is explained; not selectable.
+    return (
+      <div
+        role="note"
+        data-testid={`capability-unavailable-${cap.value}`}
+        className="flex w-full cursor-default items-center gap-2.5 px-3 py-1.5 text-left opacity-70"
+      >
+        <Icon
+          size={15}
+          strokeWidth={1.7}
+          className="shrink-0 text-[var(--muted-foreground)]"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12.5px] font-medium leading-snug text-[var(--muted-foreground)]">
+            {t(cap.label)}
+          </div>
+          <div className="text-[11px] leading-snug text-[var(--muted-foreground)]">
+            {t(cap.unavailableNote)}
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <button
       type="button"

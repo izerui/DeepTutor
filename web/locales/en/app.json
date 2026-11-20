@@ -6071,5 +6071,17 @@
   "Install now": "Install now",
   "npm registry mirror": "npm registry mirror",
   "Optional. Used for the first install, for example https://registry.npmmirror.com. Leave empty for the default registry.": "Optional. Used for the first install, for example https://registry.npmmirror.com. Leave empty for the default registry.",
-  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Who may use it, per-lesson budget, layout check and the Node.js runtime."
+  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Who may use it, per-lesson budget, layout check and the Node.js runtime.",
+  "video_lesson": "video lesson",
+  "Video lessons are turned off by the administrator": "Video lessons are turned off by the administrator",
+  "Video lessons need a runtime the server does not have yet. Please contact your administrator.": "Video lessons need a runtime the server does not have yet. Please contact your administrator.",
+  "This video lesson is no longer available.": "This video lesson is no longer available.",
+  "Add to book": "Add to book",
+  "Added to “{{book}}”": "Added to “{{book}}”",
+  "Open the chapter": "Open the chapter",
+  "Everyone who can read the book can play it.": "Everyone who can read the book can play it.",
+  "You have no book with chapters to add it to.": "You have no book with chapters to add it to.",
+  "Could not load your books.": "Could not load your books.",
+  "Could not load the chapters.": "Could not load the chapters.",
+  "Could not add the video lesson to the book.": "Could not add the video lesson to the book."
 }

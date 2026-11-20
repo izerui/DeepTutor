@@ -6115,5 +6115,17 @@
   "Install now": "Встановити зараз",
   "npm registry mirror": "Дзеркало реєстру npm",
   "Optional. Used for the first install, for example https://registry.npmmirror.com. Leave empty for the default registry.": "Необов’язково. Використовується для першого встановлення, наприклад https://registry.npmmirror.com. Залиште порожнім для типового реєстру.",
-  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Хто може користуватися, бюджет на урок, перевірка макета та середовище Node.js."
+  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Хто може користуватися, бюджет на урок, перевірка макета та середовище Node.js.",
+  "video_lesson": "відеоурок",
+  "Video lessons are turned off by the administrator": "Відеоуроки вимкнено адміністратором",
+  "Video lessons need a runtime the server does not have yet. Please contact your administrator.": "Для відеоуроків на сервері ще немає середовища виконання. Зверніться до адміністратора.",
+  "This video lesson is no longer available.": "Цей відеоурок більше недоступний.",
+  "Add to book": "Додати до книги",
+  "Added to “{{book}}”": "Додано до «{{book}}»",
+  "Open the chapter": "Відкрити розділ",
+  "Everyone who can read the book can play it.": "Відтворити його зможе кожен, хто може читати книгу.",
+  "You have no book with chapters to add it to.": "У вас немає книги з розділами, до якої його можна додати.",
+  "Could not load your books.": "Не вдалося завантажити ваші книги.",
+  "Could not load the chapters.": "Не вдалося завантажити розділи.",
+  "Could not add the video lesson to the book.": "Не вдалося додати відеоурок до книги."
 }

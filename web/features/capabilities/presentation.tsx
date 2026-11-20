@@ -55,6 +55,11 @@ export interface CapabilityDef {
   allowedTools: string[];
   secondary?: boolean;
   legacy?: boolean;
+  /**
+   * Set when the entry is shown but cannot be started here: the note takes the
+   * description's place and the row is not selectable.
+   */
+  unavailableNote?: string;
 }
 
 export interface ChatCapabilityDef extends CapabilityDef {
@@ -264,6 +269,39 @@ export function mergeCapabilityPresentations(
         defaultTools: [],
       };
     });
+}
+
+/** What the composer says where an entry would be, by capability and reason. */
+const UNAVAILABLE_NOTES: Record<string, Record<string, string>> = {
+  video_lesson: {
+    disabled_by_admin: "Video lessons are turned off by the administrator",
+    runtime_unavailable:
+      "Video lessons need a runtime the server does not have yet. Please contact your administrator.",
+  },
+};
+
+/**
+ * Entries the caller cannot start but should hear about, instead of the entry
+ * silently missing (an admin turned video lessons off for learners, or the
+ * server lacks its runtime). Not selectable; never part of `capabilities`.
+ */
+export function unavailableCapabilityNotices(
+  descriptors: readonly CapabilityDescriptor[],
+): ChatCapabilityDef[] {
+  const notices: ChatCapabilityDef[] = [];
+  for (const descriptor of descriptors) {
+    if (descriptor.available) continue;
+    const note = UNAVAILABLE_NOTES[descriptor.id]?.[descriptor.unavailableReason ?? ""];
+    const known = CHAT_CAPABILITIES.find((entry) => entry.value === descriptor.id);
+    if (!note || !known) continue;
+    notices.push({
+      ...known,
+      allowedTools: [],
+      defaultTools: [],
+      unavailableNote: note,
+    });
+  }
+  return notices;
 }
 
 export function visibleCapabilityPresentations(

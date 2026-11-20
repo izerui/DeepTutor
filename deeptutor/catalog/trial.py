@@ -83,4 +83,24 @@ def first_chapter(viewer: CurrentUser, item_id: str, chapter_id: str = "") -> di
     }
 
 
-__all__ = ["JOIN_TO_READ", "first_chapter"]
+def trial_page_storage(item_id: str, page_id: str):
+    """The book's store when ``page_id`` is in the trial chapter of a listed book.
+
+    Lets a visitor play the media of the blocks :func:`first_chapter` shows
+    them (spec 2026-11-20 §6); ``None`` for every other page or book.
+    """
+    record = _listed_book(item_id)
+    if record is None:
+        return None
+    from deeptutor.multi_user.book_access import storage_for
+
+    storage = storage_for(record)
+    spine = storage.load_spine(item_id)
+    chapters = sorted(spine.chapters, key=lambda c: c.order) if spine is not None else []
+    readable = [chapter for chapter in chapters if chapter.page_ids]
+    if not readable or page_id not in readable[0].page_ids:
+        return None
+    return storage
+
+
+__all__ = ["JOIN_TO_READ", "first_chapter", "trial_page_storage"]

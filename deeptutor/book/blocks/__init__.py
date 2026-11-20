@@ -19,6 +19,7 @@ from .quiz import QuizGenerator
 from .text import TextGenerator, generate_bridge_text
 from .timeline import TimelineGenerator
 from .user_note import UserNoteGenerator
+from .video_lesson import VideoLessonGenerator
 
 __all__ = [
     "BlockContext",
@@ -38,4 +39,5 @@ __all__ = [
     "TimelineGenerator",
     "FlashCardsGenerator",
     "DeepDiveGenerator",
+    "VideoLessonGenerator",
 ]

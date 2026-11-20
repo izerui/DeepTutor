@@ -140,6 +140,20 @@ class InsertBlockRequest(BaseModel):
     expected_revision: int | None = Field(default=None, ge=1)
 
 
+class InsertVideoLessonRequest(BaseModel):
+    """Spec 2026-11-20 §6: put a chat video lesson into a book chapter."""
+
+    book_id: str
+    page_id: str
+    #: The lesson page URL from the chat result (``/files/outputs/.../lesson.html``).
+    output_url: str = Field(max_length=1000)
+    title: str = Field(default="", max_length=300)
+    summary: str = Field(default="", max_length=6000)
+    duration_seconds: float | None = Field(default=None, ge=0, le=3600)
+    position: int | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
+
+
 class DeleteBlockRequest(BaseModel):
     book_id: str
     page_id: str
@@ -1497,6 +1511,16 @@ def _coerce_block_type(name: str) -> BlockType:
         raise HTTPException(status_code=400, detail=f"Unknown block type: {name}") from exc
 
 
+def _coerce_inserted_block_type(name: str) -> BlockType:
+    """A block type a reader may create by generating it in the book."""
+    block_type = _coerce_block_type(name)
+    if block_type == BlockType.VIDEO_LESSON:
+        from deeptutor.book.blocks.video_lesson import INSERT_FROM_CHAT
+
+        raise HTTPException(status_code=400, detail=INSERT_FROM_CHAT)
+    return block_type
+
+
 def _coerce_content_type(name: str) -> ContentType:
     try:
         return ContentType(name)
@@ -1516,7 +1540,7 @@ async def insert_block(req: InsertBlockRequest) -> dict[str, Any]:
         "insert_block",
         extra={"page_id": req.page_id, "block_type": req.block_type},
     )
-    block_type = _coerce_block_type(req.block_type)
+    block_type = _coerce_inserted_block_type(req.block_type)
     try:
         block = await engine.insert_block(
             book_id=req.book_id,
@@ -1534,6 +1558,118 @@ async def insert_block(req: InsertBlockRequest) -> dict[str, Any]:
     if block is None:
         raise HTTPException(status_code=404, detail="Page or chapter not found")
     return {"block": block.model_dump(mode="json"), "book_revision": revision}
+
+
+def _chat_video_lesson_source(output_url: str) -> Path:
+    """The inserting account's own chat lesson page named by ``output_url``.
+
+    Resolved in the caller's workspace exactly like ``/files/outputs`` serves
+    it, and limited to a video lesson's published page.
+    """
+    from deeptutor.book.media import LESSON_PAGE, OUTPUTS_PREFIX
+    from deeptutor.multi_user.context import get_current_user_or_none
+    from deeptutor.multi_user.paths import get_current_path_service
+
+    url = str(output_url or "").strip()
+    relative = url[len(OUTPUTS_PREFIX):] if url.startswith(OUTPUTS_PREFIX) else ""
+    parts = Path(relative).parts if relative else ()
+    if not (
+        len(parts) == 6
+        and parts[:3] == ("workspace", "chat", "video_lesson")
+        and parts[4] == "artifacts"
+        and parts[5] == LESSON_PAGE
+    ):
+        raise HTTPException(status_code=400, detail="Not a video lesson page.")
+    if _auth_enabled() and get_current_user_or_none() is None:
+        raise HTTPException(status_code=404, detail="Video lesson not found")
+    source = get_current_path_service().resolve_public_output_path(relative)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Video lesson not found")
+    return source
+
+
+@router.post("/books/insert-video-lesson")
+async def insert_video_lesson(req: InsertVideoLessonRequest) -> dict[str, Any]:
+    """Spec 2026-11-20 §6: publish a chat video lesson into a book chapter.
+
+    The page is copied into the book (``assets/blocks/<block>/lesson.html``),
+    so it is shared, listed and joined together with the book.
+    """
+    from deeptutor.book.media import BookMediaError
+
+    source = _chat_video_lesson_source(req.output_url)
+    resolved = _resolve_book_or_404(req.book_id, edit=True)
+    req.book_id = book_registry.strip_ref(req.book_id)
+    engine = resolved.engine
+    revision = _claim_content_mutation(
+        resolved,
+        req.book_id,
+        req.expected_revision,
+        "insert_block",
+        extra={"page_id": req.page_id, "block_type": BlockType.VIDEO_LESSON.value},
+    )
+    try:
+        block = await engine.insert_video_lesson(
+            book_id=req.book_id,
+            page_id=req.page_id,
+            source=source,
+            title=req.title.strip(),
+            summary=req.summary.strip(),
+            duration_seconds=req.duration_seconds,
+            position=req.position,
+        )
+    except BookMediaError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if block is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    return {"block": block.model_dump(mode="json"), "book_revision": revision}
+
+
+def _trial_media_storage(book_id: str, page_id: str) -> Any:
+    """A market visitor trying a listed book may play its first chapter's media."""
+    from deeptutor.catalog.trial import trial_page_storage
+
+    return trial_page_storage(book_id, page_id)
+
+
+@router.get("/books/{book_id}/pages/{page_id}/blocks/{block_id}/media/{name}")
+async def get_block_media(book_id: str, page_id: str, block_id: str, name: str) -> Response:
+    """A file a block plays, under the book's own read rules (spec 2026-11-20 §6).
+
+    Everyone who may read the book (its owner, joined learners of a shared or
+    listed book, a course's learners, an author path's assigned learners)
+    may play it; nobody else learns whether it exists (404). Video lesson
+    pages keep the script-only sandbox CSP they have in chat.
+    """
+    from fastapi.responses import FileResponse
+
+    from deeptutor.api.routers.outputs import SANDBOXED_LESSON_CSP
+    from deeptutor.book.media import is_video_lesson_page, resolve_block_media
+
+    try:
+        resolved = _resolve_book_or_404(_path_book_ref(book_id))
+        storage = resolved.engine.storage
+    except HTTPException:
+        storage = await asyncio.to_thread(_trial_media_storage, book_registry.strip_ref(book_id), page_id)
+        if storage is None:
+            raise
+    bare_id = book_registry.strip_ref(book_id)
+
+    def _locate() -> Path | None:
+        try:
+            page = storage.load_page(bare_id, page_id)
+        except ValueError:
+            return None
+        return resolve_block_media(storage, bare_id, page, block_id, name)
+
+    path = await asyncio.to_thread(_locate)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    headers = {"X-Content-Type-Options": "nosniff", "Cache-Control": "private"}
+    if is_video_lesson_page(path):
+        headers["Content-Security-Policy"] = SANDBOXED_LESSON_CSP
+        return FileResponse(path, media_type="text/html", headers=headers)
+    return FileResponse(path, headers=headers)
 
 
 @router.post("/books/delete-block")
@@ -1589,7 +1725,7 @@ async def change_block_type(req: ChangeBlockTypeRequest) -> dict[str, Any]:
         "change_block_type",
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
-    new_type = _coerce_block_type(req.new_type)
+    new_type = _coerce_inserted_block_type(req.new_type)
     try:
         block = await engine.change_block_type(
             book_id=req.book_id,

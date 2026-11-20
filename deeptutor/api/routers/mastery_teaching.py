@@ -36,6 +36,8 @@ ORIGINAL_CONTENT_ROUTES: frozenset[str] = frozenset(
         "/books/{book_id}",
         "/books/{book_id}/spine",
         "/books/{book_id}/pages/{page_id}",
+        # A block's published media (video lesson page, animation), spec 2026-11-20 §6.
+        "/books/{book_id}/pages/{page_id}/blocks/{block_id}/media/{name}",
     }
 )
 #: R2 (B2-17): the reader's OWN state on a path book — reading progress,

@@ -42,6 +42,7 @@ export type BlockType =
   | "figure"
   | "interactive"
   | "animation"
+  | "video_lesson"
   | "code"
   | "timeline"
   | "flash_cards"

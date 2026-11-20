@@ -336,6 +336,25 @@ export const bookApi = {
       }),
     }),
 
+  /**
+   * Put a chat video lesson into a chapter (spec 2026-11-20 §6). The server
+   * copies the lesson page into the book, so it is shared with the book.
+   */
+  insertVideoLesson: (params: {
+    book_id: string;
+    page_id: string;
+    output_url: string;
+    title?: string;
+    summary?: string;
+    duration_seconds?: number | null;
+    position?: number;
+    expected_revision?: number;
+  }) =>
+    request<{ block: Block; book_revision: number }>("/books/insert-video-lesson", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
   /** Edit a block's prose in place. Title/body only — see the backend note. */
   updateBlock: (params: {
     book_id: string;

@@ -470,7 +470,8 @@ class BookEngine:
         other from their point of view.
         """
         for block in page.blocks:
-            if block.type == BlockType.USER_NOTE:
+            # A video lesson is inserted from chat and cannot be regenerated.
+            if block.type in (BlockType.USER_NOTE, BlockType.VIDEO_LESSON):
                 continue
             if (block.metadata or {}).get("edited_by_user"):
                 continue
@@ -1979,6 +1980,53 @@ class BookEngine:
         self.storage.append_log(
             book_id,
             f"inserted {block_type.value} block on page {page_id} (pos={position})",
+            op="insert_block",
+        )
+        return block
+
+    @content_writer
+    async def insert_video_lesson(
+        self,
+        *,
+        book_id: str,
+        page_id: str,
+        source: Path,
+        title: str = "",
+        summary: str = "",
+        duration_seconds: float | None = None,
+        position: int | None = None,
+    ) -> Block | None:
+        """Publish a chat video lesson's page into the book as a new READY block.
+
+        Spec 2026-11-20 §6: the page is copied into the book's own assets, so
+        everyone who may read the book can play it — never a link into the
+        inserting account's private outputs.
+        """
+        from .media import LESSON_PAGE, MEDIA_KEY, media_url, publish_file
+
+        page = self.storage.load_page(book_id, page_id)
+        if page is None or self.storage.load_book(book_id) is None:
+            return None
+        block = Block(type=BlockType.VIDEO_LESSON, status=BlockStatus.READY, title=title)
+        # A lesson page runs to several MB: copy it off the event loop.
+        await asyncio.to_thread(publish_file, self.storage, book_id, block.id, source, LESSON_PAGE)
+        payload: dict[str, Any] = {
+            "title": title,
+            "summary": summary,
+            MEDIA_KEY: [LESSON_PAGE],
+            "lesson_url": media_url(book_id, page_id, block.id, LESSON_PAGE),
+        }
+        if duration_seconds:
+            payload["duration_seconds"] = duration_seconds
+        block.payload = payload
+        if position is None or position >= len(page.blocks) or position < 0:
+            page.blocks.append(block)
+        else:
+            page.blocks.insert(position, block)
+        self.storage.save_page(page)
+        self.storage.append_log(
+            book_id,
+            f"inserted video_lesson block on page {page_id} (pos={position})",
             op="insert_block",
         )
         return block

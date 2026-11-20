@@ -916,6 +916,31 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/books/{book_id}/pages/{page_id}/blocks/{block_id}/media/{name}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Get Block Media
+     * @description A file a block plays, under the book's own read rules (spec 2026-11-20 §6).
+     *
+     *     Everyone who may read the book (its owner, joined learners of a shared or
+     *     listed book, a course's learners, an author path's assigned learners)
+     *     may play it; nobody else learns whether it exists (404). Video lesson
+     *     pages keep the script-only sandbox CSP they have in chat.
+     */
+    readonly get: operations["get_block_media_api_books__book_id__pages__page_id__blocks__block_id__media__name__get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/books/{book_id}/references": {
     readonly parameters: {
       readonly query?: never;
@@ -1189,6 +1214,29 @@ export interface paths {
     readonly put?: never;
     /** Insert Block */
     readonly post: operations["insert_block_api_books_insert_block_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/books/insert-video-lesson": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Insert Video Lesson
+     * @description Spec 2026-11-20 §6: publish a chat video lesson into a book chapter.
+     *
+     *     The page is copied into the book (``assets/blocks/<block>/lesson.html``),
+     *     so it is shared, listed and joined together with the book.
+     */
+    readonly post: operations["insert_video_lesson_api_books_insert_video_lesson_post"];
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -15274,6 +15322,34 @@ export interface components {
       readonly position?: number | null;
     };
     /**
+     * InsertVideoLessonRequest
+     * @description Spec 2026-11-20 §6: put a chat video lesson into a book chapter.
+     */
+    readonly InsertVideoLessonRequest: {
+      /** Book Id */
+      readonly book_id: string;
+      /** Duration Seconds */
+      readonly duration_seconds?: number | null;
+      /** Expected Revision */
+      readonly expected_revision?: number | null;
+      /** Output Url */
+      readonly output_url: string;
+      /** Page Id */
+      readonly page_id: string;
+      /** Position */
+      readonly position?: number | null;
+      /**
+       * Summary
+       * @default
+       */
+      readonly summary: string;
+      /**
+       * Title
+       * @default
+       */
+      readonly title: string;
+    };
+    /**
      * InstallPayload
      * @description Install a catalog entry, optionally under a different local name.
      */
@@ -20066,6 +20142,8 @@ export type SchemaInitModulesRequest =
   components["schemas"]["InitModulesRequest"];
 export type SchemaInsertBlockRequest =
   components["schemas"]["InsertBlockRequest"];
+export type SchemaInsertVideoLessonRequest =
+  components["schemas"]["InsertVideoLessonRequest"];
 export type SchemaInstallPayload = components["schemas"]["InstallPayload"];
 export type SchemaInstallRequest = components["schemas"]["InstallRequest"];
 export type SchemaInstallSkillRequest =
@@ -22470,6 +22548,44 @@ export interface operations {
       };
     };
   };
+  readonly get_block_media_api_books__book_id__pages__page_id__blocks__block_id__media__name__get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly block_id: string;
+        readonly book_id: string;
+        readonly name: string;
+        readonly page_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly get_book_references_api_books__book_id__references_get: {
     readonly parameters: {
       readonly query?: never;
@@ -23019,6 +23135,45 @@ export interface operations {
     readonly requestBody: {
       readonly content: {
         readonly "application/json": components["schemas"]["InsertBlockRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly insert_video_lesson_api_books_insert_video_lesson_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["InsertVideoLessonRequest"];
       };
     };
     readonly responses: {

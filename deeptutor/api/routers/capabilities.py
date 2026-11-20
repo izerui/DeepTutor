@@ -21,6 +21,15 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
+def _unavailable_reason(name: str) -> str:
+    """``""`` when the caller may start ``name``; otherwise a stable reason code."""
+    if name == "video_lesson":
+        from deeptutor.agents.video_lesson.capability import unavailable_reason
+
+        return unavailable_reason()
+    return ""
+
+
 @router.get("/registered")
 async def list_registered_capabilities() -> dict[str, list[dict[str, object]]]:
     """Describe every turn capability the deployment can execute."""
@@ -31,11 +40,15 @@ async def list_registered_capabilities() -> dict[str, list[dict[str, object]]]:
         manifest = {
             key: value for key, value in item.items() if key not in {"request_schema", "kind"}
         }
+        reason = _unavailable_reason(str(item["name"]))
         descriptors.append(
             {
                 "id": str(item["name"]),
                 "kind": str(item.get("kind") or "turn"),
-                "available": True,
+                "available": not reason,
+                # Why the caller cannot start it here, so the page can say so
+                # where the entry would be instead of silently hiding it.
+                "unavailable_reason": reason,
                 "manifest": manifest,
                 "config_schema": item.get("request_schema") or {},
             }

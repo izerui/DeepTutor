@@ -66,6 +66,8 @@ class BlockType(str, Enum):
     FIGURE = "figure"
     INTERACTIVE = "interactive"
     ANIMATION = "animation"
+    # A chat-generated video lesson (spec 2026-11-20 §6): inserted, never planned.
+    VIDEO_LESSON = "video_lesson"
     CODE = "code"
     TIMELINE = "timeline"
     FLASH_CARDS = "flash_cards"

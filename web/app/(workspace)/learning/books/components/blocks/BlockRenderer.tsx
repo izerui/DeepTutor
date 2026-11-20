@@ -24,6 +24,7 @@ import UserNoteBlock from "./UserNoteBlock";
 import FigureBlock from "./FigureBlock";
 import InteractiveBlock from "./InteractiveBlock";
 import AnimationBlock from "./AnimationBlock";
+import VideoLessonBlock from "./VideoLessonBlock";
 import CodeBlock from "./CodeBlock";
 import TimelineBlock from "./TimelineBlock";
 import FlashCardsBlock from "./FlashCardsBlock";
@@ -80,6 +81,11 @@ export interface BlockRendererProps {
   onUpdateBody?: (block: Block, body: string) => Promise<void> | void;
   pendingDeepDiveTopic?: string | null;
   bookId?: string;
+  /**
+   * The book whose published media the block plays, when it is shown outside
+   * the reader (the market trial). Defaults to `bookId`.
+   */
+  mediaBookId?: string;
   currentPageId?: string;
   bookLanguage?: string;
 }
@@ -101,6 +107,7 @@ export default function BlockRenderer({
   onUpdateBody,
   pendingDeepDiveTopic,
   bookId,
+  mediaBookId,
   currentPageId,
   bookLanguage,
 }: BlockRendererProps) {
@@ -203,7 +210,16 @@ export default function BlockRenderer({
       body = <InteractiveBlock block={block} />;
       break;
     case "animation":
-      body = <AnimationBlock block={block} />;
+      body = (
+        <AnimationBlock
+          block={block}
+          bookId={mediaBookId ?? bookId}
+          pageId={currentPageId}
+        />
+      );
+      break;
+    case "video_lesson":
+      body = <VideoLessonBlock block={block} />;
       break;
     case "code":
       body = <CodeBlock block={block} />;
@@ -240,6 +256,8 @@ export default function BlockRenderer({
 
   const canEditBody =
     !!onUpdateBody && EDITABLE_BODY_TYPES.includes(block.type);
+  // A video lesson comes from chat: nothing to regenerate or re-type here.
+  const generated = block.type !== "video_lesson";
   const currentBody = String(
     (block.payload as Record<string, unknown> | undefined)?.[
       bodyKeyFor(block)
@@ -298,7 +316,7 @@ export default function BlockRenderer({
               </Tooltip>
             </>
           )}
-          {onChangeType && (
+          {onChangeType && generated && (
             <div className="relative pointer-events-auto">
               <Tooltip label={t("Change type")} suppressed={showTypeMenu}>
                 <button
@@ -341,7 +359,7 @@ export default function BlockRenderer({
               </button>
             </Tooltip>
           )}
-          {onRegenerate && (
+          {onRegenerate && generated && (
             <Tooltip label={t("Regenerate")}>
               <button
                 onClick={() => onRegenerate(block)}

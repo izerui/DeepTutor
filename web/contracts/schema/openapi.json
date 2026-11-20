@@ -4878,6 +4878,79 @@
         "title": "InsertBlockRequest",
         "type": "object"
       },
+      "InsertVideoLessonRequest": {
+        "description": "Spec 2026-11-20 §6: put a chat video lesson into a book chapter.",
+        "properties": {
+          "book_id": {
+            "title": "Book Id",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "output_url": {
+            "maxLength": 1000,
+            "title": "Output Url",
+            "type": "string"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 6000,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "book_id",
+          "page_id",
+          "output_url"
+        ],
+        "title": "InsertVideoLessonRequest",
+        "type": "object"
+      },
       "InstallPayload": {
         "description": "Install a catalog entry, optionally under a different local name.",
         "properties": {
@@ -18357,6 +18430,84 @@
         ]
       }
     },
+    "/api/books/insert-video-lesson": {
+      "post": {
+        "description": "Spec 2026-11-20 §6: publish a chat video lesson into a book chapter.\n\nThe page is copied into the book (``assets/blocks/<block>/lesson.html``),\nso it is shared, listed and joined together with the book.",
+        "operationId": "insert_video_lesson_api_books_insert_video_lesson_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InsertVideoLessonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Insert Video Lesson Api Books Insert Video Lesson Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Insert Video Lesson",
+        "tags": [
+          "books"
+        ]
+      }
+    },
     "/api/books/move-block": {
       "post": {
         "operationId": "move_block_api_books_move_block_post",
@@ -20671,6 +20822,106 @@
           }
         },
         "summary": "Get Page",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/api/books/{book_id}/pages/{page_id}/blocks/{block_id}/media/{name}": {
+      "get": {
+        "description": "A file a block plays, under the book's own read rules (spec 2026-11-20 §6).\n\nEveryone who may read the book (its owner, joined learners of a shared or\nlisted book, a course's learners, an author path's assigned learners)\nmay play it; nobody else learns whether it exists (404). Video lesson\npages keep the script-only sandbox CSP they have in chat.",
+        "operationId": "get_block_media_api_books__book_id__pages__page_id__blocks__block_id__media__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "book_id",
+            "required": true,
+            "schema": {
+              "title": "Book Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "title": "Block Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Block Media",
         "tags": [
           "books"
         ]

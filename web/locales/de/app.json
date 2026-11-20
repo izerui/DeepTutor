@@ -6071,5 +6071,17 @@
   "Install now": "Jetzt installieren",
   "npm registry mirror": "npm-Registry-Mirror",
   "Optional. Used for the first install, for example https://registry.npmmirror.com. Leave empty for the default registry.": "Optional. Wird für die erste Installation verwendet, zum Beispiel https://registry.npmmirror.com. Leer lassen für die Standard-Registry.",
-  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Wer sie nutzen darf, Budget pro Lektion, Layout-Prüfung und die Node.js-Laufzeit."
+  "Who may use it, per-lesson budget, layout check and the Node.js runtime.": "Wer sie nutzen darf, Budget pro Lektion, Layout-Prüfung und die Node.js-Laufzeit.",
+  "video_lesson": "Video-Lektion",
+  "Video lessons are turned off by the administrator": "Video-Lektionen wurden vom Administrator deaktiviert",
+  "Video lessons need a runtime the server does not have yet. Please contact your administrator.": "Für Video-Lektionen fehlt auf dem Server noch die Laufzeitumgebung. Bitte wende dich an den Administrator.",
+  "This video lesson is no longer available.": "Diese Video-Lektion ist nicht mehr verfügbar.",
+  "Add to book": "Zum Buch hinzufügen",
+  "Added to “{{book}}”": "Zu „{{book}}“ hinzugefügt",
+  "Open the chapter": "Kapitel öffnen",
+  "Everyone who can read the book can play it.": "Alle, die das Buch lesen können, können sie abspielen.",
+  "You have no book with chapters to add it to.": "Du hast noch kein Buch mit Kapiteln, in das du sie einfügen kannst.",
+  "Could not load your books.": "Deine Bücher konnten nicht geladen werden.",
+  "Could not load the chapters.": "Die Kapitel konnten nicht geladen werden.",
+  "Could not add the video lesson to the book.": "Die Video-Lektion konnte nicht zum Buch hinzugefügt werden."
 }

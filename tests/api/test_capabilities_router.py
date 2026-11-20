@@ -31,9 +31,12 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_registered_lists_the_builtin_capabilities(client) -> None:
+def test_registered_lists_the_builtin_capabilities(client, monkeypatch) -> None:
     """The backend-owned descriptors are sorted and complete."""
+    from deeptutor.agents.video_lesson import capability as video_lesson
     from deeptutor.runtime.bootstrap.builtin_capabilities import BUILTIN_CAPABILITY_CLASSES
+
+    monkeypatch.setattr(video_lesson, "unavailable_reason", lambda: "")
 
     body = client.get("/api/capabilities/registered").json()
     descriptors = body["capabilities"]
@@ -43,10 +46,26 @@ def test_registered_lists_the_builtin_capabilities(client) -> None:
     assert set(BUILTIN_CAPABILITY_CLASSES) <= set(names)
     assert "mastery_path" in names
     assert all(
-        set(item) == {"id", "kind", "available", "manifest", "config_schema"}
+        set(item)
+        == {"id", "kind", "available", "unavailable_reason", "manifest", "config_schema"}
         for item in descriptors
     )
     assert all(item["available"] is True for item in descriptors)
+    assert all(item["unavailable_reason"] == "" for item in descriptors)
+
+
+@pytest.mark.parametrize("reason", ["disabled_by_admin", "runtime_unavailable"])
+def test_an_unavailable_video_lesson_says_why(client, monkeypatch, reason) -> None:
+    """Listed, not startable, with the reason the page shows where the entry would be."""
+    from deeptutor.agents.video_lesson import capability as video_lesson
+
+    monkeypatch.setattr(video_lesson, "unavailable_reason", lambda: reason)
+    descriptors = client.get("/api/capabilities/registered").json()["capabilities"]
+    entry = next(item for item in descriptors if item["id"] == "video_lesson")
+    assert entry["available"] is False
+    assert entry["unavailable_reason"] == reason
+    others = [item for item in descriptors if item["id"] != "video_lesson"]
+    assert all(item["available"] and not item["unavailable_reason"] for item in others)
 
 
 def test_a_stock_install_reports_whisper_missing(client) -> None:

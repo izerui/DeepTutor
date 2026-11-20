@@ -319,3 +319,19 @@ def test_a_failed_install_is_reported_to_the_admin(admin_http, monkeypatch) -> N
     response = admin_http("adam", "POST", "/api/capabilities/video-lesson/install")
     assert response.status_code == 503
     assert "Node.js" in response.json()["detail"]
+
+
+def test_the_catalog_says_why_a_learner_cannot_start_it(as_account, switch, monkeypatch) -> None:
+    """Batch 5: the composer shows a note where the entry would be, not nothing."""
+    from deeptutor.agents.video_lesson import runtime
+
+    monkeypatch.setattr(runtime, "tools_present", lambda: True)
+    with as_account("sara"):
+        assert capability_module.unavailable_reason() == ""
+    switch["learners_allowed"] = False
+    with as_account("sara"):
+        assert capability_module.unavailable_reason() == "disabled_by_admin"
+    with as_account("adam"):
+        assert capability_module.unavailable_reason() == ""
+        monkeypatch.setattr(runtime, "tools_present", lambda: False)
+        assert capability_module.unavailable_reason() == "runtime_unavailable"

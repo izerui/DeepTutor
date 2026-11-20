@@ -18,6 +18,7 @@ Ported from upstream (``6b7897a32`` .. ``c35eb7266``) with the develop rules:
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 import shutil
 import time
@@ -31,6 +32,8 @@ from deeptutor.i18n import StatusI18n
 from deeptutor.runtime.agentic.usage import UsageTracker
 from deeptutor.runtime.request_contracts import get_capability_request_schema
 from deeptutor.runtime.stream_bus import StreamBus
+
+logger = logging.getLogger(__name__)
 
 # Rounds of "your layout collides here" feedback after a lesson already builds.
 MAX_LAYOUT_ROUNDS = 2
@@ -76,6 +79,26 @@ def ensure_allowed(params: dict[str, Any] | None = None) -> dict[str, Any]:
     if not params.get("learners_allowed", True) and acting_learner():
         raise VideoLessonDisabled()
     return params
+
+
+def unavailable_reason() -> str:
+    """Why the caller cannot start a video lesson here, or ``""``.
+
+    ``disabled_by_admin``: an administrator turned it off for learners;
+    ``runtime_unavailable``: the server has no Node.js/npm. Both are checked
+    again server-side when a turn starts.
+    """
+    from deeptutor.agents.video_lesson.runtime import tools_present
+
+    try:
+        ensure_allowed()
+    except VideoLessonDisabled:
+        return "disabled_by_admin"
+    except Exception:
+        logger.debug("Could not read the video lesson switch", exc_info=True)
+    if not tools_present():
+        return "runtime_unavailable"
+    return ""
 
 
 class VideoLessonCapability(TurnCapability):

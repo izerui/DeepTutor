@@ -105,7 +105,13 @@ export default function BookTrial() {
           <div key={page.id} className="space-y-4" data-testid="trial-page">
             {page.title && page.title !== trial.chapter.title && <h3 className="text-[15px] font-semibold">{page.title}</h3>}
             {page.blocks.map((block) => (
-              <BlockRenderer key={block.id} block={asBlock(block)} bookLanguage={trial.book.language || undefined} />
+              <BlockRenderer
+                key={block.id}
+                block={asBlock(block)}
+                mediaBookId={trial.book.id}
+                currentPageId={page.id}
+                bookLanguage={trial.book.language || undefined}
+              />
             ))}
           </div>
         ))}

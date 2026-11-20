@@ -239,6 +239,7 @@ def _payload_for_type(block_type: str, payload: dict[str, Any]) -> str:
         BlockType.FIGURE.value,
         BlockType.INTERACTIVE.value,
         BlockType.ANIMATION.value,
+        BlockType.VIDEO_LESSON.value,
         BlockType.CONCEPT_GRAPH.value,
     }:
         main = _format_visual_summary(payload)

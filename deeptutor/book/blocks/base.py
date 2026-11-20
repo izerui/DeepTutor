@@ -222,6 +222,7 @@ def _build_default_registry() -> BlockGeneratorRegistry:
     from .text import TextGenerator
     from .timeline import TimelineGenerator
     from .user_note import UserNoteGenerator
+    from .video_lesson import VideoLessonGenerator
 
     for cls in (
         TextGenerator,
@@ -237,6 +238,7 @@ def _build_default_registry() -> BlockGeneratorRegistry:
         DeepDiveGenerator,
         ConceptGraphGenerator,
         SectionGenerator,
+        VideoLessonGenerator,
     ):
         registry.register(cls())
     return registry

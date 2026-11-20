@@ -6,6 +6,7 @@ import { fetchCapabilityCatalog } from "./api";
 import type { CapabilityDescriptor } from "./model";
 import {
   mergeCapabilityPresentations,
+  unavailableCapabilityNotices,
   visibleCapabilityPresentations,
 } from "./presentation";
 
@@ -51,9 +52,15 @@ export function useCapabilityCatalog() {
     () => mergeCapabilityPresentations(descriptors),
     [descriptors],
   );
+  // The composer menu also lists what this account cannot start here, with a
+  // note in its place; `capabilities` (what may be selected) stays available-only.
   const visibleCapabilities = useMemo(
-    () => visibleCapabilityPresentations(capabilities),
-    [capabilities],
+    () =>
+      visibleCapabilityPresentations([
+        ...capabilities,
+        ...unavailableCapabilityNotices(descriptors),
+      ]),
+    [capabilities, descriptors],
   );
 
   return { capabilities, descriptors, error, isLoading, visibleCapabilities };

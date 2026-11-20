@@ -103,6 +103,26 @@ class AnimationGenerator(BlockGenerator):
         summary_payload = result["summary"]
         analysis = result["analysis"]
         artifacts = [artifact.model_dump() for artifact in render_result.artifacts]
+        # Publish the clip with the book (spec 2026-11-20 §6): its outputs URL
+        # resolves in the generating account's workspace, so a learner reading
+        # the shared book could never play it.
+        media: list[str] = []
+        try:
+            from deeptutor.services.path_service import get_path_service
+
+            from ..media import publish_animation_artifacts
+            from ..storage import get_book_storage
+
+            artifacts, media = publish_animation_artifacts(
+                ctx.storage or get_book_storage(),
+                ctx.book_id,
+                ctx.page.id,
+                ctx.block.id,
+                artifacts,
+                get_path_service(),
+            )
+        except Exception as exc:  # noqa: BLE001 - the author can still play it
+            logger.warning(f"AnimationGenerator could not publish media: {exc}", exc_info=True)
         primary = next(
             (
                 a
@@ -121,6 +141,7 @@ class AnimationGenerator(BlockGenerator):
                 "summary": getattr(summary_payload, "summary_text", "") or "",
                 "key_points": list(getattr(summary_payload, "key_points", []) or []),
                 "description": getattr(analysis, "learning_goal", "") or "",
+                "media": media,
             },
             [],
             {

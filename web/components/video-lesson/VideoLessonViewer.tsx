@@ -4,6 +4,7 @@ import { Clapperboard, Code2, ExternalLink, Timer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { apiUrl } from "@/lib/api";
 import type { VideoLessonResult } from "@/lib/video-lesson-types";
+import AddVideoLessonToBook from "./AddVideoLessonToBook";
 
 /** Upstream 6b7897a32: the lesson page in a script-only sandboxed frame. */
 export default function VideoLessonViewer({
@@ -65,6 +66,9 @@ export default function VideoLessonViewer({
           ) : null}
         </div>
       ) : null}
+
+      {/* Spec 2026-11-20 §6: published with a book, its readers can play it. */}
+      {url.startsWith("/files/outputs/") ? <AddVideoLessonToBook result={result} /> : null}
 
       {result.code ? (
         <details className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)]">

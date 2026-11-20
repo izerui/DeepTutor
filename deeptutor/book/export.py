@@ -263,6 +263,8 @@ def render_block(block: Block, language: str = "en") -> str:
         body = _render_visual(payload, "interactive widget", labels)
     elif block.type == BlockType.ANIMATION:
         body = _render_visual(payload, "animation", labels)
+    elif block.type == BlockType.VIDEO_LESSON:
+        body = _render_visual(payload, "video lesson", labels)
     elif block.type == BlockType.DEEP_DIVE:
         body = _render_deep_dive(payload)
     else:
