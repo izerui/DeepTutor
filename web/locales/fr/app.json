@@ -6053,5 +6053,6 @@
   "Action": "Action",
   "Conversation IDs (optional)": "Conversation IDs (optional)",
   "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.",
-  "guidedLearning.loadKbFailed": "Échec du chargement des bases de connaissances"
+  "guidedLearning.loadKbFailed": "Échec du chargement des bases de connaissances",
+  "MCP services are managed by your administrator.": "Les services MCP sont gérés par votre administrateur."
 }

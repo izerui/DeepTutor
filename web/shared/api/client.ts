@@ -1,6 +1,6 @@
 import { ApiError, type AppError, type AppErrorScope } from "./errors";
 import { browserReturnPath, loginHref } from "../auth/return-url";
-import { browserPath, scopedUrl } from "@/lib/workspace-scope";
+import { browserPath, scopedUrl, stripBasePath } from "@/lib/workspace-scope";
 
 export interface RequestOptions extends RequestInit {
   scope?: AppErrorScope;
@@ -25,6 +25,22 @@ export function setRuntimeAuthEnabled(enabled: boolean): void {
   runtimeAuthEnabled = enabled;
 }
 
+/** Marks a 403 caused by a pending temporary-password change (backend M7). */
+export const PASSWORD_CHANGE_HEADER = "X-DeepTutor-Password-Change";
+const PASSWORD_CHANGE_PATH = "/profile";
+
+/** Whether a response asks to leave for the change-password page from `pathname`. */
+export function needsPasswordChangeRedirect(
+  response: Pick<Response, "status" | "headers">,
+  pathname: string,
+): boolean {
+  return (
+    response.status === 403 &&
+    response.headers.get(PASSWORD_CHANGE_HEADER) === "required" &&
+    (stripBasePath(pathname).replace(/\/+$/, "") || "/") !== PASSWORD_CHANGE_PATH
+  );
+}
+
 export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit & { skipAuthRedirect?: boolean },
@@ -42,6 +58,17 @@ export async function apiFetch(
     typeof window !== "undefined"
   ) {
     window.location.href = loginHref(browserReturnPath(window.location));
+    return new Promise(() => {});
+  }
+
+  if (
+    typeof window !== "undefined" &&
+    needsPasswordChangeRedirect(response, window.location.pathname)
+  ) {
+    // The account still holds an administrator-assigned password: the server
+    // only admits the profile/change-password surface until it is replaced.
+    // On /profile itself the response is returned as-is, so no redirect loop.
+    window.location.href = browserPath(PASSWORD_CHANGE_PATH);
     return new Promise(() => {});
   }
 

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { useCapabilityFilter } from "@/features/capabilities/useCapabilityCatalog";
+import { useAuthStatus } from "@/hooks/useAuthStatus";
 import {
   ArrowUpRight,
   BookOpen,
@@ -82,6 +83,11 @@ interface DashboardItem {
    * was never installed (#963).
    */
   requiresCapability?: string;
+  /**
+   * Shown to administrators only. Learners do not see technical surfaces
+   * (spec 2026-11-06), and the backend answers 403 for them anyway.
+   */
+  adminOnly?: boolean;
 }
 
 interface DashboardGroup {
@@ -188,6 +194,7 @@ const GROUPS: DashboardGroup[] = [
         key: "mcp",
         href: "/space/mcp",
         icon: Plug,
+        adminOnly: true,
         title: { zh: "MCP 服务", en: "MCP Services" },
         blurb: {
           zh: "连接托管 MCP 服务，把它们的工具带进对话。",
@@ -264,15 +271,17 @@ const ALL_ITEMS = GROUPS.flatMap(g => g.items);
  */
 export function visibleGroups(
   groups: DashboardGroup[],
-  isAvailable: ((name: string) => boolean) | null
+  isAvailable: ((name: string) => boolean) | null,
+  isAdmin = false
 ): DashboardGroup[] {
   return groups
     .map(group => ({
       ...group,
       items: group.items.filter(
         item =>
-          !item.requiresCapability ||
-          (isAvailable?.(item.requiresCapability) ?? false)
+          (!item.adminOnly || isAdmin) &&
+          (!item.requiresCapability ||
+            (isAvailable?.(item.requiresCapability) ?? false))
       ),
     }))
     .filter(group => group.items.length > 0);
@@ -288,17 +297,19 @@ export default function SpaceDashboard() {
   const [counts, setCounts] = useState<Partial<Record<DashKey, number>>>({});
 
   const capabilityAvailable = useCapabilityFilter();
+  const { isAdmin, loading: authLoading } = useAuthStatus();
   const groups = useMemo(
-    () => visibleGroups(GROUPS, capabilityAvailable),
-    [capabilityAvailable]
+    () => visibleGroups(GROUPS, capabilityAvailable, isAdmin),
+    [capabilityAvailable, isAdmin]
   );
 
   useEffect(() => {
+    if (authLoading) return;
     let cancelled = false;
     // Each tile loads independently so one slow/failed endpoint never blanks
     // the whole dashboard.
     for (const item of ALL_ITEMS) {
-      if (!item.load) continue;
+      if (!item.load || (item.adminOnly && !isAdmin)) continue;
       item
         .load()
         .then(n => {
@@ -311,7 +322,7 @@ export default function SpaceDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAdmin]);
 
   return (
     <div>

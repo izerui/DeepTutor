@@ -770,9 +770,9 @@ class AgenticLoopPipeline:
         def has_book_authoring():
             if not context.metadata.get("book_references"):
                 return False
-            from deeptutor.book.authoring_tool import authoring_scope
+            from deeptutor.book.authoring_tool import editable_authoring_scope
 
-            return bool(authoring_scope(context))
+            return bool(editable_authoring_scope(context))
 
         composed = compose_enabled_tools(
             registry=self.tool_lookup,

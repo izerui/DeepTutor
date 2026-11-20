@@ -782,15 +782,14 @@ app.include_router(
     tags=["mcp-settings"],
     dependencies=_auth,
 )
-# Per-user MCP servers. Deliberately only ``_auth``: the router's own routes
-# resolve the owner server-side, and everything a non-admin can reach through it
-# is remote-transport-only (see the module docstring). The admin registry above
-# keeps its own ``require_admin``.
+# Per-user MCP servers: administrators only (P1, 2026-11-20). Learners do not
+# see technical settings (spec 2026-11-06), so every ``/api/space/mcp`` route
+# answers 403 for them and their turns no longer load personal servers.
 app.include_router(
     space_mcp.router,
     prefix="/api/space/mcp",
     tags=["space-mcp"],
-    dependencies=_auth,
+    dependencies=_admin,
 )
 # CLI apps. Only ``_auth`` here as well, but for a different reason: the two
 # routes that install or remove an app carry their own ``require_admin``, and

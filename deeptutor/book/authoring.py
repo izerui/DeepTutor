@@ -15,6 +15,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from deeptutor.book.models import Block, BlockStatus, BlockType, Chapter, Page, PageStatus
+from deeptutor.book.source_access import require_content_writable
 from deeptutor.book.storage import _read_json, _safe_page_id
 from deeptutor.services.file_io import atomic_write_json
 
@@ -123,6 +124,9 @@ def recover_edits(storage, book_id):
 
 
 def preview_edit(storage, book_id, edit: BookEdit, *, source_session_id="", source_turn_id=""):
+    # Checked here, at write time, like the engine's ``@content_writer``: the
+    # route's admission check can be stale by the time the record is written.
+    require_content_writable(storage)
     recover_edits(storage, book_id)
     book, spine, pages = _read(storage, book_id)
     before = {
@@ -336,7 +340,36 @@ def list_edits(storage, book_id, page_id=None):
     ][:50]
 
 
+def _prune_progress(storage, book_id, before, after):
+    """Drop removed pages and chapters from the progress, as ``engine.delete_chapter`` does."""
+    removed_pages = {
+        name[6:-5]
+        for name, value in after.items()
+        if name.startswith("pages/") and value is None and before.get(name) is not None
+    }
+    old_spine, new_spine = before.get("spine.json"), after.get("spine.json")
+    removed_chapters = (
+        {c["id"] for c in old_spine["chapters"]} - {c["id"] for c in new_spine["chapters"]}
+        if old_spine and new_spine
+        else set()
+    )
+    if not removed_pages and not removed_chapters:
+        return
+    progress = storage.load_progress(book_id)
+    if progress is None:
+        return
+    if progress.current_page_id in removed_pages:
+        progress.current_page_id = ""
+    progress.visited_page_ids = [p for p in progress.visited_page_ids if p not in removed_pages]
+    progress.bookmarked_page_ids = [
+        p for p in progress.bookmarked_page_ids if p not in removed_pages
+    ]
+    progress.weak_chapters = [c for c in progress.weak_chapters if c not in removed_chapters]
+    storage.save_progress(progress)
+
+
 def apply_edit(storage, book_id, edit_id, expected_revision, *, undo=False):
+    require_content_writable(storage)
     recover_edits(storage, book_id)
     book, spine, pages = _read(storage, book_id)
     path = _record_path(storage, book_id, edit_id)
@@ -387,4 +420,5 @@ def apply_edit(storage, book_id, edit_id, expected_revision, *, undo=False):
     record.pop("transaction_before", None)
     record.pop("transaction_after", None)
     atomic_write_json(path, record)
+    _prune_progress(storage, book_id, before, after)
     return public_edit(record)

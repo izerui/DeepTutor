@@ -18,7 +18,6 @@ from tests.services.session.test_model_history import turn_record
 async def test_oversized_last_exchange_is_rejected_without_changing_durable_history(
     tmp_path, monkeypatch, summarizes, recorded, prior_summary
 ):
-    monkeypatch.setenv("DEEPTUTOR_CHAT_ENGINE", "python")
     store = SQLiteSessionStore(tmp_path / "history.db")
     sid = (await store.create_session())["id"]
     for role, content in [
@@ -60,7 +59,6 @@ async def test_oversized_last_exchange_is_rejected_without_changing_durable_hist
 
 @pytest.mark.asyncio
 async def test_whole_small_tool_exchange_remains_replayable(tmp_path, monkeypatch):
-    monkeypatch.setenv("DEEPTUTOR_CHAT_ENGINE", "python")
     store = SQLiteSessionStore(tmp_path / "history.db")
     sid = (await store.create_session())["id"]
     await store.add_message(sid, "user", "Question")
@@ -81,7 +79,6 @@ async def test_large_window_does_not_bypass_the_real_history_plan(tmp_path, monk
         HistoryBudgetExceeded,
     )
 
-    monkeypatch.setenv("DEEPTUTOR_CHAT_ENGINE", "python")
     store = SQLiteSessionStore(tmp_path / "history.db")
     sid = (await store.create_session())["id"]
     await store.add_message(sid, "user", "Previous question")

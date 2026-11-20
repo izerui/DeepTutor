@@ -6077,5 +6077,6 @@
   "Action": "Action",
   "Conversation IDs (optional)": "Conversation IDs (optional)",
   "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.",
-  "guidedLearning.loadKbFailed": "Не вдалося завантажити бази знань"
+  "guidedLearning.loadKbFailed": "Не вдалося завантажити бази знань",
+  "MCP services are managed by your administrator.": "Сервісами MCP керує ваш адміністратор."
 }

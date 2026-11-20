@@ -486,9 +486,66 @@ async def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    _enforce_password_change(payload, request)
     _install_current_user(payload)
     _install_request_workspace(request)
     return payload
+
+
+#: Response header marking a 403 caused by a pending temporary-password change;
+#: the frontend sends the person to ``/profile`` when it sees it.
+PASSWORD_CHANGE_HEADER = "X-DeepTutor-Password-Change"
+PASSWORD_CHANGE_DETAIL = "Change your temporary password before continuing."
+#: What an account still holding an administrator-assigned password may call:
+#: who am I, read the profile, change the password, sign out (spec M7).
+_PASSWORD_CHANGE_ALLOWED = frozenset(
+    {
+        ("GET", "/api/auth/status"),
+        ("GET", "/api/auth/profile"),
+        ("GET", "/api/auth/profile/learner-profile"),
+        ("PUT", "/api/auth/profile/password"),
+        ("POST", "/api/auth/logout"),
+    }
+)
+
+
+def _request_route_path(request) -> str:
+    """The request path without a context-path deployment's ``root_path``."""
+    scope = getattr(request, "scope", None)
+    if isinstance(scope, dict) and "path" in scope:
+        from starlette._utils import get_route_path
+
+        return get_route_path(scope)
+    return str(getattr(getattr(request, "url", None), "path", "") or "")
+
+
+def password_change_allows(request) -> bool:
+    """Whether a must-change-password account may make this request."""
+    method = str(getattr(request, "method", "") or "").upper()
+    path = _request_route_path(request).rstrip("/") or "/"
+    if method in {"GET", "HEAD"} and path.startswith("/api/auth/avatar/"):
+        return True
+    if method == "HEAD":
+        method = "GET"
+    return (method, path) in _PASSWORD_CHANGE_ALLOWED
+
+
+def _enforce_password_change(payload: TokenPayload | None, request) -> None:
+    """403 everything but the change-password surface while the flag is set.
+
+    The flag is set when an administrator creates or resets the account's
+    password and cleared when the owner picks their own, so a temporary
+    password cannot be used as a working credential through the API.
+    """
+    if payload is None or not payload.must_change_password:
+        return
+    if request is not None and password_change_allows(request):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=PASSWORD_CHANGE_DETAIL,
+        headers={PASSWORD_CHANGE_HEADER: "required"},
+    )
 
 
 def _install_request_workspace(request) -> None:
@@ -604,6 +661,11 @@ async def ws_require_auth(ws: WebSocket) -> _CtxToken | _WsAuthFailed:
         payload = decode_token(token) if token else None
         if not payload:
             await ws.close(code=4001)
+            return ws_auth_failed
+        if payload.must_change_password:
+            # Same rule as ``require_auth``: no socket is part of the
+            # change-password surface.
+            await ws.close(code=4003)
             return ws_auth_failed
     user_token = _install_current_user(payload)
     try:

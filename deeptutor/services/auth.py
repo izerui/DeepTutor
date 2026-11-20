@@ -73,6 +73,9 @@ class TokenPayload:
     username: str
     role: str
     user_id: str = ""
+    #: The account still uses an administrator-assigned temporary password;
+    #: ``require_auth`` then only admits the change-password surface.
+    must_change_password: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +349,7 @@ def decode_token(token: str) -> TokenPayload | None:
             username=username,
             role=str(record.get("role") or payload.get("role", "user")),
             user_id=user_id,
+            must_change_password=bool(record.get("must_change_password", False)),
         )
     except JWTError:
         return None

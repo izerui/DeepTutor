@@ -155,10 +155,15 @@ def resource_catalog(*, workspace_id: str = "") -> dict:
                 "available": cfg.enabled,
             }
         )
-    owned, _ = load_user_mcp_config(current_owner_id())
+    # Personal MCP is admin-only (P1): a learner's earlier servers are not offered.
+    owned, _ = (
+        load_user_mcp_config(current_owner_id())
+        if get_current_user().is_admin
+        else (None, None)
+    )
     mcp.extend(
         {"id": f"account:{name}", "name": name, "source": "account", "available": cfg.enabled}
-        for name, cfg in owned.servers.items()
+        for name, cfg in (owned.servers.items() if owned is not None else ())
     )
     return {"skills": skills, "mcp": mcp, "knowledge_bases": knowledge_catalog()}
 

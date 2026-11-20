@@ -3,11 +3,11 @@ Per-user MCP API
 ================
 
 The servers an individual configures for themselves, mounted at
-``/api/space/mcp``. Auth-gated, **not** admin-gated: this is the whole point
-of the surface — a learner adds the hosted services they use without an
-administrator in the loop.
+``/api/space/mcp``. Admin-gated (``main.py``): learners do not see technical
+settings (spec 2026-11-06), so a learner gets 403 here and their turns do not
+load personal servers; data they configured earlier stays on disk, unused.
 
-What keeps that safe is narrow rather than trusting:
+What keeps it narrow even for administrators:
 
 * **remote transports only** — a ``stdio`` server is a command run on the host
   as the app user, so it stays in the admin registry

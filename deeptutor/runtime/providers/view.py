@@ -215,6 +215,12 @@ async def _owned_tools(manager: Any, scope: ToolScope) -> list[BaseTool]:
         # A partner has no account of its own, so it has no self-configured
         # servers; its surface is the deployment's, filtered by its own list.
         return []
+    from deeptutor.multi_user.context import get_current_user
+
+    if not get_current_user().is_admin:
+        # Personal MCP is admin-only (P1): a learner's earlier servers stay on
+        # disk but are never connected for their turns.
+        return []
     try:
         return list(
             await asyncio.wait_for(

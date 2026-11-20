@@ -1,5 +1,6 @@
 """A proposal-only tool bound by the server to one attached book page."""
 
+from contextlib import nullcontext
 import json
 
 from deeptutor.core.tool_protocol import BaseTool, ToolDefinition, ToolParameter, ToolResult
@@ -14,6 +15,23 @@ def authoring_scope(context):
     if len(pages) != 1 or not ref.get("book_id"):
         return None
     return {"book_id": ref["book_id"], "page_id": pages[0]}
+
+
+def editable_authoring_scope(context):
+    """``authoring_scope`` only when the viewer may edit the attached book.
+
+    A reader on someone else's book would only collect "not editable" refusals.
+    """
+    scope = authoring_scope(context)
+    if scope is None:
+        return None
+    from deeptutor.multi_user.book_access import resolve_book
+
+    try:
+        resolved = resolve_book(scope["book_id"])
+    except Exception:
+        return None
+    return scope if resolved is not None and resolved.can_edit else None
 
 
 class ProposeBookEditTool(BaseTool):
@@ -57,8 +75,11 @@ class ProposeBookEditTool(BaseTool):
             resolved = resolve_book(scope["book_id"])
             if resolved is None or not resolved.can_edit:
                 raise ValueError("The attached book is not editable")
+            from deeptutor.book.registry import strip_ref
+
+            book_id = strip_ref(scope["book_id"])
             storage = resolved.engine.storage
-            page = storage.load_page(scope["book_id"], scope["page_id"])
+            page = storage.load_page(book_id, scope["page_id"])
             if page is None:
                 raise ValueError("The attached page is unavailable")
             if kwargs.get("action") not in {"add_page", "insert_block", "extend_page"}:
@@ -71,20 +92,22 @@ class ProposeBookEditTool(BaseTool):
                 page_id=page.id,
                 chapter_id=page.chapter_id,
             )
-            proposal = preview_edit(
-                storage,
-                scope["book_id"],
-                edit,
-                source_session_id=kwargs.get("_source_session_id", ""),
-                source_turn_id=kwargs["_source_turn_id"],
-            )
+            lock = getattr(resolved.engine, "book_mutation_lock", None)
+            async with lock(book_id) if callable(lock) else nullcontext():
+                proposal = preview_edit(
+                    storage,
+                    book_id,
+                    edit,
+                    source_session_id=kwargs.get("_source_session_id", ""),
+                    source_turn_id=kwargs["_source_turn_id"],
+                )
             return ToolResult(
                 content=json.dumps(
                     {"proposal_id": proposal["id"], "status": "awaiting_user_confirmation"}
                 ),
                 metadata={
                     "book_edit_id": proposal["id"],
-                    "book_id": scope["book_id"],
+                    "book_id": book_id,
                     "page_id": page.id,
                 },
             )

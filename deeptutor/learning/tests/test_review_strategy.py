@@ -172,6 +172,41 @@ def test_store_refuses_to_shadow_builtin_templates(tmp_path):
         store.save_review_strategy(template)
 
 
+def test_store_caps_custom_strategies_but_still_updates_existing(tmp_path, monkeypatch):
+    from deeptutor.learning import storage as storage_module
+
+    monkeypatch.setattr(storage_module, "MAX_REVIEW_STRATEGIES", 3)
+    store = LearningStore(root=tmp_path)
+    for index in range(3):
+        store.save_review_strategy(
+            ReviewStrategyTemplate(
+                template_id=f"custom-{index}", name=f"S{index}", intervals=_valid_intervals()
+            )
+        )
+    with pytest.raises(ValueError, match="at most 3 custom review strategies"):
+        store.save_review_strategy(
+            ReviewStrategyTemplate(
+                template_id="custom-extra", name="Extra", intervals=_valid_intervals()
+            )
+        )
+    # Editing one that already exists is not a new strategy.
+    edited = store.get_review_strategy("custom-0").model_copy(update={"name": "Renamed"})
+    store.save_review_strategy(edited)
+    assert store.get_review_strategy("custom-0").name == "Renamed"
+    assert len(store.list_review_strategies()) == 3
+
+
+def test_create_over_the_cap_answers_409(client, monkeypatch):
+    from deeptutor.learning import storage as storage_module
+
+    monkeypatch.setattr(storage_module, "MAX_REVIEW_STRATEGIES", 1)
+    payload = {"name": "One", "intervals": _valid_intervals()}
+    assert client.post("/api/mastery-paths/review-strategies", json=payload).status_code == 201
+    refused = client.post("/api/mastery-paths/review-strategies", json=payload)
+    assert refused.status_code == 409
+    assert "at most 1 custom review strategies" in refused.json()["detail"]
+
+
 # -- Scheduler integration ------------------------------------------------------
 
 

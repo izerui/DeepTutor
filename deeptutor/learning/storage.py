@@ -54,6 +54,8 @@ _initialized_db_paths: set[Path] = set()
 _T = TypeVar("_T")
 # How long an explanation that needs clarification is kept for the follow-up.
 PENDING_EXPLANATION_TTL_SECONDS = 24 * 3600
+#: Ceiling on custom review strategies per learning store (workspace).
+MAX_REVIEW_STRATEGIES = 100
 _ACTIVE_INTERACTION_STATES = (
     InteractionStatus.REGISTERED.value,
     InteractionStatus.AWAITING_INPUT.value,
@@ -1428,7 +1430,9 @@ class LearningStore:
         }
         return sorted(stored | legacy)
 
-    # ---- account review interval strategies -------------------------------
+    # ---- review interval strategies ----------------------------------------
+    # Stored in this workspace's learning database (``get_workspace_dir()/learning``),
+    # so they are per workspace, not per account. Learners have one space (D4).
 
     @staticmethod
     def _strategy_from_row(row: sqlite3.Row) -> ReviewStrategyTemplate:
@@ -1475,6 +1479,18 @@ class LearningStore:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
+                exists = conn.execute(
+                    "SELECT 1 FROM mastery_review_strategies WHERE template_id = ?",
+                    (stored.template_id,),
+                ).fetchone()
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM mastery_review_strategies"
+                ).fetchone()[0]
+                if exists is None and count >= MAX_REVIEW_STRATEGIES:
+                    raise ValueError(
+                        f"You can keep at most {MAX_REVIEW_STRATEGIES} custom review "
+                        "strategies. Delete one before creating another."
+                    )
                 conn.execute(
                     """
                     INSERT INTO mastery_review_strategies (

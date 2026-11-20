@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 import hashlib
 import json
 import logging
@@ -1614,6 +1614,7 @@ async def add_chapter(book_id: str, req: AddChapterRequest) -> dict[str, Any]:
     if not req.title.strip():
         raise HTTPException(status_code=400, detail="title is required")
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -1648,6 +1649,7 @@ async def update_chapter(
     if req.title is not None and not req.title.strip():
         raise HTTPException(status_code=400, detail="title cannot be empty")
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -1680,6 +1682,7 @@ async def delete_chapter(
 ) -> dict[str, Any]:
     """Delete a chapter and only its pages; other compiled pages are untouched."""
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -1702,6 +1705,7 @@ async def delete_chapter(
 async def move_chapter(book_id: str, chapter_id: str, req: MoveChapterRequest) -> dict[str, Any]:
     """Reorder a chapter and carry the new order onto its pages."""
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -2643,13 +2647,34 @@ class ApplyBookEditRequest(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+def _book_mutation_lock(resolved: ResolvedBook, book_id: str):
+    """The engine's per-book lock, or a no-op for embedded engines without one."""
+    lock = getattr(resolved.engine, "book_mutation_lock", None)
+    return lock(book_id) if callable(lock) else nullcontext()
+
+
+def _log_book_edit(resolved: ResolvedBook, book_id: str, action: str, edit_id: str) -> None:
+    """Audit an applied/undone edit with ``_claim_content_mutation``'s rule.
+
+    Shared books are usage-logged; the admin log only hears about an
+    administrator changing a book that is not theirs, never an author's own work.
+    """
+    summary = {"book_id": book_id, "edit_id": edit_id, "action": action}
+    if resolved.is_shared:
+        log_usage("book", book_id, "shared_edit", summary)
+    elif get_current_user().is_admin and resolved.capabilities().get("group") != "mine":
+        log_admin_action(action, summary=summary)
+
+
 @router.post("/books/{book_id}/edits/preview")
 async def preview_book_edit(book_id: str, req: BookEdit) -> dict[str, Any]:
     from deeptutor.book.authoring import preview_edit
 
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     try:
-        return preview_edit(resolved.engine.storage, book_id, req)
+        async with _book_mutation_lock(resolved, book_id):
+            return preview_edit(resolved.engine.storage, book_id, req)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -2659,35 +2684,36 @@ async def get_book_edits(book_id: str, page_id: str | None = None) -> dict[str, 
     from deeptutor.book.authoring import list_edits
 
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     try:
         return {"edits": list_edits(resolved.engine.storage, book_id, page_id)}
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.post("/books/{book_id}/edits/{edit_id}/apply")
-async def apply_book_edit(book_id: str, edit_id: str, req: ApplyBookEditRequest) -> dict[str, Any]:
+async def _apply_or_undo(
+    book_id: str, edit_id: str, req: "ApplyBookEditRequest", *, undo: bool
+) -> dict[str, Any]:
     from deeptutor.book.authoring import apply_edit
 
     resolved = _resolve_book_or_404(book_id, edit=True)
+    book_id = book_registry.strip_ref(book_id)
     try:
-        result = apply_edit(resolved.engine.storage, book_id, edit_id, req.expected_revision)
-        log_admin_action("book.edit.apply", summary={"book_id": book_id, "edit_id": edit_id})
-        return result
+        async with _book_mutation_lock(resolved, book_id):
+            result = apply_edit(
+                resolved.engine.storage, book_id, edit_id, req.expected_revision, undo=undo
+            )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _log_book_edit(resolved, book_id, "book.edit.undo" if undo else "book.edit.apply", edit_id)
+    return result
+
+
+@router.post("/books/{book_id}/edits/{edit_id}/apply")
+async def apply_book_edit(book_id: str, edit_id: str, req: ApplyBookEditRequest) -> dict[str, Any]:
+    return await _apply_or_undo(book_id, edit_id, req, undo=False)
 
 
 @router.post("/books/{book_id}/edits/{edit_id}/undo")
 async def undo_book_edit(book_id: str, edit_id: str, req: ApplyBookEditRequest) -> dict[str, Any]:
-    from deeptutor.book.authoring import apply_edit
-
-    resolved = _resolve_book_or_404(book_id, edit=True)
-    try:
-        result = apply_edit(
-            resolved.engine.storage, book_id, edit_id, req.expected_revision, undo=True
-        )
-        log_admin_action("book.edit.undo", summary={"book_id": book_id, "edit_id": edit_id})
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return await _apply_or_undo(book_id, edit_id, req, undo=True)

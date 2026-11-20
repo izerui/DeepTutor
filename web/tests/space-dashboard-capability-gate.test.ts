@@ -78,3 +78,22 @@ test("with whisper absent the real dashboard drops More Projects entirely", () =
   assert.ok(!shown.some((g) => g.items.some((i) => i.key === "whisper")));
   assert.ok(shown.length > 0, "the ungated groups must survive");
 });
+
+// Port recheck P1: personal MCP is admin-only; learners do not see the tile.
+test("admin-only tiles are hidden from learners and shown to admins", () => {
+  const mcpVisible = (isAdmin: boolean) =>
+    visibleGroups(DASHBOARD_GROUPS, () => false, isAdmin).some((g) =>
+      g.items.some((i) => i.key === "mcp"),
+    );
+
+  assert.equal(mcpVisible(false), false);
+  assert.equal(mcpVisible(true), true);
+});
+
+test("only the MCP tile is admin-only", () => {
+  const adminOnly = DASHBOARD_GROUPS.flatMap((g) => g.items).filter(
+    (i) => i.adminOnly,
+  );
+
+  assert.deepEqual(adminOnly.map((i) => i.key), ["mcp"]);
+});

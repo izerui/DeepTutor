@@ -41,8 +41,8 @@ after the call that queued it has returned.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 import logging
@@ -1442,6 +1442,34 @@ class BookEngine:
                     runtime.queued.add(page.id)
                     await runtime.queue.put(page.id)
                 self._ensure_worker(book_id)
+                return
+
+    @asynccontextmanager
+    async def book_mutation_lock(self, book_id: str) -> AsyncIterator[None]:
+        """Hold the per-book lock that queueing generation takes.
+
+        For writers outside the engine (revision-fenced book edits): while held,
+        no generation can be queued for this book. A runtime created only for
+        this is retired again afterwards so idle books do not accumulate one.
+        """
+        while True:
+            runtime = await self._get_or_create_runtime(book_id)
+            async with runtime.lock:
+                # Same lookup-then-acquire check as ``_enqueue_pending_pages``.
+                async with self._global_lock:
+                    if self._runtimes.get(book_id) is not runtime:
+                        continue
+                try:
+                    yield
+                finally:
+                    async with self._global_lock:
+                        if (
+                            self._runtimes.get(book_id) is runtime
+                            and runtime.worker is None
+                            and not runtime.in_flight
+                            and runtime.queue.empty()
+                        ):
+                            self._runtimes.pop(book_id, None)
                 return
 
     async def _get_or_create_runtime(self, book_id: str) -> _BookRuntime:
