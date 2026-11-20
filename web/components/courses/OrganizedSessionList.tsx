@@ -12,6 +12,7 @@ import {
   Folder,
   FolderOpen,
   GraduationCap,
+  MessageSquarePlus,
   MoreHorizontal,
   Unlink,
   Pencil,
@@ -361,8 +362,17 @@ export default function OrganizedSessionList({
           />
           {child ? (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--muted)]/70 px-1.5 py-0.5 text-[9px] font-medium text-[var(--muted-foreground)]">
-              <GraduationCap size={9} strokeWidth={1.8} />
-              {t("Little Tutor")}
+              {session.preferences?.session_kind === "quiz_followup" ? (
+                <>
+                  <MessageSquarePlus size={9} strokeWidth={1.8} />
+                  {t("Question follow-up")}
+                </>
+              ) : (
+                <>
+                  <GraduationCap size={9} strokeWidth={1.8} />
+                  {t("Little Tutor")}
+                </>
+              )}
             </span>
           ) : null}
           {child && session.preferences?.tutor_source_deleted ? (

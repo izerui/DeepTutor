@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+QUIZ_FOLLOWUP_KIND = "quiz_followup"
 TUTOR_SELECTED_TEXT_LIMIT = 2_000
 
 
@@ -741,6 +742,8 @@ class TurnRequestPreparer:
                         ),
                     }
                 )
+        else:
+            await self._attach_quiz_followup_parent(session, payload, preference_update)
         if llm_selection:
             preference_update["llm_selection"] = llm_selection
         if persona_explicit:
@@ -1011,6 +1014,53 @@ class TurnRequestPreparer:
                 inherited_binding.workspace_id
             )
         preference_update["course_id"] = str(parent_preferences.get("course_id") or "")
+
+    async def _attach_quiz_followup_parent(
+        self,
+        session: dict[str, Any],
+        payload: dict[str, Any],
+        preference_update: dict[str, Any],
+    ) -> None:
+        """File a quiz question's follow-up chat under the quiz conversation.
+
+        Without this every followed-up question became its own top-level
+        conversation in the sidebar. The parent must be one of this user's own
+        conversations (the store is per user); an unknown or cyclic parent
+        leaves the follow-up standalone, as before, rather than failing the turn.
+        """
+        raw = payload.get("followup_question_context")
+        if not isinstance(raw, dict):
+            return
+        parent_session_id = str(raw.get("parent_quiz_session_id") or "").strip()
+        if not parent_session_id or parent_session_id == session["id"]:
+            return
+        current = session.get("preferences") or {}
+        if current.get("session_kind") not in (None, "", "chat", QUIZ_FOLLOWUP_KIND):
+            return
+        existing_parent = str(current.get("parent_session_id") or "").strip()
+        if existing_parent and existing_parent != parent_session_id:
+            return
+        from deeptutor.services.session.organization import validate_parent_assignment
+
+        try:
+            parent_session = await validate_parent_assignment(
+                self.store,
+                session_id=session["id"],
+                parent_session_id=parent_session_id,
+            )
+        except (LookupError, ValueError):
+            logger.info(
+                "quiz follow-up %s left standalone: parent %s unavailable",
+                session["id"],
+                parent_session_id,
+            )
+            return
+        self._inherit_parent_placement(
+            parent_session, parent_session_id, preference_update, payload
+        )
+        preference_update.update(
+            {"parent_session_id": parent_session_id, "session_kind": QUIZ_FOLLOWUP_KIND}
+        )
 
     async def regenerate_last_turn(
         self,

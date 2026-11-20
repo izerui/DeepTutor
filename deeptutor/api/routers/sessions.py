@@ -96,7 +96,9 @@ class SessionOrganizationRequest(BaseModel):
     course_id: str | None = None
     workspace_id: str | None = None
     parent_session_id: str | None = None
-    session_kind: Literal["chat", "selection_tutor", "immersive_reading"] | None = None
+    session_kind: (
+        Literal["chat", "selection_tutor", "quiz_followup", "immersive_reading"] | None
+    ) = None
     pinned: bool | None = None
     archived: bool | None = None
     # Little Tutor threads only: ``null`` detaches the thread from its source

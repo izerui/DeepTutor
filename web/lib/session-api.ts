@@ -117,9 +117,9 @@ export interface SessionPreferences {
   selected_branches?: Record<string, number>;
   /** Study-course organization. Empty/absent means Unclassified. */
   course_id?: string;
-  /** Source conversation for nested Little Tutor threads. */
+  /** Source conversation for nested Little Tutor threads and quiz follow-ups. */
   parent_session_id?: string;
-  session_kind?: "chat" | "selection_tutor" | "immersive_reading";
+  session_kind?: "chat" | "selection_tutor" | "quiz_followup" | "immersive_reading";
   /** Little Tutor: asked about a selected passage or about a whole message. */
   tutor_scope?: "selection" | "message";
   /** Little Tutor: the selected passage (empty for a whole message). */
@@ -426,7 +426,7 @@ export type SessionOrganizationPatch = Partial<{
   workspace_id: string | null;
   course_id: string;
   parent_session_id: string;
-  session_kind: "chat" | "selection_tutor";
+  session_kind: "chat" | "selection_tutor" | "quiz_followup";
   pinned: boolean;
   archived: boolean;
   /** Little Tutor threads only: ``null`` detaches the thread from its message. */

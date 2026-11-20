@@ -10491,6 +10491,7 @@
                 "enum": [
                   "chat",
                   "selection_tutor",
+                  "quiz_followup",
                   "immersive_reading"
                 ],
                 "type": "string"

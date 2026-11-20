@@ -167,7 +167,11 @@ export default function ChatHistorySection({
         prefs.course_id !== courseFilter
       )
         return false;
-      if (kindFilter === "chat" && prefs.session_kind === "selection_tutor")
+      if (
+        kindFilter === "chat" &&
+        (prefs.session_kind === "selection_tutor" ||
+          prefs.session_kind === "quiz_followup")
+      )
         return false;
       if (
         kindFilter === "selection_tutor" &&

@@ -18030,7 +18030,8 @@ export interface components {
       readonly pinned?: boolean | null;
       /** Session Kind */
       readonly session_kind?:
-        ("chat" | "selection_tutor" | "immersive_reading") | null;
+        | ("chat" | "selection_tutor" | "quiz_followup" | "immersive_reading")
+        | null;
       /** Tutor Source Message Id */
       readonly tutor_source_message_id?: number | null;
       /** Workspace Id */
