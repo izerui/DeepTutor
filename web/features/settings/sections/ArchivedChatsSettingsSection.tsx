@@ -133,7 +133,7 @@ export default function ArchivedChatsSettingsSection() {
             if (
               !window.confirm(
                 t(
-                  "Permanently delete all {{count}} archived chats and their tutor threads? This cannot be undone.",
+                  "Permanently delete all {{count}} archived chats, their tutor threads, and the files generated in them? This cannot be undone.",
                   { count },
                 ),
               )
@@ -243,7 +243,7 @@ export default function ArchivedChatsSettingsSection() {
             if (
               !window.confirm(
                 t(
-                  "Permanently delete this chat and its tutor threads? This cannot be undone.",
+                  "Permanently delete this chat, its tutor threads, and the files generated in them? This cannot be undone.",
                 ),
               )
             )

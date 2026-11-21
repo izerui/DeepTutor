@@ -1,10 +1,11 @@
 "use client";
 
-import { Clapperboard, Code2, ExternalLink, Timer } from "lucide-react";
+import { Clapperboard, Code2, Timer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { apiUrl } from "@/lib/api";
 import type { VideoLessonResult } from "@/lib/video-lesson-types";
 import AddVideoLessonToBook from "./AddVideoLessonToBook";
+import { OutputFileActions } from "@/components/files/OutputFileActions";
 
 /** Upstream 6b7897a32: the lesson page in a script-only sandboxed frame. */
 export default function VideoLessonViewer({
@@ -26,15 +27,11 @@ export default function VideoLessonViewer({
           <Clapperboard size={14} className="shrink-0" />
           <span className="truncate">{result.title || t("Video Lesson")}</span>
         </div>
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-        >
-          <ExternalLink size={12} />
-          {t("Open in new tab")}
-        </a>
+        <OutputFileActions
+          url={url}
+          filename={result.page.filename}
+          className="shrink-0"
+        />
       </div>
 
       {/* The page runs model-written code: scripts yes, same-origin access no.

@@ -9824,6 +9824,21 @@
         "title": "RenameTagRequest",
         "type": "object"
       },
+      "RenderCleanupPayload": {
+        "description": "Bind cleanup to the storage inventory reviewed by the caller.",
+        "properties": {
+          "fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Fingerprint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint"
+        ],
+        "title": "RenderCleanupPayload",
+        "type": "object"
+      },
       "ReplyBody": {
         "properties": {
           "text": {
@@ -76386,6 +76401,188 @@
           }
         },
         "summary": "Read Workspace Item",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/files/workspace-items/{workspace_id}/{workspace_item_id}/clean-render-cache": {
+      "post": {
+        "description": "Clean a reviewed render directory while excluding active writers.",
+        "operationId": "clean_render_cache_files_workspace_items__workspace_id___workspace_item_id__clean_render_cache_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_item_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderCleanupPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Clean Render Cache Files Workspace Items  Workspace Id   Workspace Item Id  Clean Render Cache Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clean Render Cache",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/files/workspace-items/{workspace_id}/{workspace_item_id}/render-storage": {
+      "get": {
+        "description": "Return the size of the final output and of its rebuildable render files.",
+        "operationId": "render_storage_files_workspace_items__workspace_id___workspace_item_id__render_storage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_item_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Render Storage Files Workspace Items  Workspace Id   Workspace Item Id  Render Storage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Render Storage",
         "tags": [
           "workspace"
         ]

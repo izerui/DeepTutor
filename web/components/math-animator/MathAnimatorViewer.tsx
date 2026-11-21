@@ -5,6 +5,7 @@ import { Code2, Expand, Image as ImageIcon, Timer, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { apiUrl } from "@/lib/api";
 import type { MathAnimatorResult } from "@/lib/math-animator-types";
+import { OutputFileActions } from "@/components/files/OutputFileActions";
 
 export default function MathAnimatorViewer({
   result,
@@ -86,7 +87,7 @@ export default function MathAnimatorViewer({
       {videos.length > 0 ? (
         <section className="space-y-2">
           <Header icon={Video} title={t("Video Output")} />
-          {videos.map((item) => (
+          {videos.map((item, index) => (
             <div key={item.url}>
               <video
                 controls
@@ -94,6 +95,12 @@ export default function MathAnimatorViewer({
                 preload="metadata"
                 className="aspect-video w-full rounded-xl border border-[var(--border)] bg-black object-contain"
                 src={resolveAssetUrl(item.url)}
+              />
+              <OutputFileActions
+                url={item.url}
+                filename={item.filename}
+                // One turn shares one render folder: offer cleanup once.
+                renderFiles={index === 0}
               />
             </div>
           ))}
@@ -104,23 +111,31 @@ export default function MathAnimatorViewer({
         <section className="space-y-2">
           <Header icon={ImageIcon} title={t("Image Output")} />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {images.map((item) => (
-              <button
-                key={item.url}
-                type="button"
-                onClick={() => setFullscreenUrl(resolveAssetUrl(item.url))}
-                className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)]"
-              >
-                <img
-                  src={resolveAssetUrl(item.url)}
-                  alt={item.label || item.filename}
-                  className="max-h-[280px] w-full object-contain"
+            {images.map((item, index) => (
+              <div key={item.url}>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenUrl(resolveAssetUrl(item.url))}
+                  className="group relative w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)]"
+                >
+                  <img
+                    src={resolveAssetUrl(item.url)}
+                    alt={item.label || item.filename}
+                    className="max-h-[280px] w-full object-contain"
+                  />
+                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <Expand size={12} />
+                    {t("Fullscreen")}
+                  </span>
+                </button>
+                <OutputFileActions
+                  url={item.url}
+                  filename={item.filename}
+                  onOpen={() => setFullscreenUrl(resolveAssetUrl(item.url))}
+                  // One turn shares one render folder: offer cleanup once.
+                  renderFiles={videos.length === 0 && index === 0}
                 />
-                <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                  <Expand size={12} />
-                  {t("Fullscreen")}
-                </span>
-              </button>
+              </div>
             ))}
           </div>
         </section>

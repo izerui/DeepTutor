@@ -55,6 +55,7 @@ import type {
 import { apiFetch, apiUrl } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { docIconFor } from "@/lib/doc-attachments";
+import { OutputFileActions } from "@/components/files/OutputFileActions";
 import { PlayAudioButton } from "@/components/voice/SpeechButton";
 export { PlayAudioButton } from "@/components/voice/SpeechButton";
 import { activeWorkspaceId } from "@/lib/workspace-scope";
@@ -556,9 +557,10 @@ function humanizeFilename(filename: string): string {
 /**
  * Files the assistant produced this turn (exec/code/media artifacts),
  * rendered as openable cards under the message — click to open in the Viewer
- * side panel, same path as user uploads. Sources: persisted ``generated``
- * attachments on the message (durable) merged with artifacts from streamed
- * tool_result events (live, while the turn is still running), deduped by URL.
+ * side panel, same path as user uploads — each with a Download control.
+ * Sources: persisted ``generated`` attachments on the message (durable) merged
+ * with artifacts from streamed tool_result events (live, while the turn is
+ * still running), deduped by URL.
  *
  * An image the reply already embeds with ``![](...)`` is drawn there, so its
  * card is left out; showing both reads as the figure appearing twice.
@@ -594,38 +596,49 @@ export function GeneratedFileCards({
         const mediaSrc = imageSrcForAttachment(a);
         const caption = a.caption?.trim() || "";
 
+        // The card itself opens the file; Download sits under every kind.
+        const actions = (
+          <OutputFileActions
+            url={a.url || mediaSrc || ""}
+            filename={filename}
+            showOpen={false}
+          />
+        );
+
         // Generated media renders inline; other MIME types use a file card.
         if (mime.startsWith("image/") && mediaSrc) {
           return (
-            <button
-              key={key}
-              type="button"
-              onClick={onOpen ? () => onOpen(a) : undefined}
-              className="group block w-full max-w-[min(520px,90%)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-sm transition hover:border-[var(--border)]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={mediaSrc}
-                alt={filename}
-                loading="lazy"
-                className="block max-h-[360px] w-full bg-[var(--background)] object-contain"
-              />
-              <span className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="min-w-0">
-                  <span className="block truncate text-[12.5px] font-medium text-[var(--foreground)]">
-                    {a.title || humanizeFilename(filename)}
-                  </span>
-                  {caption ? (
-                    <span className="block truncate text-[11px] text-[var(--muted-foreground)]">
-                      {caption}
+            <div key={key} className="w-full max-w-[min(520px,90%)]">
+              <button
+                type="button"
+                onClick={onOpen ? () => onOpen(a) : undefined}
+                className="group block w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-sm transition hover:border-[var(--border)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={mediaSrc}
+                  alt={filename}
+                  loading="lazy"
+                  className="block max-h-[360px] w-full bg-[var(--background)] object-contain"
+                />
+                <span className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12.5px] font-medium text-[var(--foreground)]">
+                      {a.title || humanizeFilename(filename)}
                     </span>
-                  ) : null}
+                    {caption ? (
+                      <span className="block truncate text-[11px] text-[var(--muted-foreground)]">
+                        {caption}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-[var(--muted-foreground)] transition group-hover:text-[var(--foreground)]">
+                    {t("Open")}
+                  </span>
                 </span>
-                <span className="shrink-0 text-[11px] text-[var(--muted-foreground)] transition group-hover:text-[var(--foreground)]">
-                  {t("Open")}
-                </span>
-              </span>
-            </button>
+              </button>
+              {actions}
+            </div>
           );
         }
 
@@ -660,6 +673,9 @@ export function GeneratedFileCards({
                   {t("Open")}
                 </span>
               </button>
+              <div className="border-t border-[var(--border)] px-1.5 pb-1">
+                {actions}
+              </div>
             </div>
           );
         }
@@ -668,28 +684,30 @@ export function GeneratedFileCards({
         const Icon = spec.Icon;
         const size = formatFileSize(a.size_bytes);
         return (
-          <button
-            key={key}
-            type="button"
-            onClick={onOpen ? () => onOpen(a) : undefined}
-            className="group flex w-full max-w-[min(520px,90%)] items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left shadow-sm transition hover:border-[var(--border)] hover:bg-[var(--muted)]/30"
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)]">
-              <Icon className={`h-[18px] w-[18px] ${spec.tint}`} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium text-[var(--foreground)]">
-                {a.title || humanizeFilename(filename)}
+          <div key={key} className="w-full max-w-[min(520px,90%)]">
+            <button
+              type="button"
+              onClick={onOpen ? () => onOpen(a) : undefined}
+              className="group flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left shadow-sm transition hover:border-[var(--border)] hover:bg-[var(--muted)]/30"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)]">
+                <Icon className={`h-[18px] w-[18px] ${spec.tint}`} />
               </span>
-              <span className="block text-[11px] text-[var(--muted-foreground)]">
-                {caption || spec.label}
-                {size ? ` · ${size}` : ""}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-[var(--foreground)]">
+                  {a.title || humanizeFilename(filename)}
+                </span>
+                <span className="block text-[11px] text-[var(--muted-foreground)]">
+                  {caption || spec.label}
+                  {size ? ` · ${size}` : ""}
+                </span>
               </span>
-            </span>
-            <span className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--foreground)] transition group-hover:bg-[var(--muted)]/40">
-              {t("Open")}
-            </span>
-          </button>
+              <span className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--foreground)] transition group-hover:bg-[var(--muted)]/40">
+                {t("Open")}
+              </span>
+            </button>
+            {actions}
+          </div>
         );
       })}
     </div>

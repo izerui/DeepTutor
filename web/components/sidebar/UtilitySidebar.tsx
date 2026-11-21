@@ -111,7 +111,7 @@ export default function UtilitySidebar() {
 
   const handleDeleteSession = useCallback(
     async (sessionId: string) => {
-      if (!window.confirm(t("Permanently delete this chat and its tutor threads? This cannot be undone."))) return;
+      if (!window.confirm(t("Permanently delete this chat, its tutor threads, and the files generated in them? This cannot be undone."))) return;
       await deleteSession(sessionId, sessionWorkspaceId(sessions.find(item => item.session_id === sessionId)));
       setSessions((prev) =>
         prev.filter((session) => session.session_id !== sessionId),

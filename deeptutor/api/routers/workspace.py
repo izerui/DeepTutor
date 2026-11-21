@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
+from deeptutor.api.routers.render_storage import router as render_storage_router
 from deeptutor.multi_user.partner_access import visible_partners
 from deeptutor.multi_user.paths import user_context
 from deeptutor.services.auth import TokenPayload
@@ -25,6 +26,7 @@ from deeptutor.services.workspace.resources import WorkspaceResources
 
 settings_router = APIRouter()
 files_router = APIRouter()
+files_router.include_router(render_storage_router)
 
 
 WORKSPACES_ADMIN_ONLY = "Workspaces are managed by an administrator."

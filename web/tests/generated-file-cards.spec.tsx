@@ -77,3 +77,31 @@ it.each([
   render(<GeneratedFileCards attachments={[figure]} content={content} />);
   expect(screen.getByRole("img", { name: "figure.png" })).toBeTruthy();
 });
+
+it("gives every generated card the same Download control beside its Open", () => {
+  const report: MessageAttachment = {
+    ...figure,
+    type: "document",
+    filename: "report.pdf",
+    mime_type: "application/pdf",
+    relative_path: "outputs/chat/turn-a/report.pdf",
+    url: "/files/workspace-items/ws_test/wsi_c",
+  };
+  const clip: MessageAttachment = {
+    ...figure,
+    type: "document",
+    filename: "clip.mp4",
+    mime_type: "video/mp4",
+    relative_path: "outputs/chat/turn-a/clip.mp4",
+    url: "/files/workspace-items/ws_test/wsi_d",
+  };
+  render(<GeneratedFileCards attachments={[figure, report, clip]} content="" />);
+  const downloads = screen.getAllByRole("link", { name: "Download" });
+  expect(downloads.map((link) => link.getAttribute("download"))).toEqual([
+    "figure.png",
+    "report.pdf",
+    "clip.mp4",
+  ]);
+  expect(downloads[1].getAttribute("href")).toContain("/files/workspace-items/ws_test/wsi_c");
+  expect(screen.getAllByText("Open")).toHaveLength(3);
+});

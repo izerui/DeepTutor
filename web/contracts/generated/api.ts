@@ -13023,6 +13023,46 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/files/workspace-items/{workspace_id}/{workspace_item_id}/clean-render-cache": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /**
+     * Clean Render Cache
+     * @description Clean a reviewed render directory while excluding active writers.
+     */
+    readonly post: operations["clean_render_cache_files_workspace_items__workspace_id___workspace_item_id__clean_render_cache_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/files/workspace-items/{workspace_id}/{workspace_item_id}/render-storage": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Render Storage
+     * @description Return the size of the final output and of its rebuildable render files.
+     */
+    readonly get: operations["render_storage_files_workspace_items__workspace_id___workspace_item_id__render_storage_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/health/live": {
     readonly parameters: {
       readonly query?: never;
@@ -17741,6 +17781,14 @@ export interface components {
       /** Rename To */
       readonly rename_to: string;
     };
+    /**
+     * RenderCleanupPayload
+     * @description Bind cleanup to the storage inventory reviewed by the caller.
+     */
+    readonly RenderCleanupPayload: {
+      /** Fingerprint */
+      readonly fingerprint: string;
+    };
     /** ReplyBody */
     readonly ReplyBody: {
       /**
@@ -20363,6 +20411,8 @@ export type SchemaRegistryEditPayload =
 export type SchemaRenamePathRequest =
   components["schemas"]["RenamePathRequest"];
 export type SchemaRenameTagRequest = components["schemas"]["RenameTagRequest"];
+export type SchemaRenderCleanupPayload =
+  components["schemas"]["RenderCleanupPayload"];
 export type SchemaReplyBody = components["schemas"]["ReplyBody"];
 export type SchemaResolveRequest = components["schemas"]["ResolveRequest"];
 export type SchemaResumeBookRequest =
@@ -49938,6 +49988,86 @@ export interface operations {
         };
         content: {
           readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly clean_render_cache_files_workspace_items__workspace_id___workspace_item_id__clean_render_cache_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly workspace_id: string;
+        readonly workspace_item_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["RenderCleanupPayload"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly render_storage_files_workspace_items__workspace_id___workspace_item_id__render_storage_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly workspace_id: string;
+        readonly workspace_item_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */
