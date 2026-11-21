@@ -67,6 +67,32 @@ _LABELS: dict[str, dict[str, str]] = {
         "not_generated": "(Ce chapitre n’a pas encore été généré.)",
         "omitted": "({kind} omis — aucune représentation textuelle.)",
     },
+    "ja": {
+        "takeaway": "要点",
+        "answer": "答え",
+        "front": "表",
+        "back": "裏",
+        "sources": "出典",
+        "chapters": "章",
+        "note": "メモ",
+        "untitled_book": "無題の本",
+        "untitled_chapter": "無題の章",
+        "not_generated": "（この章はまだ生成されていません。）",
+        "omitted": "（{kind} はテキストで表現できないため省略されました。）",
+    },
+    "ko": {
+        "takeaway": "핵심 요약",
+        "answer": "정답",
+        "front": "앞면",
+        "back": "뒷면",
+        "sources": "출처",
+        "chapters": "챕터",
+        "note": "참고",
+        "untitled_book": "제목 없는 책",
+        "untitled_chapter": "제목 없는 챕터",
+        "not_generated": "(이 챕터는 아직 생성되지 않았습니다.)",
+        "omitted": "({kind}은(는) 텍스트로 표현할 수 없어 생략되었습니다.)",
+    },
 }
 
 

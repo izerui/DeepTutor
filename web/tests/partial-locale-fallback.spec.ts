@@ -37,3 +37,16 @@ it("uses Ukrainian copy when a translation exists", async () => {
 
   expect(i18n.t("common.save")).toBe("зберегти");
 });
+
+it("uses Japanese and Korean copy", async () => {
+  const i18n = initI18n("ja");
+  await ensureLanguage("ja");
+  await i18n.changeLanguage("ja");
+  expect(i18n.t("common.save")).toBe("保存");
+  expect(i18n.t("{{count}} files", { count: 3 })).toBe("3件のファイル");
+
+  await ensureLanguage("ko");
+  await i18n.changeLanguage("ko");
+  expect(i18n.t("common.save")).toBe("저장");
+  expect(i18n.t("{{count}} files", { count: 3 })).toBe("파일 3개");
+});

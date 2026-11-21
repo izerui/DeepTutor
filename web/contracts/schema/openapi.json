@@ -5480,7 +5480,9 @@
               "fr",
               "de",
               "uk",
-              "pl"
+              "pl",
+              "ja",
+              "ko"
             ],
             "title": "Language",
             "type": "string"
@@ -12963,7 +12965,9 @@
                   "fr",
                   "de",
                   "uk",
-                  "pl"
+                  "pl",
+                  "ja",
+                  "ko"
                 ],
                 "type": "string"
               },

@@ -22,7 +22,7 @@ const KEYS = [
   "Admins can manage users and assignments. Each admin keeps their own learning data.",
 ];
 
-for (const lang of ["en", "zh", "de", "fr", "pl", "uk"]) {
+for (const lang of ["en", "zh", "de", "fr", "pl", "uk", "ja", "ko"]) {
   test(`${lang} translates every P1a isolation message`, () => {
     const table = JSON.parse(
       fs.readFileSync(path.join(localeDir, lang, "app.json"), "utf8"),

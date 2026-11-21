@@ -233,7 +233,7 @@ it("a new lesson in a joined course reads as such", () => {
 
 it("the refusal to change a connected knowledge base's connection is translated everywhere", () => {
   const key = "Only administrators change where a connected knowledge base connects to.";
-  for (const locale of ["en", "zh", "de", "fr", "pl", "uk"]) {
+  for (const locale of ["en", "zh", "de", "fr", "pl", "uk", "ja", "ko"]) {
     const entries = JSON.parse(fs.readFileSync(path.join(process.cwd(), "locales", locale, "app.json"), "utf8"));
     expect(typeof entries[key], locale).toBe("string");
   }

@@ -19,7 +19,7 @@ from deeptutor.response_languages import SUPPORTED_RESPONSE_LANGUAGES
 from deeptutor.services.path_service import get_path_service
 from deeptutor.tools.builtin import USER_TOGGLEABLE_TOOL_NAMES
 
-UiLanguage = Literal["en", "zh", "fr", "de", "uk", "pl"]
+UiLanguage = Literal["en", "zh", "fr", "de", "uk", "pl", "ja", "ko"]
 
 DEFAULT_UI_SETTINGS: dict[str, Any] = {
     # "system" follows the OS. "snow" is the pure-white Default palette.
@@ -103,6 +103,8 @@ def _normalize_language(language: Any, default: str = "en") -> str:
     - de/german/deutsch -> de
     - uk/ukrainian/ua -> uk
     - pl/polish/polski -> pl
+    - ja/japanese/jp -> ja
+    - ko/korean/kr -> ko
 
     An unknown code falls back to ``default`` rather than raising, so this is
     also the gate that decides which languages exist at all: a locale shipped
@@ -126,6 +128,10 @@ def _normalize_language(language: Any, default: str = "en") -> str:
             return "uk"
         if s in {"polish", "polski"} or base == "pl":
             return "pl"
+        if s in {"japanese", "日本語"} or base in {"ja", "jp"}:
+            return "ja"
+        if s in {"korean", "한국어"} or base in {"ko", "kr"}:
+            return "ko"
 
     # Fall back to default
     if isinstance(default, str):

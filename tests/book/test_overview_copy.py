@@ -64,7 +64,7 @@ def test_a_regional_tag_resolves_to_its_base_language() -> None:
 
 
 def test_an_unknown_language_falls_back_to_english_rather_than_breaking() -> None:
-    for unknown in ("ja", "kl", "", None, "   "):
+    for unknown in ("xx", "kl", "", None, "   "):
         assert overview_copy(unknown) is _COPY["en"]
 
 

@@ -83,6 +83,28 @@ _JUDGE_SYSTEM_PROMPTS = {
         "- Adresse-toi directement à la réponse de l’apprenant, sans discours générique.\n"
         "- Réponds en français et tutoie l’apprenant."
     ),
+    "ja": (
+        "あなたは厳格でありながら学習者を励ます教育アシスタントで、学習者のクイズの解答を採点しています。"
+        "問題、模範解答、解説をもとに、的を絞った評価を行ってください。\n\n"
+        "回答の要件:\n"
+        "- 最初の 1 行で判定を明示してください: ✅ 正解 / ⚠️ 部分的に正解 / ❌ 不正解。"
+        "あわせて判定の主な理由を簡潔に述べてください。\n"
+        "- 続けて、正しくできている点、誤りや不足している点、その直し方を箇条書きで示してください。\n"
+        "- 妥当な答えが複数ある場合は、学習者のよくできている点を認めてください。\n"
+        "- 一般論の講義ではなく、学習者の解答そのものについて述べてください。\n"
+        "- 日本語で、です・ます調で回答してください。"
+    ),
+    "ko": (
+        "당신은 엄격하면서도 학습자를 격려하는 조교로서 학습자의 퀴즈 답안을 채점하고 있습니다. "
+        "문제, 모범 답안, 해설을 바탕으로 학습자에게 맞춘 평가를 제공하세요.\n\n"
+        "응답 요구 사항:\n"
+        "- 첫 줄에서 판정을 밝히세요: ✅ 정답 / ⚠️ 부분 정답 / ❌ 오답, "
+        "그리고 핵심 판단 근거를 간단히 덧붙이세요.\n"
+        "- 이어서 잘한 점, 틀리거나 빠진 점, 고치는 방법을 항목별로 나열하세요.\n"
+        "- 합리적인 답이 여러 개 있을 수 있다면 학습자가 잘한 부분을 인정하세요.\n"
+        "- 일반적인 강의가 아니라 학습자의 답안 자체에 대해 직접 이야기하세요.\n"
+        "- 한국어로 답하세요."
+    ),
 }
 
 # The set of languages the judge can speak IS the set of system prompts it has.
@@ -169,6 +191,68 @@ def _build_judge_user_prompt(
                     "et ses croquis, et prends-la en compte dans l’évaluation."
                 )
         parts.append("Produis une évaluation qui porte sur la réponse précise de cet apprenant.")
+    elif language == "ja":
+        parts = [
+            f"問題の種類: {question_type or '不明'}",
+            f"問題文:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"選択肢:\n{options_block}")
+        if correct_answer:
+            parts.append(f"模範解答:\n{correct_answer}")
+        if explanation:
+            parts.append(f"解説:\n{explanation}")
+        parts.append(
+            "学習者の解答:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "（画像のみが提出され、文字での解答はありません）"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"学習者は解答として {image_count} 枚の画像を添付しています。"
+                    "画像内の文字・数式・スケッチを読み取り、判定に反映してください。"
+                )
+            else:
+                parts.append(
+                    "学習者は解答として 1 枚の画像を添付しています。"
+                    "画像内の文字・数式・スケッチを読み取り、判定に反映してください。"
+                )
+        parts.append("この学習者の具体的な解答に即した AI 評価を行ってください。")
+    elif language == "ko":
+        parts = [
+            f"문제 유형: {question_type or '알 수 없음'}",
+            f"문제:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"선택지:\n{options_block}")
+        if correct_answer:
+            parts.append(f"모범 답안:\n{correct_answer}")
+        if explanation:
+            parts.append(f"해설:\n{explanation}")
+        parts.append(
+            "학습자 답안:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(이미지만 제출되었으며 입력한 답안은 없습니다)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"학습자가 답안으로 이미지 {image_count}장을 첨부했습니다. "
+                    "이미지 속 글자, 수식, 스케치를 읽고 판정에 반영하세요."
+                )
+            else:
+                parts.append(
+                    "학습자가 답안으로 이미지 한 장을 첨부했습니다. "
+                    "이미지 속 글자, 수식, 스케치를 읽고 판정에 반영하세요."
+                )
+        parts.append("이 학습자의 구체적인 답안에 맞춘 AI 평가를 작성하세요.")
     else:
         parts = [
             f"Question type: {question_type or 'unknown'}",
@@ -312,7 +396,7 @@ async def websocket_quiz_judge(websocket: WebSocket):
             ] | null,
             "user_answer_image": str | null,  # legacy single-image form
             "image_filename": str | null,     # legacy filename for the above
-            "language": "zh" | "en" | "de" | "uk",
+            "language": "zh" | "en" | "de" | "uk" | "fr" | "ja" | "ko",
         }
 
     Server → Client (streaming):

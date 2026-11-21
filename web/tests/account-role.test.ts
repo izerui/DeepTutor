@@ -9,7 +9,7 @@ test("only administrators and learners are shown", () => {
   assert.equal(accountRoleLabelKey("admin"), "Administrator");
   assert.equal(accountRoleLabelKey("learner"), "Learner");
 
-  for (const language of ["en", "zh", "de", "fr", "uk", "pl"]) {
+  for (const language of ["en", "zh", "de", "fr", "uk", "pl", "ja", "ko"]) {
     const labels = JSON.parse(
       readFileSync(path.resolve(process.cwd(), `locales/${language}/app.json`), "utf8"),
     ) as Record<string, string>;

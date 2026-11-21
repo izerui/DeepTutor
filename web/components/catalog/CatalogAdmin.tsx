@@ -37,19 +37,23 @@ const OTHER_LANGUAGES = [
   { code: "fr", label: "Français" },
   { code: "pl", label: "Polski" },
   { code: "uk", label: "Українська" },
+  { code: "ja", label: "日本語" },
+  { code: "ko", label: "한국어" },
 ] as const;
 type OtherCode = (typeof OTHER_LANGUAGES)[number]["code"];
 
 const othersOf = (names: Partial<Record<OtherCode, string>>): Record<OtherCode, string> => ({
   de: names.de ?? "", fr: names.fr ?? "", pl: names.pl ?? "", uk: names.uk ?? "",
+  ja: names.ja ?? "", ko: names.ko ?? "",
 });
 const trimmed = (others: Record<OtherCode, string>): OtherNames => ({
   de: others.de.trim(), fr: others.fr.trim(), pl: others.pl.trim(), uk: others.uk.trim(),
+  ja: others.ja.trim(), ko: others.ko.trim(),
 });
 const sameOthers = (a: Record<OtherCode, string>, b: Record<OtherCode, string>) =>
   OTHER_LANGUAGES.every(({ code }) => a[code].trim() === b[code].trim());
 
-/** "Other languages": Deutsch, Français, Polski, Українська inputs. */
+/** "Other languages": Deutsch, Français, Polski, Українська, 日本語, 한국어 inputs. */
 function OtherNameInputs({
   value,
   onChange,

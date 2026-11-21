@@ -97,6 +97,46 @@ _COPY: dict[str, dict[str, Any]] = {
         "chapter_index_title": "Index des chapitres",
         "chapter_index_heading": "## Index des chapitres",
     },
+    "ja": {
+        "chapter_title": "この本の読み方",
+        "chapter_summary": "本書の概念グラフと章の索引から自動生成された概要です。",
+        "objectives": [
+            "章の全体像をひと目で把握する",
+            "概念同士の依存関係を理解する",
+            "目的に合った読み進め方を選ぶ",
+        ],
+        "intro_title": "この本の読み方",
+        "intro_body": (
+            "下の図は、本書の {concepts} 個の主要な概念とそれらの依存関係を示しています。"
+            "続く章の索引には {chapters} 個の章がすべて並んでいます。"
+            "上から順に読めばおすすめの順序で学べますし、"
+            "興味のある章から直接読み始めることもできます。"
+        ),
+        "untitled_book": "本書",
+        "concept_map_title": "概念マップ",
+        "chapter_index_title": "章の索引",
+        "chapter_index_heading": "## 章の索引",
+    },
+    "ko": {
+        "chapter_title": "이 책을 읽는 방법",
+        "chapter_summary": "이 책의 개념 그래프와 챕터 목차로 자동 생성된 개요입니다.",
+        "objectives": [
+            "전체 챕터 구성을 한눈에 파악하기",
+            "개념 간의 의존 관계 이해하기",
+            "목표에 맞는 읽기 순서 선택하기",
+        ],
+        "intro_title": "이 책을 읽는 방법",
+        "intro_body": (
+            "아래 다이어그램은 이 책의 핵심 개념 {concepts}개와 그 사이의 의존 관계를 보여 줍니다. "
+            "이어지는 챕터 목차에는 {chapters}개 챕터가 모두 나열되어 있습니다. "
+            "위에서 아래로 읽으면 권장 순서를 따르게 되고, "
+            "가장 궁금한 내용으로 바로 이동할 수도 있습니다."
+        ),
+        "untitled_book": "이 책",
+        "concept_map_title": "개념 맵",
+        "chapter_index_title": "챕터 목차",
+        "chapter_index_heading": "## 챕터 목차",
+    },
 }
 
 

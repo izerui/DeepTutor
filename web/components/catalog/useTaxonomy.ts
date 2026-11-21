@@ -61,11 +61,11 @@ export function indexTaxonomy(taxonomy: Taxonomy | null): Map<string, TaxonomyIn
   return index;
 }
 
-const NAME_LANGUAGES = ["zh", "en", "de", "fr", "pl", "uk"] as const;
+const NAME_LANGUAGES = ["zh", "en", "de", "fr", "pl", "uk", "ja", "ko"] as const;
 
 /**
  * The name in the interface language (follow-ups §7): the built-in entries have
- * German, French, Polish and Ukrainian names too; otherwise English (Chinese for
+ * German, French, Polish, Ukrainian, Japanese and Korean names too; otherwise English (Chinese for
  * a Chinese interface).
  */
 export function pickName(names: TaxonomyName | undefined, language: string | undefined): string {

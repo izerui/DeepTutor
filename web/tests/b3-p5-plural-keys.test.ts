@@ -67,3 +67,19 @@ test("fr locale has _one/_many/_other for every en _one key", () => {
     `Missing plural keys in fr:\n${missing.join("\n")}`,
   );
 });
+
+test("ja/ko locales have only the _other form for every en _one key", () => {
+  // Japanese and Korean have a single plural category; i18next looks up `_other` only.
+  assert.deepEqual(new Intl.PluralRules("ja").resolvedOptions().pluralCategories, ["other"]);
+  assert.deepEqual(new Intl.PluralRules("ko").resolvedOptions().pluralCategories, ["other"]);
+  for (const lang of ["ja", "ko"]) {
+    const catalog = loadLocale(lang);
+    const problems: string[] = [];
+    for (const oneKey of oneKeys) {
+      const stem = oneKey.slice(0, -4);
+      if (!(`${stem}_other` in catalog)) problems.push(`${lang}: missing ${stem}_other`);
+      if (oneKey in catalog) problems.push(`${lang}: unused ${oneKey}`);
+    }
+    assert.deepEqual(problems, [], problems.join("\n"));
+  }
+});

@@ -7,7 +7,7 @@ import { resolveResponseLanguage } from "../context/app-shell-storage";
 import { APP_LANGUAGES, isAppLanguage, normalizeLanguage } from "../i18n/languages";
 
 test("the locale registry accepts every supported language", () => {
-  assert.deepEqual(APP_LANGUAGES.map(({ code }) => code), ["en", "zh", "fr", "de", "uk", "pl"]);
+  assert.deepEqual(APP_LANGUAGES.map(({ code }) => code), ["en", "zh", "fr", "de", "uk", "pl", "ja", "ko"]);
   for (const { code } of APP_LANGUAGES) assert.equal(isAppLanguage(code), true);
   assert.equal(isAppLanguage("xx"), false);
   assert.equal(normalizeLanguage("uk-UA"), "uk");
@@ -16,6 +16,10 @@ test("the locale registry accepts every supported language", () => {
   assert.equal(normalizeLanguage("pl-PL"), "pl");
   assert.equal(normalizeLanguage("Polish"), "pl");
   assert.equal(normalizeLanguage("Polski"), "pl");
+  assert.equal(normalizeLanguage("ja-JP"), "ja");
+  assert.equal(normalizeLanguage("Japanese"), "ja");
+  assert.equal(normalizeLanguage("ko-KR"), "ko");
+  assert.equal(normalizeLanguage("한국어"), "ko");
 });
 
 test("response language remains independent from the interface language", () => {

@@ -200,8 +200,15 @@ GRADE_STAGES: dict[str, tuple[int, ...]] = {"primary": (1, 2, 3, 4, 5, 6), "juni
 
 def _grade_names(number: int) -> dict[str, str]:
     french = "1re année" if number == 1 else f"{number}e année"
+    # Japanese and Korean count school years within each stage: grade 7 is 中学1年 / 중학교 1학년.
+    ja_stage, ko_stage, year = (
+        ("小学", "초등학교", number) if number <= 6
+        else ("中学", "중학교", number - 6) if number <= 9
+        else ("高校", "고등학교", number - 9)
+    )
     return {"zh": _CN_GRADES[number - 1], "en": f"Grade {number}", "de": f"{number}. Klasse", "fr": french,
-            "pl": f"Klasa {number}", "uk": f"{number} клас"}
+            "pl": f"Klasa {number}", "uk": f"{number} клас", "ja": f"{ja_stage}{year}年",
+            "ko": f"{ko_stage} {year}학년"}
 
 
 def grades() -> list[dict[str, Any]]:
@@ -443,7 +450,7 @@ def validate(
 # ── administrators (batch 2 §8.1) ──────────────────────────
 
 NAME_MAX = 40
-OTHER_LANGUAGES = ("de", "fr", "pl", "uk")
+OTHER_LANGUAGES = ("de", "fr", "pl", "uk", "ja", "ko")
 
 
 def _clean_others(names: dict[str, str] | None) -> str | None:
