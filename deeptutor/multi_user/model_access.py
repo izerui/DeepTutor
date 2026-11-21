@@ -58,7 +58,7 @@ def _model_by_id(profile: dict[str, Any], model_id: str) -> dict[str, Any] | Non
 #: server and may assign it to learners like any other model (port round 2,
 #: batch C). Its turns run with Claude Code's own tools, settings and project
 #: files disabled, in a throwaway working directory.
-OWNER_BOUND_BINDINGS = frozenset({"openai_codex", "codebuddy", "github_copilot"})
+OWNER_BOUND_BINDINGS = frozenset({"openai_codex", "codebuddy", "github_copilot", "claude_code"})
 
 
 def is_owner_bound(profile: dict[str, Any]) -> bool:

@@ -184,17 +184,16 @@ def test_copilot_binding_blocks_existing_grants_and_assignment(tmp_path, monkeyp
         reset_current_user(token)
 
 
-def test_claude_code_is_assignable_like_any_other_model(tmp_path, monkeypatch):
-    """Port round 2 (batch C): an administrator sets Claude Code up on the
-    server and assigns it to learners like any other model. It is not
-    owner-bound, so it is offered for assignment and a granted learner can
-    select it — and an ungranted learner still cannot."""
+def test_claude_code_is_owner_bound_and_never_lent(tmp_path, monkeypatch):
+    """Claude Code runs on one person's sign-in on the server, so like Codex,
+    CodeBuddy and Copilot it is never lent to learners through grants."""
     from deeptutor.api.routers import multi_user as router
 
     catalog = _catalog(owner_bound=False)
     catalog["services"]["llm"]["profiles"][0]["binding"] = "claude_code"
-    assert model_access.is_owner_bound({"binding": "claude_code"}) is False
+    assert model_access.is_owner_bound({"binding": "claude_code"})
     monkeypatch.setattr(model_access, "admin_catalog", lambda: catalog)
+    monkeypatch.setattr(model_access, "load_grant", _grant)
     monkeypatch.setattr(
         router, "ModelCatalogService", lambda path=None: SimpleNamespace(load=lambda: catalog)
     )
@@ -203,23 +202,13 @@ def test_claude_code_is_assignable_like_any_other_model(tmp_path, monkeypatch):
         "get_admin_path_service",
         lambda: SimpleNamespace(get_settings_file=lambda _: tmp_path / "catalog.json"),
     )
-    assert [m["model_id"] for m in router._admin_catalog_summary()["llm"][0]["models"]] == [
-        "m-sol"
-    ]
     token = set_current_user(make_user(tmp_path))
     try:
-        monkeypatch.setattr(model_access, "load_grant", lambda _user_id=None: {"models": {}})
-        assert model_access.redacted_model_access()["llm"] == []
+        assert model_access.allowed_llm_options()["options"] == []
         with pytest.raises(PermissionError):
             model_access.apply_allowed_llm_selection(
                 {"profile_id": CODEX_PROFILE, "model_id": "m-sol"}
             )
-
-        monkeypatch.setattr(model_access, "load_grant", _grant)
-        option = model_access.allowed_llm_options()["options"][0]
-        assert option["provider"] == "claude_code"
-        assert model_access.apply_allowed_llm_selection(
-            {"profile_id": CODEX_PROFILE, "model_id": "m-sol"}
-        ) == {"profile_id": CODEX_PROFILE, "model_id": "m-sol"}
+        assert router._admin_catalog_summary() == {"llm": []}
     finally:
         reset_current_user(token)
