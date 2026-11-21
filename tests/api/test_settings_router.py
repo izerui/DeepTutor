@@ -425,6 +425,31 @@ async def test_web_fetch_settings_roundtrip_and_validation(
 
 
 @pytest.mark.asyncio
+async def test_web_fetch_settings_are_admin_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from fastapi import HTTPException
+
+    service = RuntimeSettingsService(tmp_path / "settings", process_env={})
+    monkeypatch.setattr(settings_router, "get_runtime_settings_service", lambda: service)
+    monkeypatch.setattr(
+        settings_router,
+        "get_current_user",
+        lambda: CurrentUser("u_alice", "alice", "student", scope_for_user("u_alice", is_admin=False)),
+    )
+
+    with pytest.raises(HTTPException) as read_refused:
+        await settings_router.get_web_fetch_settings()
+    assert read_refused.value.status_code == 403
+    with pytest.raises(HTTPException) as write_refused:
+        await settings_router.update_web_fetch_settings(
+            settings_router.WebFetchSettingsUpdate(backend="deepseek")
+        )
+    assert write_refused.value.status_code == 403
+    assert service.load_system(include_process_overrides=False)["web_fetch_backend"] == "local"
+
+
+@pytest.mark.asyncio
 async def test_chat_attachment_settings_roundtrip(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
