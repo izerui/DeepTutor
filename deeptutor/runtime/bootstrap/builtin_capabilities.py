@@ -143,6 +143,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "output_mode": "video",
                 "quality": "medium",
                 "style_hint": "",
+                "enable_visual_review": False,
             },
         ),
     ),
@@ -164,6 +165,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
             ],
             tools_used=["submit_visualization"],
             cli_aliases=["visualize", "viz"],
+            config_defaults={"enable_visual_review": False},
         ),
     ),
     "mastery_path": BuiltinCapabilitySpec(
