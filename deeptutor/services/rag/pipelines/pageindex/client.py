@@ -112,6 +112,7 @@ def resolve_oss_sdk_config() -> tuple[str, dict[str, Any]]:
             "openai_codex",
             "github_copilot",
             "codebuddy",
+            "claude_code",
         }
     ):
         raise RuntimeError(

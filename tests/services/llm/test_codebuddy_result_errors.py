@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.services.llm.provider_core.codebuddy_provider import (
+from deeptutor.services.llm.provider_core.sdk_bridge import (
     _consume_messages,
     _result_detail,
 )

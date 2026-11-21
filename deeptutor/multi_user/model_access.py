@@ -53,6 +53,11 @@ def _model_by_id(profile: dict[str, Any], model_id: str) -> dict[str, Any] | Non
 #: a CodeBuddy profile is, and it reads the operator's own IDE-plugin session —
 #: and there is nowhere for such a profile to acquire the flag. Binding is the
 #: durable fact, so it decides too.
+#:
+#: ``claude_code`` is deliberately absent: an administrator sets it up on the
+#: server and may assign it to learners like any other model (port round 2,
+#: batch C). Its turns run with Claude Code's own tools, settings and project
+#: files disabled, in a throwaway working directory.
 OWNER_BOUND_BINDINGS = frozenset({"openai_codex", "codebuddy", "github_copilot"})
 
 
