@@ -705,13 +705,27 @@ async def delete_session(session_id: str):
                         detail="Active conversation turn could not be stopped before deletion",
                     )
     for target in reversed(ordered):
+        generated = await _generated_output_dirs(store, target)
         if not await store.delete_session(target):
             raise HTTPException(status_code=409, detail="Unable to delete conversation")
-        await _cleanup_deleted_session(target)
+        await _cleanup_deleted_session(target, generated)
     return {"deleted": True, "session_id": session_id}
 
 
-async def _cleanup_deleted_session(session_id: str) -> None:
+async def _generated_output_dirs(store, session_id: str) -> set[tuple[str, str]]:
+    """Legacy output folders the conversation links, read before its rows go."""
+    from deeptutor.services.workspace.session_outputs import legacy_output_dirs
+
+    try:
+        return legacy_output_dirs(await store.get_messages(session_id))
+    except Exception:
+        logger.exception("failed to list generated outputs for session %s", session_id)
+        return set()
+
+
+async def _cleanup_deleted_session(
+    session_id: str, generated: set[tuple[str, str]] | None = None
+) -> None:
     try:
         await asyncio.to_thread(LearningStore().detach_session, session_id)
     except Exception:
@@ -724,6 +738,12 @@ async def _cleanup_deleted_session(session_id: str) -> None:
         await asyncio.to_thread(ReadingCatalogStore().forget_session, session_id)
     except Exception:
         logger.exception("failed to detach reading collections for session %s", session_id)
+    try:
+        from deeptutor.services.workspace.session_outputs import remove_session_outputs
+
+        await asyncio.to_thread(remove_session_outputs, session_id, set(generated or ()))
+    except Exception:
+        logger.exception("failed to remove generated files for session %s", session_id)
 
 
 @router.post("/{session_id}/restore")
@@ -739,10 +759,11 @@ async def restore_session(session_id: str):
 @router.delete("/{session_id}/purge")
 async def purge_session(session_id: str):
     store = get_session_store()
+    generated = await _generated_output_dirs(store, session_id)
     purged = await store.hard_delete_session(session_id)
     if not purged:
         raise HTTPException(status_code=404, detail="Session not found in recycle bin")
-    await _cleanup_deleted_session(session_id)
+    await _cleanup_deleted_session(session_id, generated)
     from deeptutor.services.task_board import get_task_board_store
     from deeptutor.services.workspace.context import current_workspace_id
 

@@ -27,6 +27,15 @@ async def test_delete_removes_conversation_descendants_and_messages(tmp_path, mo
     monkeypatch.setattr(
         store, "list_active_turns", AsyncMock(side_effect=lambda sid: [{"id": f"turn-{sid}"}])
     )
+    from deeptutor.services.workspace import session_outputs
+
+    removed_outputs = Mock()
+    monkeypatch.setattr(session_outputs, "remove_session_outputs", removed_outputs)
+    await store.add_message(
+        "child",
+        "assistant",
+        "Lesson: /files/outputs/workspace/chat/video_lesson/turn_v/artifacts/lesson.html",
+    )
 
     result = await router.delete_session("root")
 
@@ -39,6 +48,14 @@ async def test_delete_removes_conversation_descendants_and_messages(tmp_path, mo
         learning.detach_session.assert_any_call(sid)
         reading.forget_session.assert_any_call(sid)
     turns.cancel_turn_and_wait.assert_any_await(f"turn-{sid}")
+    # Generated files go with each deleted conversation, linked legacy folders included.
+    removed_outputs.assert_any_call("child", {("video_lesson", "turn_v")})
+    removed_outputs.assert_any_call("root", set())
+    assert {call.args[0] for call in removed_outputs.call_args_list} == {
+        "root",
+        "child",
+        "grandchild",
+    }
     assert await store.get_session("other") is not None
     assert len(await store.get_messages("other")) == 1
     assert await store.list_deleted_sessions() == []

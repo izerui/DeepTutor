@@ -79,6 +79,14 @@ def _normalise_relative(path: str) -> str:
     return PurePosixPath(*parts).as_posix()
 
 
+def session_output_component(session_id: str) -> str:
+    """The folder name a conversation's turns write under ``outputs/<capability>/``."""
+    safe = _safe_component(session_id, "direct")
+    if safe == session_id:
+        return safe
+    return f"{safe}_{hashlib.sha256(session_id.encode()).hexdigest()[:12]}"
+
+
 class ContentWorkspaceService(WorkspaceCatalogMixin):
     """Resolve system, general and custom content workspaces.
 
@@ -333,11 +341,7 @@ class ContentWorkspaceService(WorkspaceCatalogMixin):
         logical = PurePosixPath(
             "outputs",
             _safe_component(capability, "chat"),
-            (
-                _safe_component(session_id, "direct")
-                if _safe_component(session_id, "direct") == session_id
-                else f"{_safe_component(session_id, 'direct')}_{hashlib.sha256(session_id.encode()).hexdigest()[:12]}"
-            ),
+            session_output_component(session_id),
             _safe_component(turn_id, "turn"),
         ).as_posix()
         output = self.resolve(binding, logical, write=True)
