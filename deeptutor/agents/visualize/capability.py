@@ -97,6 +97,7 @@ class VisualizeCapability(TurnCapability):
         tools_used=["submit_visualization"],
         cli_aliases=["visualize", "viz"],
         request_schema=get_capability_request_schema("visualize"),
+        config_defaults={"enable_visual_review": False},
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBus) -> None:
@@ -305,6 +306,7 @@ class VisualizeCapability(TurnCapability):
             output_mode=output_mode,  # type: ignore[arg-type]
             quality=visualize_config.quality,
             style_hint=visualize_config.style_hint,
+            enable_visual_review=visualize_config.enable_visual_review,
         )
 
         llm_config = get_llm_config()
@@ -314,6 +316,7 @@ class VisualizeCapability(TurnCapability):
             base_url=llm_config.base_url,
             api_version=llm_config.api_version,
             language=context.language,
+            enable_visual_review=request_config.enable_visual_review,
             trace_callback=self._build_trace_bridge(stream, i18n=i18n),
             workspace_output_dir=workspace.output_dir if workspace else None,
             workspace_root=workspace.root if workspace else None,

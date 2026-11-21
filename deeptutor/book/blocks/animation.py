@@ -80,12 +80,14 @@ class AnimationGenerator(BlockGenerator):
                 output_mode="video",
                 quality=quality if quality in ("low", "medium", "high") else "medium",
                 style_hint=style_hint,
+                enable_visual_review=params.get("enable_visual_review", False),
             )
             pipeline = MathAnimatorPipeline(
                 api_key=primary_api_key(llm_config.api_key),
                 base_url=llm_config.base_url,
                 api_version=llm_config.api_version,
                 language=ctx.language,
+                enable_visual_review=request_config.enable_visual_review,
             )
             turn_id = f"book-{ctx.book_id}-{ctx.block.id}"
             result = await pipeline.run(
@@ -102,6 +104,7 @@ class AnimationGenerator(BlockGenerator):
         render_result = result["render_result"]
         summary_payload = result["summary"]
         analysis = result["analysis"]
+        visual_review = render_result.visual_review
         artifacts = [artifact.model_dump() for artifact in render_result.artifacts]
         # Publish the clip with the book (spec 2026-11-20 §6): its outputs URL
         # resolves in the generating account's workspace, so a learner reading
@@ -147,6 +150,7 @@ class AnimationGenerator(BlockGenerator):
             {
                 "retry_attempts": render_result.retry_attempts,
                 "quality": request_config.quality,
+                "visual_review": visual_review.model_dump() if visual_review else None,
             },
         )
 
