@@ -38,6 +38,8 @@ def test_every_route_that_runs_or_adds_an_agent_is_refused():
 def test_local_agent_kbs_are_retired_but_partner_delegates_are_not():
     assert is_retired_connected_agent_kb({"type": "subagent", "agent_kind": "claude_code"})
     assert is_retired_connected_agent_kb({"type": "subagent", "agent_kind": "hermes_remote"})
+    # The ACP client backend (port round 2) is a local agent program too.
+    assert is_retired_connected_agent_kb({"type": "subagent", "agent_kind": "acp"})
     assert not is_retired_connected_agent_kb({"type": "subagent", "agent_kind": "partner"})
     assert not is_retired_connected_agent_kb({"type": "obsidian"})
     assert not is_retired_connected_agent_kb(None)

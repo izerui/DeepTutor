@@ -14,8 +14,9 @@ was and was not confirmed):
    The agent replies with the negotiated version and its capabilities.
 2. client → agent: ``session/new`` with ``cwd`` (absolute) + ``mcpServers: []``,
    or ``session/load`` with ``mcpServers: []`` + ``cwd`` + ``sessionId`` when
-   resuming a prior session. The agent replies with the ``sessionId`` in the
-   JSON-RPC result (a JSON-RPC error rejects the request).
+   resuming a prior session and ``loadSession`` was advertised. New sessions
+   return a ``sessionId``; a successful load may return an empty result and
+   retains the requested ID (a JSON-RPC error rejects either request).
 3. client → agent: ``session/prompt`` with ``sessionId`` and a ``prompt`` array
    of content blocks (``[{"type": "text", "text": …}]``). While it works, the
    agent streams ``session/update`` notifications whose ``update.sessionUpdate``
@@ -460,11 +461,15 @@ async def _handshake(session: _HostSession, *, resume: str | None, cwd: str | No
 
 async def _establish_session(_session: _HostSession, *, resume: str | None, cwd: str | None) -> str:
     # 1. initialize
-    request_id = await _session.send_request("initialize", {"protocolVersion": _PROTOCOL_VERSION})
-    await _await_initialize(_session, request_id)
+    request_id = await _session.send_request(
+        "initialize", {"protocolVersion": _PROTOCOL_VERSION, "clientCapabilities": {}}
+    )
+    capabilities = await _await_initialize(_session, request_id)
     # 2. session/new (fresh) or session/load (resume) — both carry cwd + mcpServers.
     workdir = os.path.abspath(cwd) if cwd else os.getcwd()
     if resume:
+        if capabilities.get("loadSession") is not True:
+            raise AcpHostError("ACP agent does not support loading sessions (loadSession)")
         method = "session/load"
         params: dict[str, Any] = {"mcpServers": [], "cwd": workdir, "sessionId": resume}
     else:
@@ -480,12 +485,16 @@ async def _establish_session(_session: _HostSession, *, resume: str | None, cwd:
                 await _session.emit(EVENT_LOG, item[1], {"stream": "stdout"})
             continue
         frame: dict[str, Any] = item[1]
-        if frame.get("id") == request_id:
+        if _is_response(frame, request_id):
             if "error" in frame:
                 raise AcpHostError(
                     f"ACP agent rejected the session request: {_rpc_error_text(frame)}"
                 )
-            sid = _pick_session_id(frame.get("result"))
+            if not isinstance(frame.get("result"), dict):
+                raise AcpHostError("ACP agent returned an invalid session result")
+            if resume:
+                return resume
+            sid = _pick_session_id(frame["result"])
             if sid:
                 return sid
             raise AcpHostError("ACP agent accepted the session request but returned no sessionId")
@@ -496,7 +505,7 @@ async def _establish_session(_session: _HostSession, *, resume: str | None, cwd:
         await _handle_agent_frame(frame, _session)
 
 
-async def _await_initialize(session: _HostSession, request_id: int) -> None:
+async def _await_initialize(session: _HostSession, request_id: int) -> dict[str, Any]:
     """Wait for the id-matched initialize response (error → fail)."""
     while True:
         item = await session.frames.get()
@@ -507,10 +516,15 @@ async def _await_initialize(session: _HostSession, request_id: int) -> None:
                 await session.emit(EVENT_LOG, item[1], {"stream": "stdout"})
             continue
         frame: dict[str, Any] = item[1]
-        if frame.get("id") == request_id:
+        if _is_response(frame, request_id):
             if "error" in frame:
                 raise AcpHostError(f"ACP agent initialize failed: {_rpc_error_text(frame)}")
-            return
+            result = frame.get("result")
+            version = result.get("protocolVersion") if isinstance(result, dict) else None
+            if type(version) is not int or version != _PROTOCOL_VERSION:
+                raise AcpHostError(f"ACP agent returned unsupported protocol version: {version!r}")
+            capabilities = result.get("agentCapabilities")
+            return capabilities if isinstance(capabilities, dict) else {}
         if frame.get("method"):
             await _handle_agent_frame(frame, session)
 
@@ -555,7 +569,7 @@ async def _run_turn(
                 await emit(EVENT_LOG, item[1], {"stream": "stdout"})
             continue
         frame: dict[str, Any] = item[1]
-        if frame.get("id") == request_id:
+        if _is_response(frame, request_id):
             if "error" in frame:
                 await _fail(result, emit, f"ACP agent prompt failed: {_rpc_error_text(frame)}")
                 return
@@ -572,8 +586,8 @@ async def _run_turn(
         await _handle_agent_frame(frame, session)
 
     if not got_response:
-        # The agent closed its output without answering the prompt.
-        await session.process.wait()
+        # EOF does not imply process exit. Fail now so the bounded teardown
+        # can terminate an agent that closed stdout but kept running.
         code = session.process.returncode
         suffix = f" (exit {code})" if code not in (None, 0) else ""
         await _fail(
@@ -779,6 +793,11 @@ async def _log_update(frame: dict[str, Any], session: _HostSession) -> None:
 
 
 # ---- small frame helpers ---------------------------------------------------------------
+
+
+def _is_response(frame: dict[str, Any], request_id: int) -> bool:
+    # Requests in opposite directions have independent ID namespaces.
+    return "method" not in frame and type(frame.get("id")) is int and frame["id"] == request_id
 
 
 def _pick_session_id(payload: Any) -> str:

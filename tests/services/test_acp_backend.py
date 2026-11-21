@@ -167,6 +167,19 @@ class _InMemoryAgent:
             method = str(request.get("method") or "")
             params = request.get("params") if isinstance(request.get("params"), dict) else {}
 
+            if scenario == "colliding_requests":
+                await self._write_frame(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request["id"],
+                        "method": "fs/read_text_file",
+                        "params": {"path": "/not-granted"},
+                    }
+                )
+                response = await self._read_frame()
+                assert response["id"] == request["id"]
+                assert response["error"]["code"] == -32601
+
             if method == "initialize":
                 if scenario == "hang_init":
                     # Stay alive without answering; consult's timeout must fire.
@@ -176,8 +189,10 @@ class _InMemoryAgent:
                 await self._respond(
                     request,
                     {
-                        "protocolVersion": 1,
-                        "agentCapabilities": {"loadSession": True},
+                        "protocolVersion": 99 if scenario == "wrong_version" else 1,
+                        "agentCapabilities": {}
+                        if scenario == "missing_load_capability"
+                        else {"loadSession": scenario != "no_load_support"},
                         "agentVersion": "fake-acp-host-1.0",
                     },
                 )
@@ -194,12 +209,18 @@ class _InMemoryAgent:
                     session_id = self.HOST_SESSION
                 else:
                     session_id = str(params.get("sessionId") or self.HOST_SESSION)
-                await self._respond(request, {"sessionId": session_id})
+                result = {"sessionId": session_id} if method == "session/new" else {}
+                if scenario == "empty_new_session":
+                    result = {}
+                await self._respond(request, result)
                 continue
 
             if method == "session/prompt":
                 self.prompt_params = params
                 question = self._prompt_text(params)
+                if scenario == "closed_stdout":
+                    self._stdout.feed_eof()
+                    await asyncio.Event().wait()
                 if scenario == "exit_early":
                     self._exit_code = 3
                     return
@@ -767,3 +788,51 @@ async def test_default_spawn_consult_streams_and_returns_session(monkeypatch) ->
     assert result.session_id == "acp-test-session-1"
     assert "The answer is 4." in result.final_text
     assert any(e.kind == EVENT_TOOL for e in seen)
+
+
+@pytest.mark.parametrize("scenario", ["no_load_support", "missing_load_capability"])
+async def test_resume_requires_an_advertised_load_capability(monkeypatch, scenario):
+    agent = _InMemoryAgent(scenario)
+    backend = AcpBackend(host_factory=lambda: _ready(agent))
+    result, _ = await _drive(backend, agent, monkeypatch, session_id="existing")
+    assert not result.success
+    assert "loadSession" in result.error
+    assert agent.session_params is None
+    assert agent.prompt_params is None
+
+
+async def test_initialize_rejects_an_unsupported_protocol_version(monkeypatch):
+    result, _ = await _consult_memory("wrong_version", monkeypatch)
+    assert not result.success
+    assert "protocol version" in result.error
+
+
+async def test_new_session_requires_its_own_id(monkeypatch):
+    result, _ = await _consult_memory("empty_new_session", monkeypatch)
+    assert not result.success
+    assert "sessionId" in result.error
+
+
+async def test_agent_request_ids_do_not_alias_client_responses(monkeypatch):
+    result, _ = await _consult_memory("colliding_requests", monkeypatch)
+    assert result.success, result.error
+    assert result.final_text.endswith("Done.")
+
+
+async def test_closed_stdout_does_not_wait_for_process_exit(monkeypatch):
+    from deeptutor.services.subagent import acp
+
+    monkeypatch.setattr(acp, "_SHUTDOWN_GRACE_SECONDS", 0.02)
+    result, _ = await asyncio.wait_for(_consult_memory("closed_stdout", monkeypatch), 1)
+    assert not result.success
+    assert "closed its output" in result.error
+
+
+@_requires_subprocess
+async def test_real_agent_with_closed_stdout_is_reaped(monkeypatch):
+    from deeptutor.services.subagent import acp
+
+    monkeypatch.setattr(acp, "_SHUTDOWN_GRACE_SECONDS", 0.02)
+    result, _ = await asyncio.wait_for(_consult_default_spawn("closed_stdout", monkeypatch), 2)
+    assert not result.success
+    assert "closed its output" in result.error

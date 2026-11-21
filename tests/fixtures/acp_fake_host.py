@@ -17,6 +17,7 @@ pytest can spawn it with ``sys.executable``.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from typing import Any
@@ -169,13 +170,18 @@ def run_scenario(scenario: str) -> int:
             continue
 
         if method == "session/load":
-            # Accept any resume id and hand it straight back.
+            # ACP load succeeds with an empty response; retain the requested ID.
             session_id = str(params.get("sessionId") or HOST_SESSION_ID)
-            respond(request, {"sessionId": session_id})
+            respond(request, {})
             continue
 
         if method == "session/prompt":
             question = extract_question(request)
+            if scenario == "closed_stdout":
+                os.close(1)
+                os.close(2)
+                time.sleep(60)
+                return 0
             if scenario == "exit_early":
                 sys.stderr.write("fake host: exiting before answering\n")
                 sys.stderr.flush()
