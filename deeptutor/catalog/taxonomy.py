@@ -206,9 +206,18 @@ def _grade_names(number: int) -> dict[str, str]:
         else ("中学", "중학교", number - 6) if number <= 9
         else ("高校", "고등학교", number - 9)
     )
+    # Brazil counts 1º–9º ano through ensino fundamental, then restarts in ensino médio; Italy restarts
+    # in each school (the Chinese stages are kept: 6 primary years, 3 middle, 3 senior).
+    portuguese = f"{number}º ano" if number <= 9 else f"{number - 9}º ano do ensino médio"
+    italian = (
+        f"{number}ª primaria" if number <= 6
+        else f"{number - 6}ª media" if number <= 9
+        else f"{number - 9}ª superiore"
+    )
     return {"zh": _CN_GRADES[number - 1], "en": f"Grade {number}", "de": f"{number}. Klasse", "fr": french,
             "pl": f"Klasa {number}", "uk": f"{number} клас", "ja": f"{ja_stage}{year}年",
-            "ko": f"{ko_stage} {year}학년"}
+            "ko": f"{ko_stage} {year}학년", "vi": f"Lớp {number}", "tr": f"{number}. Sınıf",
+            "pt": portuguese, "it": italian, "hu": f"{number}. osztály"}
 
 
 def grades() -> list[dict[str, Any]]:
@@ -450,7 +459,7 @@ def validate(
 # ── administrators (batch 2 §8.1) ──────────────────────────
 
 NAME_MAX = 40
-OTHER_LANGUAGES = ("de", "fr", "pl", "uk", "ja", "ko")
+OTHER_LANGUAGES = ("de", "fr", "pl", "uk", "ja", "ko", "vi", "tr", "pt", "it", "hu")
 
 
 def _clean_others(names: dict[str, str] | None) -> str | None:

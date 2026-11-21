@@ -73,6 +73,7 @@ _THINKING_NOTICES = {
     "en": "🤔 Thinking…",
     "es": "🤔 Pensando…",
     "fr": "🤔 Réflexion…",
+    "hu": "🤔 Gondolkodom…",
     "it": "🤔 Sto pensando…",
     "ja": "🤔 考え中…",
     "ko": "🤔 생각 중…",
@@ -80,7 +81,9 @@ _THINKING_NOTICES = {
     "pl": "🤔 Myślę…",
     "pt": "🤔 Pensando…",
     "ru": "🤔 Думаю…",
+    "tr": "🤔 Düşünüyorum…",
     "uk": "🤔 Думаю…",
+    "vi": "🤔 Đang suy nghĩ…",
     "zh": "🤔 正在思考…",
     "zh-tw": "🤔 正在思考…",
 }

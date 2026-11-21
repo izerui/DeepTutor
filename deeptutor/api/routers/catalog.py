@@ -249,7 +249,7 @@ class NodeUpdate(BaseModel):
     name_zh: str | None = Field(default=None, max_length=100)
     name_en: str | None = Field(default=None, max_length=100)
     hidden: bool | None = None
-    #: The other interface languages: de, fr, pl, uk, ja, ko.
+    #: The other interface languages: de, fr, pl, uk, ja, ko, vi, tr, pt, it, hu.
     names: dict[str, str] | None = None
 
 

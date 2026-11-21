@@ -108,7 +108,7 @@ def test_quiz_feedback_speaks_both_languages() -> None:
 
 def test_built_in_classification_is_named_in_both_languages() -> None:
     assert set(NAMES_JA_KO) == set(NAMES)
-    assert LANGUAGES[-2:] == ("ja", "ko")
+    assert LANGUAGES[4:6] == ("ja", "ko")
     names = localized({"zh": "数学", "en": "Mathematics"})
     assert names["ja"] == "数学" and names["ko"] == "수학"
     seventh = next(g for g in grades() if g["id"] == "grade.7")

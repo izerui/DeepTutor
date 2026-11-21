@@ -8,6 +8,11 @@ export const APP_LANGUAGES = [
   { code: "pl", labelKey: "language.polish" },
   { code: "ja", labelKey: "language.japanese" },
   { code: "ko", labelKey: "language.korean" },
+  { code: "vi", labelKey: "language.vietnamese" },
+  { code: "tr", labelKey: "language.turkish" },
+  { code: "pt", labelKey: "language.portuguese" },
+  { code: "it", labelKey: "language.italian" },
+  { code: "hu", labelKey: "language.hungarian" },
 ] as const;
 
 export type AppLanguage = (typeof APP_LANGUAGES)[number]["code"];
@@ -31,6 +36,11 @@ export function normalizeLanguage(value: unknown): AppLanguage {
   if (base === "pl" || code === "polish" || code === "polski") return "pl";
   if (base === "ja" || base === "jp" || code === "japanese" || code === "日本語") return "ja";
   if (base === "ko" || base === "kr" || code === "korean" || code === "한국어") return "ko";
+  if (base === "vi" || code === "vietnamese" || code === "tiếng việt") return "vi";
+  if (base === "tr" || code === "turkish" || code === "türkçe") return "tr";
+  if (base === "pt" || code === "portuguese" || code === "português") return "pt";
+  if (base === "it" || code === "italian" || code === "italiano") return "it";
+  if (base === "hu" || code === "hungarian" || code === "magyar") return "hu";
   return "en";
 }
 
@@ -51,4 +61,7 @@ export type ResponseLanguage =
   | "pl"
   | "uk"
   | "ms"
-  | "hi";
+  | "vi"
+  | "tr"
+  | "hi"
+  | "hu";

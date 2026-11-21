@@ -5482,7 +5482,12 @@
               "uk",
               "pl",
               "ja",
-              "ko"
+              "ko",
+              "vi",
+              "tr",
+              "pt",
+              "it",
+              "hu"
             ],
             "title": "Language",
             "type": "string"
@@ -12967,7 +12972,12 @@
                   "uk",
                   "pl",
                   "ja",
-                  "ko"
+                  "ko",
+                  "vi",
+                  "tr",
+                  "pt",
+                  "it",
+                  "hu"
                 ],
                 "type": "string"
               },
@@ -12996,7 +13006,10 @@
                   "pl",
                   "uk",
                   "ms",
-                  "hi"
+                  "vi",
+                  "tr",
+                  "hi",
+                  "hu"
                 ],
                 "type": "string"
               },

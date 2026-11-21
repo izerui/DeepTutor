@@ -10,6 +10,11 @@ export function getLocale(lang: Language): string {
   if (lang === "pl") return "pl-PL";
   if (lang === "ja") return "ja-JP";
   if (lang === "ko") return "ko-KR";
+  if (lang === "vi") return "vi-VN";
+  if (lang === "tr") return "tr-TR";
+  if (lang === "pt") return "pt-BR";
+  if (lang === "it") return "it-IT";
+  if (lang === "hu") return "hu-HU";
   return "en-US";
 }
 

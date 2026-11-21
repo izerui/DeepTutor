@@ -465,8 +465,11 @@ test('TOUR_STEPS walk the settings navigator in order with complete steps', () =
 test('RESPONSE_LANGUAGE_OPTIONS covers the supported response languages exactly once each', () => {
   const options = settingsContext.RESPONSE_LANGUAGE_OPTIONS
 
-  assert.equal(options.length, 16)
+  assert.equal(options.length, 19)
   assert.equal(option_label(options, "hi"), "हिन्दी")
+  assert.equal(option_label(options, "vi"), "Tiếng Việt")
+  assert.equal(option_label(options, "tr"), "Türkçe")
+  assert.equal(option_label(options, "hu"), "Magyar")
   const values = options.map(option => option.value)
   assert.equal(new Set(values).size, values.length, 'no duplicated codes')
   for (const value of values) {

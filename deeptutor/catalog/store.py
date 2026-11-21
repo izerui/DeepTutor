@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS taxonomy_nodes (
     hidden INTEGER NOT NULL DEFAULT 0,
     position REAL,
     custom INTEGER NOT NULL DEFAULT 0,
-    -- Names in the other interface languages: {"de": …, "fr": …, "pl": …, "uk": …, "ja": …, "ko": …}.
+    -- Names in the other interface languages: {"de": …, "fr": …, "ja": …, "vi": …, …}.
     names_json TEXT NOT NULL DEFAULT '{}'
 );
 

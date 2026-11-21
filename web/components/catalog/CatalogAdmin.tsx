@@ -39,21 +39,28 @@ const OTHER_LANGUAGES = [
   { code: "uk", label: "Українська" },
   { code: "ja", label: "日本語" },
   { code: "ko", label: "한국어" },
+  { code: "vi", label: "Tiếng Việt" },
+  { code: "tr", label: "Türkçe" },
+  { code: "pt", label: "Português (Brasil)" },
+  { code: "it", label: "Italiano" },
+  { code: "hu", label: "Magyar" },
 ] as const;
 type OtherCode = (typeof OTHER_LANGUAGES)[number]["code"];
 
 const othersOf = (names: Partial<Record<OtherCode, string>>): Record<OtherCode, string> => ({
   de: names.de ?? "", fr: names.fr ?? "", pl: names.pl ?? "", uk: names.uk ?? "",
   ja: names.ja ?? "", ko: names.ko ?? "",
+  vi: names.vi ?? "", tr: names.tr ?? "", pt: names.pt ?? "", it: names.it ?? "", hu: names.hu ?? "",
 });
 const trimmed = (others: Record<OtherCode, string>): OtherNames => ({
   de: others.de.trim(), fr: others.fr.trim(), pl: others.pl.trim(), uk: others.uk.trim(),
   ja: others.ja.trim(), ko: others.ko.trim(),
+  vi: others.vi.trim(), tr: others.tr.trim(), pt: others.pt.trim(), it: others.it.trim(), hu: others.hu.trim(),
 });
 const sameOthers = (a: Record<OtherCode, string>, b: Record<OtherCode, string>) =>
   OTHER_LANGUAGES.every(({ code }) => a[code].trim() === b[code].trim());
 
-/** "Other languages": Deutsch, Français, Polski, Українська, 日本語, 한국어 inputs. */
+/** "Other languages": one input per interface language besides Chinese and English. */
 function OtherNameInputs({
   value,
   onChange,

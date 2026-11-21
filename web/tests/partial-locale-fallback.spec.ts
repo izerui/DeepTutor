@@ -50,3 +50,21 @@ it("uses Japanese and Korean copy", async () => {
   expect(i18n.t("common.save")).toBe("저장");
   expect(i18n.t("{{count}} files", { count: 3 })).toBe("파일 3개");
 });
+
+it("uses Vietnamese, Turkish, Brazilian Portuguese, Italian and Hungarian copy", async () => {
+  const cases: [string, string, string, string][] = [
+    ["vi", "Lưu", "3 tệp", "1 tệp"],
+    ["tr", "Kaydet", "3 dosya", "1 dosya"],
+    ["pt", "Salvar", "3 arquivos", "1 arquivo"],
+    ["it", "Salva", "3 file", "1 file"],
+    ["hu", "Mentés", "3 fájl", "1 fájl"],
+  ];
+  const i18n = initI18n("en");
+  for (const [language, save, three, one] of cases) {
+    await ensureLanguage(language as Parameters<typeof ensureLanguage>[0]);
+    await i18n.changeLanguage(language);
+    expect(i18n.t("common.save")).toBe(save);
+    expect(i18n.t("{{count}} files", { count: 3 })).toBe(three);
+    expect(i18n.t("{{count}} files", { count: 1 })).toBe(one);
+  }
+});

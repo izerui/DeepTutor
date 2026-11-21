@@ -68,6 +68,16 @@ def _normalize_language(value: Any) -> str | None:
         return "ja"
     if language in {"korean", "한국어"} or base in {"ko", "kr"}:
         return "ko"
+    if language in {"vietnamese", "tiếng việt", "tieng viet"} or base == "vi":
+        return "vi"
+    if language in {"turkish", "türkçe", "turkce"} or base == "tr":
+        return "tr"
+    if language in {"portuguese", "português", "portugues"} or base == "pt":
+        return "pt"
+    if language in {"italian", "italiano"} or base == "it":
+        return "it"
+    if language in {"hungarian", "magyar"} or base == "hu":
+        return "hu"
     return None
 
 

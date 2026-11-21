@@ -105,6 +105,69 @@ _JUDGE_SYSTEM_PROMPTS = {
         "- 일반적인 강의가 아니라 학습자의 답안 자체에 대해 직접 이야기하세요.\n"
         "- 한국어로 답하세요."
     ),
+    "vi": (
+        "Bạn là trợ giảng nghiêm túc nhưng luôn khích lệ, đang chấm câu trả lời của người học "
+        "cho một câu hỏi kiểm tra. Hãy dựa vào câu hỏi, đáp án tham khảo và phần giải thích "
+        "để đưa ra nhận xét sát với bài làm.\n\n"
+        "Yêu cầu:\n"
+        "- Mở đầu bằng một dòng nêu kết luận: ✅ Đúng / ⚠️ Đúng một phần / ❌ Sai, "
+        "kèm lý do chính.\n"
+        "- Sau đó nêu: người học đã làm đúng gì, chỗ nào sai hoặc còn thiếu, và cách sửa.\n"
+        "- Nếu có nhiều đáp án hợp lý, hãy ghi nhận những gì người học đã làm tốt.\n"
+        "- Nhận xét trực tiếp vào bài làm này, không giảng lý thuyết chung chung.\n"
+        "- Trả lời bằng tiếng Việt."
+    ),
+    "tr": (
+        "Titiz ama cesaretlendirici bir öğretim asistanısınız ve bir öğrencinin test sorusuna "
+        "verdiği yanıtı değerlendiriyorsunuz. Soruyu, örnek yanıtı ve açıklamayı temel alarak "
+        "yanıta özel bir değerlendirme yapın.\n\n"
+        "Yanıt gereksinimleri:\n"
+        "- Sonucu belirten tek bir satırla başlayın: ✅ Doğru / ⚠️ Kısmen doğru / ❌ Yanlış "
+        "ve temel gerekçeyi kısaca yazın.\n"
+        "- Ardından madde madde yazın: öğrencinin neyi doğru yaptığı, neyin yanlış ya da eksik "
+        "olduğu ve nasıl düzeltileceği.\n"
+        "- Birden fazla makul yanıt mümkünse öğrencinin iyi yaptığı yönleri belirtin.\n"
+        "- Doğrudan bu yanıta odaklanın, genel bir ders vermeyin.\n"
+        "- Türkçe yanıt verin ve öğrenciye \"siz\" diye hitap edin."
+    ),
+    "pt": (
+        "Você é um assistente de ensino rigoroso e encorajador que avalia a resposta de um "
+        "estudante a uma questão de teste. Use a questão, a resposta de referência e a "
+        "explicação para fazer uma avaliação direcionada.\n\n"
+        "Requisitos:\n"
+        "- Comece com uma linha informando o veredito: ✅ Correto / ⚠️ Parcialmente correto / "
+        "❌ Incorreto, e o motivo principal.\n"
+        "- Em seguida, liste: o que o estudante acertou, o que está errado ou faltando e como "
+        "corrigir.\n"
+        "- Se houver várias respostas válidas, reconheça os acertos do estudante.\n"
+        "- Comente diretamente a resposta enviada — não dê uma explicação genérica.\n"
+        "- Responda em português do Brasil e trate o estudante por \"você\"."
+    ),
+    "it": (
+        "Sei un assistente didattico rigoroso ma incoraggiante che corregge la risposta "
+        "di uno studente a una domanda di un quiz. Basati sulla domanda, sulla risposta di "
+        "riferimento e sulla spiegazione per fornire una valutazione mirata.\n\n"
+        "Requisiti:\n"
+        "- Inizia con una riga che esprime il verdetto: ✅ Corretto / ⚠️ Parzialmente corretto / "
+        "❌ Non corretto, con la motivazione principale.\n"
+        "- Quindi elenca: cosa lo studente ha fatto bene, cosa è errato o mancante e come "
+        "correggerlo.\n"
+        "- Se esistono più risposte ragionevoli, riconosci i punti validi dello studente.\n"
+        "- Rivolgiti direttamente alla risposta dello studente, senza lezioni generiche.\n"
+        "- Rispondi in italiano e dai del tu allo studente."
+    ),
+    "hu": (
+        "Ön szigorú, de bátorító tanársegéd, aki egy tanuló kvízkérdésre adott válaszát "
+        "értékeli. A kérdés, a mintaválasz és a magyarázat alapján adjon célzott értékelést.\n\n"
+        "Követelmények:\n"
+        "- Egy sorral kezdje az ítélettel: ✅ Helyes / ⚠️ Részben helyes / ❌ Helytelen, "
+        "és a döntő indokkal.\n"
+        "- Ezután sorolja fel: mit tudott jól a tanuló, mi hibás vagy hiányzik, és hogyan "
+        "javítható.\n"
+        "- Ha több elfogadható válasz is létezik, ismerje el, amit a tanuló jól tett.\n"
+        "- Közvetlenül a tanuló megoldására reagáljon — ne tartson általános előadást.\n"
+        "- Magyarul válaszoljon."
+    ),
 }
 
 # The set of languages the judge can speak IS the set of system prompts it has.
@@ -253,6 +316,161 @@ def _build_judge_user_prompt(
                     "이미지 속 글자, 수식, 스케치를 읽고 판정에 반영하세요."
                 )
         parts.append("이 학습자의 구체적인 답안에 맞춘 AI 평가를 작성하세요.")
+    elif language == "vi":
+        parts = [
+            f"Dạng câu hỏi: {question_type or 'không rõ'}",
+            f"Câu hỏi:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"Các lựa chọn:\n{options_block}")
+        if correct_answer:
+            parts.append(f"Đáp án tham khảo:\n{correct_answer}")
+        if explanation:
+            parts.append(f"Giải thích tham khảo:\n{explanation}")
+        parts.append(
+            "Bài làm của người học:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(chỉ nộp hình ảnh, không có câu trả lời dạng văn bản)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"Người học đã đính kèm {image_count} hình ảnh trong bài làm. "
+                    "Hãy đọc chữ, công thức và hình vẽ trong ảnh rồi đưa vào đánh giá."
+                )
+            else:
+                parts.append(
+                    "Người học đã đính kèm một hình ảnh trong bài làm. "
+                    "Hãy đọc chữ, công thức và hình vẽ trong ảnh rồi đưa vào đánh giá."
+                )
+        parts.append("Hãy đưa ra đánh giá AI dựa trên chính bài làm cụ thể của người học này.")
+    elif language == "tr":
+        parts = [
+            f"Soru türü: {question_type or 'bilinmiyor'}",
+            f"Soru:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"Seçenekler:\n{options_block}")
+        if correct_answer:
+            parts.append(f"Örnek yanıt:\n{correct_answer}")
+        if explanation:
+            parts.append(f"Örnek açıklama:\n{explanation}")
+        parts.append(
+            "Öğrencinin yanıtı:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(yalnızca görsel gönderildi, yazılı yanıt yok)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"Öğrenci yanıtına {image_count} görsel ekledi. "
+                    "Görsellerdeki metni, formülleri ve çizimleri okuyun ve değerlendirmeye katın."
+                )
+            else:
+                parts.append(
+                    "Öğrenci yanıtına bir görsel ekledi. "
+                    "Görseldeki metni, formülleri ve çizimleri okuyun ve değerlendirmeye katın."
+                )
+        parts.append("Bu öğrencinin verdiği yanıta özel bir AI değerlendirmesi yazın.")
+    elif language == "pt":
+        parts = [
+            f"Tipo de questão: {question_type or 'desconhecido'}",
+            f"Questão:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"Alternativas:\n{options_block}")
+        if correct_answer:
+            parts.append(f"Resposta de referência:\n{correct_answer}")
+        if explanation:
+            parts.append(f"Explicação de referência:\n{explanation}")
+        parts.append(
+            "Resposta do estudante:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(apenas uma imagem foi enviada, sem resposta digitada)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"O estudante anexou {image_count} imagens à resposta. "
+                    "Leia o texto, as fórmulas e os esboços delas e leve-os em conta na avaliação."
+                )
+            else:
+                parts.append(
+                    "O estudante anexou uma imagem à resposta. "
+                    "Leia o texto, as fórmulas e os esboços dela e leve-os em conta na avaliação."
+                )
+        parts.append("Faça uma avaliação de IA voltada para a resposta específica deste estudante.")
+    elif language == "it":
+        parts = [
+            f"Tipo di domanda: {question_type or 'sconosciuto'}",
+            f"Domanda:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"Opzioni:\n{options_block}")
+        if correct_answer:
+            parts.append(f"Risposta di riferimento:\n{correct_answer}")
+        if explanation:
+            parts.append(f"Spiegazione di riferimento:\n{explanation}")
+        parts.append(
+            "Risposta dello studente:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(è stata inviata solo un’immagine, senza risposta scritta)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"Lo studente ha allegato {image_count} immagini alla risposta. "
+                    "Leggi testo, formule e schizzi presenti nelle immagini e tienine conto nella valutazione."
+                )
+            else:
+                parts.append(
+                    "Lo studente ha allegato un’immagine alla risposta. "
+                    "Leggi testo, formule e schizzi presenti nell’immagine e tienine conto nella valutazione."
+                )
+        parts.append("Fornisci una valutazione IA centrata sulla risposta specifica di questo studente.")
+    elif language == "hu":
+        parts = [
+            f"Kérdéstípus: {question_type or 'ismeretlen'}",
+            f"Kérdés:\n{question}",
+        ]
+        if options_block:
+            parts.append(f"Válaszlehetőségek:\n{options_block}")
+        if correct_answer:
+            parts.append(f"Mintaválasz:\n{correct_answer}")
+        if explanation:
+            parts.append(f"Magyarázat:\n{explanation}")
+        parts.append(
+            "A tanuló válasza:\n"
+            + (
+                user_answer.strip()
+                if user_answer and user_answer.strip()
+                else "(csak kép érkezett, gépelt válasz nincs)"
+            )
+        )
+        if has_image:
+            if image_count > 1:
+                parts.append(
+                    f"A tanuló {image_count} képet csatolt a válaszához. "
+                    "Olvassa el a képeken lévő szöveget, képleteket és vázlatokat, és vegye figyelembe őket az értékelésben."
+                )
+            else:
+                parts.append(
+                    "A tanuló egy képet csatolt a válaszához. "
+                    "Olvassa el a képen lévő szöveget, képleteket és vázlatokat, és vegye figyelembe az értékelésben."
+                )
+        parts.append("Készítsen AI-értékelést, amely ennek a tanulónak a konkrét válaszára reagál.")
     else:
         parts = [
             f"Question type: {question_type or 'unknown'}",
@@ -396,7 +614,7 @@ async def websocket_quiz_judge(websocket: WebSocket):
             ] | null,
             "user_answer_image": str | null,  # legacy single-image form
             "image_filename": str | null,     # legacy filename for the above
-            "language": "zh" | "en" | "de" | "uk" | "fr" | "ja" | "ko",
+            "language": "zh" | "en" | "de" | "uk" | "fr" | "ja" | "ko" | "vi" | "tr" | "pt" | "it" | "hu",
         }
 
     Server → Client (streaming):

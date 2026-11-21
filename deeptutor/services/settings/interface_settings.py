@@ -19,7 +19,7 @@ from deeptutor.response_languages import SUPPORTED_RESPONSE_LANGUAGES
 from deeptutor.services.path_service import get_path_service
 from deeptutor.tools.builtin import USER_TOGGLEABLE_TOOL_NAMES
 
-UiLanguage = Literal["en", "zh", "fr", "de", "uk", "pl", "ja", "ko"]
+UiLanguage = Literal["en", "zh", "fr", "de", "uk", "pl", "ja", "ko", "vi", "tr", "pt", "it", "hu"]
 
 DEFAULT_UI_SETTINGS: dict[str, Any] = {
     # "system" follows the OS. "snow" is the pure-white Default palette.
@@ -59,6 +59,13 @@ _RESPONSE_LANGUAGE_ALIASES: dict[str, str] = {
     "hindi": "hi",
     "हिन्दी": "hi",
     "हिंदी": "hi",
+    "vietnamese": "vi",
+    "tiếng việt": "vi",
+    "tieng viet": "vi",
+    "turkish": "tr",
+    "türkçe": "tr",
+    "hungarian": "hu",
+    "magyar": "hu",
 }
 
 
@@ -105,6 +112,11 @@ def _normalize_language(language: Any, default: str = "en") -> str:
     - pl/polish/polski -> pl
     - ja/japanese/jp -> ja
     - ko/korean/kr -> ko
+    - vi/vietnamese/tiếng việt -> vi
+    - tr/turkish/türkçe -> tr
+    - pt/pt-br/portuguese/português -> pt (Brazilian Portuguese)
+    - it/italian/italiano -> it
+    - hu/hungarian/magyar -> hu
 
     An unknown code falls back to ``default`` rather than raising, so this is
     also the gate that decides which languages exist at all: a locale shipped
@@ -132,6 +144,16 @@ def _normalize_language(language: Any, default: str = "en") -> str:
             return "ja"
         if s in {"korean", "한국어"} or base in {"ko", "kr"}:
             return "ko"
+        if s in {"vietnamese", "tiếng việt", "tieng viet"} or base == "vi":
+            return "vi"
+        if s in {"turkish", "türkçe", "turkce"} or base == "tr":
+            return "tr"
+        if s in {"portuguese", "português", "portugues"} or base == "pt":
+            return "pt"
+        if s in {"italian", "italiano"} or base == "it":
+            return "it"
+        if s in {"hungarian", "magyar"} or base == "hu":
+            return "hu"
 
     # Fall back to default
     if isinstance(default, str):

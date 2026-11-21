@@ -134,6 +134,11 @@ _LANGUAGE_CHOICES: tuple[tuple[str, str, str], ...] = (
     ("pl", "Polski", "Interface and replies in Polish."),
     ("ja", "日本語", "Interface and replies in Japanese."),
     ("ko", "한국어", "Interface and replies in Korean."),
+    ("vi", "Tiếng Việt", "Interface and replies in Vietnamese."),
+    ("tr", "Türkçe", "Interface and replies in Turkish."),
+    ("pt", "Português (Brasil)", "Interface and replies in Brazilian Portuguese."),
+    ("it", "Italiano", "Interface and replies in Italian."),
+    ("hu", "Magyar", "Interface and replies in Hungarian."),
 )
 
 _RESPONSE_LANGUAGE_CHOICES: tuple[tuple[str, str, str], ...] = (
@@ -151,7 +156,10 @@ _RESPONSE_LANGUAGE_CHOICES: tuple[tuple[str, str, str], ...] = (
     ("ar", "العربية", "Replies in Arabic."),
     ("pl", "Polski", "Replies in Polish."),
     ("ms", "Bahasa Melayu", "Replies in Malay."),
+    ("vi", "Tiếng Việt", "Replies in Vietnamese."),
+    ("tr", "Türkçe", "Replies in Turkish."),
     ("hi", "हिन्दी", "Replies in Hindi."),
+    ("hu", "Magyar", "Replies in Hungarian."),
 )
 
 _THEME_CHOICES: tuple[tuple[str, str, str], ...] = (

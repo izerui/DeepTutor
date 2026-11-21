@@ -75,4 +75,29 @@ export async function ensureLanguage(language: AppLanguage) {
     const koApp = (await import("@/locales/ko/app.json")).default;
     i18n.addResourceBundle("ko", "app", koApp, true, true);
   }
+
+  if (language === "vi") {
+    const viApp = (await import("@/locales/vi/app.json")).default;
+    i18n.addResourceBundle("vi", "app", viApp, true, true);
+  }
+
+  if (language === "tr") {
+    const trApp = (await import("@/locales/tr/app.json")).default;
+    i18n.addResourceBundle("tr", "app", trApp, true, true);
+  }
+
+  if (language === "pt") {
+    const ptApp = (await import("@/locales/pt/app.json")).default;
+    i18n.addResourceBundle("pt", "app", ptApp, true, true);
+  }
+
+  if (language === "it") {
+    const itApp = (await import("@/locales/it/app.json")).default;
+    i18n.addResourceBundle("it", "app", itApp, true, true);
+  }
+
+  if (language === "hu") {
+    const huApp = (await import("@/locales/hu/app.json")).default;
+    i18n.addResourceBundle("hu", "app", huApp, true, true);
+  }
 }

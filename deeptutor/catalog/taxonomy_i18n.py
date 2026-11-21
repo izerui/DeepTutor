@@ -1,7 +1,8 @@
-"""The built-in classification in German, French, Polish, Ukrainian, Japanese and Korean (follow-ups §7).
+"""The built-in classification in every interface language besides Chinese and English (follow-ups §7).
 
-Keyed by the English name; each NAMES value is (de, fr, pl, uk), each NAMES_JA_KO value (ja, ko). Entries an
-administrator adds have Chinese and English names only.
+Keyed by the English name; each NAMES value is (de, fr, pl, uk), each NAMES_JA_KO value (ja, ko), each
+NAMES_VI_TR_PT_IT_HU value (vi, tr, pt, it, hu). Entries an administrator adds have Chinese and English names
+only.
 """
 
 from __future__ import annotations
@@ -467,16 +468,583 @@ NAMES_JA_KO: dict[str, tuple[str, str]] = {
     "Advanced": ("上級", "고급"),
 }
 
-LANGUAGES = ("de", "fr", "pl", "uk", "ja", "ko")
+#: Vietnamese, Turkish, Brazilian Portuguese, Italian and Hungarian names, keyed by the English
+#: name: (vi, tr, pt, it, hu).
+NAMES_VI_TR_PT_IT_HU: dict[str, tuple[str, str, str, str, str]] = {
+    "Primary school": (
+        "Tiểu học", "İlkokul", "Ensino fundamental – anos iniciais",
+        "Scuola primaria", "Általános iskola (alsó tagozat)",
+    ),
+    "Junior high school": (
+        "Trung học cơ sở", "Ortaokul", "Ensino fundamental – anos finais",
+        "Scuola secondaria di primo grado", "Általános iskola (felső tagozat)",
+    ),
+    "Senior high school": (
+        "Trung học phổ thông", "Lise", "Ensino médio",
+        "Scuola secondaria di secondo grado", "Középiskola",
+    ),
+    "University": ("Đại học", "Üniversite", "Universidade", "Università", "Egyetem"),
+    "Postgraduate entrance exam": (
+        "Thi tuyển sinh sau đại học", "Lisansüstü giriş sınavı", "Seleção para pós-graduação",
+        "Ammissione alla laurea magistrale", "Mesterképzési felvételi",
+    ),
+    "Vocational skills": (
+        "Kỹ năng nghề nghiệp", "Mesleki beceriler", "Habilidades profissionais",
+        "Competenze professionali", "Szakmai készségek",
+    ),
+    "Interests and life": (
+        "Sở thích và đời sống", "İlgi alanları ve yaşam", "Interesses e cotidiano",
+        "Interessi e vita quotidiana", "Hobbi és életmód",
+    ),
+    "Chinese": ("Ngữ văn (tiếng Trung)", "Çince", "Língua chinesa", "Lingua cinese", "Kínai nyelv"),
+    "Mathematics": ("Toán học", "Matematik", "Matemática", "Matematica", "Matematika"),
+    "English": ("Tiếng Anh", "İngilizce", "Inglês", "Inglese", "Angol nyelv"),
+    "Science": ("Khoa học tự nhiên", "Fen bilimleri", "Ciências", "Scienze", "Természettudomány"),
+    "Morality and Law": (
+        "Đạo đức và pháp luật", "Ahlak ve hukuk", "Ética e direito",
+        "Morale e diritto", "Erkölcs és jog",
+    ),
+    "Information Technology": (
+        "Tin học", "Bilişim teknolojileri", "Informática",
+        "Tecnologie informatiche", "Digitális kultúra",
+    ),
+    "Music": ("Âm nhạc", "Müzik", "Música", "Musica", "Ének-zene"),
+    "Art": ("Mỹ thuật", "Görsel sanatlar", "Artes visuais", "Arte e immagine", "Vizuális kultúra"),
+    "PE and Health": (
+        "Giáo dục thể chất và sức khỏe", "Beden eğitimi ve sağlık", "Educação física e saúde",
+        "Educazione fisica e salute", "Testnevelés és egészség",
+    ),
+    "Labor Education": (
+        "Giáo dục lao động", "Emek eğitimi", "Educação para o trabalho",
+        "Educazione al lavoro", "Munkára nevelés",
+    ),
+    "Physics": ("Vật lý", "Fizik", "Física", "Fisica", "Fizika"),
+    "Chemistry": ("Hóa học", "Kimya", "Química", "Chimica", "Kémia"),
+    "Biology": ("Sinh học", "Biyoloji", "Biologia", "Biologia", "Biológia"),
+    "History": ("Lịch sử", "Tarih", "História", "Storia", "Történelem"),
+    "Geography": ("Địa lý", "Coğrafya", "Geografia", "Geografia", "Földrajz"),
+    "Politics": ("Chính trị", "Siyaset", "Política", "Politica", "Politika"),
+    "General Technology": (
+        "Công nghệ", "Genel teknoloji", "Tecnologia geral",
+        "Tecnologia generale", "Általános technika",
+    ),
+    "Foundation courses": (
+        "Học phần cơ bản chung", "Temel dersler", "Disciplinas básicas",
+        "Corsi di base", "Alapozó tárgyak",
+    ),
+    "Calculus": ("Toán cao cấp", "Kalkülüs", "Cálculo", "Analisi matematica", "Matematikai analízis"),
+    "Linear algebra": (
+        "Đại số tuyến tính", "Lineer cebir", "Álgebra linear",
+        "Algebra lineare", "Lineáris algebra",
+    ),
+    "Probability and statistics": (
+        "Xác suất thống kê", "Olasılık ve istatistik", "Probabilidade e estatística",
+        "Probabilità e statistica", "Valószínűségszámítás és statisztika",
+    ),
+    "University physics": (
+        "Vật lý đại cương", "Üniversite fiziği", "Física universitária",
+        "Fisica generale", "Egyetemi fizika",
+    ),
+    "College English": (
+        "Tiếng Anh đại học", "Üniversite İngilizcesi", "Inglês universitário",
+        "Inglese universitario", "Egyetemi angol",
+    ),
+    "Computing fundamentals": (
+        "Tin học đại cương", "Bilgisayar temelleri", "Fundamentos de computação",
+        "Fondamenti di informatica", "Informatikai alapok",
+    ),
+    "Ideological and political theory": (
+        "Lý luận chính trị", "İdeoloji ve siyaset teorisi", "Teoria ideológica e política",
+        "Teoria ideologica e politica", "Ideológiai és politikai elmélet",
+    ),
+    "Physical education": (
+        "Giáo dục thể chất", "Beden eğitimi", "Educação física",
+        "Educazione fisica", "Testnevelés",
+    ),
+    "Career planning and entrepreneurship": (
+        "Định hướng nghề nghiệp và khởi nghiệp", "Kariyer planlama ve girişimcilik", "Carreira e empreendedorismo",
+        "Orientamento e imprenditorialità", "Pályatervezés és vállalkozás",
+    ),
+    "Philosophy": ("Triết học", "Felsefe", "Filosofia", "Filosofia", "Filozófia"),
+    "Economics": ("Kinh tế học", "İktisat", "Economia", "Economia", "Közgazdaságtan"),
+    "Public finance": (
+        "Tài chính công", "Maliye", "Finanças públicas",
+        "Scienza delle finanze", "Közpénzügyek",
+    ),
+    "Finance": ("Tài chính", "Finans", "Finanças", "Finanza", "Pénzügy"),
+    "Economics and trade": (
+        "Kinh tế và thương mại", "Ekonomi ve ticaret", "Economia e comércio",
+        "Economia e commercio", "Gazdaság és kereskedelem",
+    ),
+    "Law": ("Luật học", "Hukuk", "Direito", "Giurisprudenza", "Jogtudomány"),
+    "Political science": (
+        "Chính trị học", "Siyaset bilimi", "Ciência política",
+        "Scienze politiche", "Politológia",
+    ),
+    "Sociology": ("Xã hội học", "Sosyoloji", "Sociologia", "Sociologia", "Szociológia"),
+    "Ethnology": ("Dân tộc học", "Etnoloji", "Etnologia", "Etnologia", "Etnológia"),
+    "Marxist theory": (
+        "Lý luận chủ nghĩa Mác", "Marksist teori", "Teoria marxista",
+        "Teoria marxista", "Marxista elmélet",
+    ),
+    "Public security": (
+        "An ninh công cộng", "Kamu güvenliği", "Segurança pública",
+        "Pubblica sicurezza", "Közbiztonság",
+    ),
+    "Education": (
+        "Giáo dục học", "Eğitim bilimleri", "Pedagogia",
+        "Scienze dell'educazione", "Neveléstudomány",
+    ),
+    "Sports science": (
+        "Khoa học thể thao", "Spor bilimleri", "Ciências do esporte",
+        "Scienze motorie", "Sporttudomány",
+    ),
+    "Literature": ("Văn học", "Edebiyat", "Letras", "Lettere", "Irodalom"),
+    "Chinese language and literature": (
+        "Ngôn ngữ và văn học Trung Quốc", "Çin dili ve edebiyatı", "Língua e literatura chinesa",
+        "Lingua e letteratura cinese", "Kínai nyelv és irodalom",
+    ),
+    "Foreign languages and literature": (
+        "Ngôn ngữ và văn học nước ngoài", "Yabancı diller ve edebiyatları", "Línguas e literaturas estrangeiras",
+        "Lingue e letterature straniere", "Idegen nyelvek és irodalmak",
+    ),
+    "Journalism and communication": (
+        "Báo chí và truyền thông", "Gazetecilik ve iletişim", "Jornalismo e comunicação",
+        "Giornalismo e comunicazione", "Újságírás és kommunikáció",
+    ),
+    "Astronomy": ("Thiên văn học", "Astronomi", "Astronomia", "Astronomia", "Csillagászat"),
+    "Atmospheric science": (
+        "Khoa học khí quyển", "Atmosfer bilimleri", "Ciências atmosféricas",
+        "Scienze dell'atmosfera", "Légkörtudomány",
+    ),
+    "Marine science": (
+        "Khoa học biển", "Deniz bilimleri", "Ciências do mar",
+        "Scienze del mare", "Tengertudomány",
+    ),
+    "Geophysics": ("Địa vật lý", "Jeofizik", "Geofísica", "Geofisica", "Geofizika"),
+    "Geology": ("Địa chất học", "Jeoloji", "Geologia", "Geologia", "Geológia"),
+    "Biological sciences": (
+        "Khoa học sinh học", "Biyolojik bilimler", "Ciências biológicas",
+        "Scienze biologiche", "Biológiai tudományok",
+    ),
+    "Psychology": ("Tâm lý học", "Psikoloji", "Psicologia", "Psicologia", "Pszichológia"),
+    "Statistics": ("Thống kê học", "İstatistik", "Estatística", "Statistica", "Statisztika"),
+    "Engineering": ("Kỹ thuật", "Mühendislik", "Engenharia", "Ingegneria", "Mérnöki tudományok"),
+    "Mechanics": ("Cơ học", "Mekanik", "Mecânica", "Meccanica", "Mechanika"),
+    "Mechanical engineering": (
+        "Kỹ thuật cơ khí", "Makine mühendisliği", "Engenharia mecânica",
+        "Ingegneria meccanica", "Gépészmérnöki",
+    ),
+    "Instrumentation": (
+        "Thiết bị đo lường", "Ölçme ve enstrümantasyon", "Instrumentação",
+        "Strumentazione", "Műszertechnika",
+    ),
+    "Materials": ("Vật liệu", "Malzeme bilimi", "Materiais", "Scienza dei materiali", "Anyagtudomány"),
+    "Energy and power": (
+        "Năng lượng và động lực", "Enerji ve güç", "Energia e potência",
+        "Energetica", "Energetika",
+    ),
+    "Electrical engineering": (
+        "Kỹ thuật điện", "Elektrik mühendisliği", "Engenharia elétrica",
+        "Ingegneria elettrica", "Villamosmérnöki",
+    ),
+    "Electronics and information": (
+        "Điện tử và thông tin", "Elektronik ve bilgi", "Eletrônica e informação",
+        "Elettronica e informazione", "Elektronika és információ",
+    ),
+    "Automation": ("Tự động hóa", "Otomasyon", "Automação", "Automazione", "Automatizálás"),
+    "Computer science": (
+        "Khoa học máy tính", "Bilgisayar bilimleri", "Ciência da computação",
+        "Informatica", "Informatika",
+    ),
+    "Civil engineering": (
+        "Kỹ thuật xây dựng", "İnşaat mühendisliği", "Engenharia civil",
+        "Ingegneria civile", "Építőmérnöki",
+    ),
+    "Water resources": (
+        "Thủy lợi", "Su kaynakları", "Recursos hídricos",
+        "Ingegneria idraulica", "Vízgazdálkodás",
+    ),
+    "Surveying and mapping": (
+        "Trắc địa – bản đồ", "Ölçme ve haritacılık", "Agrimensura e cartografia",
+        "Topografia e cartografia", "Földmérés és térképészet",
+    ),
+    "Chemical and pharmaceutical engineering": (
+        "Kỹ thuật hóa học và dược phẩm", "Kimya ve ilaç mühendisliği", "Engenharia química e farmacêutica",
+        "Ingegneria chimica e farmaceutica", "Vegyész- és gyógyszeripari mérnöki",
+    ),
+    "Geological engineering": (
+        "Kỹ thuật địa chất", "Jeoloji mühendisliği", "Engenharia geológica",
+        "Ingegneria geologica", "Földtudományi mérnöki",
+    ),
+    "Mining": (
+        "Khai thác mỏ", "Maden mühendisliği", "Engenharia de minas",
+        "Ingegneria mineraria", "Bányászat",
+    ),
+    "Textiles": ("Dệt may", "Tekstil", "Têxtil", "Tessile", "Textilipar"),
+    "Light industry": (
+        "Công nghiệp nhẹ", "Hafif sanayi", "Indústria leve",
+        "Industria leggera", "Könnyűipar",
+    ),
+    "Transportation": ("Giao thông vận tải", "Ulaştırma", "Transportes", "Trasporti", "Közlekedés"),
+    "Ocean engineering": (
+        "Kỹ thuật công trình biển", "Deniz mühendisliği", "Engenharia oceânica",
+        "Ingegneria oceanica", "Tengeri mérnöki",
+    ),
+    "Aerospace": (
+        "Hàng không vũ trụ", "Havacılık ve uzay", "Engenharia aeroespacial",
+        "Ingegneria aerospaziale", "Repülő- és űrmérnöki",
+    ),
+    "Weapons": (
+        "Vũ khí", "Silah mühendisliği", "Engenharia de armamentos",
+        "Ingegneria degli armamenti", "Haditechnika",
+    ),
+    "Nuclear engineering": (
+        "Kỹ thuật hạt nhân", "Nükleer mühendislik", "Engenharia nuclear",
+        "Ingegneria nucleare", "Nukleáris technika",
+    ),
+    "Agricultural engineering": (
+        "Kỹ thuật nông nghiệp", "Tarım makineleri mühendisliği", "Engenharia agrícola",
+        "Ingegneria agraria", "Agrárműszaki mérnöki",
+    ),
+    "Forestry engineering": (
+        "Kỹ thuật lâm nghiệp", "Orman endüstrisi mühendisliği", "Engenharia florestal",
+        "Ingegneria forestale", "Erdőmérnöki és faipari",
+    ),
+    "Environmental science and engineering": (
+        "Khoa học và kỹ thuật môi trường", "Çevre bilimi ve mühendisliği", "Ciência e engenharia ambiental",
+        "Scienze e ingegneria ambientale", "Környezettudomány és -technika",
+    ),
+    "Biomedical engineering": (
+        "Kỹ thuật y sinh", "Biyomedikal mühendisliği", "Engenharia biomédica",
+        "Ingegneria biomedica", "Orvosbiológiai mérnöki",
+    ),
+    "Food science and engineering": (
+        "Khoa học và công nghệ thực phẩm", "Gıda mühendisliği", "Ciência e engenharia de alimentos",
+        "Scienze e tecnologie alimentari", "Élelmiszertudomány és -technológia",
+    ),
+    "Architecture": ("Kiến trúc", "Mimarlık", "Arquitetura", "Architettura", "Építészet"),
+    "Safety engineering": (
+        "Kỹ thuật an toàn", "Güvenlik mühendisliği", "Engenharia de segurança",
+        "Ingegneria della sicurezza", "Biztonságtechnika",
+    ),
+    "Bioengineering": (
+        "Công nghệ sinh học", "Biyomühendislik", "Bioengenharia",
+        "Bioingegneria", "Biomérnöki",
+    ),
+    "Public security technology": (
+        "Công nghệ an ninh công cộng", "Kamu güvenliği teknolojisi", "Tecnologia de segurança pública",
+        "Tecnologie per la sicurezza pubblica", "Közbiztonsági technológia",
+    ),
+    "Interdisciplinary engineering": (
+        "Kỹ thuật liên ngành", "Disiplinlerarası mühendislik", "Engenharia interdisciplinar",
+        "Ingegneria interdisciplinare", "Interdiszciplináris mérnöki",
+    ),
+    "Agriculture": ("Nông học", "Ziraat", "Agronomia", "Scienze agrarie", "Agrártudomány"),
+    "Plant production": (
+        "Trồng trọt", "Bitkisel üretim", "Produção vegetal",
+        "Produzione vegetale", "Növénytermesztés",
+    ),
+    "Nature conservation and ecology": (
+        "Bảo tồn thiên nhiên và sinh thái", "Doğa koruma ve ekoloji", "Conservação da natureza e ecologia",
+        "Conservazione della natura ed ecologia", "Természetvédelem és ökológia",
+    ),
+    "Animal production": (
+        "Chăn nuôi", "Hayvansal üretim", "Produção animal",
+        "Produzione animale", "Állattenyésztés",
+    ),
+    "Veterinary medicine": (
+        "Thú y", "Veteriner hekimlik", "Medicina veterinária",
+        "Medicina veterinaria", "Állatorvoslás",
+    ),
+    "Forestry": ("Lâm học", "Ormancılık", "Ciências florestais", "Scienze forestali", "Erdészet"),
+    "Fisheries": (
+        "Thủy sản", "Su ürünleri", "Pesca e aquicultura",
+        "Pesca e acquacoltura", "Halászat és akvakultúra",
+    ),
+    "Grassland science": (
+        "Khoa học đồng cỏ", "Çayır ve mera", "Ciência de pastagens",
+        "Scienze dei pascoli", "Gyepgazdálkodás",
+    ),
+    "Medicine": ("Y học", "Tıp", "Medicina", "Medicina", "Orvostudomány"),
+    "Basic medicine": (
+        "Y học cơ sở", "Temel tıp bilimleri", "Ciências médicas básicas",
+        "Scienze mediche di base", "Elméleti orvostudomány",
+    ),
+    "Clinical medicine": (
+        "Y học lâm sàng", "Klinik tıp", "Medicina clínica",
+        "Medicina clinica", "Klinikai orvostudomány",
+    ),
+    "Stomatology": ("Răng hàm mặt", "Diş hekimliği", "Odontologia", "Odontoiatria", "Fogorvoslás"),
+    "Public health": ("Y tế công cộng", "Halk sağlığı", "Saúde pública", "Sanità pubblica", "Népegészségügy"),
+    "Traditional Chinese medicine": (
+        "Y học cổ truyền Trung Quốc", "Geleneksel Çin tıbbı", "Medicina tradicional chinesa",
+        "Medicina tradizionale cinese", "Hagyományos kínai orvoslás",
+    ),
+    "Integrated Chinese and Western medicine": (
+        "Kết hợp Đông y và Tây y", "Bütünleşik Çin-Batı tıbbı", "Medicina integrativa chinesa-ocidental",
+        "Medicina integrata cinese-occidentale", "Integrált kínai és nyugati orvoslás",
+    ),
+    "Pharmacy": ("Dược học", "Eczacılık", "Farmácia", "Farmacia", "Gyógyszerészet"),
+    "Chinese pharmacy": (
+        "Dược học cổ truyền Trung Quốc", "Geleneksel Çin farmakolojisi", "Farmácia tradicional chinesa",
+        "Farmacia tradizionale cinese", "Hagyományos kínai gyógyszertan",
+    ),
+    "Forensic medicine": ("Pháp y", "Adli tıp", "Medicina legal", "Medicina legale", "Igazságügyi orvostan"),
+    "Medical technology": (
+        "Kỹ thuật y học", "Tıbbi teknoloji", "Tecnologias médicas",
+        "Tecnologie mediche", "Orvostechnika",
+    ),
+    "Nursing": ("Điều dưỡng", "Hemşirelik", "Enfermagem", "Infermieristica", "Ápolás"),
+    "Management": ("Quản lý", "Yönetim bilimleri", "Gestão", "Scienze gestionali", "Menedzsment"),
+    "Management science and engineering": (
+        "Khoa học và kỹ thuật quản lý", "Yönetim bilimi ve mühendisliği", "Ciência e engenharia de gestão",
+        "Scienze e ingegneria gestionale", "Műszaki menedzsment",
+    ),
+    "Business administration": (
+        "Quản trị kinh doanh", "İşletme", "Administração de empresas",
+        "Economia aziendale", "Gazdálkodás és menedzsment",
+    ),
+    "Agricultural economics and management": (
+        "Kinh tế và quản lý nông nghiệp", "Tarım ekonomisi ve yönetimi", "Economia e gestão agrícola",
+        "Economia e gestione agraria", "Agrárközgazdaság és menedzsment",
+    ),
+    "Public administration": (
+        "Hành chính công", "Kamu yönetimi", "Administração pública",
+        "Amministrazione pubblica", "Közigazgatás",
+    ),
+    "Library, information and archives": (
+        "Thư viện, thông tin và lưu trữ", "Bilgi ve belge yönetimi", "Biblioteconomia e arquivologia",
+        "Biblioteconomia e archivistica", "Könyvtár, információ és levéltár",
+    ),
+    "Logistics": ("Quản lý logistics", "Lojistik", "Logística", "Logistica", "Logisztika"),
+    "Industrial engineering": (
+        "Kỹ thuật công nghiệp", "Endüstri mühendisliği", "Engenharia de produção",
+        "Ingegneria industriale", "Ipari mérnöki",
+    ),
+    "E-commerce": (
+        "Thương mại điện tử", "E-ticaret", "Comércio eletrônico",
+        "Commercio elettronico", "E-kereskedelem",
+    ),
+    "Tourism management": (
+        "Quản trị du lịch", "Turizm işletmeciliği", "Gestão de turismo",
+        "Gestione del turismo", "Turizmus-menedzsment",
+    ),
+    "Arts": ("Nghệ thuật", "Sanat", "Artes", "Arti", "Művészetek"),
+    "Art theory": (
+        "Lý luận nghệ thuật", "Sanat kuramı", "Teoria da arte",
+        "Teoria dell'arte", "Művészetelmélet",
+    ),
+    "Music and dance": (
+        "Âm nhạc và múa", "Müzik ve dans", "Música e dança",
+        "Musica e danza", "Zene és tánc",
+    ),
+    "Drama, film and television": (
+        "Sân khấu, điện ảnh và truyền hình", "Tiyatro, sinema ve televizyon", "Teatro, cinema e televisão",
+        "Teatro, cinema e televisione", "Színház, film és televízió",
+    ),
+    "Fine arts": ("Nghệ thuật tạo hình", "Güzel sanatlar", "Belas-artes", "Belle arti", "Képzőművészet"),
+    "Design": ("Thiết kế", "Tasarım", "Design", "Design", "Design"),
+    "Common subjects": (
+        "Môn chung", "Ortak dersler", "Disciplinas comuns",
+        "Materie comuni", "Közös tárgyak",
+    ),
+    "English I": ("Tiếng Anh I", "İngilizce I", "Inglês I", "Inglese I", "Angol I"),
+    "English II": ("Tiếng Anh II", "İngilizce II", "Inglês II", "Inglese II", "Angol II"),
+    "Mathematics I": ("Toán I", "Matematik I", "Matemática I", "Matematica I", "Matematika I"),
+    "Mathematics II": ("Toán II", "Matematik II", "Matemática II", "Matematica II", "Matematika II"),
+    "Mathematics III": ("Toán III", "Matematik III", "Matemática III", "Matematica III", "Matematika III"),
+    "Management joint exam": (
+        "Thi chung khối Quản lý", "Yönetim ortak sınavı", "Exame conjunto de gestão",
+        "Prova comune di management", "Menedzsment egységes vizsga",
+    ),
+    "Economics joint exam": (
+        "Thi chung khối Kinh tế", "İktisat ortak sınavı", "Exame conjunto de economia",
+        "Prova comune di economia", "Közgazdasági egységes vizsga",
+    ),
+    "Major subjects": (
+        "Môn chuyên ngành", "Alan dersleri", "Disciplinas específicas",
+        "Materie di indirizzo", "Szaktárgyak",
+    ),
+    "IT and internet": (
+        "Công nghệ thông tin và Internet", "Bilişim ve internet", "TI e internet",
+        "IT e internet", "IT és internet",
+    ),
+    "Programming languages": (
+        "Ngôn ngữ lập trình", "Programlama dilleri", "Linguagens de programação",
+        "Linguaggi di programmazione", "Programozási nyelvek",
+    ),
+    "Front-end development": (
+        "Lập trình front-end", "Frontend geliştirme", "Desenvolvimento front-end",
+        "Sviluppo front-end", "Frontend-fejlesztés",
+    ),
+    "Back-end development": (
+        "Lập trình back-end", "Backend geliştirme", "Desenvolvimento back-end",
+        "Sviluppo back-end", "Backend-fejlesztés",
+    ),
+    "Mobile development": (
+        "Lập trình di động", "Mobil geliştirme", "Desenvolvimento mobile",
+        "Sviluppo mobile", "Mobilfejlesztés",
+    ),
+    "Data analysis": (
+        "Phân tích dữ liệu", "Veri analizi", "Análise de dados",
+        "Analisi dei dati", "Adatelemzés",
+    ),
+    "Artificial intelligence": (
+        "Trí tuệ nhân tạo", "Yapay zekâ", "Inteligência artificial",
+        "Intelligenza artificiale", "Mesterséges intelligencia",
+    ),
+    "Networks and security": (
+        "Mạng và bảo mật", "Ağ ve güvenlik", "Redes e segurança",
+        "Reti e sicurezza", "Hálózatok és biztonság",
+    ),
+    "Operations and cloud": (
+        "Vận hành và điện toán đám mây", "Sistem yönetimi ve bulut", "Operações e nuvem",
+        "Sistemi e cloud", "Üzemeltetés és felhő",
+    ),
+    "Software testing": (
+        "Kiểm thử phần mềm", "Yazılım testi", "Testes de software",
+        "Testing del software", "Szoftvertesztelés",
+    ),
+    "Professional certificates": (
+        "Chứng chỉ nghề nghiệp", "Mesleki sertifikalar", "Certificações profissionais",
+        "Certificazioni professionali", "Szakmai képesítések",
+    ),
+    "Teacher qualification": (
+        "Chứng chỉ sư phạm", "Öğretmenlik yeterliliği", "Habilitação docente",
+        "Abilitazione all'insegnamento", "Tanári képesítés",
+    ),
+    "Accounting and tax": (
+        "Kế toán và thuế", "Muhasebe ve vergi", "Contabilidade e tributos",
+        "Contabilità e fisco", "Számvitel és adózás",
+    ),
+    "Civil service": (
+        "Công chức, viên chức", "Kamu personeli", "Concursos públicos",
+        "Concorsi pubblici", "Közszolgálat",
+    ),
+    "Legal profession": (
+        "Nghề luật", "Hukuk meslekleri", "Carreiras jurídicas",
+        "Professioni legali", "Jogi hivatások",
+    ),
+    "Computer rank exams": (
+        "Chứng chỉ tin học", "Bilgisayar yeterlilik sınavları", "Certificações de informática",
+        "Certificazioni informatiche", "Számítógépes szintvizsgák",
+    ),
+    "Construction": ("Xây dựng công trình", "İnşaat", "Construção civil", "Edilizia", "Építőipar"),
+    "Health care": ("Y tế", "Sağlık hizmetleri", "Saúde", "Sanità", "Egészségügy"),
+    "Finance and securities": (
+        "Tài chính – chứng khoán", "Finans ve menkul kıymetler", "Mercado financeiro",
+        "Finanza e borsa", "Pénzügy és értékpapírok",
+    ),
+    "Office productivity": (
+        "Kỹ năng văn phòng", "Ofis verimliliği", "Produtividade no trabalho",
+        "Produttività in ufficio", "Irodai hatékonyság",
+    ),
+    "Office software": (
+        "Tin học văn phòng", "Ofis yazılımları", "Softwares de escritório",
+        "Software per ufficio", "Irodai szoftverek",
+    ),
+    "Writing and speaking": (
+        "Viết và thuyết trình", "Yazma ve konuşma", "Escrita e oratória",
+        "Scrittura ed esposizione orale", "Írás és beszéd",
+    ),
+    "Time management": (
+        "Quản lý thời gian", "Zaman yönetimi", "Gestão do tempo",
+        "Gestione del tempo", "Időgazdálkodás",
+    ),
+    "Design and creation": (
+        "Thiết kế và sáng tạo", "Tasarım ve yaratıcılık", "Design e criação",
+        "Design e creatività", "Design és alkotás",
+    ),
+    "Graphic design": ("Thiết kế đồ họa", "Grafik tasarım", "Design gráfico", "Grafica", "Grafikai tervezés"),
+    "UI design": (
+        "Thiết kế UI", "Arayüz tasarımı", "Design de interface",
+        "Design di interfacce", "UI-tervezés",
+    ),
+    "Video editing": ("Dựng video", "Video kurgu", "Edição de vídeo", "Montaggio video", "Videóvágás"),
+    "3D and animation": (
+        "3D và hoạt hình", "3D ve animasyon", "3D e animação",
+        "3D e animazione", "3D és animáció",
+    ),
+    "Business management": (
+        "Quản trị doanh nghiệp", "İşletme yönetimi", "Gestão empresarial",
+        "Gestione aziendale", "Vállalatvezetés",
+    ),
+    "Project management": (
+        "Quản lý dự án", "Proje yönetimi", "Gestão de projetos",
+        "Gestione di progetti", "Projektmenedzsment",
+    ),
+    "Human resources": (
+        "Nhân sự", "İnsan kaynakları", "Recursos humanos",
+        "Risorse umane", "Emberi erőforrások",
+    ),
+    "Entrepreneurship": (
+        "Khởi nghiệp", "Girişimcilik", "Empreendedorismo",
+        "Imprenditorialità", "Vállalkozásindítás",
+    ),
+    "Marketing": ("Marketing", "Pazarlama", "Marketing", "Marketing", "Marketing"),
+    "New media operations": (
+        "Vận hành truyền thông mới", "Sosyal medya yönetimi", "Gestão de redes sociais",
+        "Social media management", "Közösségimédia-kezelés",
+    ),
+    "E-commerce operations": (
+        "Vận hành thương mại điện tử", "E-ticaret yönetimi", "Gestão de e-commerce",
+        "Gestione e-commerce", "Webáruház-üzemeltetés",
+    ),
+    "Brand and advertising": (
+        "Thương hiệu và quảng cáo", "Marka ve reklam", "Marca e publicidade",
+        "Brand e pubblicità", "Márka és reklám",
+    ),
+    "Foreign languages": ("Ngoại ngữ", "Yabancı diller", "Idiomas", "Lingue straniere", "Idegen nyelvek"),
+    "Literature and reading": (
+        "Văn học và đọc sách", "Edebiyat ve okuma", "Literatura e leitura",
+        "Letteratura e lettura", "Irodalom és olvasás",
+    ),
+    "History and humanities": (
+        "Lịch sử và nhân văn", "Tarih ve beşeri bilimler", "História e humanidades",
+        "Storia e discipline umanistiche", "Történelem és bölcsészet",
+    ),
+    "Art appreciation": (
+        "Thưởng thức nghệ thuật", "Sanatı anlamak", "Apreciação artística",
+        "Scoprire l'arte", "Művészeti ismeretek",
+    ),
+    "Calligraphy, painting and photography": (
+        "Thư pháp, hội họa và nhiếp ảnh", "Hat, resim ve fotoğrafçılık", "Caligrafia, pintura e fotografia",
+        "Calligrafia, pittura e fotografia", "Kalligráfia, festészet és fotó",
+    ),
+    "Health and fitness": (
+        "Sức khỏe và vận động", "Sağlık ve fitness", "Saúde e atividade física",
+        "Salute e fitness", "Egészség és fitnesz",
+    ),
+    "Personal growth": (
+        "Phát triển bản thân", "Kişisel gelişim", "Desenvolvimento pessoal",
+        "Crescita personale", "Személyes fejlődés",
+    ),
+    "Popular science": (
+        "Khoa học phổ thông", "Popüler bilim", "Divulgação científica",
+        "Divulgazione scientifica", "Ismeretterjesztés",
+    ),
+    "Personal finance": (
+        "Tài chính cá nhân", "Kişisel finans", "Finanças pessoais",
+        "Finanza personale", "Személyes pénzügyek",
+    ),
+    "Beginner": ("Nhập môn", "Başlangıç", "Iniciante", "Principiante", "Kezdő"),
+    "Elementary": ("Sơ cấp", "Temel", "Básico", "Elementare", "Alapszint"),
+    "Intermediate": ("Trung cấp", "Orta", "Intermediário", "Intermedio", "Középhaladó"),
+    "Advanced": ("Nâng cao", "İleri", "Avançado", "Avanzato", "Haladó"),
+}
+
+LANGUAGES = ("de", "fr", "pl", "uk", "ja", "ko", "vi", "tr", "pt", "it", "hu")
 
 
 def localized(names: dict[str, str]) -> dict[str, str]:
-    """The Chinese and English names, plus the other six where the English one is known."""
+    """The Chinese and English names, plus the other eleven where the English one is known."""
     english = names.get("en", "")
     found = NAMES.get(english)
     if not found:
         return names
-    return {**names, **dict(zip(LANGUAGES, found + NAMES_JA_KO.get(english, ())))}
+    others = found + NAMES_JA_KO.get(english, ()) + NAMES_VI_TR_PT_IT_HU.get(english, ())
+    return {**names, **dict(zip(LANGUAGES, others))}
 
 
-__all__ = ["LANGUAGES", "NAMES", "NAMES_JA_KO", "localized"]
+__all__ = ["LANGUAGES", "NAMES", "NAMES_JA_KO", "NAMES_VI_TR_PT_IT_HU", "localized"]

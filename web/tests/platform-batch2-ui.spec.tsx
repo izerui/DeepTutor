@@ -232,7 +232,7 @@ it("edits the names in the other languages of an entry and of a new one", async 
   fireEvent.change(within(row).getByLabelText("Français name of Math"), { target: { value: "" } });
   fireEvent.click(within(row).getByRole("button", { name: "Save" }));
   await waitFor(() => expect(catalog.updateTaxonomyNode).toHaveBeenCalledWith("senior.math", {
-    name_zh: "Math", name_en: "Math", names: { de: "Mathematik", fr: "", pl: "Matematyka", uk: "", ja: "", ko: "" },
+    name_zh: "Math", name_en: "Math", names: { de: "Mathematik", fr: "", pl: "Matematyka", uk: "", ja: "", ko: "", vi: "", tr: "", pt: "", it: "", hu: "" },
   }));
 
   catalog.addTaxonomyNode.mockResolvedValue(tree);
@@ -242,7 +242,7 @@ it("edits the names in the other languages of an entry and of a new one", async 
   fireEvent.click(within(form).getByRole("button", { name: "Other languages" }));
   fireEvent.change(within(form).getByLabelText("Українська name"), { target: { value: "Фізика" } });
   fireEvent.click(within(form).getByRole("button", { name: "Add" }));
-  await waitFor(() => expect(catalog.addTaxonomyNode).toHaveBeenCalledWith("senior", "", "Physics", { de: "", fr: "", pl: "", uk: "Фізика", ja: "", ko: "" }));
+  await waitFor(() => expect(catalog.addTaxonomyNode).toHaveBeenCalledWith("senior", "", "Physics", { de: "", fr: "", pl: "", uk: "Фізика", ja: "", ko: "", vi: "", tr: "", pt: "", it: "", hu: "" }));
 });
 
 it("merges one tag into another and undoes a merge", async () => {

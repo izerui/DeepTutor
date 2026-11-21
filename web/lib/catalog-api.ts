@@ -15,7 +15,7 @@ export const CATALOG_KINDS: readonly CatalogKind[] = ["book", "knowledge_base", 
 export type ListingStatus = "none" | "draft" | "pending" | "rejected" | "listed" | "unlisted" | "taken_down";
 export type SortOrder = "newest" | "popular" | "rating";
 
-/** Chinese and English always; the built-in entries also in German, French, Polish, Ukrainian, Japanese and Korean. */
+/** Chinese and English always; the built-in entries also in every other interface language. */
 export interface TaxonomyName {
   zh: string;
   en: string;
@@ -25,6 +25,11 @@ export interface TaxonomyName {
   uk?: string;
   ja?: string;
   ko?: string;
+  vi?: string;
+  tr?: string;
+  pt?: string;
+  it?: string;
+  hu?: string;
 }
 export interface TaxonomyNode {
   id: string;
@@ -392,8 +397,8 @@ export interface AdminTaxonomy {
   stages: AdminTaxonomyStage[];
   difficulties: TaxonomyNode[];
 }
-/** German, French, Polish, Ukrainian, Japanese and Korean names; given, they replace the stored ones (empty drops one). */
-export type OtherNames = Partial<Record<"de" | "fr" | "pl" | "uk" | "ja" | "ko", string>>;
+/** Names in the other interface languages; given, they replace the stored ones (empty drops one). */
+export type OtherNames = Partial<Record<"de" | "fr" | "pl" | "uk" | "ja" | "ko" | "vi" | "tr" | "pt" | "it" | "hu", string>>;
 export interface TaxonomyNodeUpdate {
   name_zh?: string;
   name_en?: string;

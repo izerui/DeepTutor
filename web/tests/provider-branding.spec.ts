@@ -67,7 +67,7 @@ describe('provider branding', () => {
   })
 
   it('omits Chinese branding in every non-Chinese UI locale without altering custom names', () => {
-    for (const language of ['en', 'fr', 'de', 'uk', 'pl', 'ja', 'ko']) {
+    for (const language of ['en', 'fr', 'de', 'uk', 'pl', 'ja', 'ko', 'vi', 'tr', 'pt', 'it', 'hu']) {
       expect(formatProviderLabel('deepseek', 'DeepSeek', language)).toBe('DeepSeek')
       expect(formatProviderLabel('deepseek', 'DeepSeek（深度求索）', language)).toBe('DeepSeek')
       expect(formatConfiguredProviderName('moonshot', 'Moonshot（月之暗面）', language)).toBe('Moonshot')

@@ -7,7 +7,7 @@ import { resolveResponseLanguage } from "../context/app-shell-storage";
 import { APP_LANGUAGES, isAppLanguage, normalizeLanguage } from "../i18n/languages";
 
 test("the locale registry accepts every supported language", () => {
-  assert.deepEqual(APP_LANGUAGES.map(({ code }) => code), ["en", "zh", "fr", "de", "uk", "pl", "ja", "ko"]);
+  assert.deepEqual(APP_LANGUAGES.map(({ code }) => code), ["en", "zh", "fr", "de", "uk", "pl", "ja", "ko", "vi", "tr", "pt", "it", "hu"]);
   for (const { code } of APP_LANGUAGES) assert.equal(isAppLanguage(code), true);
   assert.equal(isAppLanguage("xx"), false);
   assert.equal(normalizeLanguage("uk-UA"), "uk");
@@ -20,6 +20,16 @@ test("the locale registry accepts every supported language", () => {
   assert.equal(normalizeLanguage("Japanese"), "ja");
   assert.equal(normalizeLanguage("ko-KR"), "ko");
   assert.equal(normalizeLanguage("한국어"), "ko");
+  assert.equal(normalizeLanguage("vi-VN"), "vi");
+  assert.equal(normalizeLanguage("Tiếng Việt"), "vi");
+  assert.equal(normalizeLanguage("tr-TR"), "tr");
+  assert.equal(normalizeLanguage("Türkçe"), "tr");
+  assert.equal(normalizeLanguage("pt-BR"), "pt");
+  assert.equal(normalizeLanguage("Português"), "pt");
+  assert.equal(normalizeLanguage("it-IT"), "it");
+  assert.equal(normalizeLanguage("Italiano"), "it");
+  assert.equal(normalizeLanguage("hu-HU"), "hu");
+  assert.equal(normalizeLanguage("Magyar"), "hu");
 });
 
 test("response language remains independent from the interface language", () => {
@@ -43,6 +53,9 @@ test("response language accepts and normalizes the extended registry", () => {
   assert.equal(resolveResponseLanguage("Malay", "en"), "ms");
   for (const raw of ["hi", "hi-IN", "hi_IN", "Hindi", "हिन्दी", "हिंदी"]) {
     assert.equal(resolveResponseLanguage(raw, "en"), "hi");
+  }
+  for (const [raw, code] of [["vi", "vi"], ["Vietnamese", "vi"], ["tr-TR", "tr"], ["Türkçe", "tr"], ["hu", "hu"], ["Magyar", "hu"]]) {
+    assert.equal(resolveResponseLanguage(raw, "en"), code);
   }
   assert.equal(resolveResponseLanguage("klingon", "zh"), "zh");
 });

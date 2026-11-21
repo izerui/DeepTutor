@@ -83,3 +83,29 @@ test("ja/ko locales have only the _other form for every en _one key", () => {
     assert.deepEqual(problems, [], problems.join("\n"));
   }
 });
+
+test("vi/tr/pt/it/hu locales have exactly the plural forms each language uses", () => {
+  // i18next picks the suffix from Intl.PluralRules: Vietnamese has only "other",
+  // Turkish and Hungarian "one"/"other", Portuguese and Italian also "many".
+  const expected: Record<string, string[]> = {
+    vi: ["other"],
+    tr: ["one", "other"],
+    hu: ["one", "other"],
+    pt: ["many", "one", "other"],
+    it: ["many", "one", "other"],
+  };
+  for (const [lang, forms] of Object.entries(expected)) {
+    assert.deepEqual(new Intl.PluralRules(lang).resolvedOptions().pluralCategories.slice().sort(), forms);
+    const catalog = loadLocale(lang);
+    const problems: string[] = [];
+    for (const oneKey of oneKeys) {
+      const stem = oneKey.slice(0, -4);
+      for (const form of ["zero", "one", "two", "few", "many", "other"]) {
+        const present = `${stem}_${form}` in catalog;
+        if (forms.includes(form) && !present) problems.push(`${lang}: missing ${stem}_${form}`);
+        if (!forms.includes(form) && present) problems.push(`${lang}: unused ${stem}_${form}`);
+      }
+    }
+    assert.deepEqual(problems, [], problems.join("\n"));
+  }
+});
