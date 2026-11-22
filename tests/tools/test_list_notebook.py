@@ -8,7 +8,7 @@ import json
 import pytest
 
 from deeptutor.services.notebook import NotebookManager
-from deeptutor.tools.builtin import ListFavoritesTool
+from deeptutor.tools.builtin import ListNotebookTool
 from deeptutor.tools.list_notebook import (
     MAX_FAVORITE_BODY_PAGE_CHARS,
     MAX_NOTEBOOKS_RENDERED,
@@ -271,7 +271,7 @@ async def test_list_favorites_schema_and_execution_keep_legacy_calls(tmp_path, m
         "id"
     ]
     monkeypatch.setattr("deeptutor.services.notebook.get_notebook_manager", lambda: manager)
-    tool = ListFavoritesTool()
+    tool = ListNotebookTool()
     schema = tool.get_definition().to_openai_schema()["function"]["parameters"]
     assert set(schema["properties"]) == {"notebook_id", "record_id", "offset"}
     assert schema["properties"]["offset"]["minimum"] == 0

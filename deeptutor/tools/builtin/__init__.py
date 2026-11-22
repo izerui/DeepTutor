@@ -1562,6 +1562,8 @@ class ListNotebookTool(_PromptHintsMixin, BaseTool):
                 "the user owns (id + name + record count). Call with a "
                 "specific `notebook_id` to drill in and list its "
                 "records (record_id + title + summary + timestamp). "
+                "Supply record_id to read a saved body in 8,000-character pages, "
+                "continuing with the returned next_offset. "
                 "Use this BEFORE `write_note` in edit mode so you have "
                 "valid record ids."
             ),
@@ -1577,15 +1579,25 @@ class ListNotebookTool(_PromptHintsMixin, BaseTool):
                     ),
                     required=False,
                 ),
+                ToolParameter(name="record_id", type="string", required=False,
+                              description="Saved record to read from the specified notebook."),
+                ToolParameter(name="offset", type="integer", required=False, default=0, minimum=0,
+                              description="Character offset for a saved record page."),
             ],
         )
 
     async def execute(self, **kwargs: Any) -> ToolResult:
-        from deeptutor.tools.list_notebook import list_notebooks_or_records
+        from deeptutor.tools.list_notebook import list_notebooks_or_records, read_favorite_record
 
-        outcome = list_notebooks_or_records(
-            notebook_id=str(kwargs.get("notebook_id") or ""),
-        )
+        notebook_id = str(kwargs.get("notebook_id") or "")
+        if "record_id" in kwargs:
+            outcome = read_favorite_record(
+                notebook_id=notebook_id,
+                record_id=str(kwargs["record_id"] or ""),
+                offset=kwargs.get("offset", 0),
+            )
+        else:
+            outcome = list_notebooks_or_records(notebook_id=notebook_id)
         if not outcome.ok:
             return ToolResult(content=outcome.error, success=False)
         return ToolResult(
