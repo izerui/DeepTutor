@@ -8,6 +8,7 @@ Covers three fixes:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -56,7 +57,29 @@ def test_tool_ids_from_other_providers_are_made_valid_and_stay_paired() -> None:
 
     tool_use = next(b for b in messages[1]["content"] if b["type"] == "tool_use")
     tool_result = messages[2]["content"][0]
-    assert tool_use["id"] == tool_result["tool_use_id"] == "call_abc_fc_def"
+    assert tool_use["id"] == tool_result["tool_use_id"]
+    assert re.fullmatch(r"[a-zA-Z0-9_-]+", tool_use["id"])
+
+
+def test_foreign_tool_ids_do_not_alias_other_calls_or_rewrite_history() -> None:
+    ids = ["a|b", "a_b", "调用", AnthropicProvider._tool_id("a|b")]
+    calls = [
+        {"id": id_, "type": "function", "function": {"name": "rag", "arguments": "{}"}}
+        for id_ in ids
+    ]
+    history = [
+        {"role": "user", "content": "search"},
+        {"role": "assistant", "tool_calls": calls},
+        *[{"role": "tool", "tool_call_id": id_, "content": id_} for id_ in ids],
+    ]
+    _, messages = _provider()._convert_messages(history)
+    sent = [block["id"] for block in messages[1]["content"] if block["type"] == "tool_use"]
+    results = [block["tool_use_id"] for block in messages[2]["content"]]
+    assert len(set(sent)) == len(ids)
+    assert sent == results
+    assert all(re.fullmatch(r"[a-zA-Z0-9_-]+", id_) for id_ in sent)
+    assert sent[1] == "a_b"
+    assert [call["id"] for call in calls] == ids
 
 
 def _kwargs(provider: AnthropicProvider, model: str) -> dict[str, Any]:

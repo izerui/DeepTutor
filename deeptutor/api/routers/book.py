@@ -473,6 +473,7 @@ def _claim_content_mutation(
     *,
     extra: dict[str, Any] | None = None,
     strict: bool = True,
+    preflight: Callable[[], None] | None = None,
 ) -> int:
     """Reserve the next canonical revision before a content mutation.
 
@@ -525,6 +526,8 @@ def _claim_content_mutation(
             },
         )
 
+    if preflight is not None:
+        preflight()
     book.revision = current + 1
     book.updated_at = time.time()
     if storage is None:
@@ -1744,6 +1747,17 @@ async def change_block_type(req: ChangeBlockTypeRequest) -> dict[str, Any]:
     return {"block": block.model_dump(mode="json"), "book_revision": revision}
 
 
+def _preflight_chapter_mutation(
+    resolved: ResolvedBook, book_id: str, chapter_id: str | None = None, *, deleting: bool = False
+) -> None:
+    try:
+        exists = resolved.engine.check_chapter_mutation(book_id, chapter_id, deleting=deleting)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not exists:
+        raise HTTPException(status_code=404, detail="Chapter or book spine not found")
+
+
 @router.post("/books/{book_id}/chapters")
 async def add_chapter(book_id: str, req: AddChapterRequest) -> dict[str, Any]:
     """Append an empty chapter shell after generation, without recompiling."""
@@ -1757,6 +1771,7 @@ async def add_chapter(book_id: str, req: AddChapterRequest) -> dict[str, Any]:
         book_id,
         req.expected_revision,
         "add_chapter",
+        preflight=lambda: _preflight_chapter_mutation(resolved, book_id),
         extra={"title": req.title.strip(), "position": req.position},
     )
     content_type = _coerce_content_type(req.content_type)
@@ -1792,6 +1807,7 @@ async def update_chapter(
         book_id,
         req.expected_revision,
         "rename_chapter",
+        preflight=lambda: _preflight_chapter_mutation(resolved, book_id, chapter_id),
         extra={"chapter_id": chapter_id},
     )
     try:
@@ -1825,6 +1841,7 @@ async def delete_chapter(
         book_id,
         expected_revision,
         "delete_chapter",
+        preflight=lambda: _preflight_chapter_mutation(resolved, book_id, chapter_id, deleting=True),
         extra={"chapter_id": chapter_id},
     )
     try:
@@ -1848,6 +1865,7 @@ async def move_chapter(book_id: str, chapter_id: str, req: MoveChapterRequest) -
         book_id,
         req.expected_revision,
         "move_chapter",
+        preflight=lambda: _preflight_chapter_mutation(resolved, book_id, chapter_id),
         extra={"chapter_id": chapter_id, "new_position": req.new_position},
     )
     try:

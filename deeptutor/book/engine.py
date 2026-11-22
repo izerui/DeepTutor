@@ -2169,6 +2169,22 @@ class BookEngine:
                     page.updated_at = time.time()
                     self.storage.save_page(page)
 
+    def check_chapter_mutation(
+        self, book_id: str, chapter_id: str | None = None, *, deleting: bool = False
+    ) -> bool:
+        """Validate a structural edit before its caller claims a book revision."""
+        spine = self.storage.load_spine(book_id)
+        if spine is None or self.storage.load_book(book_id) is None:
+            return False
+        if chapter_id is None:
+            return True
+        chapter = spine.chapter_by_id(chapter_id)
+        if chapter is None:
+            return False
+        if deleting and _is_auto_overview(chapter):
+            raise ValueError("The generated overview chapter cannot be deleted")
+        return True
+
     @content_writer
     async def add_chapter(
         self,

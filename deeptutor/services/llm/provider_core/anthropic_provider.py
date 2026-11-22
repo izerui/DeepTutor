@@ -7,6 +7,7 @@ prompt caching, extended thinking, tool calls, and streaming.
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections.abc import Awaitable, Callable
 import re
 import secrets
@@ -154,10 +155,12 @@ class AnthropicProvider(LLMProvider):
 
     @staticmethod
     def _tool_id(raw: Any) -> str:
-        # History from other providers (e.g. Codex "call_x|fc_y") can carry ids
-        # Anthropic rejects; map them deterministically so tool_use/tool_result
-        # pairs still match. Stored history is left untouched.
-        return re.sub(r"[^a-zA-Z0-9_-]", "_", str(raw or ""))
+        # Reserve the prefix so a native ID cannot collide with an encoded foreign ID.
+        value = str(raw or "")
+        prefix = "dt_encoded_"
+        if not value or (re.fullmatch(r"[a-zA-Z0-9_-]+", value) and not value.startswith(prefix)):
+            return value
+        return prefix + base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
     @staticmethod
     def _tool_result_block(msg: dict[str, Any]) -> dict[str, Any]:

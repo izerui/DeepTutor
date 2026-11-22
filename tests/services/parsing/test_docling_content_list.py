@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
@@ -186,6 +187,10 @@ class _PictureItem:
 class _FakeDocument:
     def __init__(self, items: list[tuple[object, int]]) -> None:
         self._items = items
+        self.pages = {
+            page: SimpleNamespace(size=SimpleNamespace(width=1000, height=1000))
+            for page in range(1, 10)
+        }
         self.markdown = "# Exported\n\nbody\n"
 
     def iterate_items(self):
@@ -320,11 +325,13 @@ def test_real_docling_core_table_keeps_merged_cells() -> None:
         DocItemLabel,
         DoclingDocument,
         ProvenanceItem,
+        Size,
         TableCell,
         TableData,
     )
 
     document = DoclingDocument(name="merged-cell-test")
+    document.add_page(page_no=1, size=Size(width=1000, height=1000))
     # 2x2 grid with a vertically merged header cell in column 0.
     data = TableData(
         num_rows=2,
@@ -483,7 +490,7 @@ def test_prov_records_on_one_page_union_their_bboxes() -> None:
     ]
 
 
-def test_prov_bottomleft_bbox_keeps_orientation() -> None:
+def test_prov_bottomleft_bbox_converts_to_top_left() -> None:
     item = _TextItem(
         "paragraph",
         "text",
@@ -500,9 +507,9 @@ def test_prov_bottomleft_bbox_keeps_orientation() -> None:
     )
     document = _FakeDocument([(item, 1)])
 
-    # y values {4, 3, 3.5, 2}: the union spans 2..4; BOTTOMLEFT emits t > b.
+    # On a 1000-point page, bottom-origin 2..4 becomes top-origin 996..998.
     assert build_content_list(document) == [
-        {"type": "text", "text": "text", "page_idx": 0, "bbox": [1.0, 4.0, 4.0, 2.0]}
+        {"type": "text", "text": "text", "page_idx": 0, "bbox": [1.0, 996.0, 4.0, 998.0]}
     ]
 
 
@@ -577,7 +584,7 @@ def test_list_block_bbox_unions_grouped_item_bboxes() -> None:
     ]
 
 
-def test_list_block_bbox_union_keeps_bottomleft_orientation() -> None:
+def test_list_block_bbox_union_converts_to_top_left() -> None:
     document = _FakeDocument(
         [
             (
@@ -602,13 +609,13 @@ def test_list_block_bbox_union_keeps_bottomleft_orientation() -> None:
     )
 
     # x: min(l)=5, max(r)=30; y values {40, 20, 35, 8} span 8..40 and
-    # BOTTOMLEFT emits t > b.
+    # Convert that range to top-origin 960..992 before emitting it.
     assert build_content_list(document) == [
         {
             "type": "list",
             "list_items": ["one", "two"],
             "page_idx": 0,
-            "bbox": [5.0, 40.0, 30.0, 8.0],
+            "bbox": [5.0, 960.0, 30.0, 992.0],
         }
     ]
 
@@ -885,15 +892,53 @@ def test_local_signature_tracks_content_list_schema(monkeypatch: pytest.MonkeyPa
 
     parser = factory.get_parser("docling")
 
-    assert docling_engine.CONTENT_LIST_SCHEMA_VERSION == 3
+    assert docling_engine.CONTENT_LIST_SCHEMA_VERSION == 4
     local_before = parser.signature(DoclingConfig(mode="local")).hash()
-    monkeypatch.setattr(
-        "deeptutor.services.parsing.engines.docling.remote.remote_version", lambda _: "server-test"
-    )
     remote_config = DoclingConfig(mode="remote", api_base_url="http://host:5001")
+    monkeypatch.setattr(
+        "deeptutor.services.parsing.engines.docling.remote.remote_version", lambda _config: "1.0"
+    )
     remote_before = parser.signature(remote_config).hash()
 
     monkeypatch.setattr(docling_engine, "CONTENT_LIST_SCHEMA_VERSION", 99)
 
     assert parser.signature(DoclingConfig(mode="local")).hash() != local_before
     assert parser.signature(remote_config).hash() == remote_before
+
+
+@pytest.mark.parametrize(
+    "origin, coordinates",
+    [
+        ("TOPLEFT", (10, 20, 100, 200)),
+        ("BOTTOMLEFT", (10, 380, 100, 200)),
+    ],
+)
+def test_bbox_scales_non_square_pages_to_shared_ir(origin, coordinates) -> None:
+    item = _TextItem("paragraph", "text", bbox=_BBox(*coordinates, coord_origin=origin))
+    document = _FakeDocument([(item, 1)])
+    document.pages[1].size = SimpleNamespace(width=200, height=400)
+    assert build_content_list(document)[0]["bbox"] == [50, 50, 500, 500]
+
+
+@pytest.mark.parametrize(
+    "size",
+    [None, SimpleNamespace(width=0, height=100), SimpleNamespace(width=float("nan"), height=100)],
+)
+def test_missing_or_invalid_page_dimensions_omit_unusable_geometry(size) -> None:
+    document = _FakeDocument([(_TextItem("paragraph", "text", bbox=_BBox(10, 20, 30, 40)), 1)])
+    document.pages = {} if size is None else {1: SimpleNamespace(size=size)}
+    assert build_content_list(document) == [{"type": "text", "text": "text", "page_idx": 0}]
+
+
+def test_mixed_origins_are_normalized_before_union() -> None:
+    item = _TextItem(
+        "paragraph",
+        "text",
+        prov=[
+            _ProvRecord(page_no=1, bbox=_BBox(10, 20, 30, 40, "TOPLEFT")),
+            _ProvRecord(page_no=1, bbox=_BBox(5, 350, 35, 330, "BOTTOMLEFT")),
+        ],
+    )
+    document = _FakeDocument([(item, 1)])
+    document.pages[1].size = SimpleNamespace(width=200, height=400)
+    assert build_content_list(document)[0]["bbox"] == [25, 50, 175, 175]

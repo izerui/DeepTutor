@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from deeptutor.api.routers import book as book_router
 from deeptutor.book.engine import BookEngine
@@ -19,6 +20,7 @@ from deeptutor.book.models import (
     Book,
     BookStatus,
     Chapter,
+    ContentType,
     Page,
     PageStatus,
     Spine,
@@ -161,3 +163,54 @@ def test_add_chapter_rejects_an_empty_title(tmp_path, monkeypatch) -> None:
     _seed(storage)
 
     assert client.post("/api/books/bk/chapters", json={"title": "  "}).status_code == 400
+
+
+@pytest.mark.parametrize(
+    "method, suffix, payload",
+    [
+        ("PATCH", "/nope", {"title": "Renamed"}),
+        ("DELETE", "/nope", None),
+        ("POST", "/nope/move", {"new_position": 0}),
+    ],
+)
+def test_rejected_chapter_edits_do_not_consume_a_revision(
+    tmp_path, monkeypatch, method, suffix, payload
+):
+    client, storage = _client(tmp_path, monkeypatch)
+    _seed(storage)
+    before = storage.load_spine("bk").model_dump()
+    response = client.request(method, "/api/books/bk/chapters" + suffix, json=payload)
+    assert response.status_code == 404
+    assert storage.load_book("bk").revision == 1
+    assert storage.load_spine("bk").model_dump() == before
+    assert (
+        client.patch(
+            "/api/books/bk/chapters/ch_0", json={"title": "Valid", "expected_revision": 1}
+        ).status_code
+        == 200
+    )
+
+
+@pytest.mark.parametrize("extra_marker", [False, True])
+def test_refused_overview_delete_keeps_the_revision(tmp_path, monkeypatch, extra_marker):
+    client, storage = _client(tmp_path, monkeypatch)
+    _seed(storage)
+    spine = storage.load_spine("bk")
+    chapter = spine.chapters[0]
+    if extra_marker:
+        chapter.__pydantic_extra__["auto_overview"] = True
+    else:
+        chapter.content_type = ContentType.OVERVIEW
+    storage.save_spine(spine)
+    response = client.delete("/api/books/bk/chapters/ch_0?expected_revision=1")
+    assert response.status_code == 409
+    assert storage.load_book("bk").revision == 1
+    assert storage.load_page("bk", "pg_0") is not None
+
+
+def test_add_without_a_spine_keeps_the_revision(tmp_path, monkeypatch):
+    client, storage = _client(tmp_path, monkeypatch)
+    storage.save_book(Book(id="bk", title="Draft", revision=1))
+    response = client.post("/api/books/bk/chapters", json={"title": "Added"})
+    assert response.status_code == 404
+    assert storage.load_book("bk").revision == 1

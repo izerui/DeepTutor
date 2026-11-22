@@ -31,9 +31,10 @@ filtered defensively as well.
 Provenance comes from Docling's ``prov`` records: a list of 1-based
 ``page_no`` + ``bbox`` entries per item. ``page_idx`` is the first record's
 page converted to the IR's 0-based indexing, and each emitted ``bbox``
-(``[l, t, r, b]`` floats, preserving the records' coordinate origin) covers
+(``[l, t, r, b]`` floats in top-left-origin 0..1000 page coordinates) covers
 the records on that page. A single non-list record and missing/empty
-``prov`` are tolerated.
+``prov`` are tolerated. Geometry is omitted when page dimensions are missing
+or invalid; page identity and content are retained.
 
 Everything is duck-typed, so this module never imports Docling and the
 mapping is unit-testable with fakes. Unknown labels degrade to plain
@@ -45,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 import re
 import shutil
@@ -61,14 +63,14 @@ logger = logging.getLogger(__name__)
 # merged-cell spans (v2 caches hold flattened markdown), and split list
 # groups on known/unknown page transitions (v2 caches hold merged groups
 # with cross-page bboxes).
-CONTENT_LIST_SCHEMA_VERSION = 3
+# v4: normalize provenance to the shared top-left 0..1000 coordinate contract.
+CONTENT_LIST_SCHEMA_VERSION = 4
 
 CONTENT_LIST_SUFFIX = "_content_list.json"
 IMAGES_DIRNAME = "images"
 
-# (l, r, y_min, y_max, bottom_origin): y bounds normalized to min/max so
-# unions are orientation-independent, with the input origin kept for output.
-_Bounds = tuple[float, float, float, float, bool]
+# (left, right, top, bottom), normalized before any cross-record union.
+_Bounds = tuple[float, float, float, float]
 
 # Docling furniture labels that must never reach the block IR. Same strings
 # MinerU's LightRAG block policy filters (see block_policy.py).
@@ -99,40 +101,50 @@ def _record_page_no(record: Any) -> Optional[int]:
     return None
 
 
-def _box_bounds(box: Any) -> Optional[_Bounds]:
-    """``(l, r, y_min, y_max, bottom_origin)`` from a duck-typed BoundingBox.
-
-    The y pair is min/max-normalized so unions are orientation-independent;
-    ``bottom_origin`` remembers the input orientation (BOTTOMLEFT boxes carry
-    ``t > b``) so the emitted ``[l, t, r, b]`` keeps it.
-    """
+def _box_bounds(box: Any, page: Any) -> Optional[_Bounds]:
+    """Normalize Docling page coordinates to the shared top-left 0..1000 IR."""
     try:
+        size = page.size
+        width, height = float(size.width), float(size.height)
         left, top, right, bottom = (float(getattr(box, name)) for name in ("l", "t", "r", "b"))
     except (AttributeError, TypeError, ValueError):
         return None
-    origin = getattr(box, "coord_origin", None)
-    value = getattr(origin, "value", origin)
-    is_bottom = isinstance(value, str) and value.strip().upper() == "BOTTOMLEFT"
-    return left, right, min(top, bottom), max(top, bottom), is_bottom
+    if (
+        width <= 0
+        or height <= 0
+        or not all(math.isfinite(value) for value in (width, height, left, top, right, bottom))
+    ):
+        return None
+    origin = getattr(box, "coord_origin", "TOPLEFT")
+    value = str(getattr(origin, "value", origin)).strip().upper()
+    if value == "BOTTOMLEFT":
+        top, bottom = height - top, height - bottom
+    elif value != "TOPLEFT":
+        return None
+    left, right = sorted((left, right))
+    top, bottom = sorted((top, bottom))
+    return tuple(
+        max(0.0, min(1000.0, coordinate * (1000.0 / extent)))
+        for coordinate, extent in ((left, width), (right, width), (top, height), (bottom, height))
+    )
 
 
 def _union_bounds(bounds: list[_Bounds]) -> _Bounds:
-    """Smallest bounds covering every input (orientation from the first)."""
+    """Smallest normalized bounds covering every input."""
     return (
         min(b[0] for b in bounds),
         max(b[1] for b in bounds),
         min(b[2] for b in bounds),
         max(b[3] for b in bounds),
-        bounds[0][4],
     )
 
 
 def _bounds_bbox(bounds: _Bounds) -> list[float]:
-    left, right, y_min, y_max, is_bottom = bounds
-    return [left, y_max if is_bottom else y_min, right, y_min if is_bottom else y_max]
+    left, right, top, bottom = bounds
+    return [left, top, right, bottom]
 
 
-def _provenance(item: Any) -> tuple[Optional[int], Optional[_Bounds]]:
+def _provenance(item: Any, document: Any) -> tuple[Optional[int], Optional[_Bounds]]:
     """``(page_idx, bounds)`` from a Docling ``prov``, or ``(None, None)``.
 
     Real Docling items carry ``prov`` as a list of provenance records, each
@@ -148,10 +160,12 @@ def _provenance(item: Any) -> tuple[Optional[int], Optional[_Bounds]]:
     records = prov if isinstance(prov, (list, tuple)) else [prov]
     page_no = _record_page_no(records[0])
     page_idx = page_no - 1 if page_no is not None else None
+    pages = getattr(document, "pages", {})
+    page = pages.get(page_no) if isinstance(pages, dict) else None
     on_page = [record for record in records if _record_page_no(record) == page_no]
     bounds = [
         parsed
-        for parsed in (_box_bounds(getattr(record, "bbox", None)) for record in on_page)
+        for parsed in (_box_bounds(getattr(record, "bbox", None), page) for record in on_page)
         if parsed is not None
     ]
     return page_idx, _union_bounds(bounds) if bounds else None
@@ -312,8 +326,7 @@ def build_content_list(
             if pending_page_idx is not None:
                 block["page_idx"] = pending_page_idx
             if pending_bounds:
-                # Cover every grouped item: min/max per axis, keeping the
-                # orientation of the items' bboxes.
+                # All records are normalized before grouping, including mixed origins.
                 block["bbox"] = _bounds_bbox(_union_bounds(pending_bounds))
             blocks.append(block)
         pending_items = []
@@ -324,7 +337,7 @@ def build_content_list(
         label = _label_value(node)
         if not label or label in _CHROME_LABELS:
             continue
-        page_idx, bounds = _provenance(node)
+        page_idx, bounds = _provenance(node, document)
         base = _base_fields(page_idx, _bounds_bbox(bounds) if bounds is not None else None)
 
         if label == "list_item":
