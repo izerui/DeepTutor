@@ -181,6 +181,8 @@ async def _run_with_stall_guard(
 class LlamaIndexPipeline:
     """Pipeline that indexes and retrieves KB content via LlamaIndex."""
 
+    supports_document_scope = True
+
     def __init__(
         self,
         kb_base_dir: Optional[str] = None,
