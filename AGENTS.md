@@ -64,6 +64,19 @@ Commit: release: v1.6.15
 a31d82624c27d75f4e771d4fcb78dce16470b383
 ```
 
+2026-11-22 定向补迁记录（不推进上述连续处理进度）：
+
+| 港大提交 | develop 提交 | 结果 |
+| --- | --- | --- |
+| `41a92edc1` | `66798641f` | 原样迁入 Windows Python CLI 应用虚拟环境路径修复 |
+| `ed709477b` | `6ccd2fffb` | 原样迁入安装失败的备份保护与恢复提示 |
+| `f8540eb5c` | `1189152b1` | 原样迁入 CLI 会话、笔记本 JSON 和回合 NDJSON 输出修复 |
+
+验证：使用 `.superpowers/run-isolated-tests.sh --without-synthetic-loopback`
+运行 `tests/services/cli_apps`、`tests/cli/test_chat_cli.py`、
+`tests/cli/test_notebook_cli.py` 和 `tests/cli/test_turn_renderer.py`。
+Windows 路径通过平台模拟用例验证。
+
 标准同步流程：
 
 1. 同步远程引用：

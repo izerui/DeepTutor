@@ -928,10 +928,30 @@ class PocketBaseSessionStore:
     @_captured_store_context
     async def delete_message(self, message_id: int | str) -> bool:
         def _delete():
-            row = _pb().collection("messages").get_one(_validate_id(str(message_id)))
-            if _find_session_record(_pb(), str(row.session_id), _current_user_id()) is None:
+            pb = _pb()
+            messages = pb.collection("messages")
+            mid = _validate_id(str(message_id))
+            row = messages.get_one(mid)
+            sid = _validate_id(str(row.session_id), "session_id")
+            owner = _current_user_id()
+            if _find_session_record(pb, sid, owner) is None:
                 return False
-            _pb().collection("messages").delete(str(message_id))
+            sessions = pb.collection("sessions")
+            children = sessions.get_full_list(
+                query_params={"filter": (
+                    f'user_id="{owner}" && preferences_json.parent_session_id="{sid}"'
+                    f' && preferences_json.tutor_source_message_id="{mid}"'
+                )}
+            )
+            # Delete last so a failed detach can be retried using the source message.
+            for child in children:
+                if child.session_id == sid:
+                    continue
+                prefs = _json_loads(child.preferences_json, {})
+                sessions.update(child.id, {"preferences_json": {
+                    **prefs, "tutor_source_message_id": "", "tutor_source_deleted": True,
+                }})
+            messages.delete(mid)
             return True
 
         try:

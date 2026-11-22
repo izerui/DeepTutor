@@ -59,6 +59,11 @@ class _Collection:
 
     def _matches(self, record: _Record, query_params: dict | None) -> bool:
         flt = (query_params or {}).get("filter") or ""
+        for match in re.finditer(r'preferences_json\.(parent_session_id|tutor_source_message_id)="([^"]*)"', flt):
+            prefs = getattr(record, "preferences_json", {}) or {}
+            if prefs.get(match[1]) != match[2]:
+                return False
+            flt = flt.replace(match[0], "")
         workspace = re.search(r'preferences_json\.workspace_id=("(?:\\.|[^"\\])*"|null)', flt)
         if workspace:
             expected = json.loads(workspace.group(1)) or ""
@@ -145,6 +150,47 @@ async def test_create_session_stamps_current_user(fake_pb) -> None:
     [row] = fake_pb.collection("sessions").get_full_list()
     assert row.user_id == "alice"
     assert row.session_id == "s_alice"
+
+
+async def test_delete_message_detaches_only_matching_threads_and_retries(fake_pb, monkeypatch):
+    store = PocketBaseSessionStore()
+    sessions = fake_pb.collection("sessions")
+    messages = fake_pb.collection("messages")
+    with as_user("alice"):
+        await store.create_session(session_id="parent")
+        source = messages.create({"session_id": "parent"})
+        prefs = {"parent_session_id": "parent", "tutor_source_message_id": source.id, "language": "en"}
+
+        def thread(owner, sid, **overrides):
+            return sessions.create(
+                {"user_id": owner, "session_id": sid, "preferences_json": {**prefs, **overrides}}
+            )
+
+        first = thread("alice", "first")
+        second = thread("alice", "second")
+        foreign = thread("bob", "foreign")
+        other_parent = thread("alice", "other", parent_session_id="different")
+        other_message = thread("alice", "sibling", tutor_source_message_id="different")
+        update = sessions.update
+
+        def fail_second(record_id, data):
+            if record_id == second.id:
+                raise OSError("unavailable")
+            return update(record_id, data)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sessions, "update", fail_second)
+            assert not await store.delete_message(source.id)
+            assert messages.get_one(source.id) is source
+        assert await store.delete_message(source.id)
+        assert not messages.get_full_list()
+        for child in (first, second):
+            assert sessions.get_one(child.id).preferences_json == {
+                **prefs, "tutor_source_message_id": "", "tutor_source_deleted": True,
+            }
+        assert foreign.preferences_json == prefs
+        assert other_parent.preferences_json == {**prefs, "parent_session_id": "different"}
+        assert other_message.preferences_json == {**prefs, "tutor_source_message_id": "different"}
 
 
 async def test_context_builder_accepts_pocketbase_message_ids(fake_pb) -> None:
