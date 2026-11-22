@@ -72,9 +72,6 @@ class SearchApiProvider(BaseSearchProvider):
         params: dict[str, Any] = {"engine": engine, "q": query}
         if mode == "scholar":
             params["num"] = min(limit, 20)
-        elif mode == "news":
-            # Resolve Google's redirect links to the publisher's own URL.
-            params["link"] = "resolved"
         for key in ("gl", "hl"):
             if kwargs.get(key):
                 params[key] = kwargs[key]

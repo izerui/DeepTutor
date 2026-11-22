@@ -67,6 +67,8 @@ def test_mistral_voice_options() -> None:
 
     assert [model["id"] for model in tts["models"]] == ["voxtral-mini-tts-2603"]
     assert "opus" in tts["models"][0]["formats"]
+    for model in [*tts["models"], *stt["models"]]:
+        assert {"tr", "hu"} <= {option["id"] for option in model["languages"]}
     assert [model["id"] for model in stt["models"]] == [
         "voxtral-mini-latest",
         "voxtral-small-latest",

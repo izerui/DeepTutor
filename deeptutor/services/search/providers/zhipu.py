@@ -26,7 +26,7 @@ from . import register_provider
 
 # Engines surfaced through configuration; anything else warns and falls back
 # to the default rather than failing the whole query.
-ALLOWED_SEARCH_ENGINES = ("search_std", "search_pro")
+ALLOWED_SEARCH_ENGINES = ("search_std", "search_pro", "search_pro_sogou", "search_pro_quark")
 DEFAULT_SEARCH_ENGINE = "search_std"
 _RECENCY = ("noLimit", "oneDay", "oneWeek", "oneMonth", "oneYear")
 # The API rejects longer queries outright rather than truncating them.
@@ -46,7 +46,7 @@ class ZhipuProvider(BaseSearchProvider):
 
         The provider config accepts ``search_engine`` or ``engine`` -- that is
         the path user settings take (a search profile field reaches here as a
-        constructor kwarg). Only ``search_std`` / ``search_pro`` are allowed;
+        constructor kwarg). All four documented engine IDs remain supported;
         unknown values fall back to the default with a warning instead of
         raising, so a mistyped setting cannot break search entirely.
         """
@@ -82,7 +82,7 @@ class ZhipuProvider(BaseSearchProvider):
         Args:
             query: Search query. Truncated to 70 chars, which the API enforces.
             max_results: Result cap (1-50).
-            search_engine: ``search_std`` or ``search_pro``. ``None`` inherits
+            search_engine: A documented Zhipu engine ID. ``None`` inherits
                 the provider config's ``search_engine``/``engine`` field, then
                 defaults to ``search_std``; unknown values warn and fall back.
             content_size: ``medium`` or ``high`` -- how much body text each row

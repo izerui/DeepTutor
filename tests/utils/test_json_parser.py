@@ -233,3 +233,13 @@ class TestParseJsonResponseThinkTags:
     def test_unclosed_think_prelude_without_braces(self) -> None:
         response = '<think>reasoning here, no JSON yet\n{"real":1}'
         assert parse_json_response(response, fallback=None) == {"real": 1}
+
+
+def test_explicit_json_fence_wins_over_unlabeled_example() -> None:
+    response = '```\n{"example": "longer example value"}\n```\n```JSON\n{"answer": 2}\n```'
+    assert parse_json_response(response) == {"answer": 2}
+
+
+def test_other_language_fences_are_not_json_candidates() -> None:
+    response = '```javascript\n{"example": "longer example value"}\n```\n{"answer": 2}'
+    assert parse_json_response(response) == {"answer": 2}

@@ -677,7 +677,7 @@ _SEARCHAPI_BODIES: dict[str, dict[str, Any]] = {
             {
                 "position": i + 1,
                 "title": f"Story {i}",
-                "link": f"https://news.example/{i}",
+                "link": f"https://news.google.com/articles/{i}",
                 "source": "Example Times",
                 "date": "8 hours ago",
                 "iso_date": "2026-11-10T11:00:00Z",
@@ -793,14 +793,15 @@ def test_searchapi_web_rows_map_and_are_cut_to_max_results(searchapi_calls) -> N
     assert response.metadata["knowledgeGraph"] == {"title": "Attention Is All You Need"}
 
 
-def test_searchapi_news_resolves_links_and_trims_client_side(searchapi_calls) -> None:
+def test_searchapi_news_preserves_links_and_trims_client_side(searchapi_calls) -> None:
     from deeptutor.services.search.providers.searchapi import SearchApiProvider
 
     response = SearchApiProvider(api_key="k").search("chatbots", mode="news", max_results=4)
 
     params = searchapi_calls[-1]["params"]
     assert params["engine"] == "google_news"
-    assert params["link"] == "resolved"
+    assert "link" not in params
+    assert response.search_results[0].url == "https://news.google.com/articles/0"
     assert "num" not in params
     assert len(response.search_results) == 4
     assert response.search_results[0].snippet == "Genuine attention & chatbots"
@@ -1339,10 +1340,8 @@ def test_gbs_metadata_comes_from_the_spec_table() -> None:
 
 # --------------------------------------------------------------------------
 # Zhipu's request engine is configurable (issue #2617): the search profile's
-# `search_engine`/`engine` field flows in through the constructor kwargs. Only
-# `search_std`/`search_pro` are exposed -- `search_pro` recalls more but costs
-# 3x -- so a mistyped value warns and falls back instead of tripling the bill
-# or failing the query.
+# `search_engine`/`engine` field flows in through the constructor kwargs.
+# Preserve all previously supported engine IDs; only unknown values fall back.
 # --------------------------------------------------------------------------
 
 
@@ -1368,18 +1367,24 @@ def test_zhipu_provider_config_selects_search_pro(new_calls) -> None:
     assert new_calls[-1]["json"]["search_engine"] == "search_std"
 
 
+@pytest.mark.parametrize("engine", ["search_pro_sogou", "search_pro_quark"])
+def test_zhipu_preserves_existing_engine_profiles_and_request_overrides(new_calls, engine) -> None:
+    zhipu = _provider_class("zhipu", "ZhipuProvider")
+    for config in ({"search_engine": engine}, {"engine": engine}):
+        response = zhipu(api_key="k", **config).search("q")
+        assert new_calls[-1]["json"]["search_engine"] == engine
+        assert response.model == engine
+    zhipu(api_key="k", search_engine="search_std").search("q", search_engine=engine)
+    assert new_calls[-1]["json"]["search_engine"] == engine
+
+
 def test_zhipu_invalid_engine_warns_and_falls_back(new_calls, caplog) -> None:
     zhipu = _provider_class("zhipu", "ZhipuProvider")
     with caplog.at_level(logging.WARNING):
-        # The retired `search_pro_sogou`/`search_pro_quark` engines are no
-        # longer accepted, and neither is garbage.
-        zhipu(api_key="k", search_engine="search_pro_sogou").search("q")
         zhipu(api_key="k").search("q", search_engine="totally-bogus")
-    assert [call["json"]["search_engine"] for call in new_calls[-2:]] == [
-        "search_std",
-        "search_std",
+    assert new_calls[-1]["json"]["search_engine"] == "search_std"
+    warnings = [
+        record.getMessage() for record in caplog.records if "search_engine" in record.getMessage()
     ]
-    warnings = [record.getMessage() for record in caplog.records if "search_engine" in record.getMessage()]
-    assert len(warnings) == 2
-    assert "search_pro_sogou" in warnings[0]
-    assert "totally-bogus" in warnings[1]
+    assert len(warnings) == 1
+    assert "totally-bogus" in warnings[0]

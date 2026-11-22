@@ -11,6 +11,8 @@ from deeptutor.book.language import resolve_book_language
     ("intent", "expected"),
     [
         ("Please create a Fourier book in Japanese", "ja"),
+        ("Schreibe ein Buch auf Ungarisch", "hu"),
+        ("请用匈牙利语写一本书", "hu"),
         ("Write about Japanese history in Spanish", "es"),
         ("请用日语整理机器学习入门内容", "ja"),
         ("日本語で書いてください", "ja"),
