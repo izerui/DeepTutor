@@ -14,7 +14,9 @@ import {
   type CSSProperties,
 } from "react";
 import { useAppShell } from "@/context/AppShellContext";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { sessionRoute } from "@/lib/mastery-session";
+import { searchAllSessions, sessionWorkspaceId } from "@/lib/session-api";
 import { useTranslation } from "react-i18next";
 import { useChatWorkspaces } from "@/hooks/useChatWorkspaces";
 import SessionList from "@/components/SessionList";
@@ -112,6 +114,8 @@ export function SidebarShell({
   const { isMobile } = useDevice();
   const drawer = useSidebarDrawer();
   const recentsScrollRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const keyword = query.trim().toLowerCase();
   // One load for the whole column: the workspace groups head their own
   // section with it and the row menus offer it as a move destination.
   const { workspaces } = useChatWorkspaces();
@@ -306,6 +310,13 @@ export function SidebarShell({
         onRenameSession &&
         onDeleteSession ? (
           <section className="mt-3 px-2 pt-0.5">
+            <label className="mb-2 flex items-center gap-2 rounded-md px-2 py-1 text-muted-foreground focus-within:bg-background">
+              <Search size={14} aria-hidden="true" />
+              <input type="search" maxLength={200} aria-label={t("Search conversations...")}
+                placeholder={t("Search conversations...")} value={query}
+                onChange={event => setQuery(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-xs" />
+            </label>
             {!onOrganizeSession && <div className="mb-2 px-2 text-xs text-[var(--muted-foreground)]">{t("Recent")}</div>}
             {loadingSessions ? (
               <SessionList
@@ -317,6 +328,11 @@ export function SidebarShell({
                 onDelete={onDeleteSession}
                 compact
               />
+            ) : keyword ? (
+              <SessionSearchResults key={keyword} keyword={keyword} sessions={sessions} onOpen={href => {
+                drawer?.close();
+                navigateTask(href, router.push);
+              }} />
             ) : onOrganizeSession ? (
               <OrganizedSessionList
                 sessions={visibleSessions}
@@ -406,4 +422,62 @@ export function SidebarShell({
       )}
     </aside>
   );
+}
+
+function SessionSearchResults({ keyword, sessions, onOpen }: {
+  keyword: string;
+  sessions: SessionSummary[];
+  onOpen: (href: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [matches, setMatches] = useState<SessionSummary[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const rows = await searchAllSessions(keyword, controller.signal, { allWorkspaces: true });
+        if (!controller.signal.aborted) setMatches(rows);
+      } catch {
+        if (!controller.signal.aborted) setFailed(true);
+      }
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [keyword]);
+
+  const key = (session: SessionSummary, id = session.session_id) =>
+    JSON.stringify([sessionWorkspaceId(session), id]);
+  const remote = new Map((matches ?? []).map(row => [key(row), row]));
+  const rows = new Map(sessions.map(row => [key(row), row]));
+  for (const [id, row] of remote) rows.set(id, row);
+  const results = Array.from(rows.values()).flatMap(row => {
+    if (row.preferences?.archived) return [];
+    const parentId = row.preferences?.parent_session_id;
+    const parent = parentId ? rows.get(key(row, parentId)) : undefined;
+    const detail = parentId ? (!parent?.preferences?.archived && parent?.title) || t("Little Tutor") : "";
+    const title = row.title || (parentId ? t("Little Tutor") : t("New chat"));
+    if (!remote.has(key(row)) && ![title, detail, row.last_message, row.preferences?.tutor_selected_text]
+      .some(value => value?.toLowerCase().includes(keyword))) return [];
+    return [{ href: sessionRoute(row), title, detail }];
+  });
+  const status = failed ? t("Could not search chat history. Try again.")
+    : !results.length ? (matches ? t("No conversations found") : t("Loading...")) : "";
+  return <>
+    {status && <p role="status" className="px-2 py-1 text-xs text-muted-foreground">{status}</p>}
+    {results.map(({ href, title, detail }) => (
+    <Link key={href} href={href} prefetch={false}
+      onClick={event => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault();
+        onOpen(href);
+      }}
+      className="block rounded-md px-2 py-1 hover:bg-background">
+      <span className="block truncate text-[13px]">{title}</span>
+      {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
+    </Link>
+    ))}
+  </>;
 }

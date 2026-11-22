@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { SidebarShell } from "@/components/sidebar/SidebarShell";
+import * as sessionApi from "@/lib/session-api";
+import { registerWorkspaceNavigator } from "@/lib/workspace-scope";
 
 const fixture = vi.hoisted(() => ({ push: vi.fn(), close: vi.fn() }));
 
@@ -121,6 +123,35 @@ it("keeps Home pinned even when a previous layout folded it into More", () => {
   expect(fixture.push).toHaveBeenCalledWith("/chat");
 });
 
+it("finds Little Tutor by thread or parent title and opens the matching workspace's child", async () => {
+  const parent = {
+    id: "p", session_id: "p", title: "Operating systems", content_workspace_id: "course",
+    created_at: 1, updated_at: 1, message_count: 1, last_message: "",
+  };
+  const thread = {
+    ...parent, id: "t", session_id: "t", title: "Fork returns twice",
+    preferences: { parent_session_id: "p", session_kind: "selection_tutor" as const },
+  };
+  render(<SidebarShell showSessions sessions={[
+    { ...thread, title: "Other thread", content_workspace_id: "" },
+    parent, thread,
+    { ...thread, id: "arch", session_id: "arch", title: "Archived fork",
+      preferences: { ...thread.preferences, archived: true } },
+  ]} onSelectSession={vi.fn()} onRenameSession={vi.fn()} onDeleteSession={vi.fn()} />);
+  expect(screen.queryByText(thread.title)).toBeNull();
+  const input = screen.getByRole("searchbox", { name: "Search conversations..." });
+  fireEvent.change(input, { target: { value: " FORK " } });
+  const link = screen.getByRole("link", { name: /Fork returns twice/ });
+  expect(link).toHaveAttribute("href", "/chat/t?dt_workspace=course");
+  expect(screen.queryByText("Archived fork")).toBeNull();
+  fireEvent.change(input, { target: { value: "systems" } });
+  expect(screen.getByRole("link", { name: /Fork returns twice/ })).toBeInTheDocument();
+  expect(screen.queryByText("Other thread")).toBeNull();
+  fireEvent.change(input, { target: { value: "" } });
+  expect(screen.queryByText(thread.title)).toBeNull();
+  expect(screen.getByText(parent.title)).toBeInTheDocument();
+});
+
 it("resizes with the keyboard, persists across mounts, and resets on double click", () => {
   const first = render(<SidebarShell />);
   const handle = screen.getByRole("separator", { name: "Resize sidebar" });
@@ -145,4 +176,28 @@ it("resizes with the keyboard, persists across mounts, and resets on double clic
   );
   fireEvent.doubleClick(restored);
   expect(restored).toHaveAttribute("aria-valuenow", "220");
+});
+
+it("opens a transcript match absent from the recent page in its owning workspace", async () => {
+  const result: sessionApi.SessionSearchResult = {
+    id: "old", session_id: "old", title: "Earlier follow-up", content_workspace_id: "course",
+    preferences: { session_kind: "selection_tutor" as const, parent_session_id: "p" },
+    created_at: 1, updated_at: 1, message_count: 2, last_message: "Thanks",
+    match_excerpt: "posterior", match_role: "user", match_message_id: 1, match_created_at: 1,
+  };
+  const search = vi.spyOn(sessionApi, "searchAllSessions").mockResolvedValue([result]);
+  const push = vi.fn();
+  const unregister = registerWorkspaceNavigator(push);
+  try {
+    render(<SidebarShell showSessions sessions={[]} onSelectSession={vi.fn()}
+      onRenameSession={vi.fn()} onDeleteSession={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "posterior" } });
+    const link = await screen.findByRole("link", { name: /Earlier follow-up/ });
+    expect(search).toHaveBeenCalledWith("posterior", expect.any(AbortSignal), { allWorkspaces: true });
+    await act(async () => { fireEvent.click(link); });
+    expect(push).toHaveBeenCalledWith("/chat/old?dt_workspace=course");
+  } finally {
+    unregister();
+    search.mockRestore();
+  }
 });
