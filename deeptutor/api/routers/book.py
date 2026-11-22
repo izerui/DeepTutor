@@ -1451,6 +1451,16 @@ async def confirm_spine(req: ConfirmSpineRequest) -> dict[str, Any]:
     return {"pages": [p.model_dump(mode="json") for p in pages], "book_revision": revision}
 
 
+def _require_edit_target(
+    engine: BookEngine, book_id: str, page_id: str, block_id: str | None = None
+) -> None:
+    page = engine.load_page(book_id, page_id)
+    if page is None:
+        raise HTTPException(status_code=404, detail="Page not found")
+    if block_id is not None and page.block_by_id(block_id) is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+
+
 @router.post("/books/compile-page")
 async def compile_page(req: CompilePageRequest) -> dict[str, Any]:
     """Drive the compiler for the page the user just opened (current-page priority)."""
@@ -1462,6 +1472,7 @@ async def compile_page(req: CompilePageRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "compile_page",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id),
         extra={"page_id": req.page_id, "force": req.force},
         # Generation command, not an edit — see `_claim_content_mutation`.
         strict=False,
@@ -1488,6 +1499,7 @@ async def regenerate_block(req: RegenerateBlockRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "regenerate_block",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id, req.block_id),
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
     try:
@@ -1543,6 +1555,7 @@ async def insert_block(req: InsertBlockRequest) -> dict[str, Any]:
         req.expected_revision,
         "insert_block",
         extra={"page_id": req.page_id, "block_type": req.block_type},
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id),
     )
     try:
         block = await engine.insert_block(
@@ -1610,6 +1623,7 @@ async def insert_video_lesson(req: InsertVideoLessonRequest) -> dict[str, Any]:
         req.expected_revision,
         "insert_block",
         extra={"page_id": req.page_id, "block_type": BlockType.VIDEO_LESSON.value},
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id),
     )
     try:
         block = await engine.insert_video_lesson(
@@ -1685,6 +1699,7 @@ async def delete_block(req: DeleteBlockRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "delete_block",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id, req.block_id),
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
     ok = await engine.delete_block(book_id=req.book_id, page_id=req.page_id, block_id=req.block_id)
@@ -1703,6 +1718,7 @@ async def move_block(req: MoveBlockRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "move_block",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id, req.block_id),
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
     ok = await engine.move_block(
@@ -1727,6 +1743,7 @@ async def change_block_type(req: ChangeBlockTypeRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "change_block_type",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id, req.block_id),
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
     try:
@@ -1893,6 +1910,7 @@ async def deep_dive(req: DeepDiveRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "deep_dive",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.parent_page_id),
         extra={"page_id": req.parent_page_id, "topic": req.topic},
     )
     try:
@@ -2043,6 +2061,7 @@ async def update_block(req: UpdateBlockRequest) -> dict[str, Any]:
         req.book_id,
         req.expected_revision,
         "update_block",
+        preflight=lambda: _require_edit_target(engine, req.book_id, req.page_id, req.block_id),
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
     block = await engine.update_block(

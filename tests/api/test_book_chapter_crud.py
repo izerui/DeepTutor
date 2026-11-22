@@ -102,6 +102,32 @@ def test_rejected_type_preserves_revision_for_next_edit(tmp_path, monkeypatch, r
     }).status_code == 200
 
 
+@pytest.mark.parametrize(("route", "payload"), [
+    ("compile-page", {"page_id": "missing"}),
+    ("insert-video-lesson", {"page_id": "missing", "output_url": "/files/outputs/lesson.html"}),
+    ("deep-dive", {"parent_page_id": "missing", "topic": "Draft"}),
+    ("insert-block", {"page_id": "missing", "block_type": "text", "compile_now": False}),
+    ("delete-block", {"page_id": "pg_0", "block_id": "missing"}),
+    ("move-block", {"page_id": "pg_0", "block_id": "missing", "new_position": 0}),
+    ("update-block", {"page_id": "pg_0", "block_id": "missing", "title": "Edit"}),
+    ("change-block-type", {"page_id": "pg_0", "block_id": "missing", "new_type": "text"}),
+    ("regenerate-block", {"page_id": "pg_0", "block_id": "missing"}),
+])
+def test_missing_target_preserves_revision_for_next_edit(tmp_path, monkeypatch, route, payload):
+    client, storage = _client(tmp_path, monkeypatch)
+    _seed(storage)
+    if route == "insert-video-lesson":
+        monkeypatch.setattr(book_router, "_chat_video_lesson_source", lambda _: tmp_path / "lesson.html")
+    response = client.post(f"/api/books/{route}", json={
+        "book_id": "bk", "expected_revision": 1, **payload,
+    })
+    assert response.status_code == 404
+    assert storage.load_book("bk").revision == 1
+    assert client.patch("/api/books/bk/chapters/ch_0", json={
+        "title": "Renamed", "expected_revision": 1,
+    }).status_code == 200
+
+
 def test_add_chapter_returns_a_pending_shell_and_advances_revision(tmp_path, monkeypatch) -> None:
     client, storage = _client(tmp_path, monkeypatch)
     _seed(storage)
