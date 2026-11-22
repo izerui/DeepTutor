@@ -79,6 +79,15 @@ a31d82624c27d75f4e771d4fcb78dce16470b383
 | `794f1c739` | `19a408a2b` | 指定文档时在查询改写和检索前验证后端能力 |
 | `bbdf745f4`、`1eb4d01d0` | `628a78e72`、`6f865103d` | 原样迁入 CLI Markdown 编码识别及交互式笔记本引用纠错 |
 | `7187d5b61`、`c7757741b` | `e9810da7e`、`c125c68e1` | 将只读分页和兼容性测试适配到本地 `list_notebook` |
+| `9934fb15c`、`d0fc167b9`、`6fcdec2ec`、`6c1e3b6e6` | `4d471d1e3` | 保留书版本校验和授权，修复章节拒绝路径、Anthropic 工具标识、Docling 坐标及上下文提示 |
+| `85c91992c`、`3ef9ee888`、`7af36949b`、`9e7f44f97`、`ff15bf084` 等 | `85c2b5b89` | 登录恢复、明确标注的 JSON、搜索配置和语音语言适配 |
+| `af403550c` 及本地学习平台适配 | `fb58b8ee0` | 用户手动重发时重新校验模型权限，学习首页提供课程与市场入口，按父标题搜索追问，聊天资源选择遵守伙伴权限 |
+| `e99d632de`、`a13bcb26c`、`399297e7f` 的独立改动 | `911fc9d29` | Docker 构建、默认配音依赖、PDF 分段、插件发现及工具提示缓存 |
+
+本轮审计补迁的 `npm run check:fast` 通过 1453 项 Node 测试和 1606 项 Vitest 测试。
+后端定向验证覆盖书籍权限与版本、模型回放、Docling 缓存、搜索、会话隔离、
+学习市场、账号偏好、插件、Docker 配置与热部署脚本。
+本机缺少 Docker CLI，生产镜像的实际构建仍需 Linux 构建环境验证。
 
 验证：使用 `.superpowers/run-isolated-tests.sh --without-synthetic-loopback`
 运行 `tests/services/cli_apps`、`tests/cli/test_chat_cli.py`、
