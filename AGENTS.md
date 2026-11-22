@@ -76,6 +76,9 @@ a31d82624c27d75f4e771d4fcb78dce16470b383
 | `318c05fa7` | `58eed0cb9` | 原样迁入伙伴聊天焦点轮询的测试等待调整 |
 | `b93451dd0` | `d89178090` | 在现有侧栏会话搜索中检索与打开小老师追问 |
 | `9ce7ba905` | `7618cb413` | 按账号保存聊天模式、开场提示、输入控件和学习方式入口偏好 |
+| `794f1c739` | `19a408a2b` | 指定文档时在查询改写和检索前验证后端能力 |
+| `bbdf745f4`、`1eb4d01d0` | `628a78e72`、`6f865103d` | 原样迁入 CLI Markdown 编码识别及交互式笔记本引用纠错 |
+| `7187d5b61`、`c7757741b` | `e9810da7e`、`c125c68e1` | 将只读分页和兼容性测试适配到本地 `list_notebook` |
 
 验证：使用 `.superpowers/run-isolated-tests.sh --without-synthetic-loopback`
 运行 `tests/services/cli_apps`、`tests/cli/test_chat_cli.py`、
@@ -84,6 +87,10 @@ Windows 路径通过平台模拟用例验证。
 沙箱参数测试 `tests/services/sandbox/test_argv_exec.py` 通过 36 项，
 前端 `mermaid-error-recovery.spec.tsx` 和 `partner-chat-continuity.spec.tsx`
 使用 Vitest 验证，共通过 8 项。
+文档范围、CLI 和收藏工具回归使用同一隔离脚本运行 `tests/services/rag`、
+`tests/tools/test_rag_selector_contract.py`、`tests/cli/test_notebook_cli.py`、
+`tests/cli/test_chat_cli.py`、`tests/tools/test_list_notebook.py`，
+共 1033 项通过、61 项跳过。
 
 标准同步流程：
 
