@@ -12,6 +12,8 @@ import { ArrowUpRight, ArrowRight, Check, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 type LearningKind = LearningSurface['kind']
 import { LEARNING_SURFACES, type LearningSurface } from './surfaces'
+import { PageCustomizeButton } from '@/components/customization/PageCustomizeButton'
+import { usePageCustomization } from '@/context/PageCustomizationContext'
 
 const FOCUSABLE = 'a[href], input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
 const tileClass = (accent: string) =>
@@ -27,7 +29,9 @@ export function LearningWays() {
   const id = useId()
   const sharedId = (part: string, kind: LearningKind) => `${id}-${kind}-${part}`
   const close = useCallback(() => setOpenKind(null), [])
-  const open = LEARNING_SURFACES.find(surface => surface.kind === openKind)
+  const { value } = usePageCustomization()
+  const visible = LEARNING_SURFACES.filter(surface => !value.learning.hidden_features.includes(surface.kind))
+  const open = visible.find(surface => surface.kind === openKind)
   const spring: Transition = reduceMotion
     ? { duration: 0 }
     : { type: 'spring', stiffness: 340, damping: 34, mass: 0.9 }
@@ -38,8 +42,9 @@ export function LearningWays() {
         <h2 id={id} className="sr-only">
           {t('Ways to learn')}
         </h2>
+        <div className="mb-2 flex justify-end"><PageCustomizeButton page="learning" /></div>
         <div className={pageGridClass(4)}>
-          {LEARNING_SURFACES.map((surface, index) => {
+          {visible.map((surface, index) => {
             const opened = openKind === surface.kind
             return (
               <motion.div

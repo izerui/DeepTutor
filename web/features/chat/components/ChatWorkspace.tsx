@@ -2867,6 +2867,7 @@ export default function ChatWorkspace() {
               {/* Batch 3 §8: a learner's AI left today (nothing without a limit). */}
               <div className="mx-auto w-full max-w-[960px] px-6"><AiUsageNote /></div>
               <ChatComposer
+                customizable
                 composerRef={composerRef}
                 capMenuRef={capMenuRef}
                 capBtnRef={capBtnRef}
@@ -2995,6 +2996,7 @@ export default function ChatWorkspace() {
                 session and starts it on the topic. */}
               {!hasMessages ? (
                 <StarterSuggestions
+                  onPrefill={handlePrefillComposer}
                   workspaceId={state.workspaceId || ""}
                   onPick={(prompt) => void handleSend(prompt)}
                   disabled={state.isStreaming}

@@ -83,6 +83,12 @@ from deeptutor.services.settings.starter_settings import (
     TRACE_COUNT_RANGE as STARTER_TRACE_COUNT_RANGE,
 )
 from deeptutor.tools.builtin import USER_TOGGLEABLE_TOOL_NAMES
+from deeptutor.multi_user.paths import get_account_path_service
+from deeptutor.services.settings.page_customization import (
+    ChatPageCustomization,
+    LearningPageCustomization,
+    PageCustomization,
+)
 
 router = APIRouter()
 # Public UI-settings router. The app shell bootstraps the interface language
@@ -2274,6 +2280,34 @@ async def get_ui_settings():
 async def get_display_settings() -> DisplaySettings:
     """Read learning typography through the authenticated, request-scoped router."""
     return DisplaySettings(**resolve_display_settings(load_ui_settings()))
+
+
+def _page_file():
+    return get_account_path_service().get_settings_file("page_customization")
+
+
+@router.get("/page-customization")
+async def get_page_customization(response: Response) -> PageCustomization:
+    response.headers["Cache-Control"] = "private, no-store"
+    try:
+        return PageCustomization.model_validate_json(_page_file().read_bytes())
+    except FileNotFoundError:
+        return PageCustomization()
+
+
+def _save_page_section(section: str, value: BaseModel) -> PageCustomization:
+    stored = atomic_update(_page_file(), lambda current: {**current, section: value.model_dump()})
+    return PageCustomization.model_validate(stored)
+
+
+@router.put("/page-customization/chat")
+async def update_chat_page_customization(update: ChatPageCustomization) -> PageCustomization:
+    return _save_page_section("chat", update)
+
+
+@router.put("/page-customization/learning")
+async def update_learning_page_customization(update: LearningPageCustomization) -> PageCustomization:
+    return _save_page_section("learning", update)
 
 
 @router.put("/ui")

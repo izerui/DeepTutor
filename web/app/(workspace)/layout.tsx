@@ -5,6 +5,7 @@ import { CapabilityAccessProvider } from "@/components/access/CapabilityAccessCo
 import CapabilityGate from "@/components/access/CapabilityGate";
 import { ChatRuntimeProvider } from "@/features/chat";
 import { ReadingProvider } from "@/context/ReadingContext";
+import { PageCustomizationProvider } from "@/context/PageCustomizationContext";
 import { Suspense } from "react";
 import { WorkspaceRuntimeBoundary } from "@/components/workspaces/WorkspaceRuntimeBoundary";
 
@@ -22,11 +23,13 @@ export default function WorkspaceLayout({
               {/* Above the page on purpose: sending the first message navigates
             /chat → /chat/<id>, which remounts the page. The open document
             must not die with it. */}
-              <ReadingProvider>
+              <PageCustomizationProvider>
+                <ReadingProvider>
                   <AppShell sidebar={<WorkspaceSidebar />}>
                     <CapabilityGate>{children}</CapabilityGate>
                   </AppShell>
-              </ReadingProvider>
+                </ReadingProvider>
+              </PageCustomizationProvider>
             </ChatRuntimeProvider>
           </WorkspaceRuntimeBoundary>
         </Suspense>

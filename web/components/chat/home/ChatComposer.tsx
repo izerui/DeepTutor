@@ -101,6 +101,8 @@ import { knowledgeBaseMatches, resolveKnowledgeBaseLabel } from "@/lib/knowledge
 import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import type { CapabilityDef } from "@/features/capabilities/presentation";
+import { usePageCustomization } from "@/context/PageCustomizationContext";
+import { PageCustomizeButton } from "@/components/customization/PageCustomizeButton";
 import AttachmentProcessingStatus from "./AttachmentProcessingStatus";
 import type { AttachmentProcessingItem } from "@/features/chat/selectors/attachment-processing";
 import Tooltip from "@/shared/ui/Tooltip";
@@ -283,7 +285,8 @@ export default memo(function ChatComposer({
   capabilityNeedsConfig,
   capabilityConfigConfirmed,
   onRequestConfigConfirm,
-  capabilities,
+  capabilities: allCapabilities,
+  customizable = false,
   onSetCapMenuOpen,
   onSetSpaceMenuOpen,
   onToggleKB,
@@ -424,6 +427,7 @@ export default memo(function ChatComposer({
    */
   onRequestConfigConfirm: () => void;
   capabilities: CapabilityDef[];
+  customizable?: boolean;
   onSetCapMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   onSetSpaceMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   onToggleKB: (name: string) => void;
@@ -509,6 +513,11 @@ export default memo(function ChatComposer({
 }) {
   const { t } = useTranslation();
   const [partners, setPartners] = useState<PartnerInfo[]>([]);
+  const { value: { chat } } = usePageCustomization();
+  const controls = customizable ? chat.controls : undefined;
+  const capabilities = customizable
+    ? allCapabilities.filter(cap => !chat.hidden_modes.includes(cap.value))
+    : allCapabilities;
   const [partnersLoading, setPartnersLoading] = useState(false);
   const [partnerLoadError, setPartnerLoadError] = useState(false);
   const canSelectPartner = Boolean(onSelectPartner);
@@ -1221,7 +1230,7 @@ export default memo(function ChatComposer({
       ),
     });
   }
-  if (onPersonaSelectionChange) {
+  if (controls?.preferences !== false && onPersonaSelectionChange) {
     resourceItems.push({
       key: "persona",
       group: "Answer preferences",
@@ -1239,7 +1248,7 @@ export default memo(function ChatComposer({
       ),
     });
   }
-  if (onResourceSelectionChange && (resourceCatalog?.skills.length ?? 0) > 0) {
+  if (controls?.skills !== false && onResourceSelectionChange && (resourceCatalog?.skills.length ?? 0) > 0) {
     resourceItems.push({
       key: "skills",
       group: "Tools",
@@ -1263,7 +1272,7 @@ export default memo(function ChatComposer({
       ),
     });
   }
-  if (onResourceSelectionChange && (resourceCatalog?.mcp.length ?? 0) > 0) {
+  if (controls?.mcp !== false && onResourceSelectionChange && (resourceCatalog?.mcp.length ?? 0) > 0) {
     resourceItems.push({
       key: "mcp",
       group: "Tools",
@@ -1310,7 +1319,7 @@ export default memo(function ChatComposer({
     });
   }
 
-  if (onSelectPartner) {
+  if (controls?.partners !== false && onSelectPartner) {
     resourceItems.push({
       key: "partner", group: "Answer preferences",
       summary: partnerName || t("None"), onClear: () => onSelectPartner(null),
@@ -1320,7 +1329,7 @@ export default memo(function ChatComposer({
     });
   }
 
-  if (onSelectPartnerGroup) {
+  if (controls?.partners !== false && onSelectPartnerGroup) {
     resourceItems.push({
       key: "partner_group", group: "Answer preferences",
       summary: partnerGroupName || t("None"),
@@ -1412,7 +1421,7 @@ export default memo(function ChatComposer({
             onSelectPersonaPicker={onSelectPersonaPicker}
             onSelectMemoryPicker={onSelectMemoryPicker}
             onOpenPersonaSelector={
-              onPersonaSelectionChange && onPersonaSelectorOpenChange
+              controls?.preferences !== false && onPersonaSelectionChange && onPersonaSelectorOpenChange
                 ? () => onPersonaSelectorOpenChange(true)
                 : undefined
             }
@@ -1646,6 +1655,7 @@ export default memo(function ChatComposer({
               </div>
 
               <div className={styles.actions}>
+                {customizable && <PageCustomizeButton page="chat" compact capabilities={allCapabilities} />}
                 <ModelSelector
                   options={llmOptions}
                   activeDefault={activeLLMDefault}
@@ -1668,7 +1678,7 @@ export default memo(function ChatComposer({
 
                 {contextBudget ? <ContextBudgetChip budget={contextBudget} /> : null}
 
-                <Tooltip
+                {(controls?.voice !== false || recorder.state !== "idle") && <Tooltip
                   label={recorder.state === "recording" ? t("Stop recording") : t("Record voice")}
                   description={recorder.error || undefined}
                   side="top"
@@ -1697,7 +1707,7 @@ export default memo(function ChatComposer({
                       <Mic size={16} strokeWidth={1.9} />
                     )}
                   </button>
-                </Tooltip>
+                </Tooltip>}
 
                 {/* The thing you press is the thing that's working is the
                     thing you press to stop — one element for the whole turn,

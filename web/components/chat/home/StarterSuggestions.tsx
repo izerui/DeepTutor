@@ -6,6 +6,8 @@ import Tooltip from "@/shared/ui/Tooltip";
 import { Loader2, Sparkles } from "lucide-react";
 import { activeWorkspaceId, scopedUrl } from "@/lib/workspace-scope";
 import { apiFetch } from "@/lib/api";
+import { usePageCustomization } from "@/context/PageCustomizationContext";
+import { STARTER_GROUPS, starterPrompts } from "@/lib/page-customization";
 
 interface Suggestion {
   /** The line the learner reads — names the specific thing worth doing next. */
@@ -68,15 +70,18 @@ type View =
  */
 export default function StarterSuggestions({
   onPick,
+  onPrefill = onPick,
   disabled = false,
   workspaceId = activeWorkspaceId(),
 }: {
   /** Send this text as the learner's message, starting the session. */
   onPick: (prompt: string) => void;
+  onPrefill?: (prompt: string) => void;
   disabled?: boolean;
   workspaceId?: string;
 }) {
   const { t } = useTranslation();
+  const { value: { chat } } = usePageCustomization();
   // Everything generated here is already in the learner's chosen output
   // language (resolved server-side from their model-output setting) and never
   // goes through the i18n table — a label that happened to match a key would
@@ -177,15 +182,34 @@ export default function StarterSuggestions({
     }
   }, [workspaceId]);
 
-  // Only the very first read renders nothing: lines appearing a beat late is
-  // calmer than a control that flashes and is immediately replaced.
-  if (view.kind === "loading") return null;
-
   return (
     // max-w-[768px] + px-6 mirrors ChatComposer's own empty-state container, so
     // the lines start exactly at the composer's left edge rather than floating
     // near it.
     <div className="group/starters mx-auto w-full max-w-[768px] px-6 pb-6 animate-fade-in">
+      <div className="mb-2 flex flex-wrap items-start gap-2">
+        {STARTER_GROUPS.map(group => {
+          const rows = starterPrompts(chat, group, t);
+          if (!rows.length) return null;
+          return (
+            <details key={group} name="chat-starter-group" className="max-w-full text-sm open:basis-full">
+              <summary className="cursor-pointer rounded-md bg-muted px-3 py-1.5">{t(`starters.${group}`)}</summary>
+              <ul className="py-1">
+                {rows.map(({ label, prompt }, index) => (
+                  <li key={index}>
+                    <Tooltip label={prompt} side="top">
+                    <button type="button" disabled={disabled} onClick={() => onPrefill(prompt)}
+                      className="w-full rounded-md px-3 py-2 text-left [overflow-wrap:anywhere] hover:bg-muted">
+                      {label}
+                    </button>
+                    </Tooltip>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          );
+        })}
+      </div>
       {view.kind === "ready" && (
         <ul className="flex flex-col items-start">
           {view.items.map((item) => (
@@ -214,7 +238,7 @@ export default function StarterSuggestions({
         </ul>
       )}
 
-      <div className="flex items-center gap-2.5 pt-1.5">
+      {view.kind !== "loading" && <div className="flex items-center gap-2.5 pt-1.5">
         <button
           type="button"
           onClick={() => void generate()}
@@ -250,7 +274,7 @@ export default function StarterSuggestions({
             {t("Not enough history yet — have a conversation first.")}
           </span>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
