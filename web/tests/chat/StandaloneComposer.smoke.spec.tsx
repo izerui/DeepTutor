@@ -13,8 +13,13 @@ initI18n("en");
  * these tests pin the pool's decisions, not the presentation.
  */
 const harness = vi.hoisted(() => ({
+  isAdmin: false,
   submitted: vi.fn(),
   composerProps: null as Record<string, unknown> | null,
+}));
+
+vi.mock("@/hooks/useAuthStatus", () => ({
+  useAuthStatus: () => ({ isAdmin: harness.isAdmin }),
 }));
 
 vi.mock("@/components/chat/home/ChatComposer", () => ({
@@ -105,12 +110,14 @@ const lastSubmission = () =>
 
 describe("StandaloneComposer smoke", () => {
   beforeEach(() => {
+    harness.isAdmin = false;
     harness.submitted.mockClear();
     harness.composerProps = null;
   });
 
   it("refuses to send while the input is empty", async () => {
     const { onSend } = await mount();
+    expect(harness.composerProps!.onSelectPartner).toBeUndefined();
 
     await act(async () => {
       await onSend("");
@@ -120,6 +127,16 @@ describe("StandaloneComposer smoke", () => {
     });
 
     expect(harness.submitted).not.toHaveBeenCalled();
+  });
+
+  it("keeps partner delegation available with the resource mention menu", async () => {
+    harness.isAdmin = true;
+    await mount();
+    expect(harness.composerProps!.onSelectAgent).toBeUndefined();
+    const select = harness.composerProps!.onSelectPartner as (id: string) => void;
+    await act(async () => select("study-partner"));
+    await act(async () => (harness.composerProps!.onSend as ComposerSend)("Discuss this"));
+    expect(lastSubmission().config).toMatchObject({ consult_partner_id: "study-partner" });
   });
 
   it("sends the text and consumes one-shot state after the send", async () => {

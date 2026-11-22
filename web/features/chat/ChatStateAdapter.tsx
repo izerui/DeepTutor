@@ -3970,8 +3970,7 @@ export function ChatStateAdapterProvider({
     const session = key ? current.sessions[key] : undefined;
     const message = session?.messages.find((item) => item.id === messageId);
     if (!key || !session || session.isStreaming || !message?.failedSubmission ||
-      !message.failedSubmissionId || !message.requestSnapshot || message.failedSubmissionNeedsReview ||
-      message.failedSubmissionNoLlmAccess) return false;
+      !message.failedSubmissionId || !message.requestSnapshot || message.failedSubmissionNeedsReview) return false;
     if (message.requestSnapshot.replacesSubmissionId && !(await supportsSubmissionReplacement())) return false;
     const rootId = message.requestSnapshot.replacementRootSubmissionId ?? message.failedSubmissionId;
     const pending = readFailedSubmissions(session.sessionId ?? draftFailedSubmissionKey()).find((record) => {

@@ -27,7 +27,7 @@ export function isFailedTurnVisible<T extends ChatBranchMessage>(
     return buildVisiblePath(messages, selectedBranches).messages.at(-1) === tail;
   }
   if (tail?.role === "user" && tail.failedSubmission &&
-      !tail.failedSubmissionNeedsReview && !tail.failedSubmissionNoLlmAccess) {
+      !tail.failedSubmissionNeedsReview) {
     return buildVisiblePath(messages, selectedBranches).messages.at(-1) === tail;
   }
   if (tail?.role === "user" && tail.orphanedFailedTurn?.retryable) {

@@ -28,6 +28,7 @@ function renderComposer({
   const onInputChange = vi.fn();
   const onOpenPersonaSelector = vi.fn();
   const onReplyLanguageChange = vi.fn();
+  const onSelectBookPicker = vi.fn();
 
   render(
     <ComposerInput
@@ -53,7 +54,7 @@ function renderComposer({
       personaAvailable={false}
       onSelectAttach={vi.fn()}
       onSelectNotebookPicker={vi.fn()}
-      onSelectBookPicker={vi.fn()}
+      onSelectBookPicker={onSelectBookPicker}
       onSelectHistoryPicker={vi.fn()}
       onSelectQuestionBankPicker={vi.fn()}
       onSelectPersonaPicker={vi.fn()}
@@ -73,8 +74,17 @@ function renderComposer({
     onInputChange,
     onOpenPersonaSelector,
     onReplyLanguageChange,
+    onSelectBookPicker,
   };
 }
+
+it("opens books through @ and removes the mention from the draft", () => {
+  const { input, onSelectBookPicker } = renderComposer();
+  fireEvent.change(input, { target: { value: "Read @" } });
+  fireEvent.click(screen.getByText("Books"));
+  expect(onSelectBookPicker).toHaveBeenCalledOnce();
+  expect(input.value.trim()).toBe("Read");
+});
 
 it("lists both slash commands and filters them by prefix", () => {
   const { input } = renderComposer();

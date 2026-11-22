@@ -130,9 +130,12 @@ it('hides the selected method while keeping the other entry points', () => {
   render(<LearningWays />)
   expect(screen.queryByRole('button', { name: /Mastery Path/ })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: /^Books/ })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Learning market' })).toHaveAttribute('href', '/market')
+  expect(screen.getByRole('link', { name: 'My courses' })).toHaveAttribute('href', '/tasks')
 })
 it('leaves a way to restore choices when every learning method is hidden', () => {
-  harness.value!.learning.hidden_features = ['books', 'mastery', 'practice', 'reading']
+  harness.value!.learning.hidden_features = ['books', 'mastery', 'practice', 'reading', 'market', 'courses']
   render(<LearningWays />)
+  expect(screen.queryByRole('link')).toBeNull()
   expect(screen.getAllByRole('button')).toEqual([screen.getByRole('button', { name: 'Customize page' })])
 })

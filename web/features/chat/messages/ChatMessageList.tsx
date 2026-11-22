@@ -1857,7 +1857,7 @@ export const UserMessage = memo(function UserMessage({
               return refusal ? t(refusal.key, refusal.values) : t("Not sent");
             })()}
             {onRetryFailedSubmission && !msg.failedSubmissionNeedsReview &&
-              !msg.failedSubmissionNoLlmAccess && typeof msg.id === "number" && (
+              typeof msg.id === "number" && (
               <button type="button" disabled={editDisabled || retrying} onClick={async () => {
                 if (retrying || typeof msg.id !== "number") return;
                 setRetrying(true);

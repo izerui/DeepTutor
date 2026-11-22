@@ -491,7 +491,7 @@ describe('ChatWorkspace smoke', () => {
     applyState({ submissionNoLlmAccess: true })
     view.rerender(<ChatWorkspace />)
     expect(screen.getByRole('alert')).toHaveTextContent('Please contact your administrator')
-    expect(screen.queryByRole('button', { name: 'Resend' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Resend' })).toBeEnabled()
 
     // The degraded variant (recovered text, lost context) explains itself
     // and offers no resend that would drop the missing context.

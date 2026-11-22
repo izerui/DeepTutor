@@ -327,6 +327,22 @@ async def test_search_sessions_skips_sessions_in_the_recycle_bin(fake_pb) -> Non
     assert [row["session_id"] for row in result["sessions"]] == [kept["id"]]
 
 
+async def test_parent_title_search_only_expands_visible_owned_tutor_threads(fake_pb) -> None:
+    store = PocketBaseSessionStore()
+    with as_user("alice"):
+        await store.create_session(title="Linear algebra", session_id="parent")
+        await store.create_session(title="Why?", session_id="child")
+        await store.update_session_preferences("child", {
+            "parent_session_id": "parent", "session_kind": "selection_tutor",
+        })
+        result = await store.search_sessions("algebra")
+        assert {row["session_id"] for row in result["sessions"]} == {"parent", "child"}
+        await store.update_session_preferences("parent", {"archived": True})
+        assert (await store.search_sessions("algebra"))["total"] == 1
+    with as_user("bob"):
+        assert (await store.search_sessions("algebra"))["total"] == 0
+
+
 async def test_legacy_workspace_preferences_are_normalized_at_repository_boundary(
     fake_pb,
 ) -> None:

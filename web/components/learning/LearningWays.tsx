@@ -11,7 +11,7 @@ import { AnimatePresence, m as motion, useReducedMotion, type Transition } from 
 import { ArrowUpRight, ArrowRight, Check, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 type LearningKind = LearningSurface['kind']
-import { LEARNING_SURFACES, type LearningSurface } from './surfaces'
+import { LEARNING_LINKS, LEARNING_SURFACES, type LearningSurface } from './surfaces'
 import { PageCustomizeButton } from '@/components/customization/PageCustomizeButton'
 import { usePageCustomization } from '@/context/PageCustomizationContext'
 
@@ -42,7 +42,14 @@ export function LearningWays() {
         <h2 id={id} className="sr-only">
           {t('Ways to learn')}
         </h2>
-        <div className="mb-2 flex justify-end"><PageCustomizeButton page="learning" /></div>
+        <div className="mb-2 flex flex-wrap items-center gap-4">
+          {LEARNING_LINKS.filter(link => !value.learning.hidden_features.includes(link.kind)).map(link => (
+            <Link key={link.kind} href={link.href} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              {t(link.title)} <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          ))}
+          <div className="ml-auto"><PageCustomizeButton page="learning" /></div>
+        </div>
         <div className={pageGridClass(4)}>
           {visible.map((surface, index) => {
             const opened = openKind === surface.kind

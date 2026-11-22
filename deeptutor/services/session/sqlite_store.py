@@ -3102,6 +3102,18 @@ class SQLiteSessionStore:
             AND s.deleted_at IS NULL
             AND (
                 INSTR(LOWER(COALESCE(s.title, '')), LOWER(?)) > 0
+                OR (
+                    json_extract(s.preferences_json, '$.session_kind') = 'selection_tutor'
+                    AND NOT COALESCE(json_extract(s.preferences_json, '$.archived'), 0)
+                    AND EXISTS (
+                        SELECT 1 FROM sessions parent
+                        WHERE parent.id = json_extract(s.preferences_json, '$.parent_session_id')
+                          AND parent.deleted_at IS NULL
+                          AND parent.id NOT LIKE 'imported\_%' ESCAPE '\'
+                          AND NOT COALESCE(json_extract(parent.preferences_json, '$.archived'), 0)
+                          AND INSTR(LOWER(parent.title), LOWER(?)) > 0
+                    )
+                )
                 OR EXISTS (
                     SELECT 1 FROM messages candidate
                     WHERE candidate.session_id = s.id
@@ -3114,7 +3126,7 @@ class SQLiteSessionStore:
             total = int(
                 conn.execute(
                     f"SELECT COUNT(*) FROM sessions s WHERE {match_condition}",  # nosec B608
-                    (normalized, normalized),
+                    (normalized, normalized, normalized),
                 ).fetchone()[0]
             )
             rows = conn.execute(
@@ -3187,6 +3199,7 @@ class SQLiteSessionStore:
                 ORDER BY s.updated_at DESC, s.id ASC
                 """,  # nosec B608 - match_condition is a module-owned SQL literal
                 (
+                    normalized,
                     normalized,
                     normalized,
                     max(1, min(int(limit), 100)),

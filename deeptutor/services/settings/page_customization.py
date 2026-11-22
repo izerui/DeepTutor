@@ -36,8 +36,8 @@ class ChatPageCustomization(BaseModel):
 
 class LearningPageCustomization(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    hidden_features: list[Literal["books", "mastery", "practice", "reading"]] = Field(
-        default_factory=list, max_length=4
+    hidden_features: list[Literal["books", "mastery", "practice", "reading", "market", "courses"]] = Field(
+        default_factory=list, max_length=6
     )
 
 

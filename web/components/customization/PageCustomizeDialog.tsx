@@ -15,7 +15,7 @@ import {
   type ComposerControls,
 } from '@/lib/page-customization'
 import type { CapabilityDef } from '@/features/capabilities/presentation'
-import { LEARNING_SURFACES } from '@/components/learning/surfaces'
+import { LEARNING_LINKS, LEARNING_SURFACES } from '@/components/learning/surfaces'
 
 const inputClass =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-shadow focus:border-ring focus:ring-2 focus:ring-ring/15'
@@ -360,7 +360,7 @@ export default function PageCustomizeDialog({
               <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
                 {t('customize.learningHint')}
               </p>
-              {LEARNING_SURFACES.filter(
+              {[...LEARNING_LINKS, ...LEARNING_SURFACES].filter(
                 surface => !learningKinds || learningKinds.includes(surface.kind)
               ).map(surface => (
                 <ChoiceRow

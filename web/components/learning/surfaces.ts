@@ -90,5 +90,10 @@ export const LEARNING_SURFACES: readonly LearningSurface[] = [
 
 ] as const
 
+export const LEARNING_LINKS = [
+  { kind: 'market', title: 'Learning market', description: 'Find books, knowledge bases, Mastery Paths, practice sets and courses, and join to learn.', href: '/market' },
+  { kind: 'courses', title: 'My courses', description: 'Courses tooltip', href: '/tasks' },
+] as const
+
 export const learningSurface = (kind: LearningKind): LearningSurface =>
   LEARNING_SURFACES.find(surface => surface.kind === (kind === "watching" ? "reading" : kind))!

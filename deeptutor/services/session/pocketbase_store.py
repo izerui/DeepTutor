@@ -665,6 +665,11 @@ class PocketBaseSessionStore:
 
             matched: list[tuple[Any, Any | None]] = []
             query_literal = json.dumps(normalized, ensure_ascii=False)
+            matching_parents = {
+                record.session_id for record in records
+                if normalized.casefold() in str(getattr(record, "title", "") or "").casefold()
+                and not _json_loads(getattr(record, "preferences_json", None), {}).get("archived")
+            }
             for record in records:
                 sid = _validate_id(str(getattr(record, "session_id", "")), "session_id")
                 message_page = pb.collection("messages").get_list(
@@ -681,7 +686,13 @@ class PocketBaseSessionStore:
                 )
                 matching_messages = self._page_items(message_page)
                 title = str(getattr(record, "title", "") or "")
-                if normalized.casefold() in title.casefold() or matching_messages:
+                prefs = _json_loads(getattr(record, "preferences_json", None), {})
+                parent_matches = (
+                    prefs.get("session_kind") == "selection_tutor"
+                    and not prefs.get("archived")
+                    and prefs.get("parent_session_id") in matching_parents
+                )
+                if normalized.casefold() in title.casefold() or matching_messages or parent_matches:
                     matched.append((record, matching_messages[0] if matching_messages else None))
 
             page = matched[bounded_offset : bounded_offset + bounded_limit]

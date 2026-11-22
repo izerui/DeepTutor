@@ -365,7 +365,6 @@ function StandaloneComposerImpl({
     [knowledgeBases],
   );
   // Spec 2026-10-29 P1c: connected local agents are closed, so none is offered.
-  const agentOptions = useMemo<{ name: string; kind: string | undefined }[]>(() => [], []);
 
   useEffect(() => {
     let cancelled = false;
@@ -900,9 +899,6 @@ function StandaloneComposerImpl({
         activeCap={activeCap}
         knowledgeBases={kbOptions}
         knowledgeBaseLabels={knowledgeBaseLabels}
-        connectedAgents={agentOptions}
-        selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
-        onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}
         selectedPartnerGroup={selectedPartnerGroup}
         onSelectPartnerGroup={isAdmin ? handleSelectPartnerGroup : undefined}
         selectedPartner={selectedPartner}

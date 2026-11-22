@@ -1109,7 +1109,7 @@ it("keeps a start_turn_rejected submission as an unsent user row across reload",
   expect(screen.getByTestId("lastTurnFailed").textContent).toBe("true");
 });
 
-it("keeps a model-access rejection non-retryable across reload without a second alert", async () => {
+it.each(["Resend", "Retry first unsent"])("rechecks model access on explicit %s after reload", async (retryLabel) => {
   const notify = vi.spyOn(notifications, "notify");
   fixture.connected = true;
   fixture.session = completedServerSession();
@@ -1134,9 +1134,12 @@ it("keeps a model-access rejection non-retryable across reload without a second 
   render(<ChatStateAdapterProvider><Harness /></ChatStateAdapterProvider>);
   await act(async () => fireEvent.click(screen.getByText("Load")));
   expect(screen.getByTestId("submissionNoLlmAccess").textContent).toBe("true");
-  await act(async () => fireEvent.click(screen.getByText("Resend")));
-  await act(async () => fireEvent.click(screen.getByText("Retry first unsent")));
   expect(fixture.sent.filter(message => message.type === "start_turn")).toHaveLength(0);
+  expect(readFailedSubmissions("s1")[0].noLlmAccess).toBe(true);
+  await act(async () => fireEvent.click(screen.getByText(retryLabel)));
+  expect(fixture.sent.filter(message => message.type === "start_turn")).toHaveLength(1);
+  expect(screen.getByTestId("submissionNoLlmAccess").textContent).toBe("false");
+  expect(readFailedSubmissions("s1").some(record => record.noLlmAccess)).toBe(false);
 });
 
 it("carries the server's rejection text into the submission banner state (#2637)", async () => {

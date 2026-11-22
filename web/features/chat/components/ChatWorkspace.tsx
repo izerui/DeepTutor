@@ -344,18 +344,6 @@ export default function ChatWorkspace() {
     () => Object.fromEntries(knowledgeBases.flatMap((kb) => knowledgeBaseSelectionRefs(kb).map((ref) => [ref, kb.name]))),
     [knowledgeBases],
   );
-  // A connected agent to preselect once it loads, from `?agent=<name>` on the
-  // URL (the partner list page links here to drop straight into a chat with a
-  // partner). Captured once at first client render — the URL is rewritten to
-  // `/chat/<sessionId>` as soon as the new session is created, dropping the
-  // query — so we can't read it later from the live search params.
-  const pendingAgentRef = useRef<string | null | undefined>(undefined);
-  if (pendingAgentRef.current === undefined) {
-    pendingAgentRef.current =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("agent");
-  }
   // Which course this conversation belongs to. Lives in chat state (not a
   // one-shot ref) because the binding is now visible and changeable in the
   // composer for the whole life of the conversation, not only on the turn that
@@ -399,7 +387,6 @@ export default function ChatWorkspace() {
       // an empty menu with a link to make one.
       .catch(() => setCourses([]));
   }, []);
-  const agentPreselectDoneRef = useRef(false);
   const {
     options: llmOptions,
     activeDefault: activeLLMDefault,
@@ -2333,13 +2320,6 @@ export default function ChatWorkspace() {
     () => knowledgeBases.filter((kb) => kb.metadata?.type !== "subagent"),
     [knowledgeBases],
   );
-  const agentOptions = useMemo(
-    () =>
-      knowledgeBases
-        .filter((kb) => kb.metadata?.type === "subagent" && kb.metadata?.agent_kind !== "partner")
-        .map((kb) => ({ name: kb.name, kind: kb.metadata?.agent_kind })),
-    [knowledgeBases],
-  );
   const selectedKbOnly = useMemo(
     () => state.knowledgeBases.filter((n) => !agentNameSet.has(n)),
     [state.knowledgeBases, agentNameSet],
@@ -2363,15 +2343,6 @@ export default function ChatWorkspace() {
     if (id) { setSelectedPartnerGroup(null); handleSelectAgent(null); }
   }, [handleSelectAgent]);
 
-  // Honor `?agent=<name>` once its connection KB has loaded: preselect it so a
-  // partner opened from the partner list starts the chat already targeting it.
-  useEffect(() => {
-    if (agentPreselectDoneRef.current) return;
-    const name = pendingAgentRef.current;
-    if (!name || !agentNameSet.has(name)) return;
-    agentPreselectDoneRef.current = true;
-    handleSelectAgent(name);
-  }, [agentNameSet, handleSelectAgent]);
   const handleSelectNotebookPicker = useCallback(() => {
     setShowNotebookPicker(true);
   }, []);
@@ -2852,7 +2823,7 @@ export default function ChatWorkspace() {
                         : state.submissionErrorMessage ||
                           t("Couldn't reach the server. Please check your connection and retry.")}
                     </span>
-                    {!state.submissionNeedsReview && !state.submissionNoLlmAccess ? (
+                    {!state.submissionNeedsReview ? (
                       <button
                         type="button"
                         onClick={handleResendMessage}
@@ -2900,9 +2871,6 @@ export default function ChatWorkspace() {
                 attachmentProcessing={attachmentProcessing}
                 activeCap={activeCap}
                 knowledgeBases={kbOptions}
-                connectedAgents={agentOptions}
-                selectedAgent={selectedPartnerGroup || selectedPartner ? null : selectedAgent}
-                onSelectAgent={(name) => { if (name) { setSelectedPartnerGroup(null); setSelectedPartner(null); } handleSelectAgent(name); }}
         selectedPartnerGroup={selectedPartnerGroup}
         onSelectPartnerGroup={handleSelectPartnerGroup}
         selectedPartner={selectedPartner}
