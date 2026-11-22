@@ -71,11 +71,19 @@ a31d82624c27d75f4e771d4fcb78dce16470b383
 | `41a92edc1` | `66798641f` | 原样迁入 Windows Python CLI 应用虚拟环境路径修复 |
 | `ed709477b` | `6ccd2fffb` | 原样迁入安装失败的备份保护与恢复提示 |
 | `f8540eb5c` | `1189152b1` | 原样迁入 CLI 会话、笔记本 JSON 和回合 NDJSON 输出修复 |
+| `a5ab4c6ea` | `b51a0ede1` | 原样迁入沙箱参数测试使用当前 Python 解释器的修复 |
+| `34e7c8527` | `2237a6bb1` | 原样迁入 Mermaid 图表纠错后的渲染回归测试修复 |
+| `318c05fa7` | `58eed0cb9` | 原样迁入伙伴聊天焦点轮询的测试等待调整 |
+| `b93451dd0` | `d89178090` | 在现有侧栏会话搜索中检索与打开小老师追问 |
+| `9ce7ba905` | `7618cb413` | 按账号保存聊天模式、开场提示、输入控件和学习方式入口偏好 |
 
 验证：使用 `.superpowers/run-isolated-tests.sh --without-synthetic-loopback`
 运行 `tests/services/cli_apps`、`tests/cli/test_chat_cli.py`、
 `tests/cli/test_notebook_cli.py` 和 `tests/cli/test_turn_renderer.py`。
 Windows 路径通过平台模拟用例验证。
+沙箱参数测试 `tests/services/sandbox/test_argv_exec.py` 通过 36 项，
+前端 `mermaid-error-recovery.spec.tsx` 和 `partner-chat-continuity.spec.tsx`
+使用 Vitest 验证，共通过 8 项。
 
 标准同步流程：
 
