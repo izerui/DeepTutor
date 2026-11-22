@@ -394,6 +394,8 @@ export function PdfDocumentView({
           // The raw route sits behind the session cookie like every other API
           // route; pdf.js does its own fetching, so it needs telling.
           withCredentials: true,
+          // Request larger ranges to reduce round trips through the document proxy.
+          rangeChunkSize: 1 << 20,
         });
         task = loadingTask;
         const opened: PdfDocument = await loadingTask.promise;

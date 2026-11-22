@@ -95,7 +95,9 @@ WORKDIR /app
 # Install system dependencies
 # Note: libgl1 and libglib2.0-0 are required for OpenCV (used by mineru)
 # Rust is required for building tiktoken and other packages without pre-built wheels
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 update \
+    && apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
     curl \
     git \
     build-essential \
@@ -160,12 +162,15 @@ WORKDIR /app
 # Office previews convert documents to PDF in the main app. Writer, Calc and
 # Impress cover DOCX, XLSX and PPTX; Noto CJK preserves Chinese text and
 # Liberation supplies common Latin font substitutes in the rendered pages.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 update \
+    && apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
     curl \
     ca-certificates \
     bash \
     git \
     supervisor \
+    ffmpeg \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -180,8 +185,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN if [ -n "${DEEPTUTOR_RUNTIME_FONT_PACKAGES}" ]; then \
-        apt-get update \
-        && apt-get install -y --no-install-recommends ${DEEPTUTOR_RUNTIME_FONT_PACKAGES} \
+        apt-get -o Acquire::Retries=3 update \
+        && apt-get -o Acquire::Retries=3 install -y --no-install-recommends ${DEEPTUTOR_RUNTIME_FONT_PACKAGES} \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -193,12 +198,13 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && node --version && npm --version
 
 # Copy Python packages from builder stage
+RUN rm -rf /usr/local/lib/python3.11/site-packages
 COPY --from=python-base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=python-base /usr/local/bin /usr/local/bin
 
 # CJK font so matplotlib/Pillow render Chinese/Japanese/Korean text instead of
 # tofu boxes. Must match the font installed in Dockerfile.runner (fonts-wqy-zenhei).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
         fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -fv
