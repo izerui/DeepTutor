@@ -1536,6 +1536,7 @@ async def insert_block(req: InsertBlockRequest) -> dict[str, Any]:
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
     engine = resolved.engine
+    block_type = _coerce_inserted_block_type(req.block_type)
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
@@ -1543,7 +1544,6 @@ async def insert_block(req: InsertBlockRequest) -> dict[str, Any]:
         "insert_block",
         extra={"page_id": req.page_id, "block_type": req.block_type},
     )
-    block_type = _coerce_inserted_block_type(req.block_type)
     try:
         block = await engine.insert_block(
             book_id=req.book_id,
@@ -1721,6 +1721,7 @@ async def change_block_type(req: ChangeBlockTypeRequest) -> dict[str, Any]:
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
     engine = resolved.engine
+    new_type = _coerce_inserted_block_type(req.new_type)
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
@@ -1728,7 +1729,6 @@ async def change_block_type(req: ChangeBlockTypeRequest) -> dict[str, Any]:
         "change_block_type",
         extra={"page_id": req.page_id, "block_id": req.block_id},
     )
-    new_type = _coerce_inserted_block_type(req.new_type)
     try:
         block = await engine.change_block_type(
             book_id=req.book_id,
@@ -1766,6 +1766,7 @@ async def add_chapter(book_id: str, req: AddChapterRequest) -> dict[str, Any]:
     resolved = _resolve_book_or_404(book_id, edit=True)
     book_id = book_registry.strip_ref(book_id)
     engine = resolved.engine
+    content_type = _coerce_content_type(req.content_type)
     revision = _claim_content_mutation(
         resolved,
         book_id,
@@ -1774,7 +1775,6 @@ async def add_chapter(book_id: str, req: AddChapterRequest) -> dict[str, Any]:
         preflight=lambda: _preflight_chapter_mutation(resolved, book_id),
         extra={"title": req.title.strip(), "position": req.position},
     )
-    content_type = _coerce_content_type(req.content_type)
     try:
         chapter = await engine.add_chapter(
             book_id=book_id,
@@ -1887,6 +1887,7 @@ async def deep_dive(req: DeepDiveRequest) -> dict[str, Any]:
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
     engine = resolved.engine
+    content_type = _coerce_content_type(req.content_type)
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
@@ -1894,7 +1895,6 @@ async def deep_dive(req: DeepDiveRequest) -> dict[str, Any]:
         "deep_dive",
         extra={"page_id": req.parent_page_id, "topic": req.topic},
     )
-    content_type = _coerce_content_type(req.content_type)
     try:
         page = await engine.create_deep_dive_subpage(
             book_id=req.book_id,

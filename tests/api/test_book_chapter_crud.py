@@ -83,6 +83,25 @@ def _seed(storage: storage_module.BookStorage, book_id: str = "bk") -> None:
     )
 
 
+@pytest.mark.parametrize(("route", "payload"), [
+    ("bk/chapters", {"title": "Draft", "content_type": "invalid"}),
+    ("deep-dive", {"parent_page_id": "pg_0", "topic": "Draft", "content_type": "invalid"}),
+    ("insert-block", {"page_id": "pg_0", "block_type": "video_lesson"}),
+    ("change-block-type", {"page_id": "pg_0", "block_id": "blk_0", "new_type": "invalid"}),
+])
+def test_rejected_type_preserves_revision_for_next_edit(tmp_path, monkeypatch, route, payload):
+    client, storage = _client(tmp_path, monkeypatch)
+    _seed(storage)
+    body = {"expected_revision": 1, **payload}
+    if route != "bk/chapters":
+        body["book_id"] = "bk"
+    assert client.post(f"/api/books/{route}", json=body).status_code == 400
+    assert storage.load_book("bk").revision == 1
+    assert client.patch("/api/books/bk/chapters/ch_0", json={
+        "title": "Renamed", "expected_revision": 1,
+    }).status_code == 200
+
+
 def test_add_chapter_returns_a_pending_shell_and_advances_revision(tmp_path, monkeypatch) -> None:
     client, storage = _client(tmp_path, monkeypatch)
     _seed(storage)
