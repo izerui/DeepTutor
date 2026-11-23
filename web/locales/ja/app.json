@@ -355,6 +355,7 @@
   "Creating account…": "アカウントを作成中…",
   "Confirm password": "パスワードを確認",
   "Passwords do not match": "パスワードが一致しません",
+  "Confirm new password": "新しいパスワードを確認",
   "Registration failed": "登録に失敗しました",
   "Already have an account?": "すでにアカウントをお持ちですか？",
   "At least 8 characters": "8 文字以上",

@@ -355,6 +355,7 @@
   "Creating account…": "创建账户中…",
   "Confirm password": "确认密码",
   "Passwords do not match": "两次输入的密码不一致",
+  "Confirm new password": "确认新密码",
   "Registration failed": "注册失败",
   "Already have an account?": "已经有账户了？",
   "At least 8 characters": "至少 8 个字符",
