@@ -563,3 +563,101 @@ async def test_session_pagination_handles_offsets_between_pages(fake_pb) -> None
         full = await store.list_sessions(limit=20)
         page = await store.list_sessions(limit=5, offset=7)
         assert [row["session_id"] for row in page] == [row["session_id"] for row in full[7:12]]
+
+
+def _slow_session_updates(fake_pb, monkeypatch, delay: float = 0.05) -> None:
+    """Widen the read-merge-write window so lost updates become deterministic."""
+    import time as _time
+
+    sessions = fake_pb.collection("sessions")
+    update = sessions.update
+
+    def slow_update(record_id, data):
+        _time.sleep(delay)
+        return update(record_id, data)
+
+    monkeypatch.setattr(sessions, "update", slow_update)
+
+
+async def test_concurrent_preference_updates_keep_every_key(fake_pb, monkeypatch) -> None:
+    """Upstream 58afb10b5: PocketBase has no compare-and-set, so merges serialize."""
+    import asyncio
+
+    store = PocketBaseSessionStore()
+    with as_user("alice"):
+        await store.create_session(session_id="thread")
+        _slow_session_updates(fake_pb, monkeypatch)
+        results = await asyncio.gather(
+            store.update_session_preferences("thread", {"tutor_source_message_id": ""}),
+            store.update_session_preferences("thread", {"language": "zh"}),
+        )
+        assert results == [True, True]
+        prefs = (await store.get_session("thread"))["preferences"]
+    assert prefs["tutor_source_message_id"] == ""
+    assert prefs["language"] == "zh"
+
+
+async def test_preference_updates_from_two_event_loops_keep_every_key(fake_pb, monkeypatch) -> None:
+    """The lock must also hold when two loops (threads) share one store."""
+    import asyncio
+    import threading
+
+    store = PocketBaseSessionStore()
+    with as_user("alice"):
+        await store.create_session(session_id="thread")
+    _slow_session_updates(fake_pb, monkeypatch)
+    outcomes: list[bool] = []
+
+    def run(prefs: dict) -> None:
+        with as_user("alice"):
+            outcomes.append(asyncio.run(store.update_session_preferences("thread", prefs)))
+
+    workers = [
+        threading.Thread(target=run, args=({"first": 1},)),
+        threading.Thread(target=run, args=({"second": 2},)),
+    ]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    assert outcomes == [True, True]
+    with as_user("alice"):
+        prefs = (await store.get_session("thread"))["preferences"]
+    assert prefs["first"] == 1
+    assert prefs["second"] == 2
+
+
+async def test_detach_and_preference_update_do_not_overwrite_each_other(fake_pb, monkeypatch) -> None:
+    import asyncio
+
+    store = PocketBaseSessionStore()
+    sessions = fake_pb.collection("sessions")
+    messages = fake_pb.collection("messages")
+    with as_user("alice"):
+        await store.create_session(session_id="parent")
+        source = messages.create({"session_id": "parent"})
+        sessions.create({
+            "user_id": "alice",
+            "session_id": "child",
+            "preferences_json": {"parent_session_id": "parent", "tutor_source_message_id": source.id},
+        })
+        _slow_session_updates(fake_pb, monkeypatch)
+        results = await asyncio.gather(
+            store.update_session_preferences("child", {"language": "zh"}),
+            store.delete_message(source.id),
+        )
+        assert results == [True, True]
+        prefs = (await store.get_session("child"))["preferences"]
+    assert prefs["language"] == "zh"
+    assert prefs["tutor_source_message_id"] == ""
+    assert prefs["tutor_source_deleted"] is True
+
+
+async def test_preference_update_still_refuses_recycled_sessions(fake_pb) -> None:
+    store = PocketBaseSessionStore()
+    with as_user("alice"):
+        await store.create_session(session_id="gone")
+        row = fake_pb.collection("sessions").get_full_list()[0]
+        fake_pb.collection("sessions").update(row.id, {"deleted_at": 123.0})
+        assert not await store.update_session_preferences("gone", {"language": "zh"})
+    assert "language" not in (row.preferences_json or {})

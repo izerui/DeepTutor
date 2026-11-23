@@ -22,6 +22,7 @@ from functools import wraps
 import json
 import logging
 import re
+import threading
 import time
 from typing import Any
 import uuid
@@ -173,9 +174,25 @@ class PocketBaseSessionStore:
     def __init__(self) -> None:
         self._closed = False
         self.store_scope: StoreScope | None = None
+        # Preference writes are read-merge-write over one JSON field and
+        # PocketBase has no compare-and-set (upstream 58afb10b5). Serialize them
+        # per user+session with a threading lock held inside the worker thread,
+        # so two event loops sharing this store are serialized too. Multiple
+        # server instances against one PocketBase still need a single writer.
+        self._prefs_locks: dict[tuple[str, str], threading.Lock] = {}
+        self._prefs_locks_guard = threading.Lock()
         from deeptutor.services.workspace.context import get_workspace_scope
 
         self._workspace_scope = get_workspace_scope()
+
+    def _prefs_lock(self, session_id: str, uid: str) -> threading.Lock:
+        key = (uid, session_id)
+        with self._prefs_locks_guard:
+            lock = self._prefs_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._prefs_locks[key] = lock
+        return lock
 
     @_captured_store_context
     async def close(self) -> None:
@@ -796,8 +813,13 @@ class PocketBaseSessionStore:
     async def update_summary(self, session_id: str, summary: str, up_to_msg_id: int | str) -> bool:
         sid = _validate_id(session_id, "session_id")
         uid = _current_user_id()
+        lock = self._prefs_lock(sid, uid)
 
         def _update():
+            with lock:
+                return _write()
+
+        def _write():
             record = _find_session_record(_pb(), sid, uid)
             if record is None:
                 return False
@@ -832,22 +854,20 @@ class PocketBaseSessionStore:
         self, session_id: str, preferences: dict[str, Any]
     ) -> bool:
         sid = _validate_id(session_id, "session_id")
+        uid = _current_user_id()
+        lock = self._prefs_lock(sid, uid)
 
-        async def _merge():
-            session = await self.get_session(sid)
-            if session is None:
-                return False
-            merged = upgrade_workspace_preferences(
-                {**session.get("preferences", {}), **(preferences or {})}
-            )
-            uid = _current_user_id()
-
-            def _update():
-                record = _find_session_record(_pb(), sid, uid)
+        def _update():
+            # Read inside the lock: merging over a snapshot taken before it
+            # would silently drop a concurrent writer's keys.
+            with lock:
+                record = _find_session_record(_pb(), sid, uid, recycled=False)
                 if record is None:
                     return False
                 current = _json_loads(getattr(record, "preferences_json", None), {})
-                if isinstance(current, dict) and _SUMMARY_CURSOR_PREFERENCE_KEY in current:
+                current = dict(current) if isinstance(current, dict) else {}
+                merged = upgrade_workspace_preferences({**current, **(preferences or {})})
+                if _SUMMARY_CURSOR_PREFERENCE_KEY in current:
                     merged[_SUMMARY_CURSOR_PREFERENCE_KEY] = current[_SUMMARY_CURSOR_PREFERENCE_KEY]
                 _pb().collection("sessions").update(
                     record.id,
@@ -855,10 +875,8 @@ class PocketBaseSessionStore:
                 )
                 return True
 
-            return await asyncio.to_thread(_update)
-
         try:
-            return await _merge()
+            return await asyncio.to_thread(_update)
         except Exception as exc:
             logger.warning(f"update_session_preferences failed: {exc}")
             return False
@@ -958,10 +976,16 @@ class PocketBaseSessionStore:
             for child in children:
                 if child.session_id == sid:
                     continue
-                prefs = _json_loads(child.preferences_json, {})
-                sessions.update(child.id, {"preferences_json": {
-                    **prefs, "tutor_source_message_id": "", "tutor_source_deleted": True,
-                }})
+                with self._prefs_lock(_validate_id(str(child.session_id), "session_id"), owner):
+                    # Re-read under the lock so a concurrent preference write survives.
+                    fresh = _find_session_record(pb, child.session_id, owner) or child
+                    prefs = _json_loads(getattr(fresh, "preferences_json", None), {})
+                    prefs = dict(prefs) if isinstance(prefs, dict) else {}
+                    if prefs.get("tutor_source_message_id") != mid:
+                        continue
+                    sessions.update(fresh.id, {"preferences_json": {
+                        **prefs, "tutor_source_message_id": "", "tutor_source_deleted": True,
+                    }})
             messages.delete(mid)
             return True
 
