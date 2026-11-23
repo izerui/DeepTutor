@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTutorTabMemory } from "@/hooks/useTutorTabMemory";
 import { useChatRouteSession } from "@/features/chat/controllers/useChatRouteSession";
 import { waitForReplyLanguageSave } from "@/features/chat/controllers/reply-language-save";
 
@@ -1814,8 +1815,9 @@ export default function ChatWorkspace() {
     [openTutor, state.messages, state.sessionId],
   );
 
-  const openTutorThread = useCallback(
-    (thread: SessionSummary) => {
+  /** How to reopen a stored Little Tutor thread, from its server record. */
+  const tutorSelectionForThread = useCallback(
+    (thread: SessionSummary): SelectionTutorContext => {
       const preferences = thread.preferences ?? {};
       const rawSource = preferences.tutor_source_message_id;
       const sourceMessageId =
@@ -1826,22 +1828,38 @@ export default function ChatWorkspace() {
         sourceMessageId == null
           ? undefined
           : state.messages.find((item) => item.id === sourceMessageId);
+      return {
+        scope: preferences.tutor_scope === "message" ? "message" : "selection",
+        selectedText: preferences.tutor_selected_text ?? "",
+        parentSessionId: preferences.parent_session_id || state.sessionId,
+        sourceMessageId,
+        sourceMessageText: source?.content ?? "",
+        sourceMessageRole: source?.role ?? "assistant",
+        threadSessionId: thread.session_id,
+        sourceDeleted: Boolean(preferences.tutor_source_deleted),
+      };
+    },
+    [state.messages, state.sessionId],
+  );
+
+  const openTutorThread = useCallback(
+    (thread: SessionSummary) => {
       viewerPanelRef.current?.openSelectionTutorTab(
-        {
-          scope: preferences.tutor_scope === "message" ? "message" : "selection",
-          selectedText: preferences.tutor_selected_text ?? "",
-          parentSessionId: preferences.parent_session_id || state.sessionId,
-          sourceMessageId,
-          sourceMessageText: source?.content ?? "",
-          sourceMessageRole: source?.role ?? "assistant",
-          threadSessionId: thread.session_id,
-          sourceDeleted: Boolean(preferences.tutor_source_deleted),
-        },
+        tutorSelectionForThread(thread),
         state.language,
       );
     },
-    [state.language, state.messages, state.sessionId],
+    [state.language, tutorSelectionForThread],
   );
+
+  const persistTutorTabs = useTutorTabMemory({
+    sessionId: state.sessionId,
+    threads: sessionThreads.threads,
+    threadsLoaded: sessionThreads.loaded,
+    language: state.language,
+    panelRef: viewerPanelRef,
+    selectionForThread: tutorSelectionForThread,
+  });
 
   const deleteTutorThread = useCallback(
     async (thread: SessionSummary) => {
@@ -3039,6 +3057,7 @@ export default function ChatWorkspace() {
               configSection={capabilityConfigSection}
               onClose={() => setViewerOpen(false)}
               onAutoOpen={() => setViewerOpen(true)}
+              onTabsChange={persistTutorTabs}
             />
           </div>
         </div>

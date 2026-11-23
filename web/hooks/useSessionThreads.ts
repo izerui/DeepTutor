@@ -17,6 +17,10 @@ const NO_THREADS: SessionSummary[] = [];
 export interface SessionThreads {
   threads: SessionSummary[];
   byMessageId: ReadonlyMap<string, SessionSummary[]>;
+  /** True once this conversation's threads were read from the server. A
+   *  failed read leaves it false: "none" would be indistinguishable from
+   *  "unknown". */
+  loaded: boolean;
   refresh: () => void;
 }
 
@@ -28,7 +32,8 @@ export function useSessionThreads(
   const [state, setState] = useState<{
     sessionId: string;
     rows: SessionSummary[];
-  }>({ sessionId: "", rows: NO_THREADS });
+    loaded: boolean;
+  }>({ sessionId: "", rows: NO_THREADS, loaded: false });
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
 
@@ -39,19 +44,20 @@ export function useSessionThreads(
     const controller = new AbortController();
     listSessionThreads(sessionId, undefined, controller.signal)
       .then((rows) => {
-        if (!controller.signal.aborted) setState({ sessionId, rows });
+        if (!controller.signal.aborted) setState({ sessionId, rows, loaded: true });
       })
       .catch(() => {
         // A conversation whose threads cannot be read simply has none to show.
         if (!controller.signal.aborted) {
-          setState({ sessionId, rows: NO_THREADS });
+          setState({ sessionId, rows: NO_THREADS, loaded: false });
         }
       });
     return () => controller.abort();
   }, [sessionId, revision]);
 
-  const rows = state.sessionId === sessionId ? state.rows : NO_THREADS;
+  const current = state.sessionId === sessionId;
+  const rows = current ? state.rows : NO_THREADS;
   const byMessageId = useMemo(() => groupThreadsByMessage(rows), [rows]);
 
-  return { threads: rows, byMessageId, refresh };
+  return { threads: rows, byMessageId, loaded: current && state.loaded, refresh };
 }

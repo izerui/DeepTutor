@@ -202,6 +202,16 @@ export interface SessionViewerPanelHandle {
   ): void;
   /** Closes any tab showing this Little Tutor thread (it was deleted). */
   closeTutorThread(threadSessionId: string): void;
+  /** Re-adds Little Tutor tabs after a reload without opening the panel or
+   *  taking focus from a tab the user already picked. */
+  restoreTutorTabs(
+    selections: SelectionTutorContext[],
+    language: string,
+    activeThreadSessionId: string | null,
+  ): void;
+  /** Server threads shown by the open Little Tutor tabs, in tab order;
+   *  null while the panel has not loaded. */
+  openTutorThreads(): { threadIds: string[]; activeThreadId: string | null } | null;
   /** Opens (or focuses) an interactive GeoGebra applet tab. */
   openGeogebraTab(payload: GeogebraTabPayload): void;
   /** Opens (first time) or live-updates a connected subagent's run tab. */
@@ -222,6 +232,8 @@ export interface SessionViewerPanelProps {
   configSection?: ReactNode;
   taskDraftIds?: string[];
   onTaskDraftChange?: (ids: string[]) => void;
+  /** Called after the open tabs or the focused tab changed. */
+  onTabsChange?: () => void;
 }
 
 function webTabIdFor(url: string): string {
@@ -284,12 +296,22 @@ function SessionViewerPanelInner(
     configSection,
     taskDraftIds,
     onTaskDraftChange,
+    onTabsChange,
   }: SessionViewerPanelProps,
   ref: React.Ref<SessionViewerPanelHandle>,
 ) {
   const { t } = useTranslation();
   const [tabs, setTabs] = useState<ViewerTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  // Committed tabs for imperative reads. Child effects run before the parent's,
+  // so the chat shell always reads the tabs of the latest commit.
+  const tabsRef = useRef<ViewerTab[]>(tabs);
+  const activeTabIdRef = useRef<string | null>(activeTabId);
+  useEffect(() => {
+    tabsRef.current = tabs;
+    activeTabIdRef.current = activeTabId;
+    onTabsChange?.();
+  }, [activeTabId, onTabsChange, tabs]);
 
   // Drag-to-resize width. The width is NOT React state — the panel reads it
   // from the ``--viewer-width`` CSS var (so does the chat shell's squeeze),
@@ -499,13 +521,14 @@ function SessionViewerPanelInner(
     [followupController],
   );
 
-  const openSelectionTutorTab = useCallback(
+  /** The tab for a tutor selection, or null when there is nothing to ask. */
+  const selectionTutorTabFor = useCallback(
     (selection: SelectionTutorContext, language: string) => {
       const scope = selection.scope === "message" ? "message" : "selection";
       const selectedText =
         scope === "message" ? "" : normalizeSelectedText(selection.selectedText);
-      if (scope === "selection" && !selectedText) return;
-      if (scope === "message" && selection.sourceMessageId == null) return;
+      if (scope === "selection" && !selectedText) return null;
+      if (scope === "message" && selection.sourceMessageId == null) return null;
       const threadSessionId = selection.threadSessionId || null;
       const questionKey = threadSessionId
         ? `selection-tutor:thread:${threadSessionId}`
@@ -544,7 +567,23 @@ function SessionViewerPanelInner(
           sourceDeleted: Boolean(selection.sourceDeleted),
         },
       };
+      const tab: ViewerTab = {
+        kind: "selection-tutor",
+        id,
+        label: t("Little Tutor"),
+        context,
+      };
+      return { tab, threadSessionId };
+    },
+    [sessionId, t],
+  );
 
+  const openSelectionTutorTab = useCallback(
+    (selection: SelectionTutorContext, language: string) => {
+      const built = selectionTutorTabFor(selection, language);
+      if (!built) return;
+      const { tab, threadSessionId } = built;
+      const id = tab.id;
       setTabs((prev) => {
         const bound = threadSessionId
           ? tabShowingThread(prev, threadSessionId)
@@ -553,13 +592,7 @@ function SessionViewerPanelInner(
           setActiveTabId(bound.id);
           return prev;
         }
-        const existingIdx = prev.findIndex((tab) => tab.id === id);
-        const tab: ViewerTab = {
-          kind: "selection-tutor",
-          id,
-          label: t("Little Tutor"),
-          context,
-        };
+        const existingIdx = prev.findIndex((open) => open.id === id);
         if (existingIdx >= 0) {
           const next = [...prev];
           next[existingIdx] = tab;
@@ -571,8 +604,57 @@ function SessionViewerPanelInner(
       });
       onAutoOpen();
     },
-    [onAutoOpen, sessionId, t, tabShowingThread],
+    [onAutoOpen, selectionTutorTabFor, tabShowingThread],
   );
+
+  const restoreTutorTabs = useCallback(
+    (
+      selections: SelectionTutorContext[],
+      language: string,
+      activeThreadSessionId: string | null,
+    ) => {
+      let next = tabsRef.current;
+      let activeId: string | null = null;
+      for (const selection of selections) {
+        // Only threads that exist on the server come back; a bare tab has no
+        // history to restore.
+        if (!selection.threadSessionId) continue;
+        const built = selectionTutorTabFor(selection, language);
+        if (!built) continue;
+        const bound = tabShowingThread(next, selection.threadSessionId);
+        const tabId = bound?.id ?? built.tab.id;
+        if (!bound && !next.some((open) => open.id === tabId)) {
+          next = [...next, built.tab];
+        }
+        if (selection.threadSessionId === activeThreadSessionId) activeId = tabId;
+      }
+      if (next === tabsRef.current) return;
+      // Synchronous so a read in the same effect pass sees the restored tabs.
+      tabsRef.current = next;
+      setTabs(next);
+      if (activeId && activeTabIdRef.current === null) {
+        activeTabIdRef.current = activeId;
+        setActiveTabId(activeId);
+      }
+    },
+    [selectionTutorTabFor, tabShowingThread],
+  );
+
+  const openTutorThreads = useCallback(() => {
+    const threadIds: string[] = [];
+    let activeThreadId: string | null = null;
+    for (const tab of tabsRef.current) {
+      if (tab.kind !== "selection-tutor") continue;
+      const threadId =
+        tab.context.followupSessionId ||
+        followupController?.getThread(tab.context.questionKey).sessionId ||
+        null;
+      if (!threadId || threadIds.includes(threadId)) continue;
+      threadIds.push(threadId);
+      if (tab.id === activeTabIdRef.current) activeThreadId = threadId;
+    }
+    return { threadIds, activeThreadId };
+  }, [followupController]);
 
   const closeTutorThread = useCallback(
     (threadSessionId: string) => {
@@ -672,6 +754,8 @@ function SessionViewerPanelInner(
       openQuizFollowupTab,
       openSelectionTutorTab,
       closeTutorThread,
+      restoreTutorTabs,
+      openTutorThreads,
       openGeogebraTab,
       openSubagentTab,
       focusActivityHome,
@@ -683,6 +767,8 @@ function SessionViewerPanelInner(
       openQuizFollowupTab,
       openSelectionTutorTab,
       closeTutorThread,
+      restoreTutorTabs,
+      openTutorThreads,
       openGeogebraTab,
       openSubagentTab,
       focusActivityHome,

@@ -95,6 +95,13 @@ const LazySessionViewerPanel = forwardRef<
       // Nothing to close before the panel has ever loaded.
       closeTutorThread: (threadSessionId) =>
         panelRef.current?.closeTutorThread(threadSessionId),
+      restoreTutorTabs: (selections, language, activeThreadSessionId) =>
+        callPanel((panel) =>
+          panel.restoreTutorTabs(selections, language, activeThreadSessionId),
+        ),
+      // Before the panel loads no tab is open, and nothing should be saved.
+      openTutorThreads: () =>
+        panelRef.current?.openTutorThreads() ?? null,
       openGeogebraTab: (payload) =>
         callPanel((panel) => panel.openGeogebraTab(payload)),
       openSubagentTab: (callId, label, events, focus) =>
