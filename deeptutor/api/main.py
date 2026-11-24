@@ -586,6 +586,7 @@ from deeptutor.api.routers import (
     remedial,
     co_writer,
     courses,
+    creations,
     dashboard,
     file_preview,
     imports,
@@ -806,6 +807,12 @@ app.include_router(
     subagents.router, prefix="/api/subagents", tags=["subagents"], dependencies=_auth
 )
 app.include_router(personas.router, prefix="/api", tags=["personas"], dependencies=_auth)
+# Conversational drafts for Skills/Personas. Same ``_auth`` gate as the two
+# form routers above: approving a draft writes through the same services into
+# the caller's own layer, and drafts are readable only by their owner.
+app.include_router(
+    creations.router, prefix="/api/creations", tags=["creations"], dependencies=_auth
+)
 app.include_router(plugins.router, prefix="/api/plugins", tags=["plugins"])
 app.include_router(tools_router.router, prefix="/api/tools", tags=["tools"], dependencies=_auth)
 app.include_router(system.router, prefix="/api/system", tags=["system"], dependencies=_auth)

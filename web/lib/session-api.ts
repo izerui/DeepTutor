@@ -105,6 +105,9 @@ export interface SessionPreferences {
   mastery_path_id?: string;
   /** "outline" | "study" | "review" — what this mastery conversation is for. */
   mastery_session_mode?: string;
+  /** Create mode: the artifact kind ("skill" | "persona") every turn of this
+   *  conversation authors towards; "" / absent when not in create mode. */
+  create_target?: string;
   /** Session-level persona preference; "" / absent = Default (no persona). */
   persona?: string;
   /** What this conversation narrowed its skill / MCP reach to. Absent or empty

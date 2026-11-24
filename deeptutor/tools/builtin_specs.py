@@ -203,6 +203,7 @@ BUILTIN_TOOL_SPECS: tuple[BuiltinToolSpec, ...] = (
     BuiltinToolSpec(
         "propose_partner", "deeptutor.capabilities.partner_authoring.tools:ProposePartnerTool"
     ),
+    BuiltinToolSpec("propose_creation", "deeptutor.capabilities.creator.tools:ProposeCreationTool"),
     BuiltinToolSpec("invoke_other", "deeptutor.capabilities.partner_group.tools:InvokeOtherTool"),
     *_specs(
         "deeptutor.capabilities.course_study.tools",

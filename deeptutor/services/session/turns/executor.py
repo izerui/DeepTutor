@@ -1073,6 +1073,11 @@ class TurnExecutor:
                     "mastery_card_answered": workspace_mode == WORKSPACE_MODE_MASTERY
                     and bool(payload.get("mastery_answer")),
                     "mastery_path_lease_managed": mastery_lease_managed,
+                    # What this conversation is authoring, for the creator
+                    # loop extension (deeptutor.capabilities.creator). Empty
+                    # string, like every other turn-kind flag here, means
+                    # "not active" rather than absent.
+                    "create_target": payload.get("create_target") or "",
                     # Immersive reading: the open material activates the reading
                     # capability and binds its tools; the viewport tells the
                     # model where the user is actually looking.

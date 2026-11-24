@@ -98,6 +98,8 @@ import { authorTurnErrorMessage } from "@/lib/author-path-messages";
 import { extractSetupCredential } from "@/lib/setup-signals";
 import { PartnerDraftCard } from "@/components/chat/home/PartnerDraftCard";
 import { extractPartnerDraft } from "@/lib/partner-draft";
+import { CreationDraftCard } from "@/components/chat/home/CreationDraftCard";
+import { extractCreationDraft } from "@/lib/creation-draft";
 import {
   extractCourseHandoffs,
   stripLeakedHandoffJson,
@@ -990,6 +992,11 @@ export const AssistantMessage = memo(function AssistantMessage({
     [msg.events],
   );
 
+  const creationDraft = useMemo(
+    () => extractCreationDraft(msg.events),
+    [msg.events],
+  );
+
   // Set by ``course_handoff`` when Course Study has decided what is worth doing
   // next. A turn may propose more than one, so this is a list.
   const courseHandoffs = useMemo(
@@ -1365,6 +1372,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           replacing it, and applies to every branch. */}
       {setupCredential ? <SetupCredentialCard data={setupCredential} /> : null}
       {partnerDraft ? <PartnerDraftCard data={partnerDraft} /> : null}
+      {creationDraft ? <CreationDraftCard data={creationDraft} /> : null}
       {/* Course Study's hand-offs sit last: they are what to do *after* reading
           the answer, so they belong below it rather than competing with it. */}
       {courseHandoffs.length > 0 && <CourseHandoffCards handoffs={courseHandoffs} />}
