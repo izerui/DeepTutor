@@ -7,7 +7,7 @@ allowing the rest of the codebase to be store-agnostic.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 # Internal admission fields shared by the store and turn runtime. The runtime
 # consumes them before returning a public turn receipt (#1793).
@@ -263,6 +263,23 @@ class SessionStoreProtocol(SessionRepository, TurnRepository, MessageRepository,
     async def update_session_preferences(
         self, session_id: str, preferences: dict[str, Any]
     ) -> bool: ...
+
+    async def update_session_preferences_if_absent(
+        self,
+        session_id: str,
+        preferences: dict[str, Any],
+        *,
+        absent: Sequence[str],
+        expected: dict[str, Any] | None = None,
+    ) -> bool:
+        """Merge only while every ``absent`` key is missing (or null) and every
+        ``expected`` key still holds its value, without reordering the list.
+
+        A conditional write for derived metadata (the legacy tutor-thread
+        source backfill): it never overwrites a source a turn or move set, nor
+        resurrects one the learner detached after the caller's snapshot.
+        """
+        ...
 
     async def get_session_with_messages(self, session_id: str) -> dict[str, Any] | None: ...
 

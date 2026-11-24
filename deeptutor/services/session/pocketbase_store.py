@@ -24,7 +24,7 @@ import logging
 import re
 import threading
 import time
-from typing import Any
+from typing import Any, Sequence
 import uuid
 
 from deeptutor.services.session.protocol import ActiveTurnConflict
@@ -879,6 +879,51 @@ class PocketBaseSessionStore:
             return await asyncio.to_thread(_update)
         except Exception as exc:
             logger.warning(f"update_session_preferences failed: {exc}")
+            return False
+
+    @_captured_store_context
+    async def update_session_preferences_if_absent(
+        self,
+        session_id: str,
+        preferences: dict[str, Any],
+        *,
+        absent: Sequence[str],
+        expected: dict[str, Any] | None = None,
+    ) -> bool:
+        """Merge only while every ``absent`` key is missing (or null) and every
+        ``expected`` key still holds its value; never touches the list order.
+
+        Checked and written under the same per-account, per-session lock as
+        every other preference write, reading inside it.
+        """
+        sid = _validate_id(session_id, "session_id")
+        uid = _current_user_id()
+        lock = self._prefs_lock(sid, uid)
+        absent_keys = tuple(absent)
+        expected_values = dict(expected or {})
+
+        def _update():
+            with lock:
+                record = _find_session_record(_pb(), sid, uid, recycled=False)
+                if record is None:
+                    return False
+                current = _json_loads(getattr(record, "preferences_json", None), {})
+                if not isinstance(current, dict):
+                    return False
+                if any(current.get(key) is not None for key in absent_keys):
+                    return False
+                if any(current.get(key) != value for key, value in expected_values.items()):
+                    return False
+                merged = upgrade_workspace_preferences({**current, **(preferences or {})})
+                if _SUMMARY_CURSOR_PREFERENCE_KEY in current:
+                    merged[_SUMMARY_CURSOR_PREFERENCE_KEY] = current[_SUMMARY_CURSOR_PREFERENCE_KEY]
+                _pb().collection("sessions").update(record.id, {"preferences_json": merged})
+                return True
+
+        try:
+            return await asyncio.to_thread(_update)
+        except Exception as exc:
+            logger.warning(f"update_session_preferences_if_absent failed: {exc}")
             return False
 
     @_captured_store_context

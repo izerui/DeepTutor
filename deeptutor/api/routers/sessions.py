@@ -468,7 +468,9 @@ async def list_session_threads(session_id: str):
     """Little Tutor threads opened from this conversation, newest first.
 
     The store is the signed-in user's own, so only their threads under their
-    own conversation can ever be listed.
+    own conversation can ever be listed. Threads opened before sources were
+    recorded are attributed here once, when their stored sidebar prompt
+    identifies exactly one message (see ``thread_attribution``).
     """
     store = get_session_store()
     if await store.get_session(session_id) is None:
@@ -480,6 +482,14 @@ async def list_session_threads(session_id: str):
         if str((row.get("preferences") or {}).get("parent_session_id") or "") == session_id
         and (row.get("preferences") or {}).get("session_kind") == "selection_tutor"
     ]
+    try:
+        from deeptutor.services.session.thread_attribution import backfill_thread_sources
+
+        threads = await backfill_thread_sources(store, session_id, threads)
+    except Exception:
+        # Attribution is an enhancement; a conversation whose threads cannot be
+        # recovered still lists exactly as it did before.
+        logger.warning("Little Tutor thread attribution failed", exc_info=True)
     threads.sort(key=lambda row: float(row.get("updated_at") or 0), reverse=True)
     return {"threads": threads}
 
