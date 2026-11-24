@@ -143,6 +143,7 @@ import {
   type ToolName,
 } from "@/features/capabilities/presentation";
 import { useCapabilityCatalog } from "@/features/capabilities/useCapabilityCatalog";
+import { capabilityReadsUserInputs } from "@/features/capabilities/model";
 import { browserStorage } from "@/shared/storage";
 import { downloadChatMarkdown } from "@/lib/chat-export";
 import { buildChatOutline, scrollToChatTurn } from "@/lib/chat-outline";
@@ -273,6 +274,7 @@ export default function ChatWorkspace() {
   const { t } = useTranslation();
   const {
     capabilities,
+    descriptors: capabilityDescriptors,
     visibleCapabilities,
     isLoading: isCapabilityCatalogLoading,
   } = useCapabilityCatalog();
@@ -2152,9 +2154,13 @@ export default function ChatWorkspace() {
       ];
       if (state.isStreaming) {
         // Sent while a turn runs: it waits its turn. Plain words can steer
-        // the running turn at its next step; anything carrying attachments,
-        // references or another mode is a turn of its own.
+        // the running turn at its next step — when that turn reads messages
+        // between steps at all; anything carrying attachments, references or
+        // another mode is a turn of its own.
+        const runningCapability =
+          state.messages.at(-1)?.capability ?? state.activeCapability;
         const plainWords =
+          capabilityReadsUserInputs(capabilityDescriptors, runningCapability) &&
           Boolean(content.trim()) &&
           extraAttachments.length === 0 &&
           !selectedBookReferences.length &&
@@ -2216,6 +2222,9 @@ export default function ChatWorkspace() {
       selectedQuestionEntries.length,
       sendMessage,
       queueMessage,
+      capabilityDescriptors,
+      state.messages,
+      state.activeCapability,
       shouldAutoScrollRef,
       state.isStreaming,
       state.sessionKey,

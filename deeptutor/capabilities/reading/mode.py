@@ -49,6 +49,7 @@ class ImmersiveReadingCapability(TurnCapability):
         stages=["responding"],
         tools_used=[*READING_TOOL_NAMES, "web_search", "exec", "reason"],
         cli_aliases=["reading", "read"],
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBusProtocol) -> None:

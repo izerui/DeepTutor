@@ -322,3 +322,45 @@ async def test_remote_user_input_reaches_the_owner_turn_inbox(monkeypatch, tmp_p
     )
     await runtime_a.close()
     await runtime_b.close()
+
+
+@pytest.mark.asyncio
+async def test_user_input_is_refused_for_a_turn_that_never_reads_it(monkeypatch, tmp_path) -> None:
+    """Accepting a message for a capability outside the agent loop would let it
+    disappear with the turn; the refusal tells the client to keep it."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class Engine:
+        async def execute(self, _context):
+            yield StreamEvent(type=StreamEventType.CONTENT, source="chat", content="working")
+            started.set()
+            await release.wait()
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", _ContextBuilder
+    )
+    monkeypatch.setattr(
+        "deeptutor.runtime.registry.capability_registry.CapabilityRegistry.reads_user_inputs",
+        lambda _self, _name: False,
+    )
+    coordinator = MemoryCoordinator(lease_ttl_seconds=5)
+    store = SQLiteSessionStore(tmp_path / "shared.sqlite3")
+    runtime = TurnRuntimeManager(
+        store, coordinator=coordinator, owner_id="worker-a", turn_engine=Engine()
+    )
+
+    async def _noop_title(**_kwargs):
+        return None
+
+    monkeypatch.setattr(runtime, "_maybe_generate_session_title", _noop_title)
+    app = _application(store, runtime, coordinator)
+    session, turn = await app.start_turn(_payload())
+    await asyncio.wait_for(started.wait(), timeout=2)
+
+    assert not await app.submit_user_input(
+        turn["id"], "Use an example", command_id="in-1", session_id=session["id"]
+    )
+    release.set()
+    await runtime.close()

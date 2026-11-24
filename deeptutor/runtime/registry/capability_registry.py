@@ -170,6 +170,15 @@ class CapabilityRegistry:
         capability = self.catalog.create("turn", name)
         return capability if isinstance(capability, TurnCapability) else None
 
+    def reads_user_inputs(self, name: str) -> bool:
+        """Whether a turn of ``name`` reads messages the learner sends mid-turn.
+
+        Declared by the capability's manifest (``reads_user_inputs``); unknown
+        names and plugin capabilities default to ``False``.
+        """
+        entry = self.catalog.get("turn", name)
+        return bool(entry is not None and getattr(entry.manifest, "reads_user_inputs", False))
+
     def list_capabilities(self) -> list[str]:
         return [manifest["name"] for manifest in self.get_manifests()]
 
@@ -188,6 +197,7 @@ class CapabilityRegistry:
                 "cli_aliases": entry.manifest.cli_aliases,
                 "request_schema": entry.config_model.model_json_schema(mode="validation"),
                 "config_defaults": entry.manifest.config_defaults,
+                "reads_user_inputs": bool(getattr(entry.manifest, "reads_user_inputs", False)),
             }
             for entry in self.catalog.entries("turn")
             if getattr(entry.factory, "_plugin_allowed", lambda: True)()
@@ -212,6 +222,7 @@ class CapabilityRegistry:
                         "cli_aliases": [],
                         "request_schema": EmptyConfig.model_json_schema(mode="validation"),
                         "config_defaults": {},
+                        "reads_user_inputs": False,
                     }
                 )
                 known.add(extension.id)

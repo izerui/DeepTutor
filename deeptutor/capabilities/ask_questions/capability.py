@@ -28,6 +28,7 @@ class AskQuestionsCapability(TurnCapability):
         tools_used=["ask_user"],
         cli_aliases=["ask"],
         request_schema=get_capability_request_schema("chat"),
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBusProtocol) -> None:

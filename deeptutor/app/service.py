@@ -648,6 +648,14 @@ class TurnApplicationService:
             return False
         if session_id and str(turn.get("session_id") or "") != session_id:
             return False
+        from deeptutor.runtime.registry.capability_registry import get_capability_registry
+
+        # A turn outside the agent loop never reads its inbox: refuse rather
+        # than accept words that would disappear with the turn.
+        if not get_capability_registry().reads_user_inputs(
+            str(turn.get("capability") or "") or "chat"
+        ):
+            return False
         if await self.coordinator.get_lease(turn_id) is None:
             return False
         await self.coordinator.submit_command(

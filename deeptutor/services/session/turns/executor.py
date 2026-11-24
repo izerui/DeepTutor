@@ -181,8 +181,15 @@ class TurnExecutor:
         # Cleaned up unconditionally in the outer ``finally``.
         reply_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._reply_queues[turn_id] = reply_queue
-        inbox = TurnInbox()
-        self._inboxes[turn_id] = inbox
+        # Only a capability that runs the agent loop reads messages sent
+        # mid-turn; any other turn gets no inbox, so a message sent to it is
+        # refused and the client keeps it for the next turn.
+        from deeptutor.runtime.registry.capability_registry import get_capability_registry
+
+        inbox: TurnInbox | None = None
+        if get_capability_registry().reads_user_inputs(capability_name or "chat"):
+            inbox = TurnInbox()
+            self._inboxes[turn_id] = inbox
 
         async def _wait_for_user_reply() -> dict[str, Any] | None:
             # Publish the pause so a turn that wants the same mastery path can
@@ -1018,7 +1025,7 @@ class TurnExecutor:
                     previous_model_turn=getattr(history_result, "previous_model_turn", None),
                     turn_id=turn_id,
                     wait_for_user_reply=_wait_for_user_reply,
-                    drain_user_inputs=inbox.drain,
+                    drain_user_inputs=inbox.drain if inbox is not None else None,
                     subagent_consult_budget=payload.get("subagent_consult_budget"),
                     consult_partner_id=payload.get("consult_partner_id"),
                     partner_discussion_group_id=payload.get("partner_discussion_group_id"),

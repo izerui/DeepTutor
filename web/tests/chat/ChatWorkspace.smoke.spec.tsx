@@ -51,6 +51,7 @@ const fixture = vi.hoisted(() => ({
     setCourseId: vi.fn(),
   },
   routeSessionId: null as string | null,
+  descriptors: [] as Array<Record<string, unknown>>,
   listKnowledgeBases: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
   composerProps: null as Record<string, unknown> | null,
   listProps: null as {
@@ -98,6 +99,7 @@ vi.mock('@/features/capabilities/useCapabilityCatalog', () => ({
       },
     ],
     visibleCapabilities: [{ value: '', label: 'Chat', description: '', allowedTools: [] }],
+    descriptors: fixture.descriptors,
     isLoading: false,
   }),
 }))
@@ -293,6 +295,9 @@ describe('ChatWorkspace smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fixture.routeSessionId = null
+    fixture.descriptors = [
+      { id: 'chat', kind: 'turn', available: true, manifest: { reads_user_inputs: true }, configSchema: null },
+    ]
     fixture.listKnowledgeBases.mockResolvedValue([])
     fixture.composerProps = null
     fixture.listProps = null
@@ -485,6 +490,31 @@ describe('ChatWorkspace smoke', () => {
     expect(send[0]).toBe('Explain photosynthesis')
     expect(steerable).toBe(true)
     expect(fixture.adapter.sendMessage).not.toHaveBeenCalled()
+    view.unmount()
+  })
+
+  it('keeps a mid-turn message for the next turn when the running mode never reads it', async () => {
+    fixture.descriptors = [
+      { id: 'chat', kind: 'turn', available: true, manifest: { reads_user_inputs: true }, configSchema: null },
+      { id: 'deep_research', kind: 'turn', available: true, manifest: { reads_user_inputs: false }, configSchema: null },
+    ]
+    const view = renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.newSession).toHaveBeenCalled())
+    applyState({
+      sessionId: 's-1',
+      isStreaming: true,
+      messages: [
+        { id: 1, role: 'user', content: 'Survey FFT papers' },
+        { id: 2, role: 'assistant', content: '', events: [], capability: 'deep_research' },
+      ],
+    })
+    view.rerender(<ChatWorkspace />)
+
+    fireEvent.click(screen.getByText('Send'))
+
+    await waitFor(() => expect(fixture.adapter.queueMessage).toHaveBeenCalledTimes(1))
+    const steerable = (fixture.adapter.queueMessage.mock.calls[0] as unknown as unknown[])[2]
+    expect(steerable).toBe(false)
     view.unmount()
   })
 

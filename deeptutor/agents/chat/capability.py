@@ -20,6 +20,7 @@ class ChatCapability(TurnCapability):
         tools_used=CHAT_OPTIONAL_TOOLS,
         cli_aliases=["chat"],
         request_schema=get_capability_request_schema("chat"),
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBus) -> None:

@@ -64,6 +64,7 @@ class MasteryPathCapability(TurnCapability):
         stages=["responding"],
         tools_used=[*MASTERY_TOOL_NAMES, "rag", "read_source", "ask_user"],
         cli_aliases=["mastery"],
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBusProtocol) -> None:
