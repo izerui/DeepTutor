@@ -161,12 +161,19 @@ export function buildUserInput(input: {
   turnId: string;
   content: string;
   commandId?: string;
+  /** Take back an earlier, still unread message by its command id. */
+  withdraw?: string;
+  /** The conversation the message was typed in; the server checks the turn
+   *  belongs to it. */
+  sessionId?: string | null;
 }): UserInputCommand {
   return {
     type: "user_input",
     turn_id: id(input.turnId, "turn_id"),
     content: input.content,
     command_id: commandId(input.commandId),
+    ...(input.withdraw ? { withdraw: input.withdraw } : {}),
+    ...(input.sessionId ? { session_id: input.sessionId } : {}),
     protocol_version: PROTOCOL_VERSION,
   };
 }

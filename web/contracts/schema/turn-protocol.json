@@ -1786,6 +1786,7 @@
     },
     "UserInputCommand": {
       "additionalProperties": false,
+      "description": "A message for a turn that is still running, read at its next step.",
       "properties": {
         "command_id": {
           "minLength": 1,
@@ -1801,6 +1802,18 @@
           "title": "Protocol Version",
           "type": "string"
         },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
         "turn_id": {
           "minLength": 1,
           "title": "Turn Id",
@@ -1811,6 +1824,18 @@
           "default": "user_input",
           "title": "Type",
           "type": "string"
+        },
+        "withdraw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Withdraw"
         }
       },
       "required": [

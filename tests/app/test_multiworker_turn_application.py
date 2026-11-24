@@ -239,3 +239,128 @@ async def test_remote_cancel_waits_for_waiting_turn_teardown(monkeypatch, tmp_pa
         pass
     await runtime_a.close()
     await runtime_b.close()
+
+
+@pytest.mark.asyncio
+async def test_remote_user_input_reaches_the_owner_turn_inbox(monkeypatch, tmp_path) -> None:
+    """A message sent mid-turn from any worker reaches the running turn.
+
+    It travels as a ``user_input`` command to the worker that owns the turn,
+    which used to hand it to a stream-bus waiter nothing ever registered, so
+    the words were dropped while the client was told they were accepted.
+    """
+    started = asyncio.Event()
+    release = asyncio.Event()
+    read: list[list[dict]] = []
+
+    class Engine:
+        async def execute(self, context):
+            yield StreamEvent(type=StreamEventType.CONTENT, source="chat", content="working")
+            started.set()
+            await release.wait()
+            read.append(context.runtime.drain_user_inputs())
+            yield StreamEvent(type=StreamEventType.CONTENT, source="chat", content="done")
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", _ContextBuilder
+    )
+    coordinator = MemoryCoordinator(lease_ttl_seconds=5)
+    path = tmp_path / "shared.sqlite3"
+    store_a = SQLiteSessionStore(path)
+    store_b = SQLiteSessionStore(path)
+    runtime_a = TurnRuntimeManager(
+        store_a, coordinator=coordinator, owner_id="worker-a", turn_engine=Engine()
+    )
+    runtime_b = TurnRuntimeManager(
+        store_b, coordinator=coordinator, owner_id="worker-b", turn_engine=Engine()
+    )
+
+    async def _noop_title(**_kwargs):
+        return None
+
+    monkeypatch.setattr(runtime_a, "_maybe_generate_session_title", _noop_title)
+    app_a = _application(store_a, runtime_a, coordinator)
+    app_b = _application(store_b, runtime_b, coordinator)
+
+    session, turn = await app_a.start_turn(_payload())
+    await asyncio.wait_for(started.wait(), timeout=2)
+
+    # Only the conversation the turn belongs to may steer it.
+    assert not await app_b.submit_user_input(
+        turn["id"], "Wrong tab", command_id="in-x", session_id="other-session"
+    )
+    assert await app_b.submit_user_input(
+        turn["id"], "Use an example", command_id="in-1", session_id=session["id"]
+    )
+    assert await app_b.submit_user_input(
+        turn["id"], "Never mind this one", command_id="in-2", session_id=session["id"]
+    )
+    assert await app_b.submit_user_input(
+        turn["id"], "", command_id="w-1", withdraw="in-2", session_id=session["id"]
+    )
+    # A retried delivery of the same command is accepted but not queued twice.
+    assert await app_b.submit_user_input(
+        turn["id"], "Use an example", command_id="in-1", session_id=session["id"]
+    )
+    inbox = runtime_a._inboxes[turn["id"]]
+    for _ in range(200):
+        if {"in-1", "in-2"} <= inbox._seen and "in-2" not in inbox._items:
+            break
+        await asyncio.sleep(0.01)
+    release.set()
+    for _ in range(300):
+        persisted = await store_b.get_turn(turn["id"])
+        if persisted and persisted["status"] == "completed":
+            break
+        await asyncio.sleep(0.01)
+
+    assert read == [[{"command_id": "in-1", "content": "Use an example"}]]
+    # Once the turn has ended the client is told so and keeps the message.
+    assert not await app_b.submit_user_input(
+        turn["id"], "Too late", command_id="in-3", session_id=session["id"]
+    )
+    await runtime_a.close()
+    await runtime_b.close()
+
+
+@pytest.mark.asyncio
+async def test_user_input_is_refused_for_a_turn_that_never_reads_it(monkeypatch, tmp_path) -> None:
+    """Accepting a message for a capability outside the agent loop would let it
+    disappear with the turn; the refusal tells the client to keep it."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class Engine:
+        async def execute(self, _context):
+            yield StreamEvent(type=StreamEventType.CONTENT, source="chat", content="working")
+            started.set()
+            await release.wait()
+
+    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        "deeptutor.services.session.context_builder.ContextBuilder", _ContextBuilder
+    )
+    monkeypatch.setattr(
+        "deeptutor.runtime.registry.capability_registry.CapabilityRegistry.reads_user_inputs",
+        lambda _self, _name: False,
+    )
+    coordinator = MemoryCoordinator(lease_ttl_seconds=5)
+    store = SQLiteSessionStore(tmp_path / "shared.sqlite3")
+    runtime = TurnRuntimeManager(
+        store, coordinator=coordinator, owner_id="worker-a", turn_engine=Engine()
+    )
+
+    async def _noop_title(**_kwargs):
+        return None
+
+    monkeypatch.setattr(runtime, "_maybe_generate_session_title", _noop_title)
+    app = _application(store, runtime, coordinator)
+    session, turn = await app.start_turn(_payload())
+    await asyncio.wait_for(started.wait(), timeout=2)
+
+    assert not await app.submit_user_input(
+        turn["id"], "Use an example", command_id="in-1", session_id=session["id"]
+    )
+    release.set()
+    await runtime.close()

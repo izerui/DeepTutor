@@ -41,6 +41,11 @@ class CapabilityManifest:
     cli_aliases: list[str] = field(default_factory=list)
     request_schema: dict[str, Any] = field(default_factory=dict)
     config_defaults: dict[str, Any] = field(default_factory=dict)
+    #: The turn runs the shared agent loop (``AgentLoop._run_loop``), which
+    #: reads the turn inbox before every model call, so a message the learner
+    #: sends mid-turn can steer it. Anything else never reads that inbox: such
+    #: a turn gets none, and a mid-turn message waits for the next turn.
+    reads_user_inputs: bool = False
 
 
 class TurnCapability(ABC):

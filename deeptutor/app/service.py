@@ -632,17 +632,36 @@ class TurnApplicationService:
         content: str,
         *,
         command_id: str | None = None,
+        withdraw: str | None = None,
+        session_id: str | None = None,
     ) -> bool:
+        """Offer a message to a running turn's inbox, or take one back.
+
+        Only a turn the caller's store can see (their own), still live, owned
+        by a worker, and — when the client names it — in the conversation the
+        message was typed in. Anything else is refused so the client keeps the
+        message and sends it as the next turn instead.
+        """
         store, _runtime = self._resolve()
-        if (
-            await store.get_turn(turn_id) is None
-            or await self.coordinator.get_lease(turn_id) is None
+        turn = await store.get_turn(turn_id)
+        if turn is None or turn.get("status") not in {"running", "waiting_input"}:
+            return False
+        if session_id and str(turn.get("session_id") or "") != session_id:
+            return False
+        from deeptutor.runtime.registry.capability_registry import get_capability_registry
+
+        # A turn outside the agent loop never reads its inbox: refuse rather
+        # than accept words that would disappear with the turn.
+        if not get_capability_registry().reads_user_inputs(
+            str(turn.get("capability") or "") or "chat"
         ):
+            return False
+        if await self.coordinator.get_lease(turn_id) is None:
             return False
         await self.coordinator.submit_command(
             turn_id,
             "user_input",
-            {"content": content},
+            {"content": content, "withdraw": withdraw},
             command_id=command_id,
         )
         return True

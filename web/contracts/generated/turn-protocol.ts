@@ -129,10 +129,12 @@ export type Type8 = "submit_user_reply";
 export type CommandId2 = string;
 export type Content1 = string;
 export type ProtocolVersion8 = "2.0";
+export type SessionId4 = string | null;
 export type TurnId5 = string;
 export type Type9 = "user_input";
+export type Withdraw = string | null;
 export type ProtocolVersion9 = "2.0";
-export type SessionId4 = string;
+export type SessionId5 = string;
 export type Type10 = "check_active_turn";
 export type ProtocolVersion10 = "2.0";
 export type Type11 = "ping";
@@ -165,7 +167,7 @@ export type ServerEvent =
 export type Content2 = string;
 export type ProtocolVersion13 = "2.0";
 export type Seq1 = number;
-export type SessionId5 = string;
+export type SessionId6 = string;
 export type Source = string;
 export type Stage = string;
 export type Timestamp = number;
@@ -223,7 +225,7 @@ export type ErrorCode2 = string;
 export type Message2 = string;
 export type ProtocolVersion17 = "2.0";
 export type Retryable1 = boolean;
-export type SessionId6 = string;
+export type SessionId7 = string;
 export type TurnId9 = string;
 export type Type15 = "protocol_error";
 export type Capability1 = string;
@@ -245,7 +247,7 @@ export type Id1 = string;
 export type LastSeq = number;
 export type OwnerId1 = string;
 export type Retryable2 = boolean;
-export type SessionId7 = string;
+export type SessionId8 = string;
 /**
  * This interface was referenced by `TurnProtocolDocument`'s JSON-Schema
  * via the `definition` "TurnStatus".
@@ -511,6 +513,8 @@ export interface UserAnswer {
   text?: Text1;
 }
 /**
+ * A message for a turn that is still running, read at its next step.
+ *
  * This interface was referenced by `TurnProtocolDocument`'s JSON-Schema
  * via the `definition` "UserInputCommand".
  */
@@ -518,8 +522,10 @@ export interface UserInputCommand {
   command_id: CommandId2;
   content: Content1;
   protocol_version: ProtocolVersion8;
+  session_id?: SessionId4;
   turn_id: TurnId5;
   type?: Type9;
+  withdraw?: Withdraw;
 }
 /**
  * This interface was referenced by `TurnProtocolDocument`'s JSON-Schema
@@ -527,7 +533,7 @@ export interface UserInputCommand {
  */
 export interface CheckActiveTurnCommand {
   protocol_version: ProtocolVersion9;
-  session_id: SessionId4;
+  session_id: SessionId5;
   type?: Type10;
 }
 /**
@@ -577,7 +583,7 @@ export interface StreamEvent {
   metadata?: Metadata;
   protocol_version?: ProtocolVersion13;
   seq?: Seq1;
-  session_id?: SessionId5;
+  session_id?: SessionId6;
   source?: Source;
   stage?: Stage;
   timestamp: Timestamp;
@@ -629,7 +635,7 @@ export interface ProtocolErrorEvent {
   message: Message2;
   protocol_version?: ProtocolVersion17;
   retryable?: Retryable1;
-  session_id?: SessionId6;
+  session_id?: SessionId7;
   turn_id?: TurnId9;
   type?: Type15;
 }
@@ -660,7 +666,7 @@ export interface TurnSummary {
   owner_id?: OwnerId1;
   query_state?: TurnQueryState | null;
   retryable?: Retryable2;
-  session_id: SessionId7;
+  session_id: SessionId8;
   status: TurnStatus;
   updated_at?: UpdatedAt;
 }

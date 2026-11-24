@@ -6195,5 +6195,12 @@
   "customize.learningHint": "Wähle die Lernmethoden auf dieser Seite. Ausgeblendete Methoden lassen sich jederzeit wieder hinzufügen.",
   "customize.emptyLearning": "Bereite dein nächstes Lernziel vor",
   "customize.emptyLearningHint": "Passe diese Seite an, um Lernmethoden anzuzeigen. Nicht verfügbare Module findest du unter Einstellungen → Laufzeit.",
-  "customize.learningFooter": "Deine Auswahl wird in deinem Konto gespeichert. Es werden nur verfügbare Lernmethoden angezeigt."
+  "customize.learningFooter": "Deine Auswahl wird in deinem Konto gespeichert. Es werden nur verfügbare Lernmethoden angezeigt.",
+  "Queued messages": "Wartende Nachrichten",
+  "Sending…": "Wird gesendet…",
+  "Read after this step": "Wird nach diesem Schritt gelesen",
+  "Sent after this reply": "Wird nach dieser Antwort gesendet",
+  "Remove from queue": "Aus der Warteschlange entfernen",
+  "Queue message": "Nachricht einreihen",
+  "You, while it worked": "Du, während es arbeitete"
 }

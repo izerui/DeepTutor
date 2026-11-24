@@ -6175,5 +6175,12 @@
   "customize.learningHint": "このページに表示する学習方法を選択します。非表示にした方法はいつでも再び追加できます。",
   "customize.emptyLearning": "次の学習目標のための余白を作りましょう",
   "customize.emptyLearningHint": "このページをカスタマイズして学習方法を表示します。利用できないモジュールは、設定 → ランタイムで確認できます。",
-  "customize.learningFooter": "選択内容はアカウントに保存されます。この環境で利用できる学習方法のみが表示されます。"
+  "customize.learningFooter": "選択内容はアカウントに保存されます。この環境で利用できる学習方法のみが表示されます。",
+  "Queued messages": "送信待ちのメッセージ",
+  "Sending…": "送信中…",
+  "Read after this step": "このステップの後に読み込み",
+  "Sent after this reply": "この返信の後に送信",
+  "Remove from queue": "キューから取り消す",
+  "Queue message": "メッセージを送信待ちにする",
+  "You, while it worked": "処理中にあなたが追加"
 }

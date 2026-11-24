@@ -276,14 +276,17 @@ def _stamp_content_offset(
     tool call and card would pile up at one end and the reload would not
     resemble what the reader watched.
 
-    Two kinds of event carry the mark: a resolved ``ask_user`` card, and the
-    start of a tool call. Both are rendered between runs of answer text.
+    Three kinds of event carry the mark: a resolved ``ask_user`` card, the
+    start of a tool call, and a message the learner sent mid-turn that the
+    turn read. All are rendered between runs of answer text.
     """
     metadata = payload_event.get("metadata")
     if not isinstance(metadata, dict):
         return
-    anchors_layout = bool(metadata.get("ask_user_resolved")) or (
-        payload_event.get("type") == StreamEventType.TOOL_CALL.value
+    anchors_layout = (
+        bool(metadata.get("ask_user_resolved"))
+        or metadata.get("trace_kind") == "user_input"
+        or payload_event.get("type") == StreamEventType.TOOL_CALL.value
     )
     if anchors_layout:
         metadata.setdefault("assistant_content_offset", len(assistant_content))

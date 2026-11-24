@@ -66,6 +66,24 @@ function descriptorFrom(value: unknown): CapabilityDescriptor | null {
   };
 }
 
+/**
+ * Whether a turn of ``capability`` reads messages the learner sends mid-turn.
+ *
+ * The backend declares it per capability (``manifest.reads_user_inputs``):
+ * only turns that run the shared agent loop read the turn's inbox between
+ * steps. ``""``/``null`` is the default chat capability. Anything not declared
+ * — including an unloaded catalog — is treated as not reading, so a message is
+ * kept for the next turn rather than offered to a turn that would drop it.
+ */
+export function capabilityReadsUserInputs(
+  descriptors: readonly CapabilityDescriptor[],
+  capability: string | null | undefined,
+): boolean {
+  const id = capability || "chat";
+  const descriptor = descriptors.find((item) => item.id === id);
+  return descriptor?.manifest?.reads_user_inputs === true;
+}
+
 export function parseCapabilityCatalogPayload(
   payload: unknown,
 ): CapabilityDescriptor[] {

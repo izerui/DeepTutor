@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  capabilityReadsUserInputs,
   parseCapabilityCatalogPayload,
   sanitizeCapabilityConfig,
 } from "../features/capabilities/model";
@@ -165,4 +166,27 @@ test("component-owned capability types cannot return", () => {
     fs.existsSync(path.resolve(process.cwd(), "lib/chat-capabilities.ts")),
     false,
   );
+});
+
+test("only a capability whose manifest says so reads messages sent mid-turn", () => {
+  const catalog = parseCapabilityCatalogPayload({
+    capabilities: [
+      { id: "chat", manifest: { reads_user_inputs: true } },
+      { id: "deep_solve", manifest: { reads_user_inputs: true } },
+      { id: "deep_research", manifest: { reads_user_inputs: false } },
+      { id: "extension_lab", manifest: {} },
+      "bare_plugin",
+    ],
+  });
+
+  // The plain chat surface sends "" for the default capability.
+  assert.equal(capabilityReadsUserInputs(catalog, ""), true);
+  assert.equal(capabilityReadsUserInputs(catalog, null), true);
+  assert.equal(capabilityReadsUserInputs(catalog, "deep_solve"), true);
+  assert.equal(capabilityReadsUserInputs(catalog, "deep_research"), false);
+  assert.equal(capabilityReadsUserInputs(catalog, "extension_lab"), false);
+  assert.equal(capabilityReadsUserInputs(catalog, "bare_plugin"), false);
+  assert.equal(capabilityReadsUserInputs(catalog, "unknown"), false);
+  // Without a catalog nothing is offered to the turn: it waits for the next one.
+  assert.equal(capabilityReadsUserInputs([], ""), false);
 });

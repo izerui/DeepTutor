@@ -33,6 +33,8 @@ const fixture = vi.hoisted(() => ({
     setResourceSelection: vi.fn(),
     setReplyLanguageOverride: vi.fn(() => Promise.resolve()),
     sendMessage: vi.fn(),
+    queueMessage: vi.fn(),
+    withdrawQueuedMessage: vi.fn(),
     cancelStreamingTurn: vi.fn(),
     submitUserReply: vi.fn(async () => true),
     regenerateLastMessage: vi.fn(),
@@ -49,6 +51,7 @@ const fixture = vi.hoisted(() => ({
     setCourseId: vi.fn(),
   },
   routeSessionId: null as string | null,
+  descriptors: [] as Array<Record<string, unknown>>,
   listKnowledgeBases: vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
   composerProps: null as Record<string, unknown> | null,
   listProps: null as {
@@ -96,6 +99,7 @@ vi.mock('@/features/capabilities/useCapabilityCatalog', () => ({
       },
     ],
     visibleCapabilities: [{ value: '', label: 'Chat', description: '', allowedTools: [] }],
+    descriptors: fixture.descriptors,
     isLoading: false,
   }),
 }))
@@ -259,6 +263,7 @@ function emptyChatState(): ChatState {
     submissionErrorMessage: '',
     submissionNeedsReview: false,
     submissionNotSaved: false,
+    queuedMessages: [],
   }
 }
 
@@ -290,6 +295,9 @@ describe('ChatWorkspace smoke', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fixture.routeSessionId = null
+    fixture.descriptors = [
+      { id: 'chat', kind: 'turn', available: true, manifest: { reads_user_inputs: true }, configSchema: null },
+    ]
     fixture.listKnowledgeBases.mockResolvedValue([])
     fixture.composerProps = null
     fixture.listProps = null
@@ -452,6 +460,61 @@ describe('ChatWorkspace smoke', () => {
     expect(screen.getByTestId('composer')).toHaveAttribute('data-streaming', 'false')
     // No error banner while the turn is healthy.
     expect(screen.queryByRole('alert')).toBeNull()
+    view.unmount()
+  })
+
+  it('queues a message sent mid-turn instead of dropping it', async () => {
+    const view = renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.newSession).toHaveBeenCalled())
+    applyState({
+      sessionId: 's-1',
+      isStreaming: true,
+      messages: [
+        { id: 1, role: 'user', content: 'Explain FFT' },
+        { id: 2, role: 'assistant', content: '', events: [] },
+      ],
+    })
+    view.rerender(<ChatWorkspace />)
+    expect(fixture.composerProps?.queueWhileStreaming).toBe(true)
+
+    fireEvent.click(screen.getByText('Send'))
+
+    // Plain words can steer the running turn; nothing starts a second turn.
+    await waitFor(() => expect(fixture.adapter.queueMessage).toHaveBeenCalledTimes(1))
+    const [content, send, steerable] = fixture.adapter.queueMessage.mock.calls[0] as unknown as [
+      string,
+      unknown[],
+      boolean,
+    ]
+    expect(content).toBe('Explain photosynthesis')
+    expect(send[0]).toBe('Explain photosynthesis')
+    expect(steerable).toBe(true)
+    expect(fixture.adapter.sendMessage).not.toHaveBeenCalled()
+    view.unmount()
+  })
+
+  it('keeps a mid-turn message for the next turn when the running mode never reads it', async () => {
+    fixture.descriptors = [
+      { id: 'chat', kind: 'turn', available: true, manifest: { reads_user_inputs: true }, configSchema: null },
+      { id: 'deep_research', kind: 'turn', available: true, manifest: { reads_user_inputs: false }, configSchema: null },
+    ]
+    const view = renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.newSession).toHaveBeenCalled())
+    applyState({
+      sessionId: 's-1',
+      isStreaming: true,
+      messages: [
+        { id: 1, role: 'user', content: 'Survey FFT papers' },
+        { id: 2, role: 'assistant', content: '', events: [], capability: 'deep_research' },
+      ],
+    })
+    view.rerender(<ChatWorkspace />)
+
+    fireEvent.click(screen.getByText('Send'))
+
+    await waitFor(() => expect(fixture.adapter.queueMessage).toHaveBeenCalledTimes(1))
+    const steerable = (fixture.adapter.queueMessage.mock.calls[0] as unknown as unknown[])[2]
+    expect(steerable).toBe(false)
     view.unmount()
   })
 

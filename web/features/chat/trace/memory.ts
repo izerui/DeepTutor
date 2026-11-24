@@ -43,9 +43,14 @@ function carriesCard(event: StreamEvent): boolean {
   );
 }
 
+/** What the learner sent mid-turn: conversation, not working-out. */
+function carriesLearnerWords(event: StreamEvent): boolean {
+  return metadata(event).trace_kind === "user_input";
+}
+
 function isSemantic(event: StreamEvent): boolean {
   if (SEMANTIC_TYPES.has(String(event.type ?? ""))) return true;
-  return carriesCard(event);
+  return carriesCard(event) || carriesLearnerWords(event);
 }
 
 function isCritical(event: StreamEvent): boolean {
@@ -55,7 +60,7 @@ function isCritical(event: StreamEvent): boolean {
   ) {
     return true;
   }
-  return carriesCard(event);
+  return carriesCard(event) || carriesLearnerWords(event);
 }
 
 function boundLegacyPayload(event: StreamEvent): StreamEvent {

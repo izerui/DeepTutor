@@ -64,6 +64,8 @@ loop:
     This round's tool budget is spent. Stop calling tools, tell the learner what you did work out, and say what you plan to do next.
   settle_exhausted: |-
     This round's exploration budget is spent. Start no new searches or optional work — finish only the recording or grading already under way, then say your piece to the learner.
+  user_sent_while_working: |-
+    [The user sent this while you were working. Take it into account from here on: answer it, or adjust what you are doing.]
 
 # What each mode is for. Only the current one is injected per turn; when the
 # mode changes mid-turn, ``mastery_mode`` carries the new block down inside its

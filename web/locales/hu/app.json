@@ -6195,5 +6195,12 @@
   "customize.learningHint": "Válassza ki az ezen az oldalon megjelenő tanulási módszereket. A rejtett módszereket bármikor visszaveheti.",
   "customize.emptyLearning": "Tegyen helyet a következő tanulási céljának",
   "customize.emptyLearningHint": "A tanulási módszerek megjelenítéséhez szabja személyre ezt az oldalt. Az elérhetetlen modulokat a Beállítások → Futtatókörnyezet alatt tekintheti át.",
-  "customize.learningFooter": "A választásai a fiókjához mentődnek. Csak az ebben a környezetben elérhető tanulási módszerek láthatók."
+  "customize.learningFooter": "A választásai a fiókjához mentődnek. Csak az ebben a környezetben elérhető tanulási módszerek láthatók.",
+  "Queued messages": "Várakozó üzenetek",
+  "Sending…": "Küldés…",
+  "Read after this step": "Ez után a lépés után olvassa el",
+  "Sent after this reply": "Ez után a válasz után küldjük",
+  "Remove from queue": "Eltávolítás a sorból",
+  "Queue message": "Üzenet sorba állítása",
+  "You, while it worked": "Te, munka közben"
 }

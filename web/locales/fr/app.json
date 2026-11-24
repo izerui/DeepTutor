@@ -6215,5 +6215,12 @@
   "customize.learningHint": "Choisissez les méthodes d’apprentissage affichées. Vous pouvez rétablir les méthodes masquées à tout moment.",
   "customize.emptyLearning": "Préparez votre prochain objectif d’apprentissage",
   "customize.emptyLearningHint": "Personnalisez cette page pour afficher les méthodes. Consultez les modules indisponibles dans Paramètres → Exécution.",
-  "customize.learningFooter": "Vos choix sont enregistrés dans votre compte. Seules les méthodes disponibles sont affichées."
+  "customize.learningFooter": "Vos choix sont enregistrés dans votre compte. Seules les méthodes disponibles sont affichées.",
+  "Queued messages": "Messages en attente",
+  "Sending…": "Envoi…",
+  "Read after this step": "Lu après cette étape",
+  "Sent after this reply": "Envoyé après cette réponse",
+  "Remove from queue": "Retirer de la file",
+  "Queue message": "Mettre le message en attente",
+  "You, while it worked": "Vous, pendant le traitement"
 }

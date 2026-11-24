@@ -6239,5 +6239,12 @@
   "customize.learningHint": "Wybierz metody nauki na tej stronie. Ukryte metody możesz przywrócić w dowolnej chwili.",
   "customize.emptyLearning": "Przygotuj się na kolejny cel nauki",
   "customize.emptyLearningHint": "Dostosuj stronę, aby wyświetlić metody nauki. Niedostępne moduły sprawdzisz w Ustawienia → Środowisko uruchomieniowe.",
-  "customize.learningFooter": "Twój wybór zostanie zapisany na koncie. Wyświetlane są tylko dostępne metody nauki."
+  "customize.learningFooter": "Twój wybór zostanie zapisany na koncie. Wyświetlane są tylko dostępne metody nauki.",
+  "Queued messages": "Wiadomości w kolejce",
+  "Sending…": "Wysyłanie…",
+  "Read after this step": "Zostanie odczytana po tym kroku",
+  "Sent after this reply": "Zostanie wysłana po tej odpowiedzi",
+  "Remove from queue": "Usuń z kolejki",
+  "Queue message": "Dodaj wiadomość do kolejki",
+  "You, while it worked": "Ty, w trakcie pracy"
 }
