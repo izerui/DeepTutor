@@ -55,6 +55,7 @@ from .._turn_runtime_shared import (
     _TurnExecution,
     _workspace_mode,
 )
+from .inbox import TurnInbox
 
 if TYPE_CHECKING:
     from deeptutor.runtime.coordination import RuntimeCoordinator
@@ -78,6 +79,7 @@ class TurnExecutor:
         _lock: asyncio.Lock
         _executions: dict[str, _TurnExecution]
         _reply_queues: dict[str, asyncio.Queue[dict[str, Any] | None]]
+        _inboxes: dict[str, TurnInbox]
 
         def _create_context_builder(self, *, tutoring: bool = False) -> Any: ...
 
@@ -179,6 +181,8 @@ class TurnExecutor:
         # Cleaned up unconditionally in the outer ``finally``.
         reply_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._reply_queues[turn_id] = reply_queue
+        inbox = TurnInbox()
+        self._inboxes[turn_id] = inbox
 
         async def _wait_for_user_reply() -> dict[str, Any] | None:
             # Publish the pause so a turn that wants the same mastery path can
@@ -1014,6 +1018,7 @@ class TurnExecutor:
                     previous_model_turn=getattr(history_result, "previous_model_turn", None),
                     turn_id=turn_id,
                     wait_for_user_reply=_wait_for_user_reply,
+                    drain_user_inputs=inbox.drain,
                     subagent_consult_budget=payload.get("subagent_consult_budget"),
                     consult_partner_id=payload.get("consult_partner_id"),
                     partner_discussion_group_id=payload.get("partner_discussion_group_id"),
@@ -1508,6 +1513,7 @@ class TurnExecutor:
             # that finds the queue gone will return ``False`` rather than
             # accumulating on a dead turn.
             self._reply_queues.pop(turn_id, None)
+            self._inboxes.pop(turn_id, None)
             if bool(payload.get("mastery_path_lease_managed")):
                 from deeptutor.learning.storage import LearningStore
 

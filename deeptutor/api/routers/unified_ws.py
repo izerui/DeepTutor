@@ -366,6 +366,8 @@ async def unified_websocket(ws: WebSocket) -> None:
                     turn_id,
                     str(msg.get("content") or ""),
                     command_id=str(msg["command_id"]),
+                    withdraw=str(msg.get("withdraw") or "") or None,
+                    session_id=str(msg.get("session_id") or "") or None,
                 )
                 if not accepted:
                     await send_command_ack(

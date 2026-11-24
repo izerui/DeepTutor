@@ -484,6 +484,7 @@ class AgentLoop:
                     settlement_started = True
             round_max_tokens = next_round_max_tokens or self.pipeline.loop_max_tokens
             next_round_max_tokens = None
+            await self._read_inbox(messages)
             try:
                 result = await self._call_llm(
                     messages=messages,
@@ -903,6 +904,39 @@ class AgentLoop:
                     final_text=_join_answer_parts(continued_answer_parts, terminal_text),
                     completed=True,
                 )
+
+    async def _read_inbox(self, messages: list[dict[str, Any]]) -> None:
+        """Hand the model what the learner sent while the turn was running.
+
+        Read at every step boundary — before each model call, so after the
+        tool batch in flight — and appended as the learner's own words; the
+        trace row puts the message in the transcript where it was read.
+        """
+        drain = self.context.runtime.drain_user_inputs
+        inputs = drain() if drain is not None else []
+        if not inputs:
+            return
+        lead = self.pipeline._t(
+            "loop.user_sent_while_working",
+            default=(
+                "[The user sent this while you were working. Take it into account from "
+                "here on: answer it, or adjust what you are doing.]"
+            ),
+        )
+        said = "\n\n".join(str(item["content"]) for item in inputs)
+        self._append_loop_instruction(messages, f"{lead}\n{said}")
+        await self.stream.progress(
+            "",
+            source=self.source,
+            stage=self.stage,
+            metadata={
+                "trace_kind": "user_input",
+                "user_inputs": [
+                    {"command_id": item["command_id"], "content": item["content"]}
+                    for item in inputs
+                ],
+            },
+        )
 
     async def _begin_settlement(self, messages: list[dict[str, Any]]) -> None:
         """Enter the bounded post-budget phase without dropping tool state."""
