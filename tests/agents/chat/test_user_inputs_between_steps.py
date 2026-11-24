@@ -172,3 +172,16 @@ def test_the_shared_trace_preview_keeps_what_the_learner_sent_mid_way() -> None:
 
     assert omitted
     assert preview[0] is said or preview[0] == said
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [("zh", "用户在你工作时发来了"), ("en", "The user sent this while you were working")],
+)
+def test_mastery_turns_introduce_a_mid_turn_message_in_the_learner_language(
+    language, expected
+) -> None:
+    from deeptutor.capabilities.mastery.pipeline import MasteryLoopPipeline
+
+    lead = MasteryLoopPipeline(language=language)._t("loop.user_sent_while_working")
+    assert expected in lead
