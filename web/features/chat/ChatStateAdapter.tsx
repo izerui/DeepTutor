@@ -204,6 +204,11 @@ export interface ChatState {
    *  picks the tutor's prompt block and narrows its tool surface, so a session
    *  that changed it mid-way would hand itself tools its kind withholds. */
   masterySessionMode: string | null;
+  /** Create mode: the artifact kind ("skill" | "persona") this conversation
+   *  is authoring, or null outside create mode. Sent on every turn (never
+   *  reset after send — only an explicit removal or mode change clears it)
+   *  and persisted on the session preferences. */
+  createTarget: string | null;
   /** Study course this conversation belongs to; "" = unclassified.
    *  Read by the composer's course pill and sent with every turn, so Course
    *  Study senses the same course the learner can see it is bound to. */
@@ -249,6 +254,7 @@ export interface SessionConfiguration {
   knowledgeBases?: string[];
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
   enabledTools?: string[];
@@ -319,6 +325,7 @@ export interface MessageRequestSnapshot {
   masterySkip?: { question_id: string };
   timedMediaId?: string;
   persona?: string;
+  createTarget?: string | null;
   memoryReferences?: MemoryReferencePayload;
   llmSelection?: LLMSelection | null;
   /** Stable identity of the material open for this turn. */
@@ -408,6 +415,7 @@ interface SessionSnapshot {
   llmSelection?: LLMSelection | null;
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
   personaSelection?: string;
@@ -432,6 +440,7 @@ type Action =
   | { type: "SET_COURSE_ID"; courseId: string }
   | { type: "SET_PERSONA_SELECTION"; persona: string }
   | { type: "SET_RESOURCE_SELECTION"; selection: ResourceSelection }
+  | { type: "SET_CREATE_TARGET"; createTarget: string | null }
   | { type: "SET_LANGUAGE"; lang: string }
   | { type: "SET_REPLY_LANGUAGE_OVERRIDE"; key: string; language: string | null }
   | {
@@ -533,6 +542,7 @@ function createSessionEntry(
     llmSelection: null,
     masteryPathId: null,
     masterySessionMode: null,
+    createTarget: null,
     workspaceId: activeWorkspaceId() || null,
     courseId: "",
     personaSelection: "",
@@ -799,6 +809,11 @@ function reducer(state: ProviderState, action: Action): ProviderState {
       return updateSelectedSession(state, (session) => ({
         ...session,
         resourceSelection: action.selection,
+      }));
+    case "SET_CREATE_TARGET":
+      return updateSelectedSession(state, (session) => ({
+        ...session,
+        createTarget: action.createTarget,
       }));
     case "SET_LANGUAGE":
       return updateSelectedSession(state, (session) => ({
@@ -1306,6 +1321,10 @@ function reducer(state: ProviderState, action: Action): ProviderState {
               action.masterySessionMode !== undefined
                 ? action.masterySessionMode
                 : existing.masterySessionMode,
+            createTarget:
+              action.createTarget !== undefined
+                ? action.createTarget
+                : existing.createTarget,
             workspaceId: action.workspaceId !== undefined ? action.workspaceId : existing.workspaceId,
             courseId:
               action.courseId !== undefined
@@ -1622,6 +1641,9 @@ interface ChatContextValue {
   setCourseId: (courseId: string) => void;
   setPersonaSelection: (persona: string) => void;
   setResourceSelection: (selection: ResourceSelection) => void;
+  /** Create mode: the artifact kind this conversation authors towards, or
+   *  null to leave it. */
+  setCreateTarget: (createTarget: string | null) => void;
   setLanguage: (lang: string) => void;
   setReplyLanguageOverride: (language: string | null) => Promise<void>;
   sendMessage: (
@@ -2761,6 +2783,10 @@ export function ChatStateAdapterProvider({
           typeof session.preferences?.mastery_session_mode === "string"
             ? session.preferences.mastery_session_mode
             : null,
+        createTarget:
+          typeof session.preferences?.create_target === "string"
+            ? session.preferences.create_target || null
+            : null,
         // The server is the truth for which course a conversation belongs to:
         // it is set from the launch URL, from the composer's pill, and from the
         // sidebar's "move to course", and every one of those writes here.
@@ -2998,6 +3024,12 @@ export function ChatStateAdapterProvider({
       const effectiveResources =
         exactReplay ? (replaySnapshot?.resourceSelection ?? emptyResourceSelection()) :
         replaySnapshot?.resourceSelection ?? session.resourceSelection ?? emptyResourceSelection();
+      // Create mode: a replay restates the exact kind it ran with (the chip
+      // may have been removed, or the session moved on, since); a live turn
+      // sends the session's current choice.
+      const effectiveCreateTarget =
+        exactReplay ? (replaySnapshot?.createTarget ?? null) :
+        replaySnapshot?.createTarget ?? session.createTarget ?? null;
       const effectiveMemoryReferences =
         exactReplay ? replaySnapshot?.memoryReferences :
         replaySnapshot?.memoryReferences ?? memoryReferences;
@@ -3125,6 +3157,7 @@ export function ChatStateAdapterProvider({
         ...(options?.masteryAnswer ? { masteryAnswer: options.masteryAnswer } : {}),
         ...(options?.masterySkip ? { masterySkip: options.masterySkip } : {}),
         ...(effectivePersona ? { persona: effectivePersona } : {}),
+        ...(effectiveCreateTarget ? { createTarget: effectiveCreateTarget } : {}),
         ...(effectiveMemoryReferences?.length
           ? { memoryReferences: [...effectiveMemoryReferences] }
           : {}),
@@ -3286,6 +3319,8 @@ export function ChatStateAdapterProvider({
         readingReferences: effectiveReadingReferences,
         masteryPathId: effectiveMasteryPathId || null,
         masterySessionMode: effectiveMasterySessionMode || null,
+        // Always sent, string or null — the wire contract for create mode.
+        createTarget: effectiveCreateTarget,
         masteryAnswer: options?.masteryAnswer ?? replaySnapshot?.masteryAnswer ?? null,
         masterySkip: options?.masterySkip ?? replaySnapshot?.masterySkip ?? null,
         // Immersive reading. Gated on the stable workspace mode as well as on
@@ -3676,6 +3711,7 @@ export function ChatStateAdapterProvider({
       llmSelection: current.llmSelection,
       masteryPathId: current.masteryPathId,
       masterySessionMode: current.masterySessionMode,
+      createTarget: current.createTarget,
       workspaceId: current.workspaceId,
       courseId: current.courseId,
       personaSelection: current.personaSelection,
@@ -3774,6 +3810,9 @@ export function ChatStateAdapterProvider({
 
   const setResourceSelection = useCallback((selection: ResourceSelection) => {
     dispatch({ type: "SET_RESOURCE_SELECTION", selection });
+  }, []);
+  const setCreateTarget = useCallback((createTarget: string | null) => {
+    dispatch({ type: "SET_CREATE_TARGET", createTarget });
   }, []);
 
   const setLanguage = useCallback((lang: string) => {
@@ -4088,6 +4127,7 @@ export function ChatStateAdapterProvider({
       setCourseId,
       setPersonaSelection,
       setResourceSelection,
+      setCreateTarget,
       setLanguage,
       setReplyLanguageOverride,
       sendMessage,
@@ -4123,6 +4163,7 @@ export function ChatStateAdapterProvider({
       setCourseId,
       setPersonaSelection,
       setResourceSelection,
+      setCreateTarget,
       setLanguage,
       setReplyLanguageOverride,
       sendMessage,

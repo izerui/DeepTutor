@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Mic,
   Paperclip,
+  PencilRuler,
   Plug,
   Sparkles,
   Square,
@@ -75,6 +76,8 @@ import ModelSelector from "./ModelSelector";
 import ReasoningEffortSelector from "./ReasoningEffortSelector";
 import styles from "./ChatComposer.module.css";
 import PersonaSelector from "./PersonaSelector";
+import CreateKindSelector from "./CreateKindSelector";
+import { CREATE_KINDS, isCreationKind } from "@/lib/creations";
 import ResourceSelector from "./ResourceSelector";
 import type { ComposerResourceCatalog } from "@/hooks/useComposerResources";
 import type { ResourceSelection } from "@/features/chat/ChatStateAdapter";
@@ -312,6 +315,8 @@ export default memo(function ChatComposer({
   resourceCatalog,
   resourceSelection,
   onResourceSelectionChange,
+  createTarget = null,
+  onCreateTargetChange,
   agentsAvailable = true,
   onToggleMemoryFile,
   onSend,
@@ -467,6 +472,10 @@ export default memo(function ChatComposer({
   resourceCatalog?: ComposerResourceCatalog;
   resourceSelection?: ResourceSelection;
   onResourceSelectionChange?: (selection: ResourceSelection) => void;
+  /** Create mode: the artifact kind this conversation is authoring, or null.
+   *  Rendered (and its picker shown) only when a parent supplies both. */
+  createTarget?: string | null;
+  onCreateTargetChange?: (value: string | null) => void;
   /** Hide the My Agents reference entry (e.g. the quiz follow-up surface). */
   agentsAvailable?: boolean;
   onToggleMemoryFile: (file: SpaceMemoryFile) => void;
@@ -1184,6 +1193,30 @@ export default memo(function ChatComposer({
   const selectedSkills = resourceSelection?.skills ?? [];
   const selectedMcp = resourceSelection?.mcp ?? [];
   const resourceItems: ComposerResourceItem[] = [];
+  // Create mode (upstream's tray "Create" menu and lead chip). Picking a kind
+  // forces the plain chat loop, the only one create mode runs on; choosing
+  // another mode afterwards clears it in the parent (`handleSelectCapability`).
+  const createKindDef = isCreationKind(createTarget) ? CREATE_KINDS[createTarget] : null;
+  if (onCreateTargetChange) {
+    resourceItems.push({
+      key: "create",
+      group: "Answer preferences",
+      label: t("Create"),
+      icon: PencilRuler,
+      count: createKindDef ? 1 : 0,
+      summary: createKindDef ? t(createKindDef.labelKey) : t("None"),
+      onClear: createKindDef ? () => onCreateTargetChange(null) : undefined,
+      node: (
+        <CreateKindSelector
+          value={createTarget}
+          onChange={(kind) => {
+            onCreateTargetChange(kind);
+            if (kind) handleSelectCapability("");
+          }}
+        />
+      ),
+    });
+  }
   if (taskSessionId || onDraftTaskIdsChange) {
     resourceItems.push({
       key: "tasks",
@@ -1431,7 +1464,9 @@ export default memo(function ChatComposer({
             replyLanguageDisabled={replyLanguageDisabled}
             onReplyLanguageChange={onReplyLanguageChange}
             languagePickerBelow={!hasMessages}
-            placeholder={inputPlaceholder}
+            placeholder={
+              inputPlaceholder ?? (createKindDef ? t(createKindDef.placeholderKey) : undefined)
+            }
             placeholderCompletion={inputPlaceholderCompletion}
             minHeight={hasMessages ? 28 : 64}
           />
@@ -1589,6 +1624,22 @@ export default memo(function ChatComposer({
                     readOnly={hasMessages}
                     error={workspaceError}
                   />
+                ) : null}
+
+                {onCreateTargetChange && createKindDef ? (
+                  <RailSlot
+                    onClear={() => onCreateTargetChange(null)}
+                    clearLabel={t("composer.create.leave")}
+                  >
+                    <span
+                      data-testid="composer-create-chip"
+                      className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium text-[var(--primary)]"
+                    >
+                      <PencilRuler size={16} strokeWidth={1.7} className="shrink-0" />
+                      <span className="font-normal text-[var(--foreground)]">{t("Create")}</span>
+                      <span className="min-w-0 truncate">{t(createKindDef.labelKey)}</span>
+                    </span>
+                  </RailSlot>
                 ) : null}
 
                 {onSelectCourse ? (
