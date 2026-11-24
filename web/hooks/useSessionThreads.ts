@@ -21,6 +21,7 @@ export interface SessionThreads {
    *  failed read leaves it false: "none" would be indistinguishable from
    *  "unknown". */
   loaded: boolean;
+  failed: boolean;
   refresh: () => void;
 }
 
@@ -33,23 +34,35 @@ export function useSessionThreads(
     sessionId: string;
     rows: SessionSummary[];
     loaded: boolean;
-  }>({ sessionId: "", rows: NO_THREADS, loaded: false });
+    failed: boolean;
+  }>({ sessionId: "", rows: NO_THREADS, loaded: false, failed: false });
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((n) => n + 1), []);
 
   useEffect(() => subscribeSessionChanges(refresh), [refresh]);
+  const failed = state.sessionId === sessionId && state.failed;
+  useEffect(() => {
+    if (!failed) return;
+    window.addEventListener("online", refresh);
+    return () => window.removeEventListener("online", refresh);
+  }, [failed, refresh]);
 
   useEffect(() => {
     if (!sessionId) return;
     const controller = new AbortController();
     listSessionThreads(sessionId, undefined, controller.signal)
       .then((rows) => {
-        if (!controller.signal.aborted) setState({ sessionId, rows, loaded: true });
+        if (!controller.signal.aborted) setState({ sessionId, rows, loaded: true, failed: false });
       })
-      .catch(() => {
-        // A conversation whose threads cannot be read simply has none to show.
+      .catch((error) => {
         if (!controller.signal.aborted) {
-          setState({ sessionId, rows: NO_THREADS, loaded: false });
+          const unavailable = [401, 403, 404].includes(error?.status);
+          setState((previous) => ({
+            sessionId,
+            rows: previous.sessionId === sessionId && !unavailable ? previous.rows : NO_THREADS,
+            loaded: false,
+            failed: true,
+          }));
         }
       });
     return () => controller.abort();
@@ -59,5 +72,5 @@ export function useSessionThreads(
   const rows = current ? state.rows : NO_THREADS;
   const byMessageId = useMemo(() => groupThreadsByMessage(rows), [rows]);
 
-  return { threads: rows, byMessageId, loaded: current && state.loaded, refresh };
+  return { threads: rows, byMessageId, loaded: current && state.loaded, failed, refresh };
 }

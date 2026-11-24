@@ -49,6 +49,16 @@ function renderPanel() {
   return { ref, onAutoOpen, onTabsChange };
 }
 
+it("opens and restores a saved message thread after its source was detached", async () => {
+  const { ref } = renderPanel();
+  const detached = { ...thread("t1"), sourceMessageId: null, sourceDeleted: true };
+  act(() => ref.current!.restoreTutorTabs([detached], "en", "t1"));
+  expect((await screen.findByTestId("tutor-body")).textContent).toBe("t1");
+  act(() => ref.current!.closeTutorThread("t1"));
+  act(() => ref.current!.openSelectionTutorTab(detached, "en"));
+  expect((await screen.findByTestId("tutor-body")).textContent).toBe("t1");
+});
+
 it("restores tutor tabs in the background and focuses the saved one", async () => {
   const { ref, onAutoOpen, onTabsChange } = renderPanel();
   onTabsChange.mockClear();

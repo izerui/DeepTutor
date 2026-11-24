@@ -528,8 +528,8 @@ function SessionViewerPanelInner(
       const selectedText =
         scope === "message" ? "" : normalizeSelectedText(selection.selectedText);
       if (scope === "selection" && !selectedText) return null;
-      if (scope === "message" && selection.sourceMessageId == null) return null;
       const threadSessionId = selection.threadSessionId || null;
+      if (scope === "message" && selection.sourceMessageId == null && !threadSessionId) return null;
       const questionKey = threadSessionId
         ? `selection-tutor:thread:${threadSessionId}`
         : selectionTutorKey(

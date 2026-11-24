@@ -214,7 +214,7 @@ async function expectJson<T>(response: Response): Promise<T> {
     return new Promise(() => {});
   }
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw Object.assign(new Error(`Request failed: ${response.status}`), { status: response.status });
   }
   return response.json() as Promise<T>;
 }

@@ -2756,6 +2756,14 @@ export default function ChatWorkspace() {
                         onDeleteThread={deleteTutorThread}
                         onDetachThread={detachTutorThread}
                       />
+                      {sessionThreads.failed && (
+                        <div role="status" className="flex items-center gap-2 text-sm">
+                          <span>{t("Little Tutor")}: {t("Could not load the list")}</span>
+                          <button type="button" className="underline" onClick={refreshSessionThreads}>
+                            {t("Retry")}
+                          </button>
+                        </div>
+                      )}
                       <div
                         ref={messagesEndRef}
                         className="h-px w-full shrink-0"
