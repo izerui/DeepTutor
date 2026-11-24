@@ -1708,3 +1708,97 @@ def test_reading_sections_context_keeps_attached_units_within_budget(monkeypatch
         + "; ".join(f"Lecture — Page {page}" for page in range(2, 25))
         + "]"
     )
+
+
+@pytest.mark.asyncio
+async def test_a_message_sent_mid_turn_waits_in_the_turn_inbox(monkeypatch, tmp_path) -> None:
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    read: list[list[dict]] = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            started.set()
+            await release.wait()
+            read.append(context.runtime.drain_user_inputs())
+            yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+    _patch_turn_services(monkeypatch, FakeOrchestrator)
+    _session, turn = await runtime.start_turn(
+        {
+            "type": "start_turn",
+            "content": "Explain FFT",
+            "session_id": None,
+            "capability": None,
+            "tools": [],
+            "knowledge_bases": [],
+            "attachments": [],
+            "language": "en",
+            "config": {},
+        }
+    )
+    consumer = asyncio.create_task(_drain(runtime.subscribe_turn(turn["id"], after_seq=0)))
+    await asyncio.wait_for(started.wait(), 5)
+    assert runtime.deliver_user_input(turn["id"], "in-1", "Use an example")
+    assert runtime.deliver_user_input(turn["id"], "in-2", "Never mind this one")
+    assert runtime.deliver_user_input(turn["id"], "w-1", "", withdraw="in-2")
+    release.set()
+    await asyncio.wait_for(consumer, 5)
+
+    assert read == [[{"command_id": "in-1", "content": "Use an example"}]]
+    # The inbox goes with the turn; a late message is the client's to resend.
+    assert not runtime.deliver_user_input(turn["id"], "in-3", "too late")
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_never_reads_mid_turn_messages_has_no_inbox(
+    monkeypatch, tmp_path
+) -> None:
+    """A capability outside the agent loop never reads the inbox, so it gets
+    none: a message sent to it is refused and the client keeps it for the
+    next turn instead of it vanishing with the turn."""
+    store = SQLiteSessionStore(tmp_path / "chat_history.db")
+    runtime = TurnRuntimeManager(store)
+    seen: list[object] = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class FakeOrchestrator:
+        async def handle(self, context):
+            seen.append(context.runtime.drain_user_inputs)
+            started.set()
+            await release.wait()
+            yield StreamEvent(type=StreamEventType.DONE, source="deep_research")
+
+    _patch_turn_services(monkeypatch, FakeOrchestrator)
+    monkeypatch.setattr(
+        "deeptutor.runtime.registry.capability_registry.CapabilityRegistry.reads_user_inputs",
+        lambda _self, name: name == "chat",
+    )
+    _session, turn = await runtime.start_turn(
+        {
+            "type": "start_turn",
+            "content": "Survey FFT papers",
+            "session_id": None,
+            "capability": "deep_solve",
+            "tools": [],
+            "knowledge_bases": [],
+            "attachments": [],
+            "language": "en",
+            "config": {},
+        }
+    )
+    consumer = asyncio.create_task(_drain(runtime.subscribe_turn(turn["id"], after_seq=0)))
+    await asyncio.wait_for(started.wait(), 5)
+    assert not runtime.deliver_user_input(turn["id"], "in-1", "Only recent ones")
+    release.set()
+    await asyncio.wait_for(consumer, 5)
+
+    assert seen == [None]
+
+
+async def _drain(stream) -> None:
+    async for _event in stream:
+        pass

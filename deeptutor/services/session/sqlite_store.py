@@ -2677,6 +2677,7 @@ class SQLiteSessionStore:
             OR json_extract(metadata_json, '$.tool_metadata.ask_user') IS NOT NULL
             OR json_extract(metadata_json, '$.mastery_question') IS NOT NULL
             OR json_extract(metadata_json, '$.tool_metadata.mastery_question') IS NOT NULL
+            OR json_extract(metadata_json, '$.trace_kind') = 'user_input'
         """
         conditions = (
             f"type IN ('done', 'error', 'cancelled', 'result') OR {cards}",
@@ -3289,6 +3290,57 @@ class SQLiteSessionStore:
         self, session_id: str, preferences: dict[str, Any]
     ) -> bool:
         return await self._run(self._update_session_preferences_sync, session_id, preferences)
+
+    def _update_session_preferences_if_absent_sync(
+        self,
+        session_id: str,
+        preferences: dict[str, Any],
+        absent: tuple[str, ...],
+        expected: dict[str, Any],
+    ) -> bool:
+        with self._connect() as conn:
+            # Check and merge in one write transaction: a detach or move
+            # committed before this point is seen and wins.
+            conn.execute("BEGIN IMMEDIATE")
+            current = conn.execute(
+                "SELECT preferences_json FROM sessions WHERE id = ? AND deleted_at IS NULL",
+                (session_id,),
+            ).fetchone()
+            if current is None:
+                return False
+            current_preferences = _json_loads(current["preferences_json"], {})
+            if not isinstance(current_preferences, dict):
+                return False
+            if any(current_preferences.get(key) is not None for key in absent):
+                return False
+            if any(current_preferences.get(key) != value for key, value in expected.items()):
+                return False
+            merged = upgrade_workspace_preferences({**current_preferences, **(preferences or {})})
+            # Derived metadata: leave ``updated_at`` (the list order) alone.
+            cur = conn.execute(
+                "UPDATE sessions SET preferences_json = ? WHERE id = ?",
+                (_json_dumps(merged), session_id),
+            )
+            conn.commit()
+        return cur.rowcount > 0
+
+    async def update_session_preferences_if_absent(
+        self,
+        session_id: str,
+        preferences: dict[str, Any],
+        *,
+        absent: Sequence[str],
+        expected: dict[str, Any] | None = None,
+    ) -> bool:
+        """Merge only while every ``absent`` key is missing (or null) and every
+        ``expected`` key still holds its value; never touches ``updated_at``."""
+        return await self._run(
+            self._update_session_preferences_if_absent_sync,
+            session_id,
+            preferences,
+            tuple(absent),
+            dict(expected or {}),
+        )
 
     async def get_session_with_messages(self, session_id: str) -> dict[str, Any] | None:
         session = await self.get_session(session_id)

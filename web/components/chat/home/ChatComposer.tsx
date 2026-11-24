@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Mic,
   Paperclip,
+  PencilRuler,
   Plug,
   Sparkles,
   Square,
@@ -75,6 +76,8 @@ import ModelSelector from "./ModelSelector";
 import ReasoningEffortSelector from "./ReasoningEffortSelector";
 import styles from "./ChatComposer.module.css";
 import PersonaSelector from "./PersonaSelector";
+import CreateKindSelector from "./CreateKindSelector";
+import { CREATE_KINDS, isCreationKind } from "@/lib/creations";
 import ResourceSelector from "./ResourceSelector";
 import type { ComposerResourceCatalog } from "@/hooks/useComposerResources";
 import type { ResourceSelection } from "@/features/chat/ChatStateAdapter";
@@ -312,6 +315,8 @@ export default memo(function ChatComposer({
   resourceCatalog,
   resourceSelection,
   onResourceSelectionChange,
+  createTarget = null,
+  onCreateTargetChange,
   agentsAvailable = true,
   onToggleMemoryFile,
   onSend,
@@ -332,6 +337,8 @@ export default memo(function ChatComposer({
   onSelectCapability,
   onCancelStreaming,
   prefillInputRef,
+  queueWhileStreaming = false,
+  inputFooter,
   inputPlaceholder,
   inputPlaceholderCompletion,
   inputHeader,
@@ -467,6 +474,10 @@ export default memo(function ChatComposer({
   resourceCatalog?: ComposerResourceCatalog;
   resourceSelection?: ResourceSelection;
   onResourceSelectionChange?: (selection: ResourceSelection) => void;
+  /** Create mode: the artifact kind this conversation is authoring, or null.
+   *  Rendered (and its picker shown) only when a parent supplies both. */
+  createTarget?: string | null;
+  onCreateTargetChange?: (value: string | null) => void;
   /** Hide the My Agents reference entry (e.g. the quiz follow-up surface). */
   agentsAvailable?: boolean;
   onToggleMemoryFile: (file: SpaceMemoryFile) => void;
@@ -494,6 +505,10 @@ export default memo(function ChatComposer({
    * without owning the composer's imperative handle directly.
    */
   prefillInputRef?: React.MutableRefObject<((text: string) => void) | null>;
+  /** Let a message be sent while a turn runs; the surface queues it. */
+  queueWhileStreaming?: boolean;
+  /** Shown just above the input, under any attachments (the queue). */
+  inputFooter?: ReactNode;
   /** Override the composer placeholder (e.g. quiz follow-up). */
   inputPlaceholder?: string;
   /** A line Tab accepts while the composer is empty. See ComposerInput. */
@@ -955,7 +970,9 @@ export default memo(function ChatComposer({
     (content: string) => {
       // Keyboard and button submissions share the same admission checks.
       // A refused submission must leave the draft in the input.
-      if (isStreaming && !awaitingUserReply) return false;
+      // Where the surface queues messages for a running turn, a send mid-turn
+      // is accepted (and held by the surface) rather than refused.
+      if (isStreaming && !awaitingUserReply && !queueWhileStreaming) return false;
       if (capabilityNeedsConfig && !capabilityConfigConfirmed) {
         onRequestConfigConfirm();
         return false;
@@ -985,7 +1002,7 @@ export default memo(function ChatComposer({
       focusTextarea();
       return true;
     },
-    [awaitingUserReply, capabilityConfigConfirmed, capabilityNeedsConfig,
+    [awaitingUserReply, queueWhileStreaming, capabilityConfigConfirmed, capabilityNeedsConfig,
       cancelDraftSave, enqueueDraftWrite, focusTextarea, isStreaming, onRequestConfigConfirm, onSend],
   );
 
@@ -1024,7 +1041,11 @@ export default memo(function ChatComposer({
   // thing that can move it forward is the user's answer. Locking the composer
   // there made the interactive card the ONLY way to answer — and left the
   // learner with no way out at all if the card failed to render.
-  const streamingBlocksSend = isStreaming && !awaitingUserReply;
+  // Where the surface can hold messages for a running turn, a message typed
+  // mid-turn is sent (queued) and Stop moves to a button of its own.
+  const queuing = Boolean(queueWhileStreaming) && isStreaming && !awaitingUserReply;
+  const streamingBlocksSend =
+    isStreaming && !awaitingUserReply && !(queuing && hasIntent);
   const canSend = hasIntent && !streamingBlocksSend && !isConfigBlocked;
 
   // `blocked` only exists once there is intent: without it the button stays
@@ -1159,7 +1180,9 @@ export default memo(function ChatComposer({
       ? t("Stop generating")
       : awaitingUserReply
         ? t("Send answer")
-        : t("Send");
+        : queuing
+          ? t("Queue message")
+          : t("Send");
   const sendTitle =
     sendState === "blocked"
       ? t("Confirm settings on the right to send.")
@@ -1184,6 +1207,30 @@ export default memo(function ChatComposer({
   const selectedSkills = resourceSelection?.skills ?? [];
   const selectedMcp = resourceSelection?.mcp ?? [];
   const resourceItems: ComposerResourceItem[] = [];
+  // Create mode (upstream's tray "Create" menu and lead chip). Picking a kind
+  // forces the plain chat loop, the only one create mode runs on; choosing
+  // another mode afterwards clears it in the parent (`handleSelectCapability`).
+  const createKindDef = isCreationKind(createTarget) ? CREATE_KINDS[createTarget] : null;
+  if (onCreateTargetChange) {
+    resourceItems.push({
+      key: "create",
+      group: "Answer preferences",
+      label: t("Create"),
+      icon: PencilRuler,
+      count: createKindDef ? 1 : 0,
+      summary: createKindDef ? t(createKindDef.labelKey) : t("None"),
+      onClear: createKindDef ? () => onCreateTargetChange(null) : undefined,
+      node: (
+        <CreateKindSelector
+          value={createTarget}
+          onChange={(kind) => {
+            onCreateTargetChange(kind);
+            if (kind) handleSelectCapability("");
+          }}
+        />
+      ),
+    });
+  }
   if (taskSessionId || onDraftTaskIdsChange) {
     resourceItems.push({
       key: "tasks",
@@ -1395,11 +1442,12 @@ export default memo(function ChatComposer({
           {inputHeader}
           <SelectedResources items={contextTreeItems}/>
           <AttachmentProcessingStatus items={attachmentProcessing} />
+          {inputFooter}
           <ComposerInput
             ref={inputHandleRef}
             textareaRef={textareaRef}
             isVisualizeMode={isVisualizeMode}
-            isStreaming={streamingBlocksSend}
+            isStreaming={isStreaming && !awaitingUserReply && !queuing}
             canSendEmpty={hasReferences}
             onSend={doSend}
             onInputChange={handleInputChange}
@@ -1431,7 +1479,9 @@ export default memo(function ChatComposer({
             replyLanguageDisabled={replyLanguageDisabled}
             onReplyLanguageChange={onReplyLanguageChange}
             languagePickerBelow={!hasMessages}
-            placeholder={inputPlaceholder}
+            placeholder={
+              inputPlaceholder ?? (createKindDef ? t(createKindDef.placeholderKey) : undefined)
+            }
             placeholderCompletion={inputPlaceholderCompletion}
             minHeight={hasMessages ? 28 : 64}
           />
@@ -1591,6 +1641,22 @@ export default memo(function ChatComposer({
                   />
                 ) : null}
 
+                {onCreateTargetChange && createKindDef ? (
+                  <RailSlot
+                    onClear={() => onCreateTargetChange(null)}
+                    clearLabel={t("composer.create.leave")}
+                  >
+                    <span
+                      data-testid="composer-create-chip"
+                      className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium text-[var(--primary)]"
+                    >
+                      <PencilRuler size={16} strokeWidth={1.7} className="shrink-0" />
+                      <span className="font-normal text-[var(--foreground)]">{t("Create")}</span>
+                      <span className="min-w-0 truncate">{t(createKindDef.labelKey)}</span>
+                    </span>
+                  </RailSlot>
+                ) : null}
+
                 {onSelectCourse ? (
                   <RailSlot
                     onClear={courseId ? () => onSelectCourse("") : undefined}
@@ -1716,6 +1782,19 @@ export default memo(function ChatComposer({
                     place (both stacked in the same grid cell) and the progress
                     ring moves to the perimeter, where it can spin without
                     fighting the square for the same space. */}
+                {queuing && hasIntent ? (
+                  <Tooltip label={t("Stop generating")} side="top">
+                    <button
+                      type="button"
+                      onClick={onCancelStreaming}
+                      aria-label={t("Stop generating")}
+                      className="relative ml-1 inline-grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--border)] transition-colors hover:text-[var(--foreground)] active:scale-95"
+                    >
+                      <span className="pointer-events-none absolute -inset-[3px] rounded-full border-2 border-[color-mix(in_srgb,var(--primary)_15%,transparent)] border-t-[var(--primary)] animate-spin" />
+                      <Square size={10} strokeWidth={2.6} className="fill-current" />
+                    </button>
+                  </Tooltip>
+                ) : null}
                 <Tooltip label={sendTitle} side="top">
                   <button
                     type="button"

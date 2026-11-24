@@ -21,6 +21,7 @@ def _manifest(
     tools_used: list[str],
     cli_aliases: list[str],
     config_defaults: dict[str, object] | None = None,
+    reads_user_inputs: bool = False,
 ) -> CapabilityManifest:
     return CapabilityManifest(
         name=name,
@@ -29,6 +30,7 @@ def _manifest(
         tools_used=tools_used,
         cli_aliases=cli_aliases,
         config_defaults=config_defaults or {},
+        reads_user_inputs=reads_user_inputs,
     )
 
 
@@ -66,6 +68,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "videogen",
             ],
             cli_aliases=["chat"],
+            reads_user_inputs=True,
         ),
     ),
     "ask_questions": BuiltinCapabilitySpec(
@@ -76,6 +79,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
             stages=["responding"],
             tools_used=["ask_user"],
             cli_aliases=["ask"],
+            reads_user_inputs=True,
         ),
     ),
     "deep_solve": BuiltinCapabilitySpec(
@@ -94,6 +98,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "reason",
             ],
             cli_aliases=["solve"],
+            reads_user_inputs=True,
         ),
     ),
     "deep_question": BuiltinCapabilitySpec(
@@ -197,6 +202,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "ask_user",
             ],
             cli_aliases=["mastery"],
+            reads_user_inputs=True,
         ),
     ),
     "immersive_reading": BuiltinCapabilitySpec(
@@ -219,6 +225,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "reason",
             ],
             cli_aliases=["reading", "read"],
+            reads_user_inputs=True,
         ),
     ),
     "course_study": BuiltinCapabilitySpec(
@@ -238,6 +245,7 @@ BUILTIN_CAPABILITY_SPECS: dict[str, BuiltinCapabilitySpec] = {
                 "reason",
             ],
             cli_aliases=["course"],
+            reads_user_inputs=True,
         ),
     ),
     "audio_overview": BuiltinCapabilitySpec(

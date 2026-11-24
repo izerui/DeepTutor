@@ -40,3 +40,10 @@
 - §4 核实：属实。用真实运行时复现，测验追问会话的 preferences 里没有 `parent_session_id`。现在记成父会话（`session_kind = "quiz_followup"`，继承工作区和课程），侧栏不再单独显示；学习空间历史里在原会话下面，标「题目追问」。父会话不是自己的就保持独立。老的追问会话不迁移。
 - 没做：老对话补来源（按 §2.7）；PocketBase 存储删除消息时解除关联（删消息接口本来直接用 SQLite，重新生成走 PocketBase 时不会解除关联）；浏览器实测（隔离环境没有模型，也不能占用现有端口）。
 - 验证：后端全量 14853 个用例，除 5 个已知的 mineru `/bin/ps` 沙箱失败外都通过（126 个跳过）；回环 22 个通过。前端 tsc、vitest 1580 个、node 测试 1444 个、语言检查、契约检查都通过。
+
+## 7. 老对话补来源（2026-11-24，移植上游 50f1d9f52、58afb10b5、75d65b7de）
+- 11-20 之前的小老师对话只记了 `parent_session_id` 和 `session_kind`，没有 `tutor_selected_text`，也没有引用附件。唯一可靠的记录是每条助手回复 `metadata.model_turn.system` 里的侧栏提示词（v1.6.9 起保存）：原消息全文或摘录、消息角色、精确选中的文字、来源会话。
+- 打开某个对话的「小老师」列表（`GET /api/sessions/{id}/threads`）时惰性补：提示词里的来源会话必须就是父会话；只在本账号、本父会话的用户/助手消息里按记录的角色找；原消息全文须与候选相等，摘录须包含在候选里；恰好一条才写入 `tutor_source_message_id`、`tutor_scope=selection`、`tutor_selected_text`。多条或没有都不写。
+- 条件写入：仍没有 `tutor_source_message_id` 键、没有 `tutor_source_deleted`、父会话和类型没变时才写，不改 `updated_at`；SQLite 用 `BEGIN IMMEDIATE`，PocketBase 用同一把 `_prefs_lock` 并在锁内读。解除、移动、删除原消息都会写这个键，所以并发时它们优先。
+- 失败记 `tutor_source_backfill_failed_at`（并在内存里记），一小时后才重试；单次请求最多处理 50 个。
+- 补不回来的：v1.6.9 之前的对话（没有存提示词）、首轮就失败没有助手回复的、原消息后来被改/重新生成/删除的、原文在父会话里出现多次的。

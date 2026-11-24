@@ -98,6 +98,8 @@ import { authorTurnErrorMessage } from "@/lib/author-path-messages";
 import { extractSetupCredential } from "@/lib/setup-signals";
 import { PartnerDraftCard } from "@/components/chat/home/PartnerDraftCard";
 import { extractPartnerDraft } from "@/lib/partner-draft";
+import { CreationDraftCard } from "@/components/chat/home/CreationDraftCard";
+import { extractCreationDraft } from "@/lib/creation-draft";
 import {
   extractCourseHandoffs,
   stripLeakedHandoffJson,
@@ -406,6 +408,32 @@ function ProcessFold({
 }
 
 /**
+ * What the learner sent while this turn was working, where the turn read it.
+ *
+ * Drawn as the learner's own bubble, only smaller, so the reply reads as one
+ * conversation: the work above was done before it arrived, and everything
+ * below was written knowing it.
+ */
+function SentMidTurn({ messages }: { messages: string[] }) {
+  const { t } = useTranslation();
+  return (
+    <div data-sent-mid-turn="true" className="my-3 flex flex-col items-end gap-1">
+      <span className="pr-1 text-[11px] text-[var(--muted-foreground)]">
+        {t("You, while it worked")}
+      </span>
+      {messages.map((text, index) => (
+        <div
+          key={index}
+          className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[var(--secondary)] px-3.5 py-2 text-[13.5px] leading-relaxed text-[var(--foreground)]"
+        >
+          {text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * One row of the assistant message: a run of working-out, a card, or answer
  * prose. Cards and the answer stand on their own; a process run is what the
  * turn did before either of them and folds away once the turn has settled.
@@ -462,7 +490,9 @@ function buildMessageBlocks(
       (segment.kind === "ask_user" && !segment.data.resolved) ||
       segment.kind === "mastery_question" ||
       // A presented lesson page is part of the lesson, not working-out.
-      segment.kind === "source_view"
+      segment.kind === "source_view" ||
+      // The learner's own words are conversation, not working-out to fold.
+      segment.kind === "user_input"
     ) {
       flush();
       blocks.push({ kind: "card", key: segment.key, segment });
@@ -962,6 +992,11 @@ export const AssistantMessage = memo(function AssistantMessage({
     [msg.events],
   );
 
+  const creationDraft = useMemo(
+    () => extractCreationDraft(msg.events),
+    [msg.events],
+  );
+
   // Set by ``course_handoff`` when Course Study has decided what is worth doing
   // next. A turn may propose more than one, so this is a list.
   const courseHandoffs = useMemo(
@@ -1289,6 +1324,8 @@ export const AssistantMessage = memo(function AssistantMessage({
                 data={block.segment.data}
                 onSubmit={submitReply}
               />
+            ) : block.segment.kind === "user_input" ? (
+              <SentMidTurn key={block.key} messages={block.segment.messages} />
             ) : null
           ) : block.segment.kind === "text" ? (
             <AssistantResponse
@@ -1335,6 +1372,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           replacing it, and applies to every branch. */}
       {setupCredential ? <SetupCredentialCard data={setupCredential} /> : null}
       {partnerDraft ? <PartnerDraftCard data={partnerDraft} /> : null}
+      {creationDraft ? <CreationDraftCard data={creationDraft} /> : null}
       {/* Course Study's hand-offs sit last: they are what to do *after* reading
           the answer, so they belong below it rather than competing with it. */}
       {courseHandoffs.length > 0 && <CourseHandoffCards handoffs={courseHandoffs} />}

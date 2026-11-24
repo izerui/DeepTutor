@@ -54,6 +54,7 @@ import StarterSuggestions from "@/components/chat/home/StarterSuggestions";
 import FilePreviewDrawer from "@/components/chat/preview/FilePreviewDrawer";
 import { buildSessionActivity } from "@/components/chat/home/SessionActivityPanel";
 import Tooltip from "@/shared/ui/Tooltip";
+import QueuedMessages from "@/features/chat/components/QueuedMessages";
 import SessionViewerPanel, {
   type SessionViewerPanelHandle,
 } from "@/components/chat/home/LazySessionViewerPanel";
@@ -142,6 +143,7 @@ import {
   type ToolName,
 } from "@/features/capabilities/presentation";
 import { useCapabilityCatalog } from "@/features/capabilities/useCapabilityCatalog";
+import { capabilityReadsUserInputs } from "@/features/capabilities/model";
 import { browserStorage } from "@/shared/storage";
 import { downloadChatMarkdown } from "@/lib/chat-export";
 import { buildChatOutline, scrollToChatTurn } from "@/lib/chat-outline";
@@ -272,6 +274,7 @@ export default function ChatWorkspace() {
   const { t } = useTranslation();
   const {
     capabilities,
+    descriptors: capabilityDescriptors,
     visibleCapabilities,
     isLoading: isCapabilityCatalogLoading,
   } = useCapabilityCatalog();
@@ -288,8 +291,11 @@ export default function ChatWorkspace() {
     setLLMSelection,
     setPersonaSelection,
     setResourceSelection,
+    setCreateTarget,
     setReplyLanguageOverride,
     sendMessage,
+    queueMessage,
+    withdrawQueuedMessage,
     cancelStreamingTurn,
     submitUserReply,
     regenerateLastMessage,
@@ -1483,8 +1489,13 @@ export default function ChatWorkspace() {
       // the new capability has its own form that needs explicit confirm.
       setCapabilityConfigConfirmed(false);
       setCapMenuOpen(false);
+      // Create mode only makes sense on the plain chat loop (`cap.value`
+      // empty); any other mode drops it. Picking Create itself goes through
+      // `setCreateTarget` → the composer's Create picker, which calls back
+      // here with `""` — a no-op for this guard.
+      if (cap.value) setCreateTarget(null);
     },
-    [capabilities, setCapability, setTools, userEnabledTools],
+    [capabilities, setCapability, setTools, setCreateTarget, userEnabledTools],
   );
 
   const fileToAttachment = fileToPendingAttachment;
@@ -2032,8 +2043,7 @@ export default function ChatWorkspace() {
           !selectedNotebookRecords.length &&
           !selectedHistorySessions.length &&
           !selectedQuestionEntries.length &&
-          !selectedMemoryFiles.length) ||
-        state.isStreaming
+          !selectedMemoryFiles.length)
       )
         return;
 
@@ -2134,7 +2144,7 @@ export default function ChatWorkspace() {
       // Persona is NOT passed per-call here: it is a session-level
       // preference (state.personaSelection) that sendMessage resolves and
       // sends with every turn.
-      sendMessage(
+      const send: Parameters<typeof sendMessage> = [
         messageContent,
         extraAttachments,
         config,
@@ -2147,7 +2157,34 @@ export default function ChatWorkspace() {
         questionNotebookReferencesPayload,
         undefined,
         memoryPayload,
-      );
+      ];
+      if (state.isStreaming) {
+        // Sent while a turn runs: it waits its turn. Plain words can steer
+        // the running turn at its next step — when that turn reads messages
+        // between steps at all; anything carrying attachments, references or
+        // another mode is a turn of its own.
+        const runningCapability =
+          state.messages.at(-1)?.capability ?? state.activeCapability;
+        const plainWords =
+          capabilityReadsUserInputs(capabilityDescriptors, runningCapability) &&
+          Boolean(content.trim()) &&
+          extraAttachments.length === 0 &&
+          !selectedBookReferences.length &&
+          !selectedReadingReferences.length &&
+          !selectedNotebookRecords.length &&
+          !selectedHistorySessions.length &&
+          !selectedAgentSessions.length &&
+          !selectedQuestionEntries.length &&
+          !selectedMemoryFiles.length &&
+          !isQuizMode &&
+          !isVisualizeMode &&
+          !isResearchMode &&
+          !selectedPartner &&
+          !selectedPartnerGroup;
+        queueMessage(messageContent, send, plainWords);
+      } else {
+        sendMessage(...send);
+      }
       setKBs(retainedKnowledgeBases(state.knowledgeBases, agentNameSet, resourceReuse.policy));
       if (!resourceReuse.policy.persona) setPersonaSelection("");
       setResourceSelection({skills: resourceReuse.policy.skills ? state.resourceSelection.skills : [], mcp: resourceReuse.policy.mcp ? state.resourceSelection.mcp : []});
@@ -2190,6 +2227,10 @@ export default function ChatWorkspace() {
       selectedNotebookRecords.length,
       selectedQuestionEntries.length,
       sendMessage,
+      queueMessage,
+      capabilityDescriptors,
+      state.messages,
+      state.activeCapability,
       shouldAutoScrollRef,
       state.isStreaming,
       state.sessionKey,
@@ -2959,6 +3000,8 @@ export default function ChatWorkspace() {
                 resourceCatalog={resourceCatalog}
                 resourceSelection={state.resourceSelection}
                 onResourceSelectionChange={setResourceSelection}
+                createTarget={state.createTarget}
+                onCreateTargetChange={setCreateTarget}
                 onToggleMemoryFile={handleToggleMemoryFile}
                 onSend={handleSend}
                 awaitingUserReply={awaitingUserReply}
@@ -2979,6 +3022,14 @@ export default function ChatWorkspace() {
                 onSelectCapability={handleSelectCapability}
                 onCancelStreaming={cancelStreamingTurn}
                 prefillInputRef={prefillInputRef}
+                queueWhileStreaming
+                inputFooter={
+                  <QueuedMessages
+                    messages={state.queuedMessages}
+                    isStreaming={state.isStreaming}
+                    onWithdraw={withdrawQueuedMessage}
+                  />
+                }
                 inputPlaceholder={askHint || undefined}
                 inputPlaceholderCompletion={askHint}
               />

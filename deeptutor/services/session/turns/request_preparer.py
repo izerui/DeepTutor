@@ -98,6 +98,7 @@ _REPLAY_SNAPSHOT_FIELDS: dict[str, str] = {
     "skills": "skills",
     "mcp": "mcp",
     "persona": "persona",
+    "create_target": "createTarget",
     "llm_selection": "llmSelection",
     "workspace_mode": "workspaceMode",
     "workspace_id": "workspaceId",
@@ -749,6 +750,11 @@ class TurnRequestPreparer:
         if persona_explicit:
             # Persist explicit set AND explicit clear ("" = back to Default).
             preference_update["persona"] = persona_pref
+        if "create_target" in payload:
+            # Same explicit-set-and-explicit-clear shape as persona: the web
+            # client sends create_target on every turn, so its presence alone
+            # (including an empty/null clear) is what makes it durable.
+            preference_update["create_target"] = payload.get("create_target") or ""
         if skills_explicit:
             preference_update["skills"] = selected_skills
         if mcp_explicit:
@@ -1237,6 +1243,17 @@ class TurnRequestPreparer:
                 if "mastery_session_mode" in overrides
                 else preferences.get("mastery_session_mode")
             ),
+            # The create-mode chip is a durable session preference like
+            # persona, but — unlike persona — ordinary chat turns always send
+            # it explicitly, so an un-set key here would read as "leave it to
+            # start_turn's own fallback" and silently drop it. Restore it
+            # explicitly so a plain Regenerate keeps authoring the same draft.
+            "create_target": (
+                overrides.get("create_target")
+                if "create_target" in overrides
+                else snapshot.get("createTarget") or preferences.get("create_target")
+            )
+            or None,
             # Recovered from the original turn's snapshot so the regenerate runs
             # against the same document. An explicit override wins (the reader
             # may have moved on), and the viewport is deliberately not restored —

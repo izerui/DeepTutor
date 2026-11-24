@@ -67,6 +67,7 @@ class CourseStudyCapability(TurnCapability):
             "reason",
         ],
         cli_aliases=["course"],
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBusProtocol) -> None:

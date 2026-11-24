@@ -276,14 +276,17 @@ def _stamp_content_offset(
     tool call and card would pile up at one end and the reload would not
     resemble what the reader watched.
 
-    Two kinds of event carry the mark: a resolved ``ask_user`` card, and the
-    start of a tool call. Both are rendered between runs of answer text.
+    Three kinds of event carry the mark: a resolved ``ask_user`` card, the
+    start of a tool call, and a message the learner sent mid-turn that the
+    turn read. All are rendered between runs of answer text.
     """
     metadata = payload_event.get("metadata")
     if not isinstance(metadata, dict):
         return
-    anchors_layout = bool(metadata.get("ask_user_resolved")) or (
-        payload_event.get("type") == StreamEventType.TOOL_CALL.value
+    anchors_layout = (
+        bool(metadata.get("ask_user_resolved"))
+        or metadata.get("trace_kind") == "user_input"
+        or payload_event.get("type") == StreamEventType.TOOL_CALL.value
     )
     if anchors_layout:
         metadata.setdefault("assistant_content_offset", len(assistant_content))
@@ -994,6 +997,11 @@ def _request_snapshot_metadata(
     timed_media_id = _timed_media_id(payload.get("timed_media_id"))
     if timed_media_id:
         snapshot["timedMediaId"] = timed_media_id
+    # The create-mode lead chip, so a regenerate/resend keeps authoring the
+    # same kind of draft instead of silently dropping back to plain chat.
+    create_target = str(payload.get("create_target") or "")
+    if create_target:
+        snapshot["createTarget"] = create_target
     if llm_selection:
         snapshot["llmSelection"] = llm_selection
     metadata: dict[str, Any] = {"request_snapshot": snapshot}

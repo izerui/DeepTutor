@@ -69,6 +69,7 @@ class DeepSolveCapability(TurnCapability):
         tools_used=[*SOLVE_TOOL_NAMES, "rag", "exec", "geogebra_analysis", "reason"],
         cli_aliases=["solve"],
         request_schema=get_capability_request_schema("deep_solve"),
+        reads_user_inputs=True,
     )
 
     async def run(self, context: UnifiedContext, stream: StreamBusProtocol) -> None:

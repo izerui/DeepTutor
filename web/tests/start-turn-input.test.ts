@@ -151,3 +151,11 @@ test("consultation selections travel as runtime fields, not capability config", 
     assert.throws(() => buildStartTurnInput({ content: "hi", capabilityConfig: { [key]: "id" } }), /must use its typed turn property/);
   }
 });
+
+test("create mode's kind is sent on every turn, string or explicitly null", () => {
+  const authoring = buildStartTurnInput({ content: "call it ada-helper", createTarget: "skill" });
+  assert.equal(authoring.create_target, "skill");
+  const off = buildStartTurnInput({ content: "hello" });
+  assert.equal(off.create_target, null);
+  assert.equal("create_target" in off, true);
+});

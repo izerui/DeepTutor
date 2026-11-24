@@ -14,7 +14,7 @@ import {
   type FailedSubmissionRecord,
 } from "@/lib/failed-submissions";
 import { randomUuid } from "@/lib/random-uuid";
-import { newCommandId } from "@/contracts/parse/turn-command";
+import { buildUserInput, newCommandId } from "@/contracts/parse/turn-command";
 
 import React, {
   createContext,
@@ -184,6 +184,27 @@ export function emptyResourceSelection(): ResourceSelection {
   return { skills: [], mcp: [] };
 }
 
+/**
+ * A message sent while a turn was still running.
+ *
+ * Text-only messages are offered to the running turn (``user_input``), whose
+ * agent loop reads them at its next step boundary — after the tool call or
+ * model output in flight — and steers by them. Whatever the turn never reads
+ * (it ended first, its mode has no steps, or the message carries attachments
+ * or references) is sent as the next turn, in order, once the turn ends.
+ */
+export interface QueuedMessage {
+  /** Also the command id it is offered to the running turn under. */
+  id: string;
+  content: string;
+  /** The send it becomes as a turn of its own. */
+  send: Parameters<ChatContextValue["sendMessage"]>;
+  /** Text only, so the running turn can take it. */
+  steerable: boolean;
+  /** The turn it was offered to; null until offered. */
+  offeredTo: string | null;
+}
+
 export interface ChatState {
   /** Local identity, available before the backend assigns a session ID. */
   sessionKey: string;
@@ -204,6 +225,11 @@ export interface ChatState {
    *  picks the tutor's prompt block and narrows its tool surface, so a session
    *  that changed it mid-way would hand itself tools its kind withholds. */
   masterySessionMode: string | null;
+  /** Create mode: the artifact kind ("skill" | "persona") this conversation
+   *  is authoring, or null outside create mode. Sent on every turn (never
+   *  reset after send — only an explicit removal or mode change clears it)
+   *  and persisted on the session preferences. */
+  createTarget: string | null;
   /** Study course this conversation belongs to; "" = unclassified.
    *  Read by the composer's course pill and sent with every turn, so Course
    *  Study senses the same course the learner can see it is bound to. */
@@ -240,6 +266,8 @@ export interface ChatState {
   /** The server's own rejection text for the flagged submission, when it
    *  provided one (#2637). Falls back to the transport copy in the banner. */
   submissionErrorMessage: string;
+  /** Messages sent while a turn ran, oldest first. */
+  queuedMessages: QueuedMessage[];
 }
 
 export interface SessionConfiguration {
@@ -249,6 +277,7 @@ export interface SessionConfiguration {
   knowledgeBases?: string[];
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
   enabledTools?: string[];
@@ -319,6 +348,7 @@ export interface MessageRequestSnapshot {
   masterySkip?: { question_id: string };
   timedMediaId?: string;
   persona?: string;
+  createTarget?: string | null;
   memoryReferences?: MemoryReferencePayload;
   llmSelection?: LLMSelection | null;
   /** Stable identity of the material open for this turn. */
@@ -408,6 +438,7 @@ interface SessionSnapshot {
   llmSelection?: LLMSelection | null;
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
   personaSelection?: string;
@@ -432,6 +463,7 @@ type Action =
   | { type: "SET_COURSE_ID"; courseId: string }
   | { type: "SET_PERSONA_SELECTION"; persona: string }
   | { type: "SET_RESOURCE_SELECTION"; selection: ResourceSelection }
+  | { type: "SET_CREATE_TARGET"; createTarget: string | null }
   | { type: "SET_LANGUAGE"; lang: string }
   | { type: "SET_REPLY_LANGUAGE_OVERRIDE"; key: string; language: string | null }
   | {
@@ -448,6 +480,9 @@ type Action =
   | { type: "POP_LAST_ASSISTANT"; key: string }
   | { type: "RESTORE_ASSISTANT"; key: string; message: MessageItem }
   | { type: "STREAM_START"; key: string; startedAt: number; capability?: string | null }
+  | { type: "QUEUE_MESSAGE"; key: string; message: QueuedMessage }
+  | { type: "OFFER_QUEUED"; key: string; ids: string[]; turnId: string }
+  | { type: "DROP_QUEUED"; key: string; ids: string[] }
   | { type: "STREAM_TOUCH"; key: string }
   | { type: "STREAM_EVENT"; key: string; event: StreamEvent }
   | {
@@ -533,6 +568,7 @@ function createSessionEntry(
     llmSelection: null,
     masteryPathId: null,
     masterySessionMode: null,
+    createTarget: null,
     workspaceId: activeWorkspaceId() || null,
     courseId: "",
     personaSelection: "",
@@ -555,6 +591,7 @@ function createSessionEntry(
     submissionErrorMessage: "",
     submissionNeedsReview: false,
     submissionNotSaved: false,
+    queuedMessages: [],
   };
 }
 
@@ -620,6 +657,31 @@ function ensureSelectedSession(state: ProviderState): SessionEntry {
     return state.sessions[state.selectedKey];
   }
   return createSessionEntry("draft");
+}
+
+function updateSessionQueue(
+  state: ProviderState,
+  key: string,
+  update: (queue: QueuedMessage[]) => QueuedMessage[],
+): ProviderState {
+  const session = state.sessions[key];
+  if (!session) return state;
+  return {
+    ...state,
+    sessions: {
+      ...state.sessions,
+      [key]: { ...session, queuedMessages: update(session.queuedMessages ?? []) },
+    },
+  };
+}
+
+/** The queued messages a turn's loop just read (its ``user_input`` row). */
+export function readUserInputIds(event: StreamEvent): string[] {
+  const metadata = event.metadata as { trace_kind?: string; user_inputs?: unknown } | undefined;
+  if (metadata?.trace_kind !== "user_input" || !Array.isArray(metadata.user_inputs)) return [];
+  return metadata.user_inputs
+    .map((item) => String((item as { command_id?: unknown })?.command_id ?? ""))
+    .filter(Boolean);
 }
 
 function updateSelectedSession(
@@ -800,6 +862,11 @@ function reducer(state: ProviderState, action: Action): ProviderState {
         ...session,
         resourceSelection: action.selection,
       }));
+    case "SET_CREATE_TARGET":
+      return updateSelectedSession(state, (session) => ({
+        ...session,
+        createTarget: action.createTarget,
+      }));
     case "SET_LANGUAGE":
       return updateSelectedSession(state, (session) => ({
         ...session,
@@ -967,6 +1034,18 @@ function reducer(state: ProviderState, action: Action): ProviderState {
         },
       };
     }
+    case "QUEUE_MESSAGE":
+      return updateSessionQueue(state, action.key, (queue) => [...queue, action.message]);
+    case "OFFER_QUEUED":
+      return updateSessionQueue(state, action.key, (queue) =>
+        queue.map((queued) =>
+          action.ids.includes(queued.id) ? { ...queued, offeredTo: action.turnId } : queued,
+        ),
+      );
+    case "DROP_QUEUED":
+      return updateSessionQueue(state, action.key, (queue) =>
+        queue.filter((queued) => !action.ids.includes(queued.id)),
+      );
     case "STREAM_START": {
       const session =
         state.sessions[action.key] ?? createSessionEntry(action.key);
@@ -1074,6 +1153,7 @@ function reducer(state: ProviderState, action: Action): ProviderState {
       // running the Chinese emphasis repair over the whole reply for events
       // that could not have changed a character of it.
       const capability = last?.capability || session.activeCapability || "";
+      const read = readUserInputIds(action.event);
       msgs[msgs.length - 1] = {
         ...(last || { role: "assistant", content: "" }),
         content,
@@ -1088,6 +1168,10 @@ function reducer(state: ProviderState, action: Action): ProviderState {
           [action.key]: {
             ...session,
             messages: msgs,
+            // What the running turn read is part of its reply now.
+            queuedMessages: read.length
+              ? (session.queuedMessages ?? []).filter((queued) => !read.includes(queued.id))
+              : session.queuedMessages,
             currentStage:
               action.event.type === "stage_start"
                 ? action.event.stage
@@ -1206,6 +1290,10 @@ function reducer(state: ProviderState, action: Action): ProviderState {
             messages: settled,
             isStreaming: false,
             currentStage: "",
+            // What the ended turn never read waits for the next one.
+            queuedMessages: (ending?.queuedMessages ?? []).map((queued) =>
+              queued.offeredTo ? { ...queued, offeredTo: null } : queued,
+            ),
             status: action.status ?? "completed",
             submissionBaseStatus: action.status ?? "completed",
             activeTurnId:
@@ -1306,6 +1394,10 @@ function reducer(state: ProviderState, action: Action): ProviderState {
               action.masterySessionMode !== undefined
                 ? action.masterySessionMode
                 : existing.masterySessionMode,
+            createTarget:
+              action.createTarget !== undefined
+                ? action.createTarget
+                : existing.createTarget,
             workspaceId: action.workspaceId !== undefined ? action.workspaceId : existing.workspaceId,
             courseId:
               action.courseId !== undefined
@@ -1622,6 +1714,9 @@ interface ChatContextValue {
   setCourseId: (courseId: string) => void;
   setPersonaSelection: (persona: string) => void;
   setResourceSelection: (selection: ResourceSelection) => void;
+  /** Create mode: the artifact kind this conversation authors towards, or
+   *  null to leave it. */
+  setCreateTarget: (createTarget: string | null) => void;
   setLanguage: (lang: string) => void;
   setReplyLanguageOverride: (language: string | null) => Promise<void>;
   sendMessage: (
@@ -1635,6 +1730,15 @@ interface ChatContextValue {
     persona?: string,
     memoryReferences?: MemoryReferencePayload,
   ) => void;
+  /** Hold a message sent while a turn runs; ``send`` is the turn it becomes
+   *  if the running turn never reads it (see ``QueuedMessage``). */
+  queueMessage: (
+    content: string,
+    send: QueuedMessage["send"],
+    steerable: boolean,
+  ) => void;
+  /** Take a queued message back, from the running turn too if not yet read. */
+  withdrawQueuedMessage: (id: string) => void;
   cancelStreamingTurn: () => void;
   /**
    * Deliver the user's reply for a turn that is paused on an
@@ -2761,6 +2865,10 @@ export function ChatStateAdapterProvider({
           typeof session.preferences?.mastery_session_mode === "string"
             ? session.preferences.mastery_session_mode
             : null,
+        createTarget:
+          typeof session.preferences?.create_target === "string"
+            ? session.preferences.create_target || null
+            : null,
         // The server is the truth for which course a conversation belongs to:
         // it is set from the launch URL, from the composer's pill, and from the
         // sidebar's "move to course", and every one of those writes here.
@@ -2998,6 +3106,12 @@ export function ChatStateAdapterProvider({
       const effectiveResources =
         exactReplay ? (replaySnapshot?.resourceSelection ?? emptyResourceSelection()) :
         replaySnapshot?.resourceSelection ?? session.resourceSelection ?? emptyResourceSelection();
+      // Create mode: a replay restates the exact kind it ran with (the chip
+      // may have been removed, or the session moved on, since); a live turn
+      // sends the session's current choice.
+      const effectiveCreateTarget =
+        exactReplay ? (replaySnapshot?.createTarget ?? null) :
+        replaySnapshot?.createTarget ?? session.createTarget ?? null;
       const effectiveMemoryReferences =
         exactReplay ? replaySnapshot?.memoryReferences :
         replaySnapshot?.memoryReferences ?? memoryReferences;
@@ -3125,6 +3239,7 @@ export function ChatStateAdapterProvider({
         ...(options?.masteryAnswer ? { masteryAnswer: options.masteryAnswer } : {}),
         ...(options?.masterySkip ? { masterySkip: options.masterySkip } : {}),
         ...(effectivePersona ? { persona: effectivePersona } : {}),
+        ...(effectiveCreateTarget ? { createTarget: effectiveCreateTarget } : {}),
         ...(effectiveMemoryReferences?.length
           ? { memoryReferences: [...effectiveMemoryReferences] }
           : {}),
@@ -3286,6 +3401,8 @@ export function ChatStateAdapterProvider({
         readingReferences: effectiveReadingReferences,
         masteryPathId: effectiveMasteryPathId || null,
         masterySessionMode: effectiveMasterySessionMode || null,
+        // Always sent, string or null — the wire contract for create mode.
+        createTarget: effectiveCreateTarget,
         masteryAnswer: options?.masteryAnswer ?? replaySnapshot?.masteryAnswer ?? null,
         masterySkip: options?.masterySkip ?? replaySnapshot?.masterySkip ?? null,
         // Immersive reading. Gated on the stable workspace mode as well as on
@@ -3676,6 +3793,7 @@ export function ChatStateAdapterProvider({
       llmSelection: current.llmSelection,
       masteryPathId: current.masteryPathId,
       masterySessionMode: current.masterySessionMode,
+      createTarget: current.createTarget,
       workspaceId: current.workspaceId,
       courseId: current.courseId,
       personaSelection: current.personaSelection,
@@ -3686,6 +3804,7 @@ export function ChatStateAdapterProvider({
       language: current.language,
       replyLanguageOverride: current.replyLanguageOverride,
       selectedBranches: current.selectedBranches,
+      queuedMessages: current.queuedMessages ?? [],
       lastTurnFailed: isFailedTurnVisible(
         current.messages,
         current.selectedBranches,
@@ -3774,6 +3893,9 @@ export function ChatStateAdapterProvider({
 
   const setResourceSelection = useCallback((selection: ResourceSelection) => {
     dispatch({ type: "SET_RESOURCE_SELECTION", selection });
+  }, []);
+  const setCreateTarget = useCallback((createTarget: string | null) => {
+    dispatch({ type: "SET_CREATE_TARGET", createTarget });
   }, []);
 
   const setLanguage = useCallback((lang: string) => {
@@ -4068,6 +4190,96 @@ export function ChatStateAdapterProvider({
     [loadSession],
   );
 
+  // ── Messages sent while a turn runs ───────────────────────────
+  const queueMessage = useCallback(
+    (content: string, send: QueuedMessage["send"], steerable: boolean) => {
+      const key = stateRef.current.selectedKey;
+      if (!key) return;
+      dispatch({
+        type: "QUEUE_MESSAGE",
+        key,
+        message: { id: newCommandId(), content, send, steerable, offeredTo: null },
+      });
+    },
+    [],
+  );
+
+  const offerToTurn = useCallback(
+    (key: string, command: ReturnType<typeof buildUserInput>) => {
+      // An unconfirmed or refused offer stays queued: the turn's end hands
+      // whatever it never read back to the queue, which sends it as the next
+      // turn, so nothing typed mid-turn is lost to a dropped ACK.
+      void sendThroughRunner(key, command, { awaitAck: true }).catch(() => {});
+    },
+    [sendThroughRunner],
+  );
+
+  const withdrawQueuedMessage = useCallback(
+    (id: string) => {
+      const key = stateRef.current.selectedKey;
+      const session = key ? stateRef.current.sessions[key] : undefined;
+      const queued = session?.queuedMessages?.find((item) => item.id === id);
+      if (!key || !session || !queued) return;
+      dispatch({ type: "DROP_QUEUED", key, ids: [id] });
+      // Already offered: take it back before the turn's next step reads it.
+      if (queued.offeredTo && queued.offeredTo === session.activeTurnId) {
+        offerToTurn(
+          key,
+          buildUserInput({
+            turnId: queued.offeredTo,
+            content: "",
+            withdraw: id,
+            sessionId: session.sessionId,
+          }),
+        );
+      }
+    },
+    [offerToTurn],
+  );
+
+  // Offer what can steer to the turn running now; it reads them between steps.
+  const selectedSession = state.selectedKey ? state.sessions[state.selectedKey] : undefined;
+  useEffect(() => {
+    const key = state.selectedKey;
+    const turnId = selectedSession?.activeTurnId;
+    if (!key || !selectedSession?.isStreaming || !turnId) return;
+    const offers = (selectedSession.queuedMessages ?? []).filter(
+      (queued) => queued.steerable && queued.offeredTo !== turnId,
+    );
+    if (!offers.length) return;
+    dispatch({ type: "OFFER_QUEUED", key, ids: offers.map((queued) => queued.id), turnId });
+    for (const queued of offers) {
+      offerToTurn(
+        key,
+        buildUserInput({
+          turnId,
+          content: queued.content,
+          commandId: queued.id,
+          sessionId: selectedSession.sessionId,
+        }),
+      );
+    }
+  }, [offerToTurn, selectedSession, state.selectedKey]);
+
+  // Once the turn has ended, what it never read goes as the next turn — one
+  // at a time, so later messages can steer that one in turn.
+  useEffect(() => {
+    const key = state.selectedKey;
+    const next = selectedSession?.queuedMessages?.[0];
+    if (
+      !key ||
+      !next ||
+      selectedSession.isStreaming ||
+      selectedSession.status === "running" ||
+      // A send the server never received is retried by hand, not queued past.
+      derivedState.submissionFailed
+    ) {
+      return;
+    }
+    dispatch({ type: "DROP_QUEUED", key, ids: [next.id] });
+    sendMessage(...next.send);
+  }, [derivedState.submissionFailed, selectedSession, sendMessage, state.selectedKey]);
+
   // Memoize the context value so consumers don't re-render on every render of
   // this provider. Without this wrap, every stream-event-driven reducer
   // dispatch produced a fresh object identity, cascading a re-render through
@@ -4088,9 +4300,12 @@ export function ChatStateAdapterProvider({
       setCourseId,
       setPersonaSelection,
       setResourceSelection,
+      setCreateTarget,
       setLanguage,
       setReplyLanguageOverride,
       sendMessage,
+      queueMessage,
+      withdrawQueuedMessage,
       cancelStreamingTurn,
       submitUserReply,
       regenerateLastMessage,
@@ -4123,9 +4338,12 @@ export function ChatStateAdapterProvider({
       setCourseId,
       setPersonaSelection,
       setResourceSelection,
+      setCreateTarget,
       setLanguage,
       setReplyLanguageOverride,
       sendMessage,
+      queueMessage,
+      withdrawQueuedMessage,
       cancelStreamingTurn,
       submitUserReply,
       regenerateLastMessage,
