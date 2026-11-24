@@ -6175,5 +6175,12 @@
   "customize.learningHint": "Chọn các phương pháp học được hiển thị trên trang này. Bạn có thể thêm lại các phương pháp đã ẩn bất cứ lúc nào.",
   "customize.emptyLearning": "Chừa chỗ cho mục tiêu học tập tiếp theo của bạn",
   "customize.emptyLearningHint": "Tùy chỉnh trang này để hiển thị các phương pháp học. Bạn có thể xem các mô-đun không khả dụng tại Cài đặt → Trạng thái môi trường thực thi.",
-  "customize.learningFooter": "Lựa chọn của bạn được lưu vào tài khoản. Chỉ hiển thị các phương pháp học khả dụng trong môi trường này."
+  "customize.learningFooter": "Lựa chọn của bạn được lưu vào tài khoản. Chỉ hiển thị các phương pháp học khả dụng trong môi trường này.",
+  "Queued messages": "Tin nhắn đang chờ",
+  "Sending…": "Đang gửi…",
+  "Read after this step": "Sẽ được đọc sau bước này",
+  "Sent after this reply": "Sẽ được gửi sau câu trả lời này",
+  "Remove from queue": "Rút khỏi hàng chờ",
+  "Queue message": "Xếp tin nhắn vào hàng chờ",
+  "You, while it worked": "Bạn gửi trong lúc xử lý"
 }

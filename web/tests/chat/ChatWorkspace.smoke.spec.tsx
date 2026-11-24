@@ -33,6 +33,8 @@ const fixture = vi.hoisted(() => ({
     setResourceSelection: vi.fn(),
     setReplyLanguageOverride: vi.fn(() => Promise.resolve()),
     sendMessage: vi.fn(),
+    queueMessage: vi.fn(),
+    withdrawQueuedMessage: vi.fn(),
     cancelStreamingTurn: vi.fn(),
     submitUserReply: vi.fn(async () => true),
     regenerateLastMessage: vi.fn(),
@@ -259,6 +261,7 @@ function emptyChatState(): ChatState {
     submissionErrorMessage: '',
     submissionNeedsReview: false,
     submissionNotSaved: false,
+    queuedMessages: [],
   }
 }
 
@@ -452,6 +455,36 @@ describe('ChatWorkspace smoke', () => {
     expect(screen.getByTestId('composer')).toHaveAttribute('data-streaming', 'false')
     // No error banner while the turn is healthy.
     expect(screen.queryByRole('alert')).toBeNull()
+    view.unmount()
+  })
+
+  it('queues a message sent mid-turn instead of dropping it', async () => {
+    const view = renderWorkspace()
+    await waitFor(() => expect(fixture.adapter.newSession).toHaveBeenCalled())
+    applyState({
+      sessionId: 's-1',
+      isStreaming: true,
+      messages: [
+        { id: 1, role: 'user', content: 'Explain FFT' },
+        { id: 2, role: 'assistant', content: '', events: [] },
+      ],
+    })
+    view.rerender(<ChatWorkspace />)
+    expect(fixture.composerProps?.queueWhileStreaming).toBe(true)
+
+    fireEvent.click(screen.getByText('Send'))
+
+    // Plain words can steer the running turn; nothing starts a second turn.
+    await waitFor(() => expect(fixture.adapter.queueMessage).toHaveBeenCalledTimes(1))
+    const [content, send, steerable] = fixture.adapter.queueMessage.mock.calls[0] as unknown as [
+      string,
+      unknown[],
+      boolean,
+    ]
+    expect(content).toBe('Explain photosynthesis')
+    expect(send[0]).toBe('Explain photosynthesis')
+    expect(steerable).toBe(true)
+    expect(fixture.adapter.sendMessage).not.toHaveBeenCalled()
     view.unmount()
   })
 

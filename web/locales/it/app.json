@@ -6215,5 +6215,12 @@
   "customize.learningHint": "Scegli i metodi di apprendimento mostrati in questa pagina. I metodi nascosti possono essere aggiunti nuovamente in qualsiasi momento.",
   "customize.emptyLearning": "Fai spazio al tuo prossimo obiettivo di apprendimento",
   "customize.emptyLearningHint": "Personalizza questa pagina per mostrare i metodi di apprendimento. I moduli non disponibili possono essere esaminati in Impostazioni → Runtime.",
-  "customize.learningFooter": "Le tue scelte vengono salvate sul tuo account. Vengono mostrati solo i metodi di apprendimento disponibili in questo ambiente."
+  "customize.learningFooter": "Le tue scelte vengono salvate sul tuo account. Vengono mostrati solo i metodi di apprendimento disponibili in questo ambiente.",
+  "Queued messages": "Messaggi in coda",
+  "Sending…": "Invio in corso…",
+  "Read after this step": "Letto dopo questo passaggio",
+  "Sent after this reply": "Inviato dopo questa risposta",
+  "Remove from queue": "Rimuovi dalla coda",
+  "Queue message": "Metti il messaggio in coda",
+  "You, while it worked": "Tu, mentre lavorava"
 }

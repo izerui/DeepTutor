@@ -6215,5 +6215,12 @@
   "customize.learningHint": "Escolha os métodos de aprendizagem exibidos nesta página. Métodos ocultos podem ser adicionados novamente a qualquer momento.",
   "customize.emptyLearning": "Abra espaço para seu próximo objetivo de aprendizagem",
   "customize.emptyLearningHint": "Personalize esta página para exibir métodos de aprendizagem. Módulos indisponíveis podem ser consultados em Configurações → Execução.",
-  "customize.learningFooter": "Suas escolhas são salvas na sua conta. Apenas métodos de aprendizagem disponíveis neste ambiente são exibidos."
+  "customize.learningFooter": "Suas escolhas são salvas na sua conta. Apenas métodos de aprendizagem disponíveis neste ambiente são exibidos.",
+  "Queued messages": "Mensagens na fila",
+  "Sending…": "Enviando…",
+  "Read after this step": "Lida após esta etapa",
+  "Sent after this reply": "Enviada após esta resposta",
+  "Remove from queue": "Remover da fila",
+  "Queue message": "Colocar mensagem na fila",
+  "You, while it worked": "Você, durante o processamento"
 }

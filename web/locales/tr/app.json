@@ -6195,5 +6195,12 @@
   "customize.learningHint": "Bu sayfada gösterilecek öğrenme yöntemlerini seçin. Gizlenen yöntemler istediğiniz zaman geri eklenebilir.",
   "customize.emptyLearning": "Sonraki öğrenme hedefiniz için yer açın",
   "customize.emptyLearningHint": "Bu sayfayı öğrenme yöntemlerini gösterecek şekilde özelleştirin. Kullanılamayan modüller Ayarlar → Çalışma zamanı bölümünde incelenebilir.",
-  "customize.learningFooter": "Seçimleriniz hesabınıza kaydedilir. Yalnızca bu ortamda kullanılabilen öğrenme yöntemleri gösterilir."
+  "customize.learningFooter": "Seçimleriniz hesabınıza kaydedilir. Yalnızca bu ortamda kullanılabilen öğrenme yöntemleri gösterilir.",
+  "Queued messages": "Sıradaki mesajlar",
+  "Sending…": "Gönderiliyor…",
+  "Read after this step": "Bu adımdan sonra okunacak",
+  "Sent after this reply": "Bu yanıttan sonra gönderilecek",
+  "Remove from queue": "Sıradan kaldır",
+  "Queue message": "Mesajı sıraya ekle",
+  "You, while it worked": "Siz, o çalışırken"
 }
