@@ -34,6 +34,7 @@ export type ClientSubmissionId = string | null;
 export type ConsultPartnerId = string | null;
 export type Content = string;
 export type CourseId = string | null;
+export type CreateTarget = string | null;
 export type FollowupQuestionContext = {
   [k: string]: unknown;
 } | null;
@@ -290,6 +291,7 @@ export interface StartTurnCommand {
   consult_partner_id?: ConsultPartnerId;
   content: Content;
   course_id?: CourseId;
+  create_target?: CreateTarget;
   followup_question_context?: FollowupQuestionContext;
   history_references?: HistoryReferences;
   knowledge_bases?: KnowledgeBases;
