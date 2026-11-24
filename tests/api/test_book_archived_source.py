@@ -213,6 +213,69 @@ def test_local_collision_does_not_authorize_archived_canonical_book(archive_env,
     assert snapshot(source) == before
 
 
+@pytest.fixture(params=["http", "websocket"])
+def submit_book_action(archive_env, request):
+    client, _ = archive_env
+
+    def submit(action, **fields):
+        payload = {"book_id": "bk_archive", "expected_revision": 1, **fields}
+        if request.param == "http":
+            response = client.post(
+                "/api/books/" + action.replace("_", "-"), headers=headers("teacher"), json=payload,
+            )
+            return response.status_code
+        with client.websocket_connect("/ws/books?token=teacher") as ws:
+            ws.send_json({"type": action, **payload})
+            while True:
+                frame = ws.receive_json()
+                if frame["type"] == "error":
+                    return frame["status"]
+                if frame["type"] == f"{action}_result":
+                    return 200
+
+    return submit
+
+
+def test_rejected_edits_allow_retry_with_original_revision(submit_book_action):
+    submit = submit_book_action
+    with actor_scope("teacher"):
+        storage = seed_book()
+    before = snapshot(storage)
+    assert submit("confirm_proposal", proposal={"estimated_chapters": "bad"}) == 400
+    assert submit("confirm_spine", spine={"chapters": "bad"}) == 400
+    assert submit("regenerate_block", page_id="pg_archive", block_id="gone") == 404
+    for fields in ({}, {"spine": None}, {"spine": {}}):
+        assert submit("confirm_spine", **fields, block_types=["quiz"]) == 404
+        assert snapshot(storage) == before
+    assert submit("confirm_spine", spine={"book_id": "bk_archive"}, auto_compile=False,
+                  block_types=["quiz"]) == 200
+    book = storage.load_book("bk_archive")
+    assert book.revision == 2
+    assert book.metadata["block_types"] == ["section", "quiz"]
+
+
+def test_empty_confirmations_reuse_saved_content(submit_book_action, monkeypatch):
+    from deeptutor.book.engine import BookEngine
+    from deeptutor.book.models import BookProposal, Spine
+
+    with actor_scope("teacher"):
+        storage = seed_book()
+        book = storage.load_book("bk_archive")
+        book.proposal = BookProposal(scope="Algebra", target_level="Advanced", estimated_chapters=4)
+        storage.save_book(book)
+        storage.save_spine(Spine(book_id=book.id, exploration_summary="Original outline"))
+
+    async def confirm_without_model(self, *, book_id, edited_proposal):
+        assert edited_proposal is None
+        return self.load_book(book_id), self.load_spine(book_id)
+
+    monkeypatch.setattr(BookEngine, "confirm_proposal", confirm_without_model)
+    assert submit_book_action("confirm_proposal", proposal={}) == 200
+    assert submit_book_action("confirm_spine", spine={}, expected_revision=2, auto_compile=False) == 200
+    assert storage.load_spine(book.id).exploration_summary == "Original outline"
+    assert storage.load_book(book.id).proposal == book.proposal
+
+
 @pytest.mark.parametrize("delete_owner", [False, True])
 def test_transferred_book_uses_retained_former_owner_catalog(archive_env, delete_owner):
     from deeptutor.multi_user.paths import user_context

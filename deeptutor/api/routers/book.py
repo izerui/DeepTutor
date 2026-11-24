@@ -1391,19 +1391,23 @@ async def confirm_proposal(req: ConfirmProposalRequest) -> dict[str, Any]:
     """Stage 2: user confirms (and possibly edits) the proposal → SpineAgent."""
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
+    return await _confirm_proposal(resolved, req)
+
+
+async def _confirm_proposal(resolved: ResolvedBook, req: ConfirmProposalRequest) -> dict[str, Any]:
     engine = resolved.engine
+    edited: BookProposal | None = None
+    if req.proposal is not None:
+        try:
+            edited = BookProposal.model_validate(req.proposal)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid proposal: {exc}") from exc
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
         req.expected_revision,
         "confirm_proposal",
     )
-    edited: BookProposal | None = None
-    if req.proposal:
-        try:
-            edited = BookProposal.model_validate(req.proposal)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid proposal: {exc}")
     try:
         book, spine = await engine.confirm_proposal(book_id=req.book_id, edited_proposal=edited)
     except ValueError as exc:
@@ -1423,19 +1427,23 @@ async def confirm_spine(req: ConfirmSpineRequest) -> dict[str, Any]:
     """Stage 3: user confirms the spine → create pending page shells."""
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
+    return await _confirm_spine(resolved, req)
+
+
+async def _confirm_spine(resolved: ResolvedBook, req: ConfirmSpineRequest) -> dict[str, Any]:
     engine = resolved.engine
+    edited: Spine | None = None
+    if req.spine is not None:
+        try:
+            edited = Spine.model_validate(req.spine)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid spine: {exc}") from exc
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
         req.expected_revision,
         "confirm_spine",
     )
-    edited: Spine | None = None
-    if req.spine:
-        try:
-            edited = Spine.model_validate(req.spine)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid spine: {exc}")
     _persist_requested_block_types(resolved, req.book_id, req.block_types)
     try:
         pages = await engine.confirm_spine(
@@ -1466,6 +1474,10 @@ async def compile_page(req: CompilePageRequest) -> dict[str, Any]:
     """Drive the compiler for the page the user just opened (current-page priority)."""
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
+    return await _compile_page(resolved, req)
+
+
+async def _compile_page(resolved: ResolvedBook, req: CompilePageRequest) -> dict[str, Any]:
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -1493,6 +1505,10 @@ async def compile_page(req: CompilePageRequest) -> dict[str, Any]:
 async def regenerate_block(req: RegenerateBlockRequest) -> dict[str, Any]:
     resolved = _resolve_book_or_404(req.book_id, edit=True)
     req.book_id = book_registry.strip_ref(req.book_id)
+    return await _regenerate_block(resolved, req)
+
+
+async def _regenerate_block(resolved: ResolvedBook, req: RegenerateBlockRequest) -> dict[str, Any]:
     engine = resolved.engine
     revision = _claim_content_mutation(
         resolved,
@@ -2640,7 +2656,7 @@ async def book_websocket(ws: WebSocket) -> None:
                         }
                     )
 
-                elif msg_type == "confirm_proposal":
+                elif msg_type in {"confirm_proposal", "confirm_spine", "compile_page", "regenerate_block"}:
                     if resolved is None or not resolved.can_edit:
                         raise ValueError("Book not found")
                     engine = resolved.engine
@@ -2648,118 +2664,16 @@ async def book_websocket(ws: WebSocket) -> None:
                         book_id, storage=getattr(engine, "storage", None) or resolved.learning,
                     )
                     fanout.attach_book(book_id, resolved, after_seq=action_bus.latest_seq)
-                    revision = _claim_content_mutation(
-                        resolved,
-                        book_id,
-                        data.get("expected_revision"),
-                        "confirm_proposal",
-                    )
-                    edited: BookProposal | None = None
-                    if data.get("proposal"):
-                        edited = BookProposal.model_validate(data["proposal"])
-                    book, spine = await engine.confirm_proposal(
-                        book_id=book_id,
-                        edited_proposal=edited,
-                    )
-                    await send(
-                        {
-                            "type": "confirm_proposal_result",
-                            "book": book.model_dump(mode="json"),
-                            "spine": spine.model_dump(mode="json"),
-                            "book_revision": revision,
-                        }
-                    )
-
-                elif msg_type == "confirm_spine":
-                    if resolved is None or not resolved.can_edit:
-                        raise ValueError("Book not found")
-                    engine = resolved.engine
-                    action_bus = get_book_bus(
-                        book_id, storage=getattr(engine, "storage", None) or resolved.learning,
-                    )
-                    fanout.attach_book(book_id, resolved, after_seq=action_bus.latest_seq)
-                    revision = _claim_content_mutation(
-                        resolved,
-                        book_id,
-                        data.get("expected_revision"),
-                        "confirm_spine",
-                    )
-                    edited_spine: Spine | None = None
-                    if data.get("spine"):
-                        edited_spine = Spine.model_validate(data["spine"])
-                    pages = await engine.confirm_spine(
-                        book_id=book_id,
-                        edited_spine=edited_spine,
-                        auto_compile=bool(data.get("auto_compile", True)),
-                    )
-                    await send(
-                        {
-                            "type": "confirm_spine_result",
-                            "pages": [p.model_dump(mode="json") for p in pages],
-                            "book_revision": revision,
-                        }
-                    )
-
-                elif msg_type == "compile_page":
-                    if resolved is None or not resolved.can_edit:
-                        raise ValueError("Book not found")
-                    engine = resolved.engine
-                    action_bus = get_book_bus(
-                        book_id, storage=getattr(engine, "storage", None) or resolved.learning,
-                    )
-                    fanout.attach_book(book_id, resolved, after_seq=action_bus.latest_seq)
-                    revision = _claim_content_mutation(
-                        resolved,
-                        book_id,
-                        data.get("expected_revision"),
-                        "compile_page",
-                        extra={"page_id": str(data.get("page_id") or "")},
-                        strict=False,
-                    )
-                    page = await engine.compile_page(
-                        book_id=book_id,
-                        page_id=str(data.get("page_id") or ""),
-                        force=bool(data.get("force", False)),
-                    )
-                    await send(
-                        {
-                            "type": "compile_page_result",
-                            "page": page.model_dump(mode="json"),
-                            "book_revision": revision,
-                        }
-                    )
-
-                elif msg_type == "regenerate_block":
-                    if resolved is None or not resolved.can_edit:
-                        raise ValueError("Book not found")
-                    engine = resolved.engine
-                    action_bus = get_book_bus(
-                        book_id, storage=getattr(engine, "storage", None) or resolved.learning,
-                    )
-                    fanout.attach_book(book_id, resolved, after_seq=action_bus.latest_seq)
-                    revision = _claim_content_mutation(
-                        resolved,
-                        book_id,
-                        data.get("expected_revision"),
-                        "regenerate_block",
-                        extra={
-                            "page_id": str(data.get("page_id") or ""),
-                            "block_id": str(data.get("block_id") or ""),
-                        },
-                    )
-                    block = await engine.regenerate_block(
-                        book_id=book_id,
-                        page_id=str(data.get("page_id") or ""),
-                        block_id=str(data.get("block_id") or ""),
-                        params_override=data.get("params_override"),
-                    )
-                    await send(
-                        {
-                            "type": "regenerate_block_result",
-                            "block": block.model_dump(mode="json") if block else None,
-                            "book_revision": revision,
-                        }
-                    )
+                    payload = {**data, "book_id": book_id}
+                    if msg_type == "confirm_proposal":
+                        result = await _confirm_proposal(resolved, ConfirmProposalRequest(**payload))
+                    elif msg_type == "confirm_spine":
+                        result = await _confirm_spine(resolved, ConfirmSpineRequest(**payload))
+                    elif msg_type == "compile_page":
+                        result = await _compile_page(resolved, CompilePageRequest(**payload))
+                    else:
+                        result = await _regenerate_block(resolved, RegenerateBlockRequest(**payload))
+                    await send({"type": f"{msg_type}_result", **result})
 
                 else:
                     await send({"type": "error", "content": f"Unknown message type: {msg_type}"})

@@ -45,6 +45,11 @@ class _StubEngine:
 
         return Book(id=book_id) if book_id in self.known else None
 
+    def load_page(self, book_id: str, page_id: str):
+        from deeptutor.book.models import Page
+
+        return Page(id=page_id, book_id=book_id) if page_id == "pg_1" else None
+
     async def compile_page(self, *, book_id, page_id, force=False):
         from deeptutor.book.models import Page
 
