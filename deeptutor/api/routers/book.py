@@ -1397,7 +1397,7 @@ async def confirm_proposal(req: ConfirmProposalRequest) -> dict[str, Any]:
 async def _confirm_proposal(resolved: ResolvedBook, req: ConfirmProposalRequest) -> dict[str, Any]:
     engine = resolved.engine
     edited: BookProposal | None = None
-    if req.proposal is not None:
+    if req.proposal:
         try:
             edited = BookProposal.model_validate(req.proposal)
         except ValueError as exc:
@@ -1433,16 +1433,22 @@ async def confirm_spine(req: ConfirmSpineRequest) -> dict[str, Any]:
 async def _confirm_spine(resolved: ResolvedBook, req: ConfirmSpineRequest) -> dict[str, Any]:
     engine = resolved.engine
     edited: Spine | None = None
-    if req.spine is not None:
+    if req.spine:
         try:
             edited = Spine.model_validate(req.spine)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid spine: {exc}") from exc
+
+    def require_spine() -> None:
+        if edited is None and engine.load_spine(req.book_id) is None:
+            raise HTTPException(status_code=404, detail=f"No spine for book {req.book_id}")
+
     revision = _claim_content_mutation(
         resolved,
         req.book_id,
         req.expected_revision,
         "confirm_spine",
+        preflight=require_spine,
     )
     _persist_requested_block_types(resolved, req.book_id, req.block_types)
     try:
