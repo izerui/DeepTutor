@@ -2343,3 +2343,53 @@ async def test_quiz_refuses_a_restatement_of_a_correctly_answered_question(path_
     assert refused.success is False
     assert "already answered correctly" in refused.content
     assert store.load(path_id).pending_question is None
+
+
+@pytest.mark.asyncio
+async def test_card_resubmission_revises_an_answer_that_was_never_graded(path_id):
+    """A grading failure leaves the card answered but ungraded; the learner's
+    edited resubmission must be what gets graded, not the first draft."""
+    await _build_basic(path_id)
+    status = json.loads((await MasteryStatusTool().execute(_mastery_path_id=path_id)).content)
+    kp_id = status["next"]["knowledge_point_id"]
+    question = tool_payload(
+        await MasteryQuizTool().execute(
+            _mastery_path_id=path_id,
+            knowledge_point_id=kp_id,
+            question="Explain the idea.",
+            expected_answer="right",
+        )
+    )
+    from deeptutor.learning.service import LearningService
+
+    service = LearningService()
+    service.record_question_answer(path_id, "first draft", interaction_id=question["question_id"])
+    # Grading failed: still answered, no result. Without the card flag the
+    # stored reply stays authoritative.
+    service.record_question_answer(path_id, "model paraphrase", interaction_id=question["question_id"])
+    kept = LearningStore().get_interaction(path_id, question["question_id"])
+    assert kept is not None and kept.user_answer == "first draft"
+
+    revised = service.record_question_answer(
+        path_id,
+        "photosynthesis",
+        interaction_id=question["question_id"],
+        revise_ungraded=True,
+    )
+    assert revised is not None
+    assert revised.status == InteractionStatus.ANSWERED
+    assert revised.user_answer == "photosynthesis"
+    stored = LearningStore().get_interaction(path_id, question["question_id"])
+    assert stored is not None and stored.user_answer == "photosynthesis"
+
+    result = await MasteryGradeTool().execute(_mastery_path_id=path_id, answer="anything")
+    assert result.success is True
+    graded_interaction = LearningStore().get_interaction(path_id, question["question_id"])
+    assert graded_interaction is not None and graded_interaction.user_answer == "photosynthesis"
+
+    # Once graded, the flag no longer rewrites the answer.
+    service.record_question_answer(
+        path_id, "late edit", interaction_id=question["question_id"], revise_ungraded=True
+    )
+    final = LearningStore().get_interaction(path_id, question["question_id"])
+    assert final is not None and final.user_answer == "photosynthesis"

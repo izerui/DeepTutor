@@ -103,6 +103,7 @@ class LearningTurnAdapter:
                 interaction_id=question_id,
                 session_id=session_id,
                 turn_id=turn_id,
+                revise_ungraded=True,
                 **({"answers": answers} if answers is not None else {}),
             )
 

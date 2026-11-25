@@ -1079,8 +1079,15 @@ class LearningService:
         interaction_id: str = "",
         session_id: str = "",
         turn_id: str = "",
+        revise_ungraded: bool = False,
     ) -> MasteryInteraction | None:
-        """Durably record a reply before the LLM gets another reasoning round."""
+        """Durably record a reply before the LLM gets another reasoning round.
+
+        ``revise_ungraded`` is set only for the learner's own card submission:
+        if grading of the stored reply failed and left no result, the card
+        reopens for a retry, and the edited answer replaces the ungraded one
+        instead of the first draft being graded again.
+        """
 
         def record(tx):
             interaction = (
@@ -1133,9 +1140,14 @@ class LearningService:
                     session_id=interaction.session_id,
                     turn_id=interaction.turn_id,
                 )
-            elif (
-                interaction.status == InteractionStatus.ANSWERED
-                and interaction.result.get("final") is False
+            elif interaction.status == InteractionStatus.ANSWERED and (
+                interaction.result.get("final") is False
+                or (
+                    revise_ungraded
+                    and not interaction.result
+                    and str(answer or "").strip()
+                    and str(answer or "").strip() != str(interaction.user_answer or "").strip()
+                )
             ):
                 tx.emit(
                     "assessment.revised",
