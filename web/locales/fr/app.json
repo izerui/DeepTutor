@@ -6252,5 +6252,6 @@
   "Unable to load file storage.": "Impossible de charger le stockage de fichiers.",
   "This question was already completed. This reply was not graded; ask for a new practice question.": "Cette question est déjà terminée. Cette réponse n’a pas été évaluée ; demandez une nouvelle question d’entraînement.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Cette question n’est plus ouverte, cette réponse n’a donc pas été évaluée. Continuez avec la question en cours ou demandez-en une nouvelle.",
-  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Les pages sources de cette question ont changé après qu’elle a été posée : elle ne peut plus être évaluée. Passez-la et demandez une nouvelle question."
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Les pages sources de cette question ont changé après qu’elle a été posée : elle ne peut plus être évaluée. Passez-la et demandez une nouvelle question.",
+  "This answer was not saved to your question bank.": "Cette réponse n’a pas été enregistrée dans votre banque de questions."
 }

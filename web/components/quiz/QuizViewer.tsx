@@ -205,6 +205,8 @@ export default function QuizViewer({
   const lastReportedSignatureRef = useRef("");
 
   const [entryIds, setEntryIds] = useState<Record<string, number>>({});
+  // Answers whose question-bank save failed; the learner can save them again.
+  const [saveFailed, setSaveFailed] = useState<Record<string, boolean>>({});
   const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({});
   // Captured from the notebook entry on lookup so QuizFollowupTabBody
   // can hydrate prior chat history when the follow-up tab opens.
@@ -502,6 +504,12 @@ export default function QuizViewer({
         });
         setEntryIds((prev) => ({ ...prev, [key]: entry.id }));
         setBookmarked((prev) => ({ ...prev, [key]: entry.bookmarked }));
+        setSaveFailed((prev) => {
+          if (!prev[key]) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
         // Replace freshly-uploaded ``base64`` images with the
         // AttachmentStore URLs the server hands back, so subsequent
         // upserts don't re-upload the same bytes and the previews can
@@ -529,7 +537,8 @@ export default function QuizViewer({
           });
         }
       } catch {
-        /* best-effort */
+        // Grading already happened locally; only the saved record is missing.
+        setSaveFailed((prev) => ({ ...prev, [key]: true }));
       }
     },
     [sessionId, turnId],
@@ -1256,6 +1265,22 @@ export default function QuizViewer({
             </>
           )}
         </div>
+
+        {ans.submitted && q && saveFailed[questionKey] && (
+          <div
+            role="alert"
+            className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:bg-red-950/30 dark:text-red-400"
+          >
+            <span>{t("This answer was not saved to your question bank.")}</span>
+            <button
+              type="button"
+              onClick={() => void upsertSingleQuestion(q, ans, idx)}
+              className="font-medium underline"
+            >
+              {t("Try again")}
+            </button>
+          </div>
+        )}
 
         {ans.submitted &&
           (() => {

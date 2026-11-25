@@ -6232,5 +6232,6 @@
   "Unable to load file storage.": "无法读取文件信息。",
   "This question was already completed. This reply was not graded; ask for a new practice question.": "这道题已经完成，这次回答没有评分；请让老师出一道新的练习题。",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "这道题已关闭，这次回答没有评分。请继续回答当前的题目，或让老师出一道新题。",
-  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "这道题引用的资料页面在出题后有变动，已无法评分。请跳过这题，让老师重新出一道。"
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "这道题引用的资料页面在出题后有变动，已无法评分。请跳过这题，让老师重新出一道。",
+  "This answer was not saved to your question bank.": "这道题的作答没有保存到题库。"
 }

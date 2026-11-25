@@ -285,6 +285,23 @@ describe("QuizViewer smoke", () => {
     ]);
   });
 
+  it("tells the learner when an answer was not saved and lets them save it again", async () => {
+    const user = userEvent.setup();
+    mocks.upsertNotebookEntry.mockRejectedValueOnce(new Error("offline"));
+    renderViewer([choiceQuestion, conceptQuestion], { sessionId: "session-1", turnId: "turn-1" });
+    await user.click(screen.getByRole("button", { name: /Paris/ }));
+    await user.click(screen.getByRole("button", { name: /Check Answer/ }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This answer was not saved to your question bank.");
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(mocks.upsertNotebookEntry).toHaveBeenCalledTimes(2));
+    expect(mocks.upsertNotebookEntry.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ question_id: "q_1", user_answer: "B", is_correct: true }),
+    );
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("stays local-only without a turn id: no notebook or result-report calls", async () => {
     const user = userEvent.setup();
     renderViewer([choiceQuestion], { sessionId: "session-1" });
