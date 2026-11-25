@@ -484,6 +484,13 @@ async def record_assessment(record: AssessmentRecord) -> AssessmentOutcome:
             f"Failed to record assessment {record.question_id!r} for session {record.session_id!r}"
         ) from exc
     if item["mastery_path_id"] and item["knowledge_point_id"]:
+        # Startup recovery cannot reach every account and workspace for sure,
+        # so this scope's own next linked answer catches up any attempt an
+        # interrupted run left unapplied, before this one, in event order.
+        try:
+            await reconcile_linked_assessments(exclude_attempt_id=attempt_id)
+        except Exception:
+            logger.warning("Could not replay pending linked assessments", exc_info=True)
         try:
             persisted = await store.get_assessment_attempt(attempt_id)
             if persisted is None:
@@ -521,8 +528,12 @@ async def record_assessment(record: AssessmentRecord) -> AssessmentOutcome:
     )
 
 
-async def reconcile_linked_assessments() -> tuple[int, int]:
-    """Replay durable cross-surface attempts left pending by an interrupted run."""
+async def reconcile_linked_assessments(*, exclude_attempt_id: str = "") -> tuple[int, int]:
+    """Replay durable cross-surface attempts left pending by an interrupted run.
+
+    Works on the current account and workspace scope. ``exclude_attempt_id``
+    leaves out the attempt the caller is about to apply itself.
+    """
     from deeptutor.services.session import get_sqlite_session_store
 
     store = get_sqlite_session_store()
@@ -531,6 +542,8 @@ async def reconcile_linked_assessments() -> tuple[int, int]:
     failed = 0
     for attempt in attempts:
         attempt_id = str(attempt.get("attempt_id") or "")
+        if exclude_attempt_id and attempt_id == exclude_attempt_id:
+            continue
         try:
             record = AssessmentRecord.model_validate(attempt)
             await asyncio.to_thread(

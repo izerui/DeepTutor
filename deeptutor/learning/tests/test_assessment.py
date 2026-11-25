@@ -447,7 +447,8 @@ def test_linked_evidence_retries_after_restart_in_event_order(
         }
     )
     asyncio.run(record_assessment(newer))
-    assert asyncio.run(reconcile_linked_assessments()) == (1, 0)
+    # The newer linked answer already replayed the pending one first.
+    assert asyncio.run(reconcile_linked_assessments()) == (0, 0)
     retried_old = old.model_copy(update={"created_at": 1_200_000.0})
     outcome = asyncio.run(record_assessment(retried_old))
 
@@ -461,6 +462,87 @@ def test_linked_evidence_retries_after_restart_in_event_order(
     assert next(e for e in linked.learning_evidence if e.evidence_id == "book-old").timestamp == (
         old.created_at
     )
+
+
+def test_next_linked_answer_replays_an_earlier_unapplied_one_first(
+    store: SQLiteSessionStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup recovery only ran for one scope; a learner's own next linked
+    answer must catch up the attempts their scope left pending."""
+    asyncio.run(store.create_session(title="S", session_id="session-1"))
+    learning = LearningStore(root=tmp_path / "learning")
+    learning.save(
+        LearningProgress(
+            book_id="path-1",
+            modules=[
+                LearningModule(
+                    id="module-1",
+                    name="Module",
+                    order=0,
+                    knowledge_points=[
+                        KnowledgePoint(
+                            id="kp-1", name="Concept", type=KnowledgeType.CONCEPT, module_id="module-1"
+                        )
+                    ],
+                )
+            ],
+            knowledge_types={"kp-1": KnowledgeType.CONCEPT},
+        )
+    )
+    monkeypatch.setattr("deeptutor.learning.assessment._get_learning_store", lambda: learning)
+    import deeptutor.learning.assessment as assessment_module
+
+    apply_retention = assessment_module._apply_linked_retention
+    calls: list[str] = []
+
+    def interrupted(*_args, **_kwargs):
+        raise RuntimeError("interrupted after event commit")
+
+    def tracked(record, **kwargs):
+        calls.append(kwargs["attempt_id"])
+        return apply_retention(record, **kwargs)
+
+    monkeypatch.setattr(assessment_module, "_apply_linked_retention", interrupted)
+    old = AssessmentRecord(
+        session_id="session-1",
+        turn_id="book-turn",
+        question_id="book-q",
+        question="Explain the concept",
+        user_answer="wrong",
+        result="incorrect",
+        is_correct=False,
+        source="book",
+        assessment_type="focus_check",
+        mastery_path_id="path-1",
+        knowledge_point_id="kp-1",
+        attempt_id="book-old",
+        created_at=1_000_000.0,
+    )
+    with pytest.raises(RecordAssessmentError):
+        asyncio.run(record_assessment(old))
+
+    monkeypatch.setattr(assessment_module, "_apply_linked_retention", tracked)
+    newer = old.model_copy(
+        update={
+            "question_id": "book-q2",
+            "attempt_id": "book-new",
+            "user_answer": "right",
+            "result": "correct",
+            "is_correct": True,
+            "created_at": 1_100_000.0,
+        }
+    )
+    asyncio.run(record_assessment(newer))
+
+    # The pending attempt was applied first, in event order, and nothing is left.
+    assert calls == ["book-old", "book-new"]
+    assert asyncio.run(store.pending_linked_assessments()) == []
+    assert {e.evidence_id for e in learning.load("path-1").learning_evidence} == {
+        "book-old",
+        "book-new",
+    }
 
 
 def test_missing_session_raises_record_error() -> None:

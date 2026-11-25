@@ -161,6 +161,50 @@ class ApplicationContainer:
                 finally:
                     activity.close()
 
+    async def reconcile_all_linked_assessments(self) -> tuple[int, int]:
+        """Replay unapplied cross-surface assessments in every account and workspace.
+
+        Each account and content workspace keeps its own assessment store, so
+        recovery that ran in one default scope left every other learner's
+        interrupted attempts unapplied.
+        """
+
+        from deeptutor.learning import assessment
+        from deeptutor.multi_user import paths
+        from deeptutor.services import session, workspace
+        from deeptutor.services.workspace import activity, context
+        from deeptutor.services.workspace.models import WorkspaceError
+
+        recovered = failed = 0
+        seen: set[str] = set()
+        for user in self._local_users():
+            with paths.user_context(user):
+                try:
+                    handle = activity.acquire_activity()
+                except WorkspaceError:
+                    continue
+                try:
+                    workspace_ids = [""] + [
+                        row["workspace_id"]
+                        for row in workspace.get_content_workspace_service()._catalog()
+                        if row.get("kind") == "workspace" and os.path.isdir(row["path"])
+                    ]
+                    for workspace_id in workspace_ids:
+                        try:
+                            with context.workspace_context(workspace_id):
+                                key = str(session.get_sqlite_session_store().db_path)
+                                if key in seen:
+                                    continue
+                                seen.add(key)
+                                done, errors = await assessment.reconcile_linked_assessments()
+                        except WorkspaceError:
+                            continue
+                        recovered += done
+                        failed += errors
+                finally:
+                    handle.close()
+        return recovered, failed
+
     async def _recover_user_workspaces(self, seen: set[str]) -> None:
         from deeptutor.services.workspace import get_content_workspace_service
         from deeptutor.services.workspace.context import workspace_context

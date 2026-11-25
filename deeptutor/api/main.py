@@ -157,9 +157,7 @@ async def lifespan(app: FastAPI):
         )
 
     try:
-        from deeptutor.learning.assessment import reconcile_linked_assessments
-
-        recovered, failed = await reconcile_linked_assessments()
+        recovered, failed = await application_container.reconcile_all_linked_assessments()
         if recovered or failed:
             logger.info("Linked assessment recovery: recovered=%s failed=%s", recovered, failed)
     except Exception:
