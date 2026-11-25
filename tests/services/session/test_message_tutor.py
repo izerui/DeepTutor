@@ -102,6 +102,35 @@ async def test_whole_reply_question_reads_the_message_by_id(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unsaved_id", [-1_795_588_873_681, 0, "-12"])
+async def test_selection_on_an_unsaved_reply_leaves_the_thread_unattached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, unsaved_id
+) -> None:
+    """Upstream 67fc8b331: an optimistic (not yet persisted) reply has no real
+    id, so the thread must not record the placeholder as its source."""
+    store = SQLiteSessionStore(tmp_path / "chat.db")
+    runtime = _runtime(monkeypatch, store)
+    reply = "Paging splits memory into fixed-size pages."
+    parent, _, _ = await _parent_with_reply(store, reply)
+
+    child, _ = await runtime.start_turn(
+        _tutor_turn(
+            {
+                "selected_text": "fixed-size pages",
+                "parent_session_id": parent["id"],
+                "source_message_id": unsaved_id,
+                "source_message_text": reply,
+            }
+        )
+    )
+
+    prefs = (await store.get_session(child["id"]))["preferences"]
+    assert prefs["session_kind"] == "selection_tutor"
+    assert prefs["tutor_source_message_id"] == ""
+    assert prefs["tutor_selected_text"] == "fixed-size pages"
+
+
+@pytest.mark.asyncio
 async def test_whole_reply_question_requires_a_message_id(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

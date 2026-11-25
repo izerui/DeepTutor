@@ -74,7 +74,9 @@ def _tutor_source_preferences(context: dict[str, Any]) -> dict[str, Any]:
         )[:TUTOR_SELECTED_TEXT_LIMIT],
         "tutor_source_message_id": (
             source_message_id
-            if isinstance(source_message_id, int) and not isinstance(source_message_id, bool)
+            if isinstance(source_message_id, int)
+            and not isinstance(source_message_id, bool)
+            and source_message_id > 0
             else ""
         ),
         "tutor_source_deleted": False,

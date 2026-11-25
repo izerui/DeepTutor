@@ -162,6 +162,7 @@ import {
 } from "@/lib/reading-references";
 import {
   normalizeSelectedText,
+  persistedSourceMessageId,
   textFromDomSelection,
   type SelectionTutorContext,
 } from "@/lib/selection-tutor";
@@ -428,7 +429,7 @@ export default function ChatWorkspace() {
   const [viewerPanelOpen, setViewerPanelOpen] = useState(false);
   const [selectionTutorPrompt, setSelectionTutorPrompt] = useState<{
     text: string;
-    sourceMessageId: number;
+    sourceMessageId: number | null;
     sourceMessageText: string;
     sourceMessageRole: SelectionTutorContext["sourceMessageRole"];
     left: number;
@@ -1761,7 +1762,7 @@ export default function ChatWorkspace() {
         : Math.max(12, rect.top - buttonHeight - 8);
     setSelectionTutorPrompt({
       text,
-      sourceMessageId,
+      sourceMessageId: persistedSourceMessageId(sourceMessageId),
       sourceMessageText: sourceMessage.content,
       sourceMessageRole: sourceMessage.role,
       left,

@@ -4,6 +4,7 @@ import {
   buildSelectionTutorConfig,
   extractTexAnnotationFromHtml,
   normalizeSelectedText,
+  persistedSourceMessageId,
   selectionTutorKey,
   wrapLatexSource,
 } from "../lib/selection-tutor";
@@ -87,4 +88,13 @@ test("a whole-message question sends only the message id, never its text", () =>
       },
     },
   );
+});
+
+test("only a saved message can anchor a Little Tutor thread", () => {
+  // A reply still streaming carries a negative placeholder id (upstream 67fc8b331).
+  assert.equal(persistedSourceMessageId(42), 42);
+  assert.equal(persistedSourceMessageId(-1795588873681), null);
+  assert.equal(persistedSourceMessageId(0), null);
+  assert.equal(persistedSourceMessageId(Number.NaN), null);
+  assert.equal(persistedSourceMessageId(1.5), null);
 });

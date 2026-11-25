@@ -1235,11 +1235,17 @@ def _extract_selection_tutor_context(
     if source_detached:
         context[SELECTION_TUTOR_SOURCE_DETACHED] = True
         return context
+    # Only a persisted message has a positive id. A reply still streaming in
+    # the browser carries a negative placeholder, and the thread must then
+    # stay unattached rather than file itself under an id nothing will match.
     raw_source_message_id = raw.get("source_message_id")
     if isinstance(raw_source_message_id, int) and not isinstance(raw_source_message_id, bool):
-        context["source_message_id"] = raw_source_message_id
+        if raw_source_message_id > 0:
+            context["source_message_id"] = raw_source_message_id
     elif str(raw_source_message_id or "").strip().isdigit():
-        context["source_message_id"] = int(str(raw_source_message_id).strip())
+        parsed_source_message_id = int(str(raw_source_message_id).strip())
+        if parsed_source_message_id > 0:
+            context["source_message_id"] = parsed_source_message_id
 
     source_message_text = str(raw.get("source_message_text", "") or "").strip()
     if source_message_text and scope == SELECTION_TUTOR_SCOPE_SELECTION:

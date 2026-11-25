@@ -15,6 +15,15 @@ export interface SelectionTutorContext {
   sourceDeleted?: boolean;
 }
 
+/** The id a Little Tutor thread may record as its source, or null.
+ *
+ *  A reply still streaming carries a negative placeholder id until the server
+ *  saves it; a thread opened from it stays unattached instead of filing itself
+ *  under an id no saved message will ever have (upstream 67fc8b331). */
+export function persistedSourceMessageId(id: number): number | null {
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 /** Collapse selection-only whitespace while preserving paragraph breaks. */
 export function normalizeSelectedText(value: string): string {
   return value
