@@ -153,6 +153,7 @@ async def _mastery_path_index() -> ResourceIndex:
             "objectives_mastered": objectives_mastered,
             "stage": _mastery_stage(row, objectives_mastered),
             "weak_points": _weak_points(row),
+            "due_reviews": _as_int(row.get("due_reviews")),
         }
     return result
 
@@ -296,7 +297,7 @@ async def _session_state(course_id: str) -> tuple[dict[str, Any], set[str]]:
 
 
 async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
-    empty = {"total": 0, "wrong": 0, "weak_categories": []}
+    empty = {"total": 0, "wrong": 0, "due": 0, "weak_categories": []}
     if not session_ids:
         return empty
 
@@ -344,7 +345,18 @@ async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
             key=lambda item: (-item[1], item[0].casefold()),
         )
     ]
-    return {"total": total, "wrong": wrong, "weak_categories": weak_categories}
+    due = 0
+    try:
+        # The practice queue's own definition of "due now", scoped to the course.
+        from deeptutor.services.practice.storage import PracticeStore
+
+        overview = await asyncio.to_thread(
+            PracticeStore(store.db_path).overview, "UTC", sorted(session_ids)
+        )
+        due = _as_int(overview.get("due"))
+    except Exception:
+        logger.warning("Failed to count the course's due practice reviews", exc_info=True)
+    return {"total": total, "wrong": wrong, "due": due, "weak_categories": weak_categories}
 
 
 def _candidate_label(kind: str, ref_id: str, detail: dict[str, Any]) -> str:

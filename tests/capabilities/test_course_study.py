@@ -832,6 +832,27 @@ async def test_course_handoff_accepts_either_identifier_for_a_resource(
     assert unattached["label"] == "Elsewhere"
 
 
+def test_overview_tells_the_tutor_what_is_due_for_review() -> None:
+    """Course Study can only suggest "review your due mistakes first" if it
+    is told what is due."""
+    from deeptutor.capabilities.course_study.tools import _render_course_overview
+
+    state = _course_state()
+    state["question_bank"] = {**state["question_bank"], "due": 3}
+    state["mastery"]["paths"][0]["due_reviews"] = 2
+    text = _render_course_overview(state)
+    assert "3 due for review" in text
+    assert "due_reviews=2" in text
+
+    from deeptutor.capabilities.course_study.capability import (
+        _mastery_summary,
+        _question_bank_summary,
+    )
+
+    assert "2 reviews due" in _mastery_summary(state)
+    assert "3 due for review" in _question_bank_summary(state)
+
+
 def test_all_four_course_tools_are_declared() -> None:
     assert tuple(tool_type().name for tool_type in COURSE_STUDY_TOOL_TYPES) == (
         COURSE_STUDY_TOOL_NAMES

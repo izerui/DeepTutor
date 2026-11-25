@@ -181,6 +181,7 @@ def test_state_degrades_when_every_subsystem_fails(
     assert state["question_bank"] == {
         "total": 0,
         "wrong": 0,
+        "due": 0,
         "weak_categories": [],
     }
     assert state["syllabus"] == {

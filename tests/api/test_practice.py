@@ -178,6 +178,19 @@ def test_practice_review_of_a_linked_question_reaches_its_mastery_path(
     assert asyncio.run(store.get_notebook_entry(entry["id"]))["user_answer"] == "A"
 
 
+def test_course_state_counts_practice_reviews_due_in_the_course(bank, monkeypatch):
+    from deeptutor.services import courses_state
+
+    store, repo, _ = bank
+    entry = seed(store)
+    monkeypatch.setattr("deeptutor.services.session.get_sqlite_session_store", lambda: store)
+    state = lambda: asyncio.run(courses_state._question_bank_state({"lesson"}))
+    assert state()["due"] == 0  # first due a day after the mistake
+    with sqlite3.connect(store.db_path) as conn:
+        conn.execute("UPDATE practice_review_state SET due_at=1 WHERE entry_id=?", (entry["id"],))
+    assert state()["due"] == 1
+
+
 def test_server_rejects_incorrect_answer_with_success_rating(bank):
     store, repo, client = bank
     entry = seed(store)

@@ -102,11 +102,16 @@ export interface CourseState {
       objectives_mastered: number;
       stage: string;
       weak_points: string[];
+      /** Mastered objectives whose spaced review is due now. */
+      due_reviews?: number;
     }[];
   };
   question_bank: {
     total: number;
+    /** Open mistakes: wrong and not yet reviewed to mastered. */
     wrong: number;
+    /** Practice reviews due now in this course. */
+    due?: number;
     weak_categories: { name: string; wrong: number }[];
   };
   reading: {

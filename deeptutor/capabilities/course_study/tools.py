@@ -232,7 +232,8 @@ def _render_course_overview(state: dict[str, Any]) -> str:
             f"- {path.get('name') or path.get('path_id') or '?'}: "
             f"{int(path.get('objectives_mastered') or 0)}/{int(path.get('objectives_total') or 0)} "
             f"modules; stage={path.get('stage') or 'unknown'}; "
-            f"weak_points={_compact_json(path.get('weak_points') or [], limit=240)}"
+            f"weak_points={_compact_json(path.get('weak_points') or [], limit=240)}; "
+            f"due_reviews={int(path.get('due_reviews') or 0)}"
         )
 
     question_bank = _mapping(state.get("question_bank"))
@@ -240,7 +241,8 @@ def _render_course_overview(state: dict[str, Any]) -> str:
     lines.append(
         "Question bank: "
         f"{int(question_bank.get('total') or 0)} total, "
-        f"{int(question_bank.get('wrong') or 0)} wrong"
+        f"{int(question_bank.get('wrong') or 0)} wrong, "
+        f"{int(question_bank.get('due') or 0)} due for review"
     )
     if weak_categories:
         lines.append(

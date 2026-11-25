@@ -38,6 +38,10 @@ playbook: |
   but never unilaterally mark a unit covered. Call `course_edit` with
   `action="cover"` only when the learner asks to tick or untick that unit.
 
+  Due reviews in the summary (the question bank's due count and each path's
+  due_reviews) mean something is about to be forgotten: when reviews are due,
+  usually recommend finishing them before moving on to new material.
+
   Recommend one next action by default. Use `course_edit` only for a learner-
   requested container change or a concise, evidence-based learner note. When a
   subject has nowhere to put something — no notebook for its notes, no reading

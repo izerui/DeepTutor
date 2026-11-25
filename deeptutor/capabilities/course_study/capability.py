@@ -119,7 +119,10 @@ def _mastery_summary(state: dict[str, Any]) -> str:
         done = int(path.get("objectives_mastered") or 0)
         total = int(path.get("objectives_total") or 0)
         stage = _clip(path.get("stage") or "unknown", 28)
-        shown.append(f"{name} {done}/{total} modules ({stage})")
+        due = int(path.get("due_reviews") or 0)
+        shown.append(
+            f"{name} {done}/{total} modules ({stage}" + (f", {due} reviews due" if due else "") + ")"
+        )
     suffix = f"; +{len(paths) - len(shown)} more" if len(paths) > len(shown) else ""
     return "Mastery completion: " + "; ".join(shown) + suffix + "."
 
@@ -139,9 +142,12 @@ def _question_bank_summary(state: dict[str, Any]) -> str:
         if categories
         else "none recorded"
     )
+    due = int(bank.get("due") or 0)
     return (
         f"Question bank: {int(bank.get('wrong') or 0)} wrong of "
-        f"{int(bank.get('total') or 0)}; weakest categories: {weakest}."
+        f"{int(bank.get('total') or 0)}"
+        + (f"; {due} due for review" if due else "")
+        + f"; weakest categories: {weakest}."
     )
 
 
