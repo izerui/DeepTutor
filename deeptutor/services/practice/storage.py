@@ -305,8 +305,12 @@ class PracticeStore:
                     ),
                 ),
             )
+            # ``resolved`` is the shared "no longer an open mistake" flag the
+            # course page and tutor read; the original answer stays as it was.
             if rating == "again":
                 conn.execute("UPDATE notebook_entries SET resolved=0 WHERE id=?", (entry_id,))
+            elif rating in {"good", "easy"}:
+                conn.execute("UPDATE notebook_entries SET resolved=1 WHERE id=?", (entry_id,))
             outcome = {
                 **next_state,
                 "entry_id": entry_id,

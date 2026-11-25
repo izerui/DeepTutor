@@ -90,6 +90,30 @@ def test_duplicate_review_and_two_tabs_cannot_advance_twice(bank):
         repo.review(entry["id"], "same_request", 0, "again", "A")
 
 
+def test_mastering_a_mistake_in_practice_resolves_it_everywhere(bank, monkeypatch):
+    """A mistake reviewed to "mastered" must stop counting as a weak spot on
+    the course page; practising it again reopens it."""
+    from deeptutor.services import courses_state
+
+    store, repo, _ = bank
+    entry = seed(store)
+    monkeypatch.setattr("deeptutor.services.session.get_sqlite_session_store", lambda: store)
+    state = lambda: asyncio.run(courses_state._question_bank_state({"lesson"}))
+    assert state()["wrong"] == 1
+
+    repo.review(entry["id"], "review_good", 0, "good", "B")
+    reviewed = asyncio.run(store.get_notebook_entry(entry["id"]))
+    assert reviewed["resolved"] is True or reviewed["resolved"] == 1
+    # The original evidence is preserved; only the open-mistake flag moved.
+    assert reviewed["is_correct"] == entry["is_correct"]
+    assert state()["wrong"] == 0
+    # The mistakes book still remembers it was once wrong.
+    assert repo.overview("UTC")["mistakes"] == 1
+
+    repo.review(entry["id"], "review_again", repo.state(entry["id"])["version"], "again", "A")
+    assert state()["wrong"] == 1
+
+
 def test_server_rejects_incorrect_answer_with_success_rating(bank):
     store, repo, client = bank
     entry = seed(store)

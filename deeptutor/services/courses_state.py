@@ -313,8 +313,11 @@ async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
 
             offset = 0
             while True:
+                # Open mistakes only: one reviewed to mastered in practice is
+                # resolved and no longer a weak spot to send the learner back to.
                 wrong_rows = await store.list_notebook_entries(
                     is_correct=False,
+                    resolved=False,
                     limit=500,
                     offset=offset,
                     session_id=session_id,
