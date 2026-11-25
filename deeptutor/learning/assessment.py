@@ -306,7 +306,9 @@ def _apply_linked_retention(
 ) -> bool:
     """Apply explicitly linked non-Mastery evidence to its objective once."""
     if (
-        record.source == "mastery_path"
+        # The mastery engine applies its own quiz and qualitative answers; a
+        # practice review of a mastery question arrives as type "review".
+        (record.source == "mastery_path" and record.assessment_type != "review")
         or result in {"ungraded", "voided"}
         or not record.mastery_path_id
         or not record.knowledge_point_id
@@ -528,6 +530,85 @@ async def record_assessment(record: AssessmentRecord) -> AssessmentOutcome:
     )
 
 
+_PRACTICE_REVIEW_QUALITY = {"again": 0.0, "hard": 0.6, "good": 1.0, "easy": 1.0}
+
+
+async def record_practice_review(
+    entry: dict[str, Any],
+    *,
+    request_id: str,
+    rating: str,
+    answer: str,
+    correct: bool | None,
+    reviewed_at: float,
+) -> bool:
+    """Feed a practice review of a linked question to its mastery objective.
+
+    Practice keeps its own schedule and never rewrites the question's original
+    answer, so this appends an immutable attempt (no card projection) and then
+    applies it as review evidence, exactly once per review request. Only an
+    answer the server checked counts: a self-report is not evidence.
+    Returns whether evidence was applied now; a failed apply stays pending and
+    is replayed by :func:`reconcile_linked_assessments`.
+    """
+    path_id = str(entry.get("mastery_path_id") or "").strip()
+    kp_id = str(entry.get("knowledge_point_id") or "").strip()
+    if not path_id or not kp_id or correct is None:
+        return False
+    source = str(entry.get("source") or "").strip()
+    if source != "mastery_path" and not await asyncio.to_thread(
+        _is_trusted_linkage, path_id, kp_id
+    ):
+        return False
+    from deeptutor.services.session import get_sqlite_session_store
+
+    attempt_id = f"practice:{request_id}"
+    record = AssessmentRecord(
+        session_id=str(entry.get("session_id") or ""),
+        origin_type=entry.get("origin_type") or "conversation",
+        origin_ref=str(entry.get("origin_ref") or ""),
+        turn_id=str(entry.get("turn_id") or ""),
+        question_id=str(entry.get("question_id") or ""),
+        source=source,
+        assessment_type="review",
+        result="correct" if correct else "incorrect",
+        is_correct=bool(correct),
+        question=str(entry.get("question") or ""),
+        user_answer=answer,
+        mastery_path_id=path_id,
+        knowledge_point_id=kp_id,
+        quality=_PRACTICE_REVIEW_QUALITY.get(rating, 1.0 if correct else 0.0),
+        created_at=reviewed_at,
+        updated_at=reviewed_at,
+        attempt_id=attempt_id,
+    )
+    store = get_sqlite_session_store()
+    await store.append_assessment_attempt(
+        record.session_id or None,
+        int(entry["id"]) if entry.get("id") is not None else None,
+        {
+            **record.model_dump(mode="json"),
+            "attempt_id": attempt_id,
+            "occurred_at": reviewed_at,
+        },
+    )
+    persisted = await store.get_assessment_attempt(attempt_id)
+    if persisted is None:
+        return False
+    try:
+        await reconcile_linked_assessments(exclude_attempt_id=attempt_id)
+    except Exception:
+        logger.warning("Could not replay pending linked assessments", exc_info=True)
+    applied = await asyncio.to_thread(
+        _apply_linked_retention,
+        AssessmentRecord.model_validate(persisted),
+        result=build_grade_result(result=record.result, is_correct=record.is_correct),
+        attempt_id=attempt_id,
+    )
+    await store.mark_assessment_link_applied(attempt_id)
+    return applied
+
+
 async def reconcile_linked_assessments(*, exclude_attempt_id: str = "") -> tuple[int, int]:
     """Replay durable cross-surface attempts left pending by an interrupted run.
 
@@ -578,6 +659,7 @@ __all__ = [
     "is_correct_to_result",
     "record_assessment",
     "reconcile_linked_assessments",
+    "record_practice_review",
     "result_to_is_correct",
     "to_notebook_item",
 ]

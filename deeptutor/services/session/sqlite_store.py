@@ -3792,7 +3792,8 @@ class SQLiteSessionStore:
             rows = conn.execute(
                 "SELECT assessment_json FROM assessment_attempts WHERE linked_applied = 0 "
                 "AND mastery_path_id != '' AND knowledge_point_id != '' "
-                "AND source != 'mastery_path' AND result NOT IN ('ungraded', 'voided') "
+                "AND (source != 'mastery_path' OR assessment_type = 'review') "
+                "AND result NOT IN ('ungraded', 'voided') "
                 "ORDER BY occurred_at, attempt_id"
             ).fetchall()
         return [

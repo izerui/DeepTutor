@@ -114,6 +114,70 @@ def test_mastering_a_mistake_in_practice_resolves_it_everywhere(bank, monkeypatc
     assert state()["wrong"] == 1
 
 
+@pytest.mark.parametrize("source", ["mastery_path", "book"])
+def test_practice_review_of_a_linked_question_reaches_its_mastery_path(
+    bank, monkeypatch, tmp_path, source
+):
+    """One student model: practising a question that belongs to a mastery
+    objective is review evidence for that objective, recorded once."""
+    from deeptutor.learning.models import (
+        KnowledgePoint,
+        KnowledgeType,
+        LearningModule,
+        LearningProgress,
+    )
+    from deeptutor.learning.storage import LearningStore
+
+    store, _, client = bank
+    learning = LearningStore(root=tmp_path / "learning")
+    learning.save(
+        LearningProgress(
+            book_id="path-1",
+            modules=[
+                LearningModule(
+                    id="m1",
+                    name="M",
+                    order=0,
+                    knowledge_points=[
+                        KnowledgePoint(id="kp-1", name="KP", type=KnowledgeType.MEMORY, module_id="m1")
+                    ],
+                )
+            ],
+            knowledge_types={"kp-1": KnowledgeType.MEMORY},
+        )
+    )
+    monkeypatch.setattr("deeptutor.learning.assessment._get_learning_store", lambda: learning)
+    monkeypatch.setattr("deeptutor.services.session.get_sqlite_session_store", lambda: store)
+    entry = seed(store, source=source, mastery_path_id="path-1", knowledge_point_id="kp-1")
+    other = seed(store, question_id="q2")  # an unlinked question changes nothing
+
+    def review(entry_id, request_id, rating, answer, version=0, **extra):
+        response = client.post(
+            f"/practice/questions/{entry_id}/review",
+            json={"request_id": request_id, "version": version, "rating": rating,
+                  "answer": answer, **extra},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    review(other["id"], "submission_unlinked0", "good", "B")
+    assert learning.load("path-1").learning_evidence == []
+
+    first = review(entry["id"], "submission_linked001", "good", "B")
+    review(entry["id"], "submission_linked001", "good", "B")  # retried request
+    evidence = learning.load("path-1").learning_evidence
+    assert [(e.knowledge_point_id, e.result, e.assessment_type) for e in evidence] == [
+        ("kp-1", "correct", "review")
+    ]
+    assert "kp-1" in learning.load("path-1").repetition_states
+
+    # "I have mastered this" without checking an answer is not evidence.
+    review(entry["id"], "submission_selfrep01", "good", "", version=first["version"], self_report=True)
+    assert len(learning.load("path-1").learning_evidence) == 1
+    # Original answer is untouched by practice.
+    assert asyncio.run(store.get_notebook_entry(entry["id"]))["user_answer"] == "A"
+
+
 def test_server_rejects_incorrect_answer_with_success_rating(bank):
     store, repo, client = bank
     entry = seed(store)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import logging
 import time
 from typing import Literal
 import zipfile
@@ -18,6 +19,8 @@ from deeptutor.services.practice.importing import MAX_BYTES, preview
 from deeptutor.services.practice.scheduler import Rating, day_bounds
 from deeptutor.services.practice.storage import PracticeStore, ReviewConflict
 from deeptutor.services.session import get_sqlite_session_store
+
+logger = logging.getLogger(__name__)
 
 from .question_notebook import NotebookEntryItem, _course_session_ids
 
@@ -243,7 +246,7 @@ async def check(entry_id: int, payload: AnswerRequest):
 @router.post("/questions/{entry_id}/review")
 async def review(entry_id: int, payload: ReviewRequest):
     try:
-        return await asyncio.to_thread(
+        outcome = await asyncio.to_thread(
             PracticeStore(get_sqlite_session_store().db_path).review,
             entry_id,
             payload.request_id,
@@ -258,6 +261,30 @@ async def review(entry_id: int, payload: ReviewRequest):
         raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    await _record_linked_review(entry_id, payload, outcome)
+    return outcome
+
+
+async def _record_linked_review(entry_id: int, payload: ReviewRequest, outcome: dict) -> None:
+    """One student model: a reviewed question linked to a mastery objective
+    is review evidence for it. The practice result is already saved, so a
+    failure here is logged and replayed later rather than failing the review."""
+    try:
+        entry = await get_sqlite_session_store().get_notebook_entry(entry_id)
+        if not entry or not entry.get("mastery_path_id") or not entry.get("knowledge_point_id"):
+            return
+        from deeptutor.learning.assessment import record_practice_review
+
+        await record_practice_review(
+            entry,
+            request_id=payload.request_id,
+            rating=payload.rating,
+            answer=payload.answer,
+            correct=outcome.get("correct"),
+            reviewed_at=float(outcome.get("last_review_at") or 0) or time.time(),
+        )
+    except Exception:
+        logger.warning("Practice review %s did not reach its mastery path", entry_id, exc_info=True)
 
 
 @router.get("/import/template")
