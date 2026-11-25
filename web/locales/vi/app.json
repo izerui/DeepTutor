@@ -6209,5 +6209,8 @@
   "Workspace file removed. The chat attachment is still available.": "Đã xóa tệp trong không gian làm việc. Tệp đính kèm trong cuộc trò chuyện vẫn còn.",
   "Add to chat": "Thêm vào cuộc trò chuyện",
   "Loading file storage…": "Đang tải kho lưu trữ tệp…",
-  "Unable to load file storage.": "Không thể tải kho lưu trữ tệp."
+  "Unable to load file storage.": "Không thể tải kho lưu trữ tệp.",
+  "This question was already completed. This reply was not graded; ask for a new practice question.": "Câu hỏi này đã hoàn tất. Câu trả lời này không được chấm; hãy yêu cầu một câu hỏi luyện tập mới.",
+  "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Câu hỏi này không còn mở nên câu trả lời này không được chấm. Hãy tiếp tục với câu hỏi hiện tại hoặc yêu cầu câu hỏi mới.",
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Các trang nguồn của câu hỏi này đã thay đổi sau khi được đặt ra nên không thể chấm được nữa. Hãy bỏ qua và yêu cầu câu hỏi mới."
 }

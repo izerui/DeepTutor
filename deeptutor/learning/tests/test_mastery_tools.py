@@ -2393,3 +2393,28 @@ async def test_card_resubmission_revises_an_answer_that_was_never_graded(path_id
     )
     final = LearningStore().get_interaction(path_id, question["question_id"])
     assert final is not None and final.user_answer == "photosynthesis"
+
+
+@pytest.mark.asyncio
+async def test_grading_a_closed_question_reports_why(path_id):
+    """An answer for a question that was skipped and replaced can never be
+    graded; the tool says so in a form the card can explain to the learner."""
+    await _build_basic(path_id)
+    status = json.loads((await MasteryStatusTool().execute(_mastery_path_id=path_id)).content)
+    kp_id = status["next"]["knowledge_point_id"]
+    first = tool_payload(
+        await MasteryQuizTool().execute(
+            _mastery_path_id=path_id, knowledge_point_id=kp_id, question="2+2?", expected_answer="4"
+        )
+    )
+    await MasterySkipQuestionTool().execute(_mastery_path_id=path_id)
+    await MasteryQuizTool().execute(
+        _mastery_path_id=path_id, knowledge_point_id=kp_id, question="3+3?", expected_answer="6"
+    )
+
+    result = await MasteryGradeTool().execute(
+        _mastery_path_id=path_id, question_id=first["question_id"], answer="4"
+    )
+
+    assert result.success is False
+    assert (result.metadata or {}).get("mastery_grade_rejection") == "question_closed"

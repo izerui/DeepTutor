@@ -1847,7 +1847,11 @@ class MasteryGradeTool(BaseTool):
                 # Legacy question with no recoverable bodies: the raw reply is
                 # the only thing there is to compare.
                 answer_for_grading = answer
-        from deeptutor.learning.service import MasteryInteractionError
+        from deeptutor.learning.service import (
+            MasteryInteractionError,
+            NoPendingInteractionError,
+            StaleInteractionError,
+        )
 
         try:
             progress, interaction, replayed = await service.grade_interaction_semantic(
@@ -1862,6 +1866,16 @@ class MasteryGradeTool(BaseTool):
                 turn_id=_resolve_turn_id(kwargs),
             )
         except MasteryInteractionError as exc:
+            from deeptutor.learning.lesson_evidence import LessonUnavailable
+
+            # Why this answer can never be graded, so a learner's card can say
+            # so instead of inviting a retry that will fail the same way.
+            if isinstance(exc, (NoPendingInteractionError, StaleInteractionError)):
+                rejection = "question_closed"
+            elif isinstance(exc.__cause__, LessonUnavailable):
+                rejection = "question_invalidated"
+            else:
+                rejection = ""
             # The common way to land here now is grading something the runtime
             # already ruled on: an answer sent from a card is graded before the
             # turn starts, and a graded interaction is no longer the open one.
@@ -1873,6 +1887,7 @@ class MasteryGradeTool(BaseTool):
                     "grade it again."
                 ),
                 success=False,
+                metadata={"mastery_grade_rejection": rejection} if rejection else {},
             )
         pending = interaction.question
         is_correct = interaction.result.get("is_correct")

@@ -25,6 +25,21 @@ import { toolResultPayload } from "@/lib/tool-event";
 export const MASTERY_QUESTION_KEY = "mastery_question";
 export const MASTERY_ANSWER_REJECTED_MESSAGE =
   "These answers could not be submitted. Please review or retry.";
+
+/** Rejections that no retry can fix get their own explanation (catalog keys). */
+const MASTERY_REJECTION_MESSAGES: Record<string, string> = {
+  stale_card:
+    "This question was already completed. This reply was not graded; ask for a new practice question.",
+  question_closed:
+    "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.",
+  question_invalidated:
+    "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.",
+};
+
+/** The catalog key explaining why the server refused a card answer. */
+export function masteryRejectionMessage(reason?: string): string {
+  return (reason && MASTERY_REJECTION_MESSAGES[reason]) || MASTERY_ANSWER_REJECTED_MESSAGE;
+}
 /**
  * The `kind` marker on the older `ask_user`-shaped card. Only history carries
  * it; nothing posed now needs a discriminator, because the key *is* the
@@ -74,6 +89,8 @@ export interface MasteryGradeResult {
 export interface MasteryAnswerRejection {
   questionId: string;
   retryKey: string;
+  /** Why it was refused, when the server says (``stale_card`` …). */
+  reason?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -291,9 +308,11 @@ export function collectMasteryAnswerRejections(
       const questionId = text(payload?.question_id).trim();
       if (!questionId) continue;
       const metadata = asRecord(event.metadata);
+      const reason = text(payload?.reason).trim();
       rejected.set(questionId, {
         questionId,
         retryKey: text(metadata?.call_id) || `${event.turn_id}:${event.seq}`,
+        ...(reason ? { reason } : {}),
       });
     }
   }

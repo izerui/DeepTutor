@@ -6273,5 +6273,8 @@
   "Workspace file removed. The chat attachment is still available.": "Файл робочого простору видалено. Вкладення в чаті залишається доступним.",
   "Add to chat": "Додати до чату",
   "Loading file storage…": "Loading file storage…",
-  "Unable to load file storage.": "Unable to load file storage."
+  "Unable to load file storage.": "Unable to load file storage.",
+  "This question was already completed. This reply was not graded; ask for a new practice question.": "Це запитання вже завершено. Цю відповідь не оцінено; попросіть нове тренувальне запитання.",
+  "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Це запитання вже закрите, тому цю відповідь не оцінено. Продовжте з поточним запитанням або попросіть нове.",
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Сторінки джерел цього запитання змінилися після того, як його поставили, тож його більше не можна оцінити. Пропустіть його й попросіть нове запитання."
 }

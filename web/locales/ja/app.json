@@ -6209,5 +6209,8 @@
   "Workspace file removed. The chat attachment is still available.": "ワークスペースのファイルを削除しました。チャットの添付ファイルは引き続き使えます。",
   "Add to chat": "チャットに追加",
   "Loading file storage…": "ファイルストレージを読み込んでいます…",
-  "Unable to load file storage.": "ファイルストレージを読み込めませんでした。"
+  "Unable to load file storage.": "ファイルストレージを読み込めませんでした。",
+  "This question was already completed. This reply was not graded; ask for a new practice question.": "この問題はすでに完了しています。この回答は採点されていません。新しい練習問題を依頼してください。",
+  "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "この問題はすでに締め切られているため、この回答は採点されていません。現在の問題を続けるか、新しい問題を依頼してください。",
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "この問題が引用している資料ページが出題後に変更されたため、採点できなくなりました。この問題をスキップして、新しい問題を依頼してください。"
 }

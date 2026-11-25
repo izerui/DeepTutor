@@ -111,6 +111,29 @@ describe("grouped mastery assessment", () => {
     expect(collectMasteryAnswerRejections([{ events: [acknowledged, rejected] }]).has("group-1")).toBe(true);
   });
 
+  it.each([
+    ["question_closed", "This question is no longer open"],
+    ["question_invalidated", "source pages changed"],
+    ["stale_card", "This question was already completed"],
+  ])("explains a %s rejection instead of inviting a retry", async (reason, phrase) => {
+    const user = userEvent.setup();
+    const posed = { id: 1, role: "assistant" as const, content: "", parentMessageId: null,
+      capability: "mastery_path", events: [event({ mastery_question: leaf("part-b") })] };
+    const conversation = (rejected: boolean) => <ChatMessageList messages={[posed,
+      { id: 2, role: "assistant", content: "", parentMessageId: 1, capability: "mastery_path",
+        events: rejected ? [event({ mastery_answer_rejected: { question_id: "part-b", reason } })] : [] }]}
+      isStreaming={false} onCopyAssistantMessage={async () => undefined}
+      onRegenerateMessage={() => undefined} onAnswerMasteryQuestion={() => true} />;
+    const { rerender } = render(conversation(false));
+    await user.type(await screen.findByRole("textbox"), "My answer");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    rerender(conversation(true));
+    expect(screen.getByText(new RegExp(phrase))).toBeInTheDocument();
+    expect(screen.queryByText("These answers could not be submitted. Please review or retry.")).toBeNull();
+    expect(collectMasteryAnswerRejections([{ events: [event({
+      mastery_answer_rejected: { question_id: "part-b", reason } })] }]).get("part-b")?.reason).toBe(reason);
+  });
+
   it("rejects duplicate, nested, or incomplete group identities", () => {
     for (const questions of [[leaf("part-a")], [leaf("part-a"), leaf("part-a")],
       [leaf("part-a"), group]]) {

@@ -6249,5 +6249,8 @@
   "Workspace file removed. The chat attachment is still available.": "Arquivo do espaço de trabalho removido. O anexo da conversa continua disponível.",
   "Add to chat": "Adicionar à conversa",
   "Loading file storage…": "Carregando armazenamento de arquivos…",
-  "Unable to load file storage.": "Não foi possível carregar o armazenamento de arquivos."
+  "Unable to load file storage.": "Não foi possível carregar o armazenamento de arquivos.",
+  "This question was already completed. This reply was not graded; ask for a new practice question.": "Esta pergunta já foi concluída. Esta resposta não foi avaliada; peça uma nova pergunta de prática.",
+  "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Esta pergunta não está mais aberta, então esta resposta não foi avaliada. Continue com a pergunta atual ou peça uma nova.",
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "As páginas de origem desta pergunta mudaram depois que ela foi feita, então ela não pode mais ser avaliada. Pule-a e peça uma nova pergunta."
 }

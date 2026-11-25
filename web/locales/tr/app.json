@@ -6229,5 +6229,8 @@
   "Workspace file removed. The chat attachment is still available.": "Çalışma alanı dosyası kaldırıldı. Sohbet eki hâlâ kullanılabilir.",
   "Add to chat": "Sohbete ekle",
   "Loading file storage…": "Dosya depolaması yükleniyor…",
-  "Unable to load file storage.": "Dosya depolaması yüklenemedi."
+  "Unable to load file storage.": "Dosya depolaması yüklenemedi.",
+  "This question was already completed. This reply was not graded; ask for a new practice question.": "Bu soru zaten tamamlandı. Bu yanıt değerlendirilmedi; yeni bir alıştırma sorusu iste.",
+  "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Bu soru artık açık değil, bu yüzden bu yanıt değerlendirilmedi. Mevcut soruyla devam et ya da yeni bir soru iste.",
+  "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Bu sorunun kaynak sayfaları soru sorulduktan sonra değişti, bu yüzden artık değerlendirilemez. Soruyu atla ve yeni bir soru iste."
 }

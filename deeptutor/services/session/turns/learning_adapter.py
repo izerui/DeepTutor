@@ -216,7 +216,8 @@ class LearningTurnAdapter:
             return None
         payload = (result.metadata or {}).get("mastery_grade")
         if not result.success or not isinstance(payload, dict):
-            await self._publish_mastery_group_rejection(execution, question_id)
+            reason = str((result.metadata or {}).get("mastery_grade_rejection") or "")
+            await self._publish_mastery_group_rejection(execution, question_id, reason=reason)
             return None
         try:
             mismatched = await self._is_mismatched_card_replay(
@@ -284,11 +285,20 @@ class LearningTurnAdapter:
             trace_id=call_id,
             tool="mastery_grade",
         )
-        message = (
-            "This question was already completed. This reply was not graded; request a new practice question."
-            if reason == "stale_card"
-            else "These answers could not be submitted. Please review or retry."
-        )
+        message = {
+            "stale_card": (
+                "This question was already completed. This reply was not graded; "
+                "request a new practice question."
+            ),
+            "question_closed": (
+                "This question is no longer open, so this reply was not graded. "
+                "Continue with the current question or ask for a new one."
+            ),
+            "question_invalidated": (
+                "This question's source pages changed after it was asked, so it can "
+                "no longer be graded. Skip it and ask for a new question."
+            ),
+        }.get(reason, "These answers could not be submitted. Please review or retry.")
         await self._publish_live_event(
             execution,
             StreamEvent(

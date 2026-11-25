@@ -209,6 +209,42 @@ async def test_rejected_group_answer_emits_card_recovery_event(monkeypatch, grou
     assert "mastery_grade" not in metadata["tool_metadata"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reason", "phrase"),
+    [
+        ("question_closed", "no longer open"),
+        ("question_invalidated", "source pages changed"),
+    ],
+)
+async def test_unanswerable_card_says_why_instead_of_retry(monkeypatch, reason, phrase):
+    """A closed or invalidated question can never be graded; telling the
+    learner to retry sends them round in a loop."""
+    published = []
+
+    async def grade(self, **kwargs):
+        return SimpleNamespace(
+            success=False, content="refused", metadata={"mastery_grade_rejection": reason}
+        )
+
+    async def publish(execution, event):
+        published.append(event)
+        return {}
+
+    monkeypatch.setattr("deeptutor.capabilities.mastery.tools.MasteryGradeTool.execute", grade)
+    adapter = LearningTurnAdapter()
+    adapter._publish_live_event = publish
+    await adapter._grade_submitted_card_answer(
+        SimpleNamespace(session_id="session", turn_id="turn"),
+        path_id="path",
+        answer={"question_id": "q", "text": "B"},
+    )
+    rejected = published[0].metadata["tool_metadata"]["mastery_answer_rejected"]
+    assert rejected["reason"] == reason
+    assert phrase in rejected["message"]
+    assert "retry" not in rejected["message"].lower()
+
+
 @pytest.fixture
 def replay_runtime(tmp_path, monkeypatch):
     """Keep a real terminal attempt and an unrelated open question in SQLite."""

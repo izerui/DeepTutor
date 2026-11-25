@@ -29,7 +29,7 @@ import { browserPath } from "@/lib/workspace-scope";
 import { useMasteryTemplate } from "@/components/space/learning/mastery-template-context";
 import { withMasteryTemplate } from "@/lib/mastery-template-scope";
 import {
-  MASTERY_ANSWER_REJECTED_MESSAGE,
+  masteryRejectionMessage,
   type MasteryGradeResult,
   type MasteryQuestion,
 } from "@/lib/mastery-question";
@@ -109,6 +109,8 @@ interface MasteryQuestionCardProps {
   submittedAnswer: string;
   /** Unique server rejection event; changes reopen an optimistically sent card. */
   rejectionKey?: string;
+  /** Why the server refused the answer, when it said. */
+  rejectionReason?: string;
   onSubmit: (payload: {
     text?: string;
     answers?: Array<{ questionId: string; text: string }>;
@@ -127,7 +129,7 @@ interface GroupInput {
 
 const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
   question, grade, answered, skipped, submittedAnswer, onSubmit, onSkip,
-  onChallenge, groupInput, rejectionKey,
+  onChallenge, groupInput, rejectionKey, rejectionReason,
 }: MasteryQuestionCardProps & { groupInput?: GroupInput }) {
   const { t } = useTranslation();
   // R9: originals of an open author path are read in its context ("" elsewhere).
@@ -327,7 +329,7 @@ const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
             {sending
               ? t("Sending your answers…")
               : sendFailed
-                ? t(rejectionKey ? MASTERY_ANSWER_REJECTED_MESSAGE : REPLY_NOT_DELIVERED)
+                ? t(rejectionKey ? masteryRejectionMessage(rejectionReason) : REPLY_NOT_DELIVERED)
                 : hasChoices
                   ? t("Pick the option you think is right.")
                   : t("Write your answer to continue.")}
@@ -370,7 +372,7 @@ const SingleMasteryQuestionCard = memo(function SingleMasteryQuestionCard({
 });
 
 function GroupedMasteryQuestionCard({
-  question, grade, answered, skipped, onSubmit, onSkip, onChallenge, rejectionKey,
+  question, grade, answered, skipped, onSubmit, onSkip, onChallenge, rejectionKey, rejectionReason,
 }: MasteryQuestionCardProps) {
   const { t } = useTranslation();
   const [answers, setAnswers] = useState<Record<string, { text: string; available: boolean }>>({});
@@ -422,7 +424,7 @@ function GroupedMasteryQuestionCard({
     {!settled ? <div className="mt-3 flex items-center justify-between gap-3">
       <span className={failed || skipFailed ? "text-xs text-[var(--destructive)]" : "text-xs text-[var(--muted-foreground)]"}>
         {sending ? t("Sending your answers…") : failed || skipFailed
-          ? t(failed && rejectionKey ? MASTERY_ANSWER_REJECTED_MESSAGE : REPLY_NOT_DELIVERED)
+          ? t(failed && rejectionKey ? masteryRejectionMessage(rejectionReason) : REPLY_NOT_DELIVERED)
           : t("Write your answer to continue.")}
       </span>
       <div className="flex shrink-0 items-center gap-1">

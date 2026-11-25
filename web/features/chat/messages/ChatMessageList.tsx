@@ -960,6 +960,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           skipped={masterySkips?.has(question.questionId) ?? false}
           submittedAnswer={grade?.learnerAnswer ?? ""}
           rejectionKey={!grade || grade.complete === false || grade.final === false ? masteryAnswerRejections?.get(question.questionId)?.retryKey : undefined}
+          rejectionReason={masteryAnswerRejections?.get(question.questionId)?.reason}
           onSubmit={({ text, answers }) =>
             onAnswerMasteryQuestion
               ? onAnswerMasteryQuestion({
