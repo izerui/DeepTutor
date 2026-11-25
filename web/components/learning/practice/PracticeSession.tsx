@@ -194,20 +194,35 @@ function PracticeTurn({
     setBusy(true)
     onBusy(true)
     setError('')
-    // Retrying a lost response must reuse its ID and exact payload.
-    submission.current ??= {
-      request_id: randomUuid(),
-      version: question.state.version,
-      rating,
-      answer,
-      self_report: selfReport,
-    }
+    // Retrying a lost response must reuse its ID and exact payload. A
+    // different choice is a new submission, not a retry of the old one.
+    const previous = submission.current
+    const payload =
+      previous &&
+      previous.rating === rating &&
+      previous.answer === answer &&
+      previous.self_report === selfReport &&
+      previous.version === question.state.version
+        ? previous
+        : {
+            request_id: randomUuid(),
+            version: question.state.version,
+            rating,
+            answer,
+            self_report: selfReport,
+          }
+    submission.current = payload
     try {
-      const result = await savePracticeReview(id, submission.current, workspaceId)
+      const result = await savePracticeReview(id, payload, workspaceId)
       onSaved(result.due_at, result.rating)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       if (err instanceof PracticeRequestError && err.status === 409) setConflict(true)
+      // The server answered and refused it: resending the same payload can
+      // only fail again, so the next attempt starts a fresh submission.
+      else if (err instanceof PracticeRequestError && err.status >= 400 && err.status < 500) {
+        submission.current = null
+      }
     } finally {
       pending.current = false
       setBusy(false)

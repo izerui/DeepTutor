@@ -104,6 +104,39 @@ it("keeps a failed save retryable with the same submission ID", async () => {
   );
 });
 
+it("sends the learner's new choice after a failed save instead of the old one", async () => {
+  // "I have mastered this" fails; the learner then checks, is wrong, and
+  // chooses to practise again. That must not be sent as "mastered".
+  vi.mocked(api.savePracticeReview).mockRejectedValueOnce(new Error("Network interrupted"));
+  vi.mocked(api.checkPracticeAnswer).mockResolvedValue({ correct: false });
+  render(<PracticeSession ids={[8]} onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "A Pacific" }));
+  fireEvent.click(screen.getByRole("button", { name: "I have mastered this" }));
+  await screen.findByText("Network interrupted");
+  fireEvent.click(screen.getByRole("button", { name: "Check and reveal answer" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Practice again" }));
+  await waitFor(() => expect(api.savePracticeReview).toHaveBeenCalledTimes(2));
+  const [first, second] = vi.mocked(api.savePracticeReview).mock.calls.map(call => call[1]);
+  expect(first).toEqual(expect.objectContaining({ rating: "good", self_report: true }));
+  expect(second).toEqual(expect.objectContaining({ rating: "again", self_report: false }));
+  expect(second.request_id).not.toBe(first.request_id);
+});
+
+it("does not resend a submission the server rejected", async () => {
+  vi.mocked(api.savePracticeReview).mockRejectedValueOnce(
+    new api.PracticeRequestError("Invalid rating", 422),
+  );
+  render(<PracticeSession ids={[8]} onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "B Atlantic" }));
+  fireEvent.click(screen.getByRole("button", { name: "Check and reveal answer" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Mastered · Next question" }));
+  await screen.findByText("Invalid rating");
+  fireEvent.click(screen.getByRole("button", { name: "Mastered · Next question" }));
+  await screen.findByText("Practice complete");
+  const [first, second] = vi.mocked(api.savePracticeReview).mock.calls.map(call => call[1]);
+  expect(second.request_id).not.toBe(first.request_id);
+});
+
 it("does not allow a success rating when the server marked the answer wrong", async () => {
   vi.mocked(api.checkPracticeAnswer).mockResolvedValue({ correct: false });
   render(<PracticeSession ids={[8]} onClose={vi.fn()} />);
