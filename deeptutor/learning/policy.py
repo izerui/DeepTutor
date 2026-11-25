@@ -565,8 +565,10 @@ def objective_report(
         if attempt.knowledge_point_id == kp_id
     ]
     state = progress.repetition_states.get(kp_id)
+    # Review mode only offers mastered points, so an unmastered point's retry
+    # schedule is not reported as a review time.
     due_at = next(
-        (task.due_at for task in progress.review_queue if task.knowledge_point_id == kp_id),
+        (task.due_at for task in reviewable_tasks(progress) if task.knowledge_point_id == kp_id),
         None,
     )
     moment = time.time() if now is None else now

@@ -992,6 +992,42 @@ class TestProgressBoard:
         assert module["total"] == 2
         assert len(module["cards"]) == 2
 
+    def test_board_only_promises_reviews_for_mastered_points(self, client, tmp_path):
+        """A failed attempt schedules a retry, but review mode only offers
+        mastered points; the board must not show a review that never comes."""
+        from deeptutor.learning.models import KnowledgePoint, LearningModule
+
+        progress = LearningProgress(book_id="boardreview", name="Board review")
+        progress.modules = [
+            LearningModule(
+                id="m1",
+                name="M1",
+                order=0,
+                knowledge_points=[
+                    KnowledgePoint(id="kp1", name="KP1", type=KnowledgeType.MEMORY, module_id="m1"),
+                    KnowledgePoint(id="kp2", name="KP2", type=KnowledgeType.MEMORY, module_id="m1"),
+                ],
+            )
+        ]
+        scheduler = SpacedRepetitionScheduler()
+        for kp_id, level in (("kp1", 0.2), ("kp2", 1.0)):
+            progress.knowledge_types[kp_id] = KnowledgeType.MEMORY
+            progress.mastery_levels[kp_id] = level
+            state = scheduler.get_initial_state(KnowledgeType.MEMORY, now=time.time())
+            state.last_review_at = time.time()
+            state.next_review_at = state.last_review_at + 1200
+            progress.repetition_states[kp_id] = state
+        LearningStore(root=tmp_path).save(progress)
+
+        cards = {
+            card["id"]: card
+            for card in client.get("/api/mastery-paths/progress/boardreview/board").json()["cards"]
+        }
+        assert cards["kp2"]["status"] == "mastered"
+        assert cards["kp2"]["next_review_at"] is not None
+        assert cards["kp1"]["status"] != "mastered"
+        assert cards["kp1"]["next_review_at"] is None
+
     def test_board_invalid_book_id_returns_400(self, client):
         resp = client.get("/api/mastery-paths/progress/a\\b/board")
         assert resp.status_code == 400

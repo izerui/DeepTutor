@@ -393,7 +393,9 @@ def test_objective_report_gathers_the_whole_evidence_trail():
     assert [a["question_id"] for a in report["attempts"]] == ["q1", "q2"]
     assert report["correct_count"] == 1
     assert report["attempts"][0]["error_type"] == "application"
-    assert report["review"]["due_at"] == 1000.0
+    # Not yet mastered: the retry schedule is never offered as a review, so
+    # the report must not promise one (the next step is more practice).
+    assert report["review"]["due_at"] is None
     assert report["review"]["interval_index"] == 2
     assert "stability" in report["review"]
     assert "retrievability" in report["review"]
@@ -401,6 +403,30 @@ def test_objective_report_gathers_the_whole_evidence_trail():
     assert "reason" in report["review"]
     assert report["review"]["desired_retention"] == 0.9
     assert [e["id"] for e in report["errors"]] == ["e1"]
+
+
+def test_objective_report_shows_the_review_time_once_mastered():
+    kp = _kp("kp1", KnowledgeType.MEMORY)
+    progress = _progress(kp)
+    progress.mastery_levels["kp1"] = 1.0
+    progress.repetition_states["kp1"] = RepetitionState(
+        interval_index=2, consecutive_correct=3, next_review_at=1000.0
+    )
+    progress.review_queue = [
+        ReviewTask(
+            id="r1",
+            knowledge_point_id="kp1",
+            knowledge_type=KnowledgeType.MEMORY,
+            due_at=1000.0,
+            priority=1,
+            state=progress.repetition_states["kp1"],
+        )
+    ]
+
+    report = policy.objective_report(progress, "kp1")
+
+    assert report is not None and report["mastered"] is True
+    assert report["review"]["due_at"] == 1000.0
 
 
 def test_objective_report_carries_qualitative_evidence():

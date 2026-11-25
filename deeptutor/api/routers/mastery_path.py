@@ -1438,7 +1438,12 @@ async def get_progress_board(book_id: str):
     progress = _read_projection(progress, now=moment)
     summary = learning_policy.map_summary(progress, now=moment)
 
-    due_by_kp = {task.knowledge_point_id: task.due_at for task in progress.review_queue}
+    # Only mastered points are ever offered as reviews; a failed attempt's
+    # retry schedule must not appear as a review time that never comes.
+    due_by_kp = {
+        task.knowledge_point_id: task.due_at
+        for task in learning_policy.reviewable_tasks(progress)
+    }
 
     cards: list[dict] = []
     modules: list[dict] = []
