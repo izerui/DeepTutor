@@ -66,7 +66,7 @@ import {
   GeogebraTabProvider,
   useGeogebraTabOpener,
 } from "@/context/GeogebraTabContext";
-import { BookmarkPlus, ChevronRight, Download, FolderOpen, PanelRight } from "lucide-react";
+import { BookmarkPlus, ChevronRight, Download, FolderOpen, PanelRight, TextQuote } from "lucide-react";
 import Link from "next/link";
 import {
   useChatStateAdapter,
@@ -87,8 +87,10 @@ import {
 import {
   fileToPendingAttachment,
   selectAttachmentFiles,
+  toOutgoingAttachment,
   type PendingAttachment,
 } from "@/features/chat/controllers/pending-attachments";
+import { isQuoteAttachment, quoteAttachment, quoteText } from "@/lib/quote-attachments";
 import { readChatLaunchIntent } from "@/lib/chat-launch-intent";
 import { useAttachmentLimits } from "@/lib/attachment-limits";
 import {
@@ -1746,8 +1748,7 @@ export default function ChatWorkspace() {
       rects.length > 0
         ? rects[rects.length - 1]
         : range.getBoundingClientRect();
-    // Read-aloud (41px) + "Ask Little Tutor" (118px).
-    const buttonWidth = 159;
+    const buttonWidth = sourceMessage.role === "assistant" ? 199 : 159;
     const buttonHeight = 38;
     const left = Math.max(
       12,
@@ -1809,6 +1810,18 @@ export default function ChatWorkspace() {
     setSelectionTutorPrompt(null);
     window.getSelection()?.removeAllRanges();
   }, [openTutor, selectionTutorPrompt, state.sessionId]);
+
+  const addSelectedPassageToChat = () => {
+    const quote = quoteAttachment(selectionTutorPrompt?.text ?? "");
+    if (!quote) return;
+    setAttachments((prev) =>
+      prev.some((item) => isQuoteAttachment(item) && quoteText(item) === quote.text)
+        ? prev : [...prev, quote],
+    );
+    setSelectionTutorPrompt(null);
+    window.getSelection()?.removeAllRanges();
+    composerRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+  };
 
   const askTutorAboutMessage = useCallback(
     (messageId: number) => {
@@ -2077,12 +2090,7 @@ export default function ChatWorkspace() {
         return;
       }
 
-      let extraAttachments = attachments.map((a) => ({
-        type: a.type,
-        filename: a.filename,
-        base64: a.base64,
-        mime_type: a.mimeType,
-      }));
+      let extraAttachments = attachments.map(toOutgoingAttachment);
       let config: Record<string, unknown> | undefined;
 
       if (isQuizMode) {
@@ -2191,7 +2199,8 @@ export default function ChatWorkspace() {
       shouldAutoScrollRef.current = true;
       if (!resourceReuse.policy.partner) setSelectedPartner(null);
       if (!resourceReuse.policy.partner_group) setSelectedPartnerGroup(null);
-      if (!resourceReuse.policy.attachments) setAttachments([]);
+      setAttachments((prev) => resourceReuse.policy.attachments
+        ? prev.filter((item) => !isQuoteAttachment(item)) : []);
       if (!resourceReuse.policy.books) setSelectedBookReferences([]);
       if (!resourceReuse.policy.reading) setSelectedReadingReferences([]);
       if (!resourceReuse.policy.notebooks) setSelectedNotebookRecords([]);
@@ -2823,6 +2832,18 @@ export default function ChatWorkspace() {
                       }}
                     >
                       {/* Upstream 70031420a: read only the selected passage aloud. */}
+                      {selectionTutorPrompt.sourceMessageRole === "assistant" && (
+                        <Tooltip label={t("Add to chat")}>
+                        <button
+                          type="button"
+                          aria-label={t("Add to chat")}
+                          onClick={addSelectedPassageToChat}
+                          className="inline-flex w-10 items-center justify-center transition hover:opacity-80"
+                        >
+                          <TextQuote size={15} aria-hidden="true" />
+                        </button>
+                        </Tooltip>
+                      )}
                       <PlayAudioButton
                         key={selectionTutorPrompt.text}
                         content={selectionTutorPrompt.text}
@@ -3019,6 +3040,7 @@ export default function ChatWorkspace() {
                 onDrop={handleDrop}
                 onPaste={handlePaste}
                 onAddFiles={handleAddFiles}
+                onRestoreQuotes={(quotes) => setAttachments((prev) => [...prev, ...quotes])}
                 onSelectCapability={handleSelectCapability}
                 onCancelStreaming={cancelStreamingTurn}
                 prefillInputRef={prefillInputRef}

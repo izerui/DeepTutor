@@ -6220,5 +6220,14 @@
   "composer.create.draft.saveFailed": "Nem sikerült menteni a vázlatot.",
   "composer.create.draft.tagsPlaceholder": "cimke-egy, cimke-ketto",
   "composer.create.draft.body": "Vázlat tartalma",
-  "composer.create.draft.notSavedYet": "Semmi sem kerül mentésre, amíg jóvá nem hagyod"
+  "composer.create.draft.notSavedYet": "Semmi sem kerül mentésre, amíg jóvá nem hagyod",
+  "Output files": "Kimeneti fájlok",
+  "Removing the workspace copy keeps the chat attachment available.": "A munkaterületi példány eltávolítása után a csevegés melléklete elérhető marad.",
+  "Remove workspace file": "Munkaterület-fájl eltávolítása",
+  "Remove generated file?": "Eltávolítja a generált fájlt?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Eltávolítja az eredeti generált fájlt a munkaterületről? A csevegés melléklete elérhető marad.",
+  "Workspace file removed. The chat attachment is still available.": "A munkaterület fájlja eltávolítva. A csevegés melléklete továbbra is elérhető.",
+  "Add to chat": "Hozzáadás a csevegéshez",
+  "Loading file storage…": "Fájltár betöltése…",
+  "Unable to load file storage.": "Nem sikerült betölteni a fájltárolót."
 }

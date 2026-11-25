@@ -44,6 +44,21 @@ export function supportsRenderCleanup(url: string): boolean {
   return workspaceItem(url) !== null;
 }
 
+export function supportsGeneratedOutputActions(file: {
+  generated?: boolean;
+  relative_path?: string;
+  url?: string;
+}): boolean {
+  const parts = (file.relative_path || "").split("/");
+  if (!file.generated || !workspaceItem(file.url || "") ||
+      parts.some((part) => !part || part === "." || part === "..") ||
+      parts[0] !== "outputs" || parts[1] !== "chat" || !parts[3]?.startsWith("turn_")) return false;
+  return parts.length === 5 || (parts[4] === "exec" && (
+    parts.length === 6 || (parts.length >= 10 && parts[5] === "outputs" &&
+      parts[6] === "chat" && parts[8].startsWith("turn_"))
+  ));
+}
+
 async function request(path: string, init?: RequestInit) {
   const response = await apiFetch(path, init);
   const body = await response.json().catch(() => ({}));
@@ -60,6 +75,7 @@ export interface OutputFileActionsProps {
   showOpen?: boolean;
   /** Offer render-file cleanup (published Math Animator artifacts). */
   renderFiles?: boolean;
+  generatedFile?: boolean;
   /** Wrapper classes; defaults to a small gap below the file it belongs to. */
   className?: string;
 }
@@ -78,6 +94,7 @@ function OutputFileActionsInner({
   onOpen,
   showOpen = true,
   renderFiles = false,
+  generatedFile = false,
   className = "mt-1.5",
 }: OutputFileActionsProps) {
   const { t } = useTranslation();
@@ -87,10 +104,11 @@ function OutputFileActionsInner({
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [removed, setRemoved] = useState(false);
   if (!url) return null;
 
   const src = resolveOutputUrl(url);
-  const asset = renderFiles ? workspaceItem(url) : null;
+  const asset = renderFiles || generatedFile ? workspaceItem(url) : null;
   const endpoint = (action: string) =>
     asset ? `${asset.pathname}/${action}${asset.search}` : "";
 
@@ -98,14 +116,15 @@ function OutputFileActionsInner({
     setBusy(true);
     setError("");
     try {
-      const result = (await request(endpoint("render-storage"))) as RenderStorage;
+      const result = (await request(endpoint(generatedFile ? "file-storage" : "render-storage"))) as RenderStorage;
       setStorage(result);
       return result;
     } catch (cause) {
+      setStorage(null);
       setError(
         cause instanceof Error && cause.message
           ? t(cause.message)
-          : t("Unable to load render files."),
+          : t("Unable to load file storage."),
       );
       return null;
     } finally {
@@ -118,11 +137,17 @@ function OutputFileActionsInner({
     setBusy(true);
     setError("");
     try {
-      const result = await request(endpoint("clean-render-cache"), {
+      const result = await request(endpoint(generatedFile ? "remove-generated-output" : "clean-render-cache"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fingerprint: storage.fingerprint }),
       });
+      if (generatedFile) {
+        setRemoved(true);
+        setStorage(null);
+        setMessage(t("Workspace file removed. The chat attachment is still available."));
+        return;
+      }
       setStorage({ ...storage, ...result });
       setMessage(
         t("Freed {{size}}. Final output is kept.", {
@@ -168,17 +193,17 @@ function OutputFileActionsInner({
             className={actionClass}
             onClick={() => {
               setOpen(!open);
-              if (!open) void load();
+              if (!open && !removed) void load();
             }}
           >
             <HardDrive size={12} />
-            {t("Render files")}
+            {generatedFile ? t("Output files") : t("Render files")}
           </button>
         ) : null}
       </div>
       {asset && open ? (
         <div className="mt-2 space-y-2 rounded-lg border border-[var(--border)] p-3">
-          {busy && !storage ? <p role="status">{t("Loading render files…")}</p> : null}
+          {busy && !storage ? <p role="status">{t("Loading file storage…")}</p> : null}
           {error ? (
             <p role="alert" className="text-red-600">
               {error}
@@ -187,29 +212,33 @@ function OutputFileActionsInner({
           {message ? <p role="status">{message}</p> : null}
           {storage ? (
             <>
-              <p>
+              {generatedFile ? <p>{formatBytes(storage.file_bytes)}</p> : <p>
                 {t("Render files: {{count}} files · {{size}}", {
                   count: storage.cache_files ?? 0,
                   size: formatBytes(storage.cache_bytes ?? 0),
                 })}
-              </p>
+              </p>}
               <p className="text-[var(--muted-foreground)]">
-                {t("Cleanup keeps the final output, source code, and chat playback.")}
+                {generatedFile ? t("Removing the workspace copy keeps the chat attachment available.") : t("Cleanup keeps the final output, source code, and chat playback.")}
               </p>
               <button
                 type="button"
-                disabled={busy || !storage.cache_files}
+                disabled={busy || (!generatedFile && !storage.cache_files)}
                 className="rounded-md border border-[var(--border)] px-2 py-1 text-[12px] hover:bg-[var(--background)] disabled:opacity-40"
                 onClick={async () => {
                   setMessage("");
+                  if (generatedFile) {
+                    setConfirm(true);
+                    return;
+                  }
                   const preview = await load();
                   if (preview && (preview.cache_files ?? 0) > 0) setConfirm(true);
                 }}
               >
-                {t("Clean render files")}
+                {generatedFile ? t("Remove workspace file") : t("Clean render files")}
               </button>
             </>
-          ) : !busy ? (
+          ) : !busy && !removed ? (
             <button
               type="button"
               className="rounded-md border border-[var(--border)] px-2 py-1 text-[12px] hover:bg-[var(--background)]"
@@ -222,14 +251,14 @@ function OutputFileActionsInner({
       ) : null}
       <ConfirmDialog
         open={confirm}
-        title={t("Clean render files?")}
-        confirmLabel={t("Clean render files")}
+        title={generatedFile ? t("Remove generated file?") : t("Clean render files?")}
+        confirmLabel={generatedFile ? t("Remove workspace file") : t("Clean render files")}
         tone="danger"
         busy={busy}
         onCancel={() => setConfirm(false)}
         onConfirm={() => void clean()}
       >
-        <p>
+        {generatedFile ? <p>{t("Remove the original generated file from the workspace? The chat attachment stays available.")}</p> : <><p>
           {t("Remove {{count}} render files and free {{size}}?", {
             count: storage?.cache_files ?? 0,
             size: formatBytes(storage?.cache_bytes ?? 0),
@@ -237,7 +266,7 @@ function OutputFileActionsInner({
         </p>
         <p className="mt-2">
           {t("Cleanup keeps the final output, source code, and chat playback.")}
-        </p>
+        </p></>}
       </ConfirmDialog>
     </div>
   );

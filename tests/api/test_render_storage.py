@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -59,6 +60,62 @@ def test_preview_cleanup_and_playback_preserve_final_files(render_api):
     assert (turn / "artifacts/movie.mp4").read_bytes() == b"final video"
     assert client.get(item.url).content == b"final video"
     assert client.get(item.url + "/render-storage").json()["cache_files"] == 0
+
+
+def _publish_chat_output(service, suffix="exec/result.txt"):
+    binding = service.current_binding(ensure_output=True)
+    relative = f"outputs/chat/session/turn_one/{suffix}"
+    path = service.resolve(binding, relative, write=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"result")
+    item = service.publish(binding, [{"path": relative}])[0]
+    return urlsplit(item.url).path, path
+
+
+@pytest.mark.parametrize("suffix", ["result.txt", "exec/result.txt", "exec/outputs/chat/s/turn_x/result.txt"])
+def test_chat_output_cleanup_keeps_snapshot(render_api, suffix):
+    client, service, _, _, _ = render_api
+    url, path = _publish_chat_output(service, suffix)
+    preview = client.get(url + "/file-storage")
+    assert preview.status_code == 200
+    body = preview.json()
+    assert set(body) == {"file_bytes", "fingerprint"}
+    assert body["file_bytes"] == 6
+    delete = url + "/remove-generated-output"
+    assert client.post(delete, json={}).status_code == 422
+    assert client.post(delete, json={"fingerprint": "0" * 64}).status_code == 409
+    assert client.post(url + "/reveal-generated-output").status_code == 404
+    response = client.post(delete, json={"fingerprint": body["fingerprint"]})
+    assert response.status_code == 200
+    assert response.json() == {"removed": True, "file_bytes": 6}
+    assert not path.exists()
+    assert client.get(url + "/file-storage").status_code == 404
+    assert client.get(url).content == b"result"
+
+
+@pytest.mark.parametrize("change", ["content", "active", "symlink"])
+def test_chat_output_cleanup_rejects_unsafe_removal(render_api, change):
+    client, service, _, _, store = render_api
+    url, path = _publish_chat_output(service)
+    fingerprint = client.get(url + "/file-storage").json()["fingerprint"]
+    if change == "content":
+        stat = path.stat()
+        path.write_bytes(b"edited")
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+        # Even a fresh confirmation cannot authorize deleting edited content.
+        fingerprint = client.get(url + "/file-storage").json()["fingerprint"]
+    elif change == "active":
+        store.list_nonterminal_turns.return_value = [{"id": "running"}]
+    else:
+        target = path.with_name("keep.txt")
+        path.rename(target)
+        path.symlink_to(target)
+        assert client.get(url + "/file-storage").status_code == 404
+    response = client.post(url + "/remove-generated-output", json={"fingerprint": fingerprint})
+    assert response.status_code == 409
+    assert str(path.parent) not in response.text
+    assert path.read_bytes() == (b"edited" if change == "content" else b"result")
+    assert client.get(url).content == b"result"
 
 
 def test_cleanup_refuses_changed_preview(render_api):
@@ -141,8 +198,10 @@ def test_another_account_can_neither_open_nor_clean_the_render(render_api, tmp_p
     from deeptutor.multi_user.context import set_current_user
     from deeptutor.multi_user.models import CurrentUser, UserScope
 
-    client, _, item, turn, _ = render_api
+    client, service, item, turn, _ = render_api
     preview = client.get(item.url + "/render-storage").json()
+    url, path = _publish_chat_output(service)
+    confirmation = {"fingerprint": client.get(url + "/file-storage").json()["fingerprint"]}
     bob = CurrentUser(
         id="u_bob",
         username="bob",
@@ -156,6 +215,9 @@ def test_another_account_can_neither_open_nor_clean_the_render(render_api, tmp_p
 
     client.app.dependency_overrides[require_auth] = as_bob
     try:
+        assert client.get(url).status_code == 404
+        assert client.get(url + "/file-storage").status_code == 404
+        assert client.post(url + "/remove-generated-output", json=confirmation).status_code == 409
         assert client.get(item.url).status_code == 404
         assert client.head(item.url).status_code == 404
         assert client.get(item.url + "/render-storage").status_code == 404
@@ -166,4 +228,5 @@ def test_another_account_can_neither_open_nor_clean_the_render(render_api, tmp_p
     finally:
         client.app.dependency_overrides.clear()
     assert (turn / "media/videos/partial_movie_files/segment.mp4").exists()
+    assert path.read_bytes() == b"result"
     assert client.get(item.url).content == b"final video"

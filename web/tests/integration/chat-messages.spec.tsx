@@ -8,6 +8,30 @@ import { initI18n } from '@/i18n/init'
 initI18n('en')
 
 describe('chat message feature', () => {
+  it('shows a persisted quote during editing and restores the original question on cancel', async () => {
+    const edit = vi.fn()
+    const user = userEvent.setup()
+    render(<ChatMessageList messages={[{
+      id: 9, role: 'user', content: 'Why?', attachments: [
+        { type: 'quote', filename: 'quote.md', extracted_text: 'ΔE is positive' },
+      ],
+    }]} isStreaming={false} onEditMessage={edit} onCopyAssistantMessage={vi.fn()} onRegenerateMessage={vi.fn()} />)
+    expect(screen.getByText('ΔE is positive')).toBeVisible()
+    expect(screen.queryByText('quote.md')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByRole('textbox'), ' More detail')
+    expect(screen.getByText('ΔE is positive')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Remove quoted passage' }))
+    expect(screen.queryByText('ΔE is positive')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Why?')).toBeVisible()
+    expect(screen.getByText('ΔE is positive')).toBeVisible()
+    expect(edit).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Remove quoted passage' }))
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(edit).toHaveBeenCalledWith(9, 'Why?', [])
+  })
   it('shows a persisted worker loss beside the saved mastery answer with Retry', async () => {
     const retry = vi.fn()
     render(

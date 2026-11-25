@@ -55,7 +55,9 @@ import type {
 import { apiFetch, apiUrl } from "@/lib/api";
 import { notify } from "@/lib/notifications";
 import { docIconFor } from "@/lib/doc-attachments";
-import { OutputFileActions } from "@/components/files/OutputFileActions";
+import { isQuoteAttachment, quoteText } from "@/lib/quote-attachments";
+import { QuotedPassage, QUOTE_RULE_CLASS } from "@/components/chat/home/QuotedPassage";
+import { OutputFileActions, supportsGeneratedOutputActions } from "@/components/files/OutputFileActions";
 import { PlayAudioButton } from "@/components/voice/SpeechButton";
 export { PlayAudioButton } from "@/components/voice/SpeechButton";
 import { activeWorkspaceId } from "@/lib/workspace-scope";
@@ -631,6 +633,7 @@ export function GeneratedFileCards({
           <OutputFileActions
             url={a.url || mediaSrc || ""}
             filename={filename}
+            generatedFile={supportsGeneratedOutputActions(a)}
             showOpen={false}
           />
         );
@@ -1587,7 +1590,7 @@ export const UserMessage = memo(function UserMessage({
   index: number;
   onPreviewAttachment?: (attachment: MessageAttachment) => void;
   onCopy?: CopyHandler;
-  onEdit?: (messageId: number, newContent: string) => void | boolean | Promise<void | boolean>;
+  onEdit?: (messageId: number, newContent: string, keptQuotes?: string[]) => void | boolean | Promise<void | boolean>;
   onDiscardFailedSubmission?: (messageId: number) => boolean | Promise<boolean>;
   onRetryFailedSubmission?: (messageId: number) => boolean | Promise<boolean>;
   editDisabled?: boolean;
@@ -1606,6 +1609,7 @@ export const UserMessage = memo(function UserMessage({
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(msg.content);
+  const [editQuotes, setEditQuotes] = useState<string[]>([]);
   const [discarding, setDiscarding] = useState(false);
   const [discardFailed, setDiscardFailed] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -1651,6 +1655,7 @@ export const UserMessage = memo(function UserMessage({
   const startEdit = () => {
     if (!canEdit) return;
     setDraft(msg.content);
+    setEditQuotes(passages);
     setEditing(true);
   };
   const cancelEdit = () => {
@@ -1660,7 +1665,7 @@ export const UserMessage = memo(function UserMessage({
   const submitEdit = async () => {
     if (submittingEdit) return;
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === msg.content) {
+    if (!trimmed || (trimmed === msg.content && editQuotes.length === passages.length)) {
       cancelEdit();
       return;
     }
@@ -1668,7 +1673,10 @@ export const UserMessage = memo(function UserMessage({
     setSubmittingEdit(true);
     setEditFailed(false);
     try {
-      if (await onEdit?.(msg.id, trimmed) === false) setEditFailed(true);
+      const result = editQuotes.length === passages.length
+        ? await onEdit?.(msg.id, trimmed)
+        : await onEdit?.(msg.id, trimmed, editQuotes);
+      if (result === false) setEditFailed(true);
       else setEditing(false);
     } catch {
       setEditFailed(true);
@@ -1681,6 +1689,13 @@ export const UserMessage = memo(function UserMessage({
   // snapshot's Space references — rendered as one collapsed tree under
   // the bubble (the sent-message mirror of the composer's tree).
   const snap = msg.requestSnapshot;
+  const passages = (msg.attachments?.some(isQuoteAttachment) ? msg.attachments : snap?.attachments ?? [])
+    .filter(isQuoteAttachment).map(quoteText);
+  const quotes = passages.map((text, index) => (
+    <blockquote key={`quote-${index}`} className={`mb-1.5 line-clamp-3 whitespace-pre-line ${QUOTE_RULE_CLASS}`}>
+      {text}
+    </blockquote>
+  ));
   const refTreeItems: ContextTreeItem[] = [
     ...(consultation ? [{
       key: `${consultation.kind}-${consultation.id}`,
@@ -1689,7 +1704,7 @@ export const UserMessage = memo(function UserMessage({
       label: consultation.name,
       onClick: onOpenConsultation,
     }] : []),
-    ...(msg.attachments ?? []).map((a, ai): ContextTreeItem => {
+    ...(msg.attachments ?? []).filter((item) => !isQuoteAttachment(item)).map((a, ai): ContextTreeItem => {
       const filename = a.filename || t("Attachment");
       const spec = docIconFor(filename);
       const src = a.type === "image" ? imageSrcForAttachment(a) : null;
@@ -1811,6 +1826,9 @@ export const UserMessage = memo(function UserMessage({
         )}
         {editing ? (
           <div className="w-[min(620px,75vw)] rounded-2xl border border-[var(--primary)]/40 bg-[var(--secondary)] px-3 py-2.5 text-[14px] leading-relaxed text-[var(--foreground)] shadow-sm">
+            {msg.failedSubmission ? quotes : editQuotes.map((text, index) => (
+              <QuotedPassage key={index} quote={text} onRemove={() => setEditQuotes((prev) => prev.filter((_, i) => i !== index))} />
+            ))}
             <textarea
               autoFocus
               value={draft}
@@ -1849,7 +1867,7 @@ export const UserMessage = memo(function UserMessage({
                 <button
                   type="button"
                   onClick={submitEdit}
-                  disabled={submittingEdit || !draft.trim() || draft.trim() === msg.content}
+                  disabled={submittingEdit || !draft.trim() || (draft.trim() === msg.content && editQuotes.length === passages.length)}
                   className="rounded-md bg-[var(--primary)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--primary-foreground)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {t("Send")}
@@ -1877,6 +1895,7 @@ export const UserMessage = memo(function UserMessage({
                 }
               />
             ) : null}
+            {quotes}
             <div dir="auto" className="whitespace-pre-wrap"><LearningText size={14}>{msg.content}</LearningText></div>
           </div>
         )}
@@ -2040,7 +2059,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   onRetryFailedSubmission?: (messageId: number) => boolean | Promise<boolean>;
   /** Edit-branching: selected sibling at each branch point. */
   selectedBranches?: Record<string, number>;
-  onEditMessage?: (messageId: number, newContent: string) => void | boolean | Promise<void | boolean>;
+  onEditMessage?: (messageId: number, newContent: string, keptQuotes?: string[]) => void | boolean | Promise<void | boolean>;
   onSwitchBranch?: (parentMessageId: number | null, childId: number) => void;
   /**
    * Deliver an ``ask_user`` reply back to the backend so the agentic

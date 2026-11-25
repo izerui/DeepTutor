@@ -17,6 +17,7 @@ from deeptutor.services.session.artifact_attachments import (
 from deeptutor.services.session.provider_response_state import (
     normalize_provider_response_state,
 )
+from deeptutor.services.session.quote_attachments import is_quote, read_quotes, with_quotes
 from deeptutor.services.session.workspace_preferences import (
     WORKSPACE_MODE_MASTERY,
     WORKSPACE_MODE_READING,
@@ -379,7 +380,11 @@ class TurnExecutor:
             # every PDF's result with the configured parser output. Running the
             # configured parser regardless of a native text layer is what lets
             # OCR/layout engines see scanned pages and figures.
-            document_texts, attachment_records = extract_documents_from_records(attachment_records)
+            quote_records = [record for record in attachment_records if is_quote(record)]
+            quotes = read_quotes(quote_records)
+            document_texts, attachment_records = extract_documents_from_records(
+                [record for record in attachment_records if not is_quote(record)]
+            )
             pdf_records = [
                 record
                 for record in attachment_records
@@ -427,6 +432,7 @@ class TurnExecutor:
                 document_texts=document_texts,
                 on_progress=_attachment_progress,
             )
+            attachment_records = quote_records + attachment_records
 
             # Immersive reading: the page the user is currently looking at
             # rides along as image attachments, so a vision model sees what
@@ -489,6 +495,7 @@ class TurnExecutor:
                     extracted_text=r.get("extracted_text", ""),
                 )
                 for r in attachment_records
+                if not is_quote(r)
             ]
             # DB persistence copy: drop base64 unconditionally now that the
             # original bytes live in the attachment store. Image attachments
@@ -660,7 +667,7 @@ class TurnExecutor:
                     session_id=session_id,
                     leaf_message_id=branch_parent_id,
                     current_turn_ordinal=current_turn_ordinal,
-                    fresh_attachment_records=attachment_records,
+                    fresh_attachment_records=[r for r in attachment_records if not is_quote(r)],
                     fresh_notebook_records=resolved_notebook_records,
                     fresh_book_context_text=book_context,
                     fresh_book_references=book_references,
@@ -671,7 +678,7 @@ class TurnExecutor:
                     language=str(payload.get("language", "en") or "en"),
                 )
                 source_manifest_text, source_index = render_manifest(inventory)
-                effective_user_message = raw_user_content
+                effective_user_message = with_quotes(raw_user_content, quotes)
             else:
                 if notebook_references:
                     referenced_records = get_notebook_manager().get_records_by_references(

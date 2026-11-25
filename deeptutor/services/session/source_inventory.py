@@ -36,6 +36,7 @@ from typing import Any, Sequence
 
 from deeptutor.reading.references import resolve_reading_sources
 from deeptutor.services.session.protocol import SessionStoreProtocol
+from deeptutor.services.session.quote_attachments import is_quote
 
 logger = logging.getLogger(__name__)
 
@@ -744,6 +745,8 @@ async def collect_prior_image_attachments(
         if msg.get("role") != "user":
             continue
         for att in msg.get("attachments") or []:
+            if is_quote(att):
+                continue
             mime = str(att.get("mime_type", "")).lower()
             url = str(att.get("url", "") or "").strip()
             if not url or url in seen_urls or url in excluded_urls:

@@ -1,3 +1,5 @@
+import { isQuoteAttachment, quoteText } from "./quote-attachments";
+
 /**
  * Minimal message/attachment shape the markdown exporter needs. Product chat's
  * `MessageItem` satisfies it structurally, and partner conversations map into
@@ -7,6 +9,10 @@ export interface ExportableAttachment {
   type?: string;
   filename?: string;
   mime_type?: string;
+  /** Quote attachments carry their passage in one of these. */
+  text?: string;
+  extracted_text?: string;
+  base64?: string;
 }
 
 export interface ExportableMessage {
@@ -32,14 +38,25 @@ function messageHeading(message: ExportableMessage): string {
 }
 
 function formatAttachments(attachments?: ExportableAttachment[]): string {
-  if (!attachments?.length) return "";
-  const items = attachments
+  const files = attachments?.filter((a) => !isQuoteAttachment(a)) ?? [];
+  if (!files.length) return "";
+  const items = files
     .map((a) => {
       const name = a.filename || a.type || "attachment";
       return a.mime_type ? `\`${name}\` (${a.mime_type})` : `\`${name}\``;
     })
     .join(", ");
   return `_Attachments:_ ${items}\n\n`;
+}
+
+/** Quoted passages, as Markdown blockquotes in front of the question. */
+function formatQuotes(attachments?: ExportableAttachment[]): string {
+  return (attachments ?? [])
+    .filter(isQuoteAttachment)
+    .map((a) => quoteText(a).trim())
+    .filter(Boolean)
+    .map((text) => text.split("\n").map((line) => `> ${line}`.trimEnd()).join("\n") + "\n\n")
+    .join("");
 }
 
 export interface BuildChatMarkdownOptions {
@@ -59,8 +76,9 @@ export function buildChatMarkdown(
       const role = messageHeading(msg);
       const cap = msg.capability ? ` _(${msg.capability})_` : "";
       const attachments = formatAttachments(msg.attachments);
+      const quotes = formatQuotes(msg.attachments);
       const content = (msg.content ?? "").trim();
-      return `## ${role}${cap}\n\n${attachments}${content}`.trimEnd();
+      return `## ${role}${cap}\n\n${attachments}${quotes}${content}`.trimEnd();
     })
     .join("\n\n---\n\n");
   return header + body + "\n";

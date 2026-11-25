@@ -6240,5 +6240,14 @@
   "composer.create.draft.saveFailed": "Impossibile salvare la bozza.",
   "composer.create.draft.tagsPlaceholder": "tag-uno, tag-due",
   "composer.create.draft.body": "Contenuto della bozza",
-  "composer.create.draft.notSavedYet": "Nulla viene salvato finché non approvi"
+  "composer.create.draft.notSavedYet": "Nulla viene salvato finché non approvi",
+  "Output files": "File di output",
+  "Removing the workspace copy keeps the chat attachment available.": "La rimozione della copia dell'area di lavoro mantiene disponibile l'allegato della chat.",
+  "Remove workspace file": "Rimuovere il file dell'area di lavoro",
+  "Remove generated file?": "Rimuovere il file generato?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Rimuovere il file generato originale dall'area di lavoro? L'allegato della chat rimane disponibile.",
+  "Workspace file removed. The chat attachment is still available.": "File dell'area di lavoro rimosso. L'allegato della chat è ancora disponibile.",
+  "Add to chat": "Aggiungi alla chat",
+  "Loading file storage…": "Caricamento dell'archivio file…",
+  "Unable to load file storage.": "Impossibile caricare l'archivio file."
 }

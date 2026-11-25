@@ -6200,5 +6200,14 @@
   "composer.create.draft.saveFailed": "下書きを保存できませんでした。",
   "composer.create.draft.tagsPlaceholder": "タグ1, タグ2",
   "composer.create.draft.body": "下書きの内容",
-  "composer.create.draft.notSavedYet": "承認するまで何も保存されません"
+  "composer.create.draft.notSavedYet": "承認するまで何も保存されません",
+  "Output files": "出力ファイル",
+  "Removing the workspace copy keeps the chat attachment available.": "ワークスペースのコピーを削除しても、チャットの添付ファイルは使えます。",
+  "Remove workspace file": "ワークスペースのファイルを削除",
+  "Remove generated file?": "生成されたファイルを削除しますか？",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "生成された元のファイルをワークスペースから削除しますか？チャットの添付ファイルは引き続き使えます。",
+  "Workspace file removed. The chat attachment is still available.": "ワークスペースのファイルを削除しました。チャットの添付ファイルは引き続き使えます。",
+  "Add to chat": "チャットに追加",
+  "Loading file storage…": "ファイルストレージを読み込んでいます…",
+  "Unable to load file storage.": "ファイルストレージを読み込めませんでした。"
 }

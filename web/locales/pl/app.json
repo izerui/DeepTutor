@@ -6264,5 +6264,14 @@
   "composer.create.draft.saveFailed": "Nie udało się zapisać szkicu.",
   "composer.create.draft.tagsPlaceholder": "tag-jeden, tag-dwa",
   "composer.create.draft.body": "Treść szkicu",
-  "composer.create.draft.notSavedYet": "Nic nie zostanie zapisane, dopóki nie zatwierdzisz"
+  "composer.create.draft.notSavedYet": "Nic nie zostanie zapisane, dopóki nie zatwierdzisz",
+  "Output files": "Output files",
+  "Removing the workspace copy keeps the chat attachment available.": "Usunięcie kopii z obszaru roboczego nie usunie załącznika z czatu.",
+  "Remove workspace file": "Usuń plik z obszaru roboczego",
+  "Remove generated file?": "Usunąć wygenerowany plik?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Usunąć oryginalny wygenerowany plik z obszaru roboczego? Załącznik w czacie nadal będzie dostępny.",
+  "Workspace file removed. The chat attachment is still available.": "Usunięto plik z obszaru roboczego. Załącznik w czacie nadal jest dostępny.",
+  "Add to chat": "Dodaj do czatu",
+  "Loading file storage…": "Loading file storage…",
+  "Unable to load file storage.": "Unable to load file storage."
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from types import SimpleNamespace
 
 import pytest
@@ -1628,6 +1629,78 @@ def _patch_turn_services(monkeypatch, orchestrator) -> None:
     monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", orchestrator)
     monkeypatch.setattr("deeptutor.services.skill.get_skill_service", _fake_skill_service)
     monkeypatch.setattr("deeptutor.services.persona.get_persona_service", _fake_persona_service)
+
+
+@pytest.mark.asyncio
+async def test_chat_quotes_survive_transcript_reload_and_retry(monkeypatch, tmp_path):
+    from deeptutor.services.session import attachment_parsing
+    from deeptutor.services.session.source_inventory import collect_prior_image_attachments
+    from deeptutor.utils import document_extractor
+
+    path = tmp_path / "chat_history.db"
+    store = SQLiteSessionStore(path)
+    runtime = TurnRuntimeManager(store)
+    messages = []
+    extractor = document_extractor.extract_documents_from_records
+    pdf_parser = attachment_parsing.parse_chat_pdf_attachments
+
+    def extract(records):
+        assert all(record["type"] != "quote" for record in records)
+        return extractor(records)
+
+    async def parse(records, **kwargs):
+        assert all(record["type"] != "quote" for record in records)
+        return await pdf_parser(records, **kwargs)
+
+    class Orchestrator:
+        async def handle(self, context):
+            messages.append(context.user_message)
+            assert not context.attachments
+            yield StreamEvent(type=StreamEventType.DONE, source="chat")
+
+    monkeypatch.setattr(document_extractor, "extract_documents_from_records", extract)
+    monkeypatch.setattr(attachment_parsing, "parse_chat_pdf_attachments", parse)
+    _patch_turn_services(monkeypatch, Orchestrator)
+    selections = ["  中文\n\nline two  ", "x" * 12001]
+    attachments = [
+        {
+            "type": "quote",
+            "filename": "selection.pdf",
+            "mime_type": "image/png",
+            "base64": base64.b64encode(s.encode()).decode(),
+        }
+        for s in selections
+    ]
+    question = "Compare these passages"
+    session, turn = await runtime.start_turn(
+        {"content": question, "capability": "chat", "attachments": attachments}
+    )
+    events = [e async for e in runtime.subscribe_turn(turn["id"])]
+    assert not [e for e in events if e["type"] == "error"]
+    expected = (
+        "[Quoted Passages — selected by the learner; the message below is about them]\n"
+        "> 中文\n>\n> line two\n\n> " + "x" * 12000 + "\n\n" + question
+    )
+    assert messages == [expected]
+    store = SQLiteSessionStore(path)
+    runtime = TurnRuntimeManager(store)
+    user, *_ = await store.get_messages(session["id"])
+    assert user["content"] == question
+    saved = user["attachments"]
+    assert [a["extracted_text"] for a in saved] == ["中文\n\nline two", "x" * 12000]
+    assert all(a["extracted_chars"] == len(a["extracted_text"]) and not a["base64"] for a in saved)
+    assert user["metadata"]["request_snapshot"]["attachments"] == saved
+    assert not await collect_prior_image_attachments(
+        store, session_id=session["id"], leaf_message_id=user["id"]
+    )
+    for replay in (False, True):
+        _, retry = await runtime.regenerate_last_turn(
+            session["id"], overrides={"replay_snapshot": replay}
+        )
+        events = [e async for e in runtime.subscribe_turn(retry["id"])]
+        assert not [e for e in events if e["type"] == "error"]
+    assert messages == [expected] * 3
+    assert sum(row["role"] == "user" for row in await store.get_messages(session["id"])) == 1
 
 
 @pytest.mark.asyncio

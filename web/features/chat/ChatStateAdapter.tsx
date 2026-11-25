@@ -1,6 +1,8 @@
 "use client";
 
 import { supportsSubmissionReplacement } from "@/lib/session-api";
+import { isQuoteAttachment, quoteAttachment, quoteText } from "@/lib/quote-attachments";
+import { toOutgoingAttachment } from "@/features/chat/controllers/pending-attachments";
 
 import { activeWorkspaceId } from "@/lib/workspace-scope";
 import {
@@ -1779,7 +1781,7 @@ interface ChatContextValue {
    *  Uses the composer's current capability / refs — only the text is
    *  taken from ``newContent``. Re-runs the turn from the original's
    *  parent context. */
-  editMessage: (messageId: number, newContent: string) => Promise<boolean>;
+  editMessage: (messageId: number, newContent: string, keptQuotes?: string[]) => Promise<boolean>;
   retryFailedSubmission: (messageId: number) => Promise<boolean>;
   /** Switch which sibling is currently visible at a branch point. */
   switchBranch: (parentMessageId: number | null, childId: number) => void;
@@ -3995,7 +3997,7 @@ export function ChatStateAdapterProvider({
   }, []);
 
   const editMessage = useCallback(
-    async (messageId: number, newContent: string): Promise<boolean> => {
+    async (messageId: number, newContent: string, keptQuotes?: string[]): Promise<boolean> => {
       const generation = runtimeGeneration.current;
       const trimmed = newContent.trim();
       if (!trimmed) return false;
@@ -4058,17 +4060,32 @@ export function ChatStateAdapterProvider({
       }
       if (!original || generation !== runtimeGeneration.current) return false;
       const parentId = original.parentMessageId ?? null;
+      const snapshot = local?.requestSnapshot ?? original.requestSnapshot;
+      const savedAttachments = snapshot?.attachments ?? original.attachments;
+      const savedQuotes = (original.attachments?.some(isQuoteAttachment)
+        ? original.attachments : savedAttachments)?.filter(isQuoteAttachment);
+      const passages = keptQuotes ?? savedQuotes?.map(quoteText);
+      const attachments = passages
+        ? [
+            ...(savedAttachments ?? []).filter((item) => !isQuoteAttachment(item)),
+            ...passages.flatMap((text) => {
+              const quote = quoteAttachment(text);
+              return quote ? [toOutgoingAttachment(quote)] : [];
+            }),
+          ]
+        : savedAttachments;
       return sendMessage(
         trimmed,
-        original.attachments,
+        attachments,
         undefined,
         undefined,
         undefined,
         { parentMessageId: parentId,
-          requestSnapshotOverride: (local?.requestSnapshot ?? original.requestSnapshot)
+          requestSnapshotOverride: snapshot
             ? withCurrentGenerationSettings(
                 {
-                  ...(local?.requestSnapshot ?? original.requestSnapshot)!,
+                  ...snapshot,
+                  attachments,
                   content: trimmed,
                   // An edit is a new turn under the current settings; it does
                   // not inherit the failed submission's replacement identity.

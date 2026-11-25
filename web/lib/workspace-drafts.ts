@@ -3,7 +3,7 @@ import { fetchAuthStatus } from './auth'
 
 export type WorkspaceDraft = {
   text: string
-  attachments: { filename: string; base64?: string; mimeType?: string }[]
+  attachments: { type?: string; filename: string; base64?: string; mimeType?: string }[]
 }
 
 export type WorkspaceDraftLocation = {

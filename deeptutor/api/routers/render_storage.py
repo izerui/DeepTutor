@@ -9,16 +9,23 @@ item resolves to nothing here (404/409) exactly as it does for reading it.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from deeptutor.api.routers.auth import require_auth
 from deeptutor.services.auth import TokenPayload
-from deeptutor.services.workspace import WorkspaceError, get_content_workspace_service
+from deeptutor.services.workspace import (
+    ContentWorkspaceService,
+    WorkspaceError,
+    get_content_workspace_service,
+)
 from deeptutor.services.workspace.render_storage import (
     clean_render_storage,
+    inspect_chat_exec_output,
     inspect_render_storage,
+    remove_chat_exec_output,
 )
 
 router = APIRouter()
@@ -54,6 +61,56 @@ async def clean_render_cache(
     _auth: TokenPayload | None = Depends(require_auth),
 ) -> dict:
     """Clean a reviewed render directory while excluding active writers."""
+    try:
+        return await _exclusive_cleanup(
+            request, clean_render_storage, workspace_id, workspace_item_id, payload
+        )
+    except (WorkspaceError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{workspace_id}/{workspace_item_id}/file-storage")
+async def chat_output_file_storage(
+    workspace_id: str,
+    workspace_item_id: str,
+    _auth: TokenPayload | None = Depends(require_auth),
+) -> dict:
+    try:
+        return await asyncio.to_thread(
+            inspect_chat_exec_output,
+            get_content_workspace_service(),
+            workspace_id,
+            workspace_item_id,
+        )
+    except (WorkspaceError, OSError) as exc:
+        raise HTTPException(404, "Generated workspace copy unavailable.") from exc
+
+
+@router.post("/{workspace_id}/{workspace_item_id}/remove-generated-output")
+async def remove_chat_output_file(
+    workspace_id: str,
+    workspace_item_id: str,
+    payload: RenderCleanupPayload,
+    request: Request,
+    _auth: TokenPayload | None = Depends(require_auth),
+) -> dict:
+    try:
+        return await _exclusive_cleanup(
+            request, remove_chat_exec_output, workspace_id, workspace_item_id, payload
+        )
+    except (WorkspaceError, OSError) as exc:
+        raise HTTPException(
+            409, "Cannot remove this workspace copy. Review its details again."
+        ) from exc
+
+
+async def _exclusive_cleanup(
+    request: Request,
+    cleanup: Callable[[ContentWorkspaceService, str, str, str], dict],
+    workspace_id: str,
+    workspace_item_id: str,
+    payload: RenderCleanupPayload,
+) -> dict:
     from deeptutor.services.session import get_session_store
     from deeptutor.services.workspace.activity import data_activity
     from deeptutor.services.workspace.data_migration import assert_no_pending_recovery
@@ -71,7 +128,7 @@ async def clean_render_cache(
             if await get_session_store().list_nonterminal_turns():
                 raise WorkspaceError("Wait for running conversations to finish before cleanup.")
             return await asyncio.to_thread(
-                clean_render_storage,
+                cleanup,
                 get_content_workspace_service(),
                 workspace_id,
                 workspace_item_id,
@@ -80,7 +137,4 @@ async def clean_render_cache(
 
     task = asyncio.create_task(perform())
     task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
-    try:
-        return await asyncio.shield(task)
-    except (WorkspaceError, OSError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return await asyncio.shield(task)

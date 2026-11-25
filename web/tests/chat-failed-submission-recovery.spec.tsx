@@ -887,6 +887,7 @@ it("edits a saved message with the current model and reply language, keeping its
   };
   session.messages[0].attachments = [
     { type: "image", filename: "figure.png", url: "https://files.example/figure.png" },
+    { type: "quote", filename: "quote.md", extracted_text: "ΔE" },
   ];
   session.messages[0].metadata = {
     request_snapshot: {
@@ -913,7 +914,10 @@ it("edits a saved message with the current model and reply language, keeping its
     language: "zh",
     capability: "chat", tools: ["reason"], knowledge_bases: ["kb-1"],
     notebook_references: [{ notebook_id: "nb-1", record_ids: ["r1"] }],
-    attachments: [{ type: "image", filename: "figure.png", url: "https://files.example/figure.png" }],
+    attachments: [
+      { type: "image", filename: "figure.png", url: "https://files.example/figure.png" },
+      { type: "quote", filename: "quote.md", base64: Buffer.from("ΔE").toString("base64"), mime_type: "text/markdown" },
+    ],
     persona: "",
     parent_message_id: null,
   });

@@ -6220,5 +6220,14 @@
   "composer.create.draft.saveFailed": "草稿保存失败。",
   "composer.create.draft.tagsPlaceholder": "标签一, 标签二",
   "composer.create.draft.body": "草稿内容",
-  "composer.create.draft.notSavedYet": "在你确认之前不会保存任何内容"
+  "composer.create.draft.notSavedYet": "在你确认之前不会保存任何内容",
+  "Output files": "输出文件",
+  "Removing the workspace copy keeps the chat attachment available.": "删除工作区中的文件副本后，聊天附件仍可打开。",
+  "Remove workspace file": "删除工作区文件",
+  "Remove generated file?": "删除生成的文件？",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "要从工作区删除原始生成文件吗？聊天附件仍可打开。",
+  "Workspace file removed. The chat attachment is still available.": "已删除工作区文件，聊天附件仍可打开。",
+  "Add to chat": "添加到对话框",
+  "Loading file storage…": "正在读取文件信息…",
+  "Unable to load file storage.": "无法读取文件信息。"
 }

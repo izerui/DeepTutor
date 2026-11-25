@@ -6220,5 +6220,14 @@
   "composer.create.draft.saveFailed": "Couldn't save the draft.",
   "composer.create.draft.tagsPlaceholder": "tag-one, tag-two",
   "composer.create.draft.body": "Draft content",
-  "composer.create.draft.notSavedYet": "Nothing is saved until you approve it"
+  "composer.create.draft.notSavedYet": "Nothing is saved until you approve it",
+  "Output files": "Output files",
+  "Removing the workspace copy keeps the chat attachment available.": "Removing the workspace copy keeps the chat attachment available.",
+  "Remove workspace file": "Remove workspace file",
+  "Remove generated file?": "Remove generated file?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Remove the original generated file from the workspace? The chat attachment stays available.",
+  "Workspace file removed. The chat attachment is still available.": "Workspace file removed. The chat attachment is still available.",
+  "Add to chat": "Add to chat",
+  "Loading file storage…": "Loading file storage…",
+  "Unable to load file storage.": "Unable to load file storage."
 }

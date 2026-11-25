@@ -17,7 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 
-from .models import WorkspaceError
+from .models import WorkspaceError, WorkspaceItem
 from .service import ContentWorkspaceService
 
 
@@ -98,4 +98,74 @@ def clean_render_storage(
     }
 
 
-__all__ = ["clean_render_storage", "inspect_render_storage"]
+def _chat_exec_output(
+    service: ContentWorkspaceService, workspace_id: str, item_id: str
+) -> tuple[Path, WorkspaceItem]:
+    _, item = service.resolve_published_item(workspace_id, item_id)
+    parts = PurePosixPath(item.relative_path).parts
+    if (
+        not item.generated
+        or len(parts) < 5
+        or parts[:2] != ("outputs", "chat")
+        or not parts[3].startswith("turn_")
+        or ".." in parts
+        or not (
+            len(parts) == 5
+            or (len(parts) == 6 and parts[4] == "exec")
+            or (
+                len(parts) >= 10
+                and parts[4:7] == ("exec", "outputs", "chat")
+                and parts[8].startswith("turn_")
+            )
+        )
+    ):
+        raise WorkspaceError("Only generated chat tool outputs support file actions.")
+    binding = service.binding_by_id(workspace_id)
+    cursor = binding.root
+    for part in parts:
+        cursor /= part
+        if cursor.is_symlink():
+            raise WorkspaceError("Generated output paths cannot contain symbolic links.")
+    path = service.resolve(binding, item.relative_path, write=True)
+    if not path.is_file():
+        raise WorkspaceError("The original generated file is unavailable.")
+    return path, item
+
+
+def _chat_file_preview(path: Path, item: WorkspaceItem) -> dict:
+    stat = path.stat()
+    fingerprint = hashlib.sha256(
+        f"{item.workspace_item_id}\0{stat.st_size}\0{stat.st_mtime_ns}\0{stat.st_ino}".encode()
+    ).hexdigest()
+    return {"file_bytes": stat.st_size, "fingerprint": fingerprint}
+
+
+def inspect_chat_exec_output(
+    service: ContentWorkspaceService, workspace_id: str, item_id: str
+) -> dict:
+    return _chat_file_preview(*_chat_exec_output(service, workspace_id, item_id))
+
+
+def remove_chat_exec_output(
+    service: ContentWorkspaceService, workspace_id: str, item_id: str, fingerprint: str
+) -> dict:
+    path, item = _chat_exec_output(service, workspace_id, item_id)
+    preview = _chat_file_preview(path, item)
+    if preview["fingerprint"] != fingerprint:
+        raise WorkspaceError("The generated file changed.")
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != item.sha256 or _chat_file_preview(path, item) != preview:
+        raise WorkspaceError("The generated file differs from its chat attachment.")
+    path.unlink()
+    return {"removed": True, "file_bytes": preview["file_bytes"]}
+
+
+__all__ = [
+    "clean_render_storage",
+    "inspect_render_storage",
+    "inspect_chat_exec_output",
+    "remove_chat_exec_output",
+]

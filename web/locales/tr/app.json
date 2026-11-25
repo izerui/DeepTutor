@@ -6220,5 +6220,14 @@
   "composer.create.draft.saveFailed": "Taslak kaydedilemedi.",
   "composer.create.draft.tagsPlaceholder": "etiket-bir, etiket-iki",
   "composer.create.draft.body": "Taslak içeriği",
-  "composer.create.draft.notSavedYet": "Onaylayana kadar hiçbir şey kaydedilmez"
+  "composer.create.draft.notSavedYet": "Onaylayana kadar hiçbir şey kaydedilmez",
+  "Output files": "Çıktı dosyaları",
+  "Removing the workspace copy keeps the chat attachment available.": "Çalışma alanı kopyasını kaldırmak sohbet ekini kullanılabilir bırakır.",
+  "Remove workspace file": "Çalışma alanı dosyasını kaldır",
+  "Remove generated file?": "Üretilen dosya kaldırılsın mı?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Üretilen özgün dosya çalışma alanından kaldırılsın mı? Sohbet eki kullanılabilir kalır.",
+  "Workspace file removed. The chat attachment is still available.": "Çalışma alanı dosyası kaldırıldı. Sohbet eki hâlâ kullanılabilir.",
+  "Add to chat": "Sohbete ekle",
+  "Loading file storage…": "Dosya depolaması yükleniyor…",
+  "Unable to load file storage.": "Dosya depolaması yüklenemedi."
 }

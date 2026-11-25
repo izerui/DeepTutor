@@ -44,6 +44,7 @@ import {
   extractBase64FromDataUrl,
   readFileAsDataUrl,
 } from "@/lib/file-attachments";
+import { isQuoteAttachment } from "@/lib/quote-attachments";
 import {
   fileToPendingAttachment,
   selectAttachmentFiles,
@@ -774,7 +775,8 @@ function StandaloneComposerImpl({
       // scope is sticky and deliberately survives it.
       if (!resourceReuse.policy.partner) setSelectedPartner(null);
       if (!resourceReuse.policy.partner_group) setSelectedPartnerGroup(null);
-      if (!resourceReuse.policy.attachments) setAttachments([]);
+      setAttachments((prev) => resourceReuse.policy.attachments
+        ? prev.filter((item) => !isQuoteAttachment(item)) : []);
       if (!resourceReuse.policy.books) setSelectedBookReferences([]);
       if (!resourceReuse.policy.notebooks) setSelectedNotebookRecords([]);
       if (!resourceReuse.policy.chat_history) setSelectedHistorySessions([]);
@@ -960,6 +962,7 @@ function StandaloneComposerImpl({
         onDrop={handleDrop}
         onPaste={handlePaste}
         onAddFiles={handleAddFiles}
+        onRestoreQuotes={(quotes) => setAttachments((prev) => [...prev, ...quotes])}
         onSelectCapability={selectCapability}
         showCapabilityChip={showCapabilityChip}
         onCancelStreaming={onCancelStreaming}

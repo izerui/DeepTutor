@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import logging
 import time
@@ -20,6 +21,7 @@ from deeptutor.services.session.protocol import (
     ActiveTurnConflict,
     NoLlmAccess,
 )
+from deeptutor.services.session.quote_attachments import QUOTE_MAX_CHARS, is_quote
 from deeptutor.services.session.workspace_preferences import (
     WORKSPACE_MODE_MASTERY,
     WORKSPACE_MODE_READING,
@@ -1178,6 +1180,20 @@ class TurnRequestPreparer:
             capability=capability,
         )
 
+        attachments = []
+        for att in last_user.get("attachments") or []:
+            if not isinstance(att, dict):
+                continue
+            wire = {
+                key: att[key]
+                for key in ("type", "url", "base64", "filename", "mime_type", "id")
+                if key in att
+            }
+            # Rebuild wire bytes from the scoped transcript, without resolving a client URL.
+            if is_quote(att) and isinstance(text := att.get("extracted_text"), str):
+                wire["base64"] = base64.b64encode(text[:QUOTE_MAX_CHARS].encode()).decode("ascii")
+            attachments.append(wire)
+
         payload: dict[str, Any] = {
             "session_id": session_id,
             "capability": capability,
@@ -1192,21 +1208,7 @@ class TurnRequestPreparer:
             "skills": skills,
             "mcp": mcp,
             "language": language,
-            "attachments": [
-                {
-                    key: att.get(key)
-                    for key in ("type", "url", "base64", "filename", "mime_type", "id")
-                    if isinstance(att, dict) and key in att
-                }
-                for att in (last_user.get("attachments") or [])
-                if isinstance(att, dict)
-            ],
-            # The persisted message-row attachments carry upload-time extras
-            # (``id``, ``extracted_text``, ``extracted_chars``) that the wire
-            # contract ``OutgoingAttachment`` forbids; project to the allowed
-            # fields so start_turn's TurnRequest validation passes on retry
-            # (#1484 — otherwise the WS closed with no terminal event and the
-            # UI hung on "Thinking..." forever).
+            "attachments": attachments,
             "notebook_references": list(
                 overrides.get("notebook_references")
                 if overrides.get("notebook_references") is not None

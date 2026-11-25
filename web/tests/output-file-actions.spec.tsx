@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { OutputFileActions } from "@/components/files/OutputFileActions";
+import { OutputFileActions, supportsGeneratedOutputActions } from "@/components/files/OutputFileActions";
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("@/shared/api/client", () => ({
@@ -26,6 +26,28 @@ const ok = (body: unknown) => ({ ok: true, json: async () => body });
 
 beforeEach(() => {
   mocks.fetch.mockReset();
+});
+
+it("offers cleanup only for generated files at supported workspace locations", () => {
+  const file = { url, generated: true, relative_path: "outputs/chat/math/turn_a/exec/chart.png" };
+  expect(supportsGeneratedOutputActions(file)).toBe(true);
+  expect(supportsGeneratedOutputActions({ ...file, generated: false })).toBe(false);
+  expect(supportsGeneratedOutputActions({ ...file, relative_path: "documents/chart.png" })).toBe(false);
+  expect(supportsGeneratedOutputActions({ ...file, url: "https://example.org/chart.png" })).toBe(false);
+});
+
+it("removes the reviewed workspace copy and keeps the published download", async () => {
+  mocks.fetch.mockResolvedValueOnce(ok(preview)).mockResolvedValueOnce(ok({ removed: true }));
+  render(<OutputFileActions url={`${url}?dt_workspace=course-one`} generatedFile />);
+  fireEvent.click(screen.getByRole("button", { name: "Output files" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Remove workspace file" }));
+  expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getAllByRole("button", { name: "Remove workspace file" })[1]);
+  await screen.findByText("Workspace file removed. The chat attachment is still available.");
+  expect(mocks.fetch).toHaveBeenCalledWith(`${url}/remove-generated-output?dt_workspace=course-one`,
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ fingerprint: preview.fingerprint }) }));
+  expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", `http://api.test${url}?dt_workspace=course-one`);
+  expect(screen.queryByRole("button", { name: "Remove workspace file" })).toBeNull();
 });
 
 it("offers Open and Download for any generated file", () => {

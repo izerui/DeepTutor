@@ -6240,5 +6240,14 @@
   "composer.create.draft.saveFailed": "Impossible d'enregistrer le brouillon.",
   "composer.create.draft.tagsPlaceholder": "tag-un, tag-deux",
   "composer.create.draft.body": "Contenu du brouillon",
-  "composer.create.draft.notSavedYet": "Rien n'est enregistré avant votre validation"
+  "composer.create.draft.notSavedYet": "Rien n'est enregistré avant votre validation",
+  "Output files": "Fichiers de sortie",
+  "Removing the workspace copy keeps the chat attachment available.": "Supprimer la copie de l’espace de travail conserve la pièce jointe de la conversation.",
+  "Remove workspace file": "Supprimer le fichier de l’espace de travail",
+  "Remove generated file?": "Supprimer le fichier généré ?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Supprimer le fichier généré d’origine de l’espace de travail ? La pièce jointe de la conversation reste disponible.",
+  "Workspace file removed. The chat attachment is still available.": "Fichier de l’espace de travail supprimé. La pièce jointe de la conversation reste disponible.",
+  "Add to chat": "Ajouter à la conversation",
+  "Loading file storage…": "Chargement du stockage de fichiers…",
+  "Unable to load file storage.": "Impossible de charger le stockage de fichiers."
 }

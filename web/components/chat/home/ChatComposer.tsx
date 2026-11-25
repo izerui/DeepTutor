@@ -100,6 +100,8 @@ type SpaceSelectionCounts = {
 };
 import type { ContextTreeItem } from "./ContextReferenceTree";
 import SelectedResources from "./SelectedResources";
+import { QuotedPassage } from "./QuotedPassage";
+import { isQuoteAttachment, quoteAttachment, quoteText, type QuotePendingAttachment } from "@/lib/quote-attachments";
 import { knowledgeBaseMatches, resolveKnowledgeBaseLabel } from "@/lib/knowledge-helpers";
 import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -334,6 +336,7 @@ export default memo(function ChatComposer({
   onDrop,
   onPaste,
   onAddFiles,
+  onRestoreQuotes,
   onSelectCapability,
   onCancelStreaming,
   prefillInputRef,
@@ -496,6 +499,7 @@ export default memo(function ChatComposer({
   onDrop: (event: React.DragEvent) => void;
   onPaste: (event: React.ClipboardEvent) => void;
   onAddFiles: (files: File[]) => void;
+  onRestoreQuotes?: (quotes: QuotePendingAttachment[]) => void;
   onSelectCapability: (value: string) => void;
   onCancelStreaming: () => void;
   /**
@@ -582,12 +586,14 @@ export default memo(function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftAttachmentsRef = useRef(attachments);
   const addDraftFilesRef = useRef(onAddFiles);
+  const restoreQuotesRef = useRef(onRestoreQuotes);
   useEffect(() => {
     draftAttachmentsRef.current = attachments;
   }, [attachments]);
   useEffect(() => {
     addDraftFilesRef.current = onAddFiles;
-  }, [onAddFiles]);
+    restoreQuotesRef.current = onRestoreQuotes;
+  }, [onAddFiles, onRestoreQuotes]);
   const restoredDraftRef = useRef(false);
   const restoreFailedRef = useRef(false);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -612,7 +618,9 @@ export default memo(function ChatComposer({
       // detached when the unmount cleanup runs.
       text: draftTextRef.current,
       attachments: draftAttachmentsRef.current.map(
-        ({ filename, base64, mimeType }) => ({ filename, base64, mimeType }),
+        ({ type, filename, base64, mimeType }) => ({
+          ...(isQuoteAttachment({ type }) ? { type } : {}), filename, base64, mimeType,
+        }),
       ),
     }),
     [],
@@ -696,8 +704,12 @@ export default memo(function ChatComposer({
             suppressDraftSaveRef.current = false;
           });
           if (interactedBeforeRestoreRef.current) scheduleDraftSave();
+          const quotes = draft.attachments.filter(isQuoteAttachment)
+            .map((item) => quoteAttachment(quoteText(item)))
+            .filter((item): item is QuotePendingAttachment => item !== null);
+          if (quotes.length) restoreQuotesRef.current?.(quotes);
           const files = draft.attachments
-            .filter((item) => item.base64)
+            .filter((item) => item.base64 && !isQuoteAttachment(item))
             .map((item) => {
               const bytes = Uint8Array.from(atob(item.base64!), (char) =>
                 char.charCodeAt(0),
@@ -1080,7 +1092,7 @@ export default memo(function ChatComposer({
   };
   // One selection summary for files, references, and conversation resources.
   const contextTreeItems: ContextTreeItem[] = [
-    ...attachments.map((file, index): ContextTreeItem => ({key:`file-${index}`, icon:Paperclip, kind:t("Attach files"),label:file.filename,thumbnailUrl:file.type === "image" ? file.previewUrl : undefined,onClick:()=>onPreviewAttachment?.(index),onRemove:()=>onRemoveAttachment(index)})),
+    ...attachments.flatMap((file, index): ContextTreeItem[] => isQuoteAttachment(file) ? [] : [{key:`file-${index}`, icon:Paperclip, kind:t("Attach files"),label:file.filename,thumbnailUrl:file.type === "image" ? file.previewUrl : undefined,onClick:()=>onPreviewAttachment?.(index),onRemove:()=>onRemoveAttachment(index)}]),
     ...selectedKnowledgeBases.map((id): ContextTreeItem => ({key:`kb-${id}`,icon:Database,kind:t("Knowledge"),label:resolveKnowledgeBaseLabel(id, knowledgeBases, knowledgeBaseLabels),onRemove:()=>onToggleKB(id)})),
     ...(personaSelection ? [{key:"persona-scope",icon:UserRound,kind:t("Response style"),label:personaSelection,onRemove:()=>onPersonaSelectionChange?.("")}] : []),
     ...(selectedPartner ? [{ key: "partner-current", icon: UserRound, kind: t("Ask partner"), label: partnerName!, onRemove: () => onSelectPartner?.(null) }] : []),
@@ -1440,6 +1452,9 @@ export default memo(function ChatComposer({
           />
 
           {inputHeader}
+          {attachments.map((file, index) => isQuoteAttachment(file) && (
+            <QuotedPassage key={`quote-${index}`} quote={quoteText(file)} onRemove={() => onRemoveAttachment(index)} />
+          ))}
           <SelectedResources items={contextTreeItems}/>
           <AttachmentProcessingStatus items={attachmentProcessing} />
           {inputFooter}

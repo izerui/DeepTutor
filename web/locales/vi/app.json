@@ -6200,5 +6200,14 @@
   "composer.create.draft.saveFailed": "Không thể lưu bản nháp.",
   "composer.create.draft.tagsPlaceholder": "the-mot, the-hai",
   "composer.create.draft.body": "Nội dung bản nháp",
-  "composer.create.draft.notSavedYet": "Không có gì được lưu cho đến khi bạn duyệt"
+  "composer.create.draft.notSavedYet": "Không có gì được lưu cho đến khi bạn duyệt",
+  "Output files": "Tệp đầu ra",
+  "Removing the workspace copy keeps the chat attachment available.": "Xóa bản sao trong không gian làm việc không ảnh hưởng đến tệp đính kèm trong cuộc trò chuyện.",
+  "Remove workspace file": "Xóa tệp trong không gian làm việc",
+  "Remove generated file?": "Xóa tệp đã tạo?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Xóa tệp gốc đã tạo khỏi không gian làm việc? Tệp đính kèm trong cuộc trò chuyện vẫn còn.",
+  "Workspace file removed. The chat attachment is still available.": "Đã xóa tệp trong không gian làm việc. Tệp đính kèm trong cuộc trò chuyện vẫn còn.",
+  "Add to chat": "Thêm vào cuộc trò chuyện",
+  "Loading file storage…": "Đang tải kho lưu trữ tệp…",
+  "Unable to load file storage.": "Không thể tải kho lưu trữ tệp."
 }

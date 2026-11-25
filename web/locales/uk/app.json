@@ -6264,5 +6264,14 @@
   "composer.create.draft.saveFailed": "Не вдалося зберегти чернетку.",
   "composer.create.draft.tagsPlaceholder": "тег-один, тег-два",
   "composer.create.draft.body": "Зміст чернетки",
-  "composer.create.draft.notSavedYet": "Нічого не буде збережено, доки ви не підтвердите"
+  "composer.create.draft.notSavedYet": "Нічого не буде збережено, доки ви не підтвердите",
+  "Output files": "Output files",
+  "Removing the workspace copy keeps the chat attachment available.": "Після видалення копії з робочого простору вкладення в чаті залишиться доступним.",
+  "Remove workspace file": "Видалити файл робочого простору",
+  "Remove generated file?": "Видалити згенерований файл?",
+  "Remove the original generated file from the workspace? The chat attachment stays available.": "Видалити оригінальний згенерований файл із робочого простору? Вкладення в чаті залишиться доступним.",
+  "Workspace file removed. The chat attachment is still available.": "Файл робочого простору видалено. Вкладення в чаті залишається доступним.",
+  "Add to chat": "Додати до чату",
+  "Loading file storage…": "Loading file storage…",
+  "Unable to load file storage.": "Unable to load file storage."
 }

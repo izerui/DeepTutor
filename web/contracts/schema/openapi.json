@@ -2042,6 +2042,46 @@
         "title": "ChatMessageRequest",
         "type": "object"
       },
+      "ChatPageCustomization": {
+        "additionalProperties": false,
+        "properties": {
+          "controls": {
+            "$ref": "#/components/schemas/ComposerControls"
+          },
+          "hidden_modes": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Hidden Modes",
+            "type": "array"
+          },
+          "starters": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/StarterPrompt"
+              },
+              "maxItems": 20,
+              "type": "array"
+            },
+            "propertyNames": {
+              "enum": [
+                "explain",
+                "solve",
+                "practice",
+                "plan",
+                "research"
+              ]
+            },
+            "title": "Starters",
+            "type": "object"
+          }
+        },
+        "title": "ChatPageCustomization",
+        "type": "object"
+      },
       "ChatResponseTimeoutUpdate": {
         "properties": {
           "chat_response_timeout": {
@@ -2215,6 +2255,38 @@
           "page_id"
         ],
         "title": "CompilePageRequest",
+        "type": "object"
+      },
+      "ComposerControls": {
+        "additionalProperties": false,
+        "properties": {
+          "mcp": {
+            "default": true,
+            "title": "Mcp",
+            "type": "boolean"
+          },
+          "partners": {
+            "default": true,
+            "title": "Partners",
+            "type": "boolean"
+          },
+          "preferences": {
+            "default": true,
+            "title": "Preferences",
+            "type": "boolean"
+          },
+          "skills": {
+            "default": true,
+            "title": "Skills",
+            "type": "boolean"
+          },
+          "voice": {
+            "default": true,
+            "title": "Voice",
+            "type": "boolean"
+          }
+        },
+        "title": "ComposerControls",
         "type": "object"
       },
       "ConfirmPartnerDraftRequest": {
@@ -5754,6 +5826,29 @@
         "title": "LearningCaptureUpdateRequest",
         "type": "object"
       },
+      "LearningPageCustomization": {
+        "additionalProperties": false,
+        "properties": {
+          "hidden_features": {
+            "items": {
+              "enum": [
+                "books",
+                "mastery",
+                "practice",
+                "reading",
+                "market",
+                "courses"
+              ],
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Hidden Features",
+            "type": "array"
+          }
+        },
+        "title": "LearningPageCustomization",
+        "type": "object"
+      },
       "LightRagConfigUpdate": {
         "description": "Partial update for LightRAG query + indexing knobs (omitted fields kept).",
         "properties": {
@@ -8181,6 +8276,18 @@
           "session_id"
         ],
         "title": "PageChatSessionRequest",
+        "type": "object"
+      },
+      "PageCustomization": {
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/ChatPageCustomization"
+          },
+          "learning": {
+            "$ref": "#/components/schemas/LearningPageCustomization"
+          }
+        },
+        "title": "PageCustomization",
         "type": "object"
       },
       "PageIndexConfigUpdate": {
@@ -11172,6 +11279,29 @@
           "content"
         ],
         "title": "SoulUpdateBody",
+        "type": "object"
+      },
+      "StarterPrompt": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "prompt": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "prompt"
+        ],
+        "title": "StarterPrompt",
         "type": "object"
       },
       "StatusColors": {
@@ -59892,7 +60022,7 @@
     },
     "/api/sessions/{session_id}/threads": {
       "get": {
-        "description": "Little Tutor threads opened from this conversation, newest first.\n\nThe store is the signed-in user's own, so only their threads under their\nown conversation can ever be listed.",
+        "description": "Little Tutor threads opened from this conversation, newest first.\n\nThe store is the signed-in user's own, so only their threads under their\nown conversation can ever be listed. Threads opened before sources were\nrecorded are attributed here once, when their stored sidebar prompt\nidentifies exactly one message (see ``thread_attribution``).",
         "operationId": "list_session_threads_api_sessions__session_id__threads_get",
         "parameters": [
           {
@@ -62993,6 +63123,221 @@
           }
         },
         "summary": "Update Network Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/page-customization": {
+      "get": {
+        "operationId": "get_page_customization_api_settings_page_customization_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageCustomization"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Page Customization",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/page-customization/chat": {
+      "put": {
+        "operationId": "update_chat_page_customization_api_settings_page_customization_chat_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatPageCustomization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageCustomization"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Chat Page Customization",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/page-customization/learning": {
+      "put": {
+        "operationId": "update_learning_page_customization_api_settings_page_customization_learning_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LearningPageCustomization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageCustomization"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Learning Page Customization",
         "tags": [
           "settings"
         ]
@@ -76891,6 +77236,186 @@
           }
         },
         "summary": "Clean Render Cache",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/files/workspace-items/{workspace_id}/{workspace_item_id}/file-storage": {
+      "get": {
+        "operationId": "chat_output_file_storage_files_workspace_items__workspace_id___workspace_item_id__file_storage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_item_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Chat Output File Storage Files Workspace Items  Workspace Id   Workspace Item Id  File Storage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat Output File Storage",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/files/workspace-items/{workspace_id}/{workspace_item_id}/remove-generated-output": {
+      "post": {
+        "operationId": "remove_chat_output_file_files_workspace_items__workspace_id___workspace_item_id__remove_generated_output_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_item_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dt_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dt Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderCleanupPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Chat Output File Files Workspace Items  Workspace Id   Workspace Item Id  Remove Generated Output Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Chat Output File",
         "tags": [
           "workspace"
         ]

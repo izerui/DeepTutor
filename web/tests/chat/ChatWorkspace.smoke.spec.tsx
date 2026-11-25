@@ -201,7 +201,7 @@ vi.mock('@/features/chat/messages', () => ({
     return (
       <div data-testid="message-list" data-streaming={props.isStreaming ? 'true' : 'false'}>
         {props.messages.map((message, index) => (
-          <div key={message.id ?? index} data-role={message.role}>
+          <div key={message.id ?? index} data-role={message.role} data-chat-message-id={message.id}>
             {message.content}
           </div>
         ))}
@@ -399,6 +399,33 @@ describe('ChatWorkspace smoke', () => {
       []
     )
     view.unmount()
+  })
+
+  it('adds an answer selection alongside Little Tutor and sends the quote once', async () => {
+    const passage = '能量 ΔE'
+    applyState({ sessionId: 's-1', messages: [{ id: 2, role: 'assistant', content: passage }] })
+    renderWorkspace()
+    const answer = screen.getByText(passage)
+    const select = () => {
+      const range = document.createRange()
+      range.selectNodeContents(answer)
+      range.getClientRects = () => [answer.getBoundingClientRect()] as unknown as DOMRectList
+      window.getSelection()!.removeAllRanges()
+      window.getSelection()!.addRange(range)
+      fireEvent.mouseUp(answer)
+    }
+    select()
+    expect(screen.getByRole('button', { name: 'Ask Little Tutor' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to chat' }))
+    select()
+    fireEvent.click(screen.getByRole('button', { name: 'Add to chat' }))
+    expect(fixture.composerProps?.attachments).toHaveLength(1)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Send' })))
+    expect(fixture.adapter.sendMessage.mock.calls[0][1]).toEqual([{
+      type: 'quote', filename: 'quote.md', mime_type: 'text/markdown',
+      base64: Buffer.from(passage).toString('base64'),
+    }])
+    expect(fixture.composerProps?.attachments).toEqual([])
   })
 
   it('walks the streaming turn: sent → streaming → done', async () => {
