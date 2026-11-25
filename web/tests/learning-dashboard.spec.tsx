@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LearningDashboard } from '@/components/learning/LearningDashboard'
 
@@ -8,7 +8,9 @@ const mock = vi.hoisted(() => ({
   topics: vi.fn(),
   reading: vi.fn(),
   sessions: vi.fn(),
+  practice: vi.fn(),
 }))
+vi.mock('@/lib/practice-api', () => ({ getPracticeSummary: mock.practice }))
 vi.mock('@/lib/book-api', () => ({ bookApi: { list: mock.books } }))
 vi.mock('@/lib/learning-api', () => ({ fetchMasteryTopics: mock.topics }))
 vi.mock('@/lib/reading-workspace-api', () => ({ listReadingWorkspaces: mock.reading }))
@@ -75,6 +77,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t, i18n: { language: 
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mock.practice.mockResolvedValue({ total: 0, mistakes: 0, due: 0, overdue: 0 })
   mock.books.mockResolvedValue({
     books: [{ id: 'b', title: 'Home', updated_at: 10, status: 'ready', metadata: {} }],
   })
@@ -175,4 +178,22 @@ it.each([
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(label) }))
   expect(screen.queryByRole('button', { name: 'Workspace' })).toBeNull()
   expect(screen.getByRole('link', { name: 'Start' })).toHaveAttribute('href', route)
+})
+
+it('due practice mistakes are part of what needs attention', async () => {
+  mock.practice.mockResolvedValue({ total: 5, mistakes: 4, due: 3, overdue: 1 })
+  render(<LearningDashboard />)
+  const heading = await screen.findByText('What needs your attention')
+  const section = heading.closest('section') as HTMLElement
+  const card = within(section).getByText('Practice').closest('a')
+  expect(card?.getAttribute('href')).toContain('/practice')
+  expect(card?.textContent).toContain('{{count}} reviews due')
+  expect(mock.practice).toHaveBeenCalledWith('', '*')
+})
+
+it('a practice summary failure leaves the rest of the page alone', async () => {
+  mock.practice.mockRejectedValue(new Error('offline'))
+  render(<LearningDashboard />)
+  expect(await screen.findByText('Recent activity')).toBeInTheDocument()
+  expect(screen.queryByText('What needs your attention')).toBeNull()
 })

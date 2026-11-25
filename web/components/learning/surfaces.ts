@@ -95,5 +95,5 @@ export const LEARNING_LINKS = [
   { kind: 'courses', title: 'My courses', description: 'Courses tooltip', href: '/tasks' },
 ] as const
 
-export const learningSurface = (kind: LearningKind): LearningSurface =>
+export const learningSurface = (kind: LearningSurface['kind']): LearningSurface =>
   LEARNING_SURFACES.find(surface => surface.kind === (kind === "watching" ? "reading" : kind))!

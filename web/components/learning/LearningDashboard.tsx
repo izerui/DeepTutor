@@ -6,7 +6,8 @@ import { BookOpen, Route } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, apiUrl } from '@/lib/api'
 import { scopedUrl } from '@/lib/workspace-scope'
-import { bookRoute } from '@/lib/learning-routes'
+import { bookRoute, practiceRoute } from '@/lib/learning-routes'
+import { getPracticeSummary } from '@/lib/practice-api'
 import {
   masterySessionRoute,
   masteryOpeningMessage,
@@ -40,6 +41,8 @@ export function LearningDashboard() {
   const [failed, setFailed] = useState<LearningKind[]>([])
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
+  // Practice mistakes due across every workspace; null until known.
+  const [practiceDue, setPracticeDue] = useState<number | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -57,6 +60,13 @@ export function LearningDashboard() {
         failures = payload.failed
       } catch { failures = ['books', 'mastery', 'reading', 'watching'] }
       const { books, mastery, reading, watching } = result
+      // Due practice is its own source: a failure keeps the last known count
+      // and never blocks the rest of the page.
+      const due = await getPracticeSummary('', '*').then(
+        summary => summary.due,
+        () => null
+      )
+      if (alive && due !== null) setPracticeDue(due)
       if (alive) {
         // Preserve previously loaded content if a refresh fails.
         setSources(previous => ({
@@ -83,6 +93,8 @@ export function LearningDashboard() {
   }, [reload])
 
   const todos = learningTodos(sources)
+  const practice = learningSurface('practice')
+  const showPractice = (practiceDue ?? 0) > 0
   const recent = recentLearningActivity(sources)
   return (
     <LearningShell
@@ -107,12 +119,21 @@ export function LearningDashboard() {
         <LearningSkeleton count={4} />
       ) : (
         <>
-          {(todos.reviews.length > 0 || todos.books.length > 0) && (
+          {(todos.reviews.length > 0 || todos.books.length > 0 || showPractice) && (
             <section aria-labelledby="learning-todos" className="mb-9">
               <h2 id="learning-todos" className="mb-3 text-[13.5px] font-semibold">
                 {t('What needs your attention')}
               </h2>
               <div className={pageGridClass(2)}>
+                {showPractice && (
+                  <LearningCard
+                    key="practice-due"
+                    href={practiceRoute(undefined, '')}
+                    title={t(practice.title)}
+                    icon={<practice.icon size={19} />}
+                    subtitle={t('{{count}} reviews due', { count: practiceDue ?? 0 })}
+                  />
+                )}
                 {todos.reviews.map(topic => (
                   <LearningCard
                     key={`${topic.content_workspace_id}:${topic.path_id}`}
