@@ -6233,5 +6233,8 @@
   "This question was already completed. This reply was not graded; ask for a new practice question.": "Ez a kérdés már lezárult. Ezt a választ nem értékeltük; kérj egy új gyakorlókérdést.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Ez a kérdés már nem nyitott, ezért ezt a választ nem értékeltük. Folytasd az aktuális kérdéssel, vagy kérj egy újat.",
   "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "A kérdés forrásoldalai a feltevése óta megváltoztak, ezért már nem értékelhető. Hagyd ki, és kérj egy új kérdést.",
-  "This answer was not saved to your question bank.": "Ez a válasz nem került mentésre a kérdésbankodba."
+  "This answer was not saved to your question bank.": "Ez a válasz nem került mentésre a kérdésbankodba.",
+  "Next in the syllabus: {{title}}": "Következő a tantervben: {{title}}",
+  "Study this unit": "Tanuld ezt az egységet",
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Tanítsd meg nekem a tanterv {{title}} egységét a tantárgy anyagából, majd ellenőrizd, hogy megértettem-e."
 }

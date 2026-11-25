@@ -6277,5 +6277,8 @@
   "This question was already completed. This reply was not graded; ask for a new practice question.": "Це запитання вже завершено. Цю відповідь не оцінено; попросіть нове тренувальне запитання.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Це запитання вже закрите, тому цю відповідь не оцінено. Продовжте з поточним запитанням або попросіть нове.",
   "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Сторінки джерел цього запитання змінилися після того, як його поставили, тож його більше не можна оцінити. Пропустіть його й попросіть нове запитання.",
-  "This answer was not saved to your question bank.": "Цю відповідь не збережено у вашому банку запитань."
+  "This answer was not saved to your question bank.": "Цю відповідь не збережено у вашому банку запитань.",
+  "Next in the syllabus: {{title}}": "Далі за програмою: {{title}}",
+  "Study this unit": "Вивчити цей розділ",
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Поясни мені розділ програми {{title}} за матеріалами цього предмета, а потім перевір, чи я його зрозумів."
 }

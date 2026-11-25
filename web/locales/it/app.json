@@ -6253,5 +6253,8 @@
   "This question was already completed. This reply was not graded; ask for a new practice question.": "Questa domanda è già stata completata. Questa risposta non è stata valutata; chiedi una nuova domanda di esercitazione.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Questa domanda non è più aperta, quindi questa risposta non è stata valutata. Continua con la domanda corrente o chiedine una nuova.",
   "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Le pagine di origine di questa domanda sono cambiate dopo che è stata posta, quindi non può più essere valutata. Saltala e chiedi una nuova domanda.",
-  "This answer was not saved to your question bank.": "Questa risposta non è stata salvata nella tua banca domande."
+  "This answer was not saved to your question bank.": "Questa risposta non è stata salvata nella tua banca domande.",
+  "Next in the syllabus: {{title}}": "Prossimo nel programma: {{title}}",
+  "Study this unit": "Studia questa unità",
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Spiegami l’unità del programma {{title}} usando il materiale di questa materia, poi verifica che l’abbia capita."
 }

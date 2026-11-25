@@ -6233,5 +6233,8 @@
   "This question was already completed. This reply was not graded; ask for a new practice question.": "This question was already completed. This reply was not graded; ask for a new practice question.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.",
   "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.",
-  "This answer was not saved to your question bank.": "This answer was not saved to your question bank."
+  "This answer was not saved to your question bank.": "This answer was not saved to your question bank.",
+  "Next in the syllabus: {{title}}": "Next in the syllabus: {{title}}",
+  "Study this unit": "Study this unit",
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it."
 }

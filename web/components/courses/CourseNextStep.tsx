@@ -98,6 +98,28 @@ function decide(
     };
   }
 
+  // Then the syllabus: with no gap to repair and no path in progress, the next
+  // uncovered unit is the learner's own plan for what comes next.
+  const unit = state.syllabus?.next;
+  if (unit) {
+    return {
+      headline: t("Next in the syllabus: {{title}}", { title: unit.title }),
+      detail: t("{{covered}} of {{total}} units covered", {
+        covered: state.syllabus.covered,
+        total: state.syllabus.total,
+      }),
+      action: {
+        label: t("Study this unit"),
+        href: `/chat?course=${encodeURIComponent(courseId)}&capability=course_study`,
+        scope: "chat",
+        prompt: t(
+          "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.",
+          { title: unit.title },
+        ),
+      },
+    };
+  }
+
   // Then reading that was opened but not finished.
   const workspace = state.reading.workspaces.find((item) => item.materials > 0);
   if (workspace) {

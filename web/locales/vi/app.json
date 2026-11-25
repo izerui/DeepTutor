@@ -6213,5 +6213,8 @@
   "This question was already completed. This reply was not graded; ask for a new practice question.": "Câu hỏi này đã hoàn tất. Câu trả lời này không được chấm; hãy yêu cầu một câu hỏi luyện tập mới.",
   "This question is no longer open, so this reply was not graded. Continue with the current question or ask for a new one.": "Câu hỏi này không còn mở nên câu trả lời này không được chấm. Hãy tiếp tục với câu hỏi hiện tại hoặc yêu cầu câu hỏi mới.",
   "This question's source pages changed after it was asked, so it can no longer be graded. Skip it and ask for a new question.": "Các trang nguồn của câu hỏi này đã thay đổi sau khi được đặt ra nên không thể chấm được nữa. Hãy bỏ qua và yêu cầu câu hỏi mới.",
-  "This answer was not saved to your question bank.": "Câu trả lời này chưa được lưu vào ngân hàng câu hỏi của bạn."
+  "This answer was not saved to your question bank.": "Câu trả lời này chưa được lưu vào ngân hàng câu hỏi của bạn.",
+  "Next in the syllabus: {{title}}": "Tiếp theo trong đề cương: {{title}}",
+  "Study this unit": "Học đơn vị này",
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Hãy dạy tôi đơn vị {{title}} trong đề cương bằng tài liệu của môn này, rồi kiểm tra xem tôi đã hiểu chưa."
 }
