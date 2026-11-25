@@ -57,6 +57,7 @@ import {
   redoProgress,
   renameProgress,
   setMasteryObjectiveOverride,
+  skipPendingQuestion,
   updateMasteryReviewSettings,
   bindMasteryReviewStrategy,
   createMasteryReviewStrategy,
@@ -95,6 +96,8 @@ export default function MasteryTopicPage() {
   const [boardError, setBoardError] = useState(false);
   const [boardRequestNonce, setBoardRequestNonce] = useState(0);
   const [mutationBusy, setMutationBusy] = useState(false);
+  const [skipBusy, setSkipBusy] = useState(false);
+  const [skipError, setSkipError] = useState<string | null>(null);
   const [retentionBusy, setRetentionBusy] = useState(false);
   const [retentionError, setRetentionError] = useState<string | null>(null);
   const [strategies, setStrategies] = useState<
@@ -362,6 +365,23 @@ export default function MasteryTopicPage() {
     }
   };
 
+  const handleSkipPending = async () => {
+    setSkipBusy(true);
+    setSkipError(null);
+    try {
+      await skipPendingQuestion(pathId);
+      await refresh();
+    } catch (reason) {
+      if (isCourseUnavailable(reason, pathId)) {
+        setClosed(true);
+        return;
+      }
+      setSkipError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSkipBusy(false);
+    }
+  };
+
   const handleDelete = async () => {
     setMutationBusy(true);
     try {
@@ -604,39 +624,58 @@ export default function MasteryTopicPage() {
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           ) : (
-            <Link
-              onClick={() => {
-                if (topic.next.action === "review") {
-                  setPendingPrompt(
-                    masteryOpeningMessage("review", t as Translate, {
-                      dueTitles: topic.next.knowledge_point_name
-                        ? [topic.next.knowledge_point_name]
-                        : [],
-                    }),
-                    MASTERY_OPENING_SCOPE,
-                  );
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {topic.next.action === "answer_pending" && (
+                // The question's conversation may be gone, so "answer it" can
+                // lead nowhere. Only the learner may abandon a question.
+                <button
+                  type="button"
+                  disabled={skipBusy}
+                  onClick={() => void handleSkipPending()}
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-[13px] text-[var(--muted-foreground)] transition hover:text-[var(--foreground)] disabled:opacity-60"
+                >
+                  {skipBusy ? t("Skipping…") : t("Skip this one")}
+                </button>
+              )}
+              <Link
+                onClick={() => {
+                  if (topic.next.action === "review") {
+                    setPendingPrompt(
+                      masteryOpeningMessage("review", t as Translate, {
+                        dueTitles: topic.next.knowledge_point_name
+                          ? [topic.next.knowledge_point_name]
+                          : [],
+                      }),
+                      MASTERY_OPENING_SCOPE,
+                    );
+                  }
+                }}
+                href={
+                  continuationSessionId
+                    ? existingMasterySessionRoute(pathId, continuationSessionId)
+                    : topic.next.action === "review"
+                      ? masterySessionRoute(pathId, "review")
+                      : masterySessionsRoute(pathId)
                 }
-              }}
-              href={
-                continuationSessionId
-                  ? existingMasterySessionRoute(pathId, continuationSessionId)
-                  : topic.next.action === "review"
-                    ? masterySessionRoute(pathId, "review")
-                    : masterySessionsRoute(pathId)
-              }
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-3.5 text-[13px] font-medium text-[var(--primary-foreground)] transition hover:opacity-90"
-            >
-              {nextCta
-                ? zh
-                  ? nextCta.zh
-                  : t(nextCta.en)
-                : topic.session_count > 0
-                  ? t("Continue learning")
-                  : t("Begin first waypoint")}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-3.5 text-[13px] font-medium text-[var(--primary-foreground)] transition hover:opacity-90"
+              >
+                {nextCta
+                  ? zh
+                    ? nextCta.zh
+                    : t(nextCta.en)
+                  : topic.session_count > 0
+                    ? t("Continue learning")
+                    : t("Begin first waypoint")}
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           )}
         </section>
+        {skipError && (
+          <p role="alert" className="mt-2 text-[12px] text-[var(--destructive)]">
+            {skipError}
+          </p>
+        )}
 
         <div className="mt-6 grid flex-none grid-cols-1 items-start gap-7 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-stretch">
           {needsRouteRepair ? (

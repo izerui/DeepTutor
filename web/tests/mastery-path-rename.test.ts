@@ -38,3 +38,15 @@ test("the rename editor opens with the stored name, not a derived label", () => 
     /onBlur=\{\(\) => \{\s*if \(draft\.trim\(\) === storedName\.trim\(\)\) setEditing\(false\);/,
   );
 });
+
+test("a learner can skip a pending question from the topic page", () => {
+  // The question's conversation may be gone (deleted), leaving "go answer it"
+  // pointing at an empty session. Abandoning is the learner's explicit call,
+  // so the dashboard must expose the existing skip endpoint.
+  const page = source("app/(workspace)/learning/mastery/[pathId]/page.tsx");
+
+  assert.match(page, /skipPendingQuestion,/);
+  assert.match(page, /await skipPendingQuestion\(pathId\)/);
+  assert.match(page, /topic\.next\.action === "answer_pending"[\s\S]*?t\("Skip this one"\)/);
+  assert.match(page, /t\("Skipping…"\)/);
+});
