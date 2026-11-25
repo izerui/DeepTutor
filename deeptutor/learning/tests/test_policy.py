@@ -144,6 +144,25 @@ def test_next_objective_teaches_before_assessing_when_learner_requests_it():
     assert policy.next_objective(progress).action == "practice"
 
 
+def test_teach_first_moves_on_to_checking_once_the_point_was_explained():
+    """A session may end right after the explanation. Coming back, the next
+    step must check understanding, not tell the tutor to teach it again."""
+    from deeptutor.learning.models import LearnerProfile
+
+    progress = _progress(_kp("kp1", KnowledgeType.PROCEDURE))
+    progress.learner_profile = LearnerProfile(teaching_strategy="teach_first")
+    assert policy.next_objective(progress).action == "teach"
+    progress.explained_objectives["kp1"] = {
+        "summary": "Explained the steps.",
+        "coverage": "partial",
+        "delivery": {"turn_id": "t1"},
+    }
+    step = policy.next_objective(progress)
+    assert step.action == "probe"
+    assert step.knowledge_point_id == "kp1"
+    assert "Untouched" not in step.reason
+
+
 def test_next_objective_qualitative_type_recommends_assess():
     kp = _kp("kp1", KnowledgeType.DESIGN)
     progress = _progress(kp)

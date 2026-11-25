@@ -390,11 +390,15 @@ def next_objective(
                 continue
             status = objective_status(progress, kp)
             gate = gate_kind(kp)
+            explained = status == "new" and bool(progress.explained_objectives.get(kp.id))
             if status == "new":
+                # Once taught, the next step checks understanding; a session
+                # that ended right after the explanation must not loop on it.
                 action = (
                     "teach"
                     if progress.learner_profile is not None
                     and progress.learner_profile.teaching_strategy == "teach_first"
+                    and not explained
                     else "probe"
                 )
             elif gate == "qualitative":
@@ -414,7 +418,9 @@ def next_objective(
                 threshold=gate_threshold(kp.type, progress),
                 reason=(
                     (
-                        "Untouched objective — teach before assessing, as the learner requested."
+                        "Already explained but not yet assessed — check understanding next."
+                        if explained
+                        else "Untouched objective — teach before assessing, as the learner requested."
                         if action == "teach"
                         else "Untouched objective — probe first to let the learner test out."
                     )
