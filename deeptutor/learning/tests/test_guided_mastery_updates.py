@@ -247,6 +247,79 @@ def test_error_record_graduates_on_later_correct_answer(tmp_path):
     assert progress.mastery_levels["kp1"] > 0.5
 
 
+def _memory_progress() -> LearningProgress:
+    progress = LearningProgress(book_id="book1")
+    progress.modules = [
+        LearningModule(
+            id="m1",
+            name="Module 1",
+            order=0,
+            knowledge_points=[
+                KnowledgePoint(id="kp1", name="KP1", type=KnowledgeType.MEMORY, module_id="m1")
+            ],
+        )
+    ]
+    progress.current_module_id = "m1"
+    progress.knowledge_types["kp1"] = KnowledgeType.MEMORY
+    return progress
+
+
+def test_error_records_close_once_the_point_is_mastered_on_fresh_questions(tmp_path):
+    """Each new question gets a new id, so a wrong answer is never re-asked
+    verbatim. Once fresh questions take the point over its mastery bar, the
+    old mistake must stop reading as an open, recent failure."""
+    from deeptutor.learning.policy import find_knowledge_point, is_assessed_mastered
+
+    service = LearningService(LearningStore(root=tmp_path))
+    progress = _memory_progress()
+    service.grade_and_record(
+        progress,
+        question_id="q-wrong",
+        knowledge_point_id="kp1",
+        module_id="m1",
+        user_answer="london",
+        expected_answer="paris",
+    )
+    assert [rec.status for rec in progress.error_records] == ["active"]
+
+    kp, _, _ = find_knowledge_point(progress, "kp1")
+    for index in range(10):
+        if is_assessed_mastered(progress, kp):
+            break
+        # Still below the bar: the mistake stays open.
+        assert progress.error_records[0].status == "active"
+        service.grade_and_record(
+            progress,
+            question_id=f"q-fresh-{index}",
+            knowledge_point_id="kp1",
+            module_id="m1",
+            user_answer="paris",
+            expected_answer="paris",
+        )
+    assert is_assessed_mastered(progress, kp)
+    assert progress.error_records[0].status == "graduated"
+    assert progress.error_records[0].retry_history[-1].is_correct is True
+
+
+def test_qualitative_pass_closes_an_earlier_quiz_mistake(tmp_path):
+    service = LearningService(LearningStore(root=tmp_path))
+    progress = _make_progress()
+    service.grade_and_record(
+        progress,
+        question_id="q-wrong",
+        knowledge_point_id="kp1",
+        module_id="m1",
+        user_answer="london",
+        expected_answer="paris",
+    )
+    assert progress.error_records[0].status == "active"
+
+    service.record_qualitative(progress, "kp1", passed=False)
+    assert progress.error_records[0].status == "active"
+    service.record_qualitative(progress, "kp1", passed=True)
+    assert progress.error_records[0].status == "graduated"
+
+
 # ── Pending-question lifecycle + qualitative recording (loop-driven path) ──
 
 

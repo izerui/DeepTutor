@@ -537,6 +537,32 @@ class LearningService:
             clear_reassessment(progress, attempt.knowledge_point_id, assessed_at=attempt.timestamp)
         progress.updated_at = time.time()
 
+    @staticmethod
+    def graduate_errors_if_mastered(progress: LearningProgress, kp_id: str) -> None:
+        """Close a point's open mistakes once assessment clears its gate.
+
+        Every new question gets a fresh id, so a wrong answer is rarely asked
+        again verbatim and the per-question graduation above never fires. The
+        point's own gate is the durable signal that the mistake was overcome;
+        a learner's self-declared mastery is not.
+        """
+        from deeptutor.learning.policy import find_knowledge_point, is_assessed_mastered
+
+        kp, _, _ = find_knowledge_point(progress, kp_id)
+        if kp is None or not is_assessed_mastered(progress, kp):
+            return
+        now = time.time()
+        for rec in progress.error_records:
+            if rec.knowledge_point_id == kp_id and rec.status in ("active", "retrying"):
+                rec.retry_history.append(
+                    RetryAttempt(
+                        timestamp=now,
+                        is_correct=True,
+                        attempt_number=len(rec.retry_history) + 1,
+                    )
+                )
+                rec.status = "graduated"
+
     def calculate_mastery(self, progress: LearningProgress, kp_id: str) -> float:
         """Mastery 0..1 for *kp_id* from its attempt history (policy in mastery.py)."""
         correctness = [
@@ -671,6 +697,8 @@ class LearningService:
             self.update_mastery(
                 progress, knowledge_point_id, self.calculate_mastery(progress, knowledge_point_id)
             )
+            if is_correct:
+                self.graduate_errors_if_mastered(progress, knowledge_point_id)
             kp_type = progress.knowledge_types.get(knowledge_point_id)
             if kp_type is not None and scheduler is not None:
                 state = progress.repetition_states.get(
@@ -3036,6 +3064,8 @@ class LearningService:
         clear_reassessment(progress, kp_id)
         current = progress.mastery_levels.get(kp_id, 0.0)
         progress.mastery_levels[kp_id] = max(current, 1.0) if passed else min(current, 0.4)
+        if passed:
+            LearningService.graduate_errors_if_mastered(progress, kp_id)
         if evidence:
             progress.feynman_explanations[kp_id] = evidence
         moment = time.time()
