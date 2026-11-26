@@ -336,6 +336,19 @@ deeptutor start                   # backend + frontend together
 | `deeptutor_cli/main.py`                    | Typer CLI entry point                |
 | `deeptutor/api/routers/unified_ws.py`      | Unified WebSocket endpoint           |
 
+## Learning Loop Acceptance
+
+`bash scripts/learning_e2e/run.sh` starts a throwaway stage (copied `deeptutor/`
+and `web/`, synthetic data only, a scripted model from `mock_llm.py`) and drives a
+real browser through the learner's main path in `scenario.mjs`: quote a passage in
+chat, answer a mastery question wrong, see the mistake reach the question bank with
+its objective, practise it to mastered (resolved + review evidence on the path),
+and read the course page's ranked next step. Every step is checked on screen and
+against the backend's records. Run it after changes to chat, mastery, practice or
+courses; extend the scenario when a new link in the loop is added. The dev
+frontend can drop the first send of a new mastery session (React strict mode);
+the scenario retries it, production does not need to.
+
 ## Dependency Layers
 
 Public install paths and source extras are defined in `pyproject.toml`.
