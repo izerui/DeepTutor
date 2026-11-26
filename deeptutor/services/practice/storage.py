@@ -135,6 +135,7 @@ class PracticeStore:
                 f"""
                 SELECT COUNT(*) AS total,
                     COALESCE(SUM(r.is_mistake = 1), 0) AS mistakes,
+                    COALESCE(SUM(n.result = 'incorrect' AND n.resolved = 0), 0) AS open_mistakes,
                     COALESCE(SUM({_DUE_AT_SQL} <= ?), 0) AS due,
                     COALESCE(SUM({_DUE_AT_SQL} <= ?), 0) AS overdue,
                     MIN({_DUE_AT_SQL}) AS next_due_at

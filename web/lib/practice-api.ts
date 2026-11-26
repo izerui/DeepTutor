@@ -7,6 +7,7 @@ export type PracticeRating = 'again' | 'hard' | 'good' | 'easy'
 export interface PracticeSummary {
   total: number
   mistakes: number
+  open_mistakes?: number
   due: number
   overdue: number
   reviewed_today: number

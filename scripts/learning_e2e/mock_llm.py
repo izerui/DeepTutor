@@ -41,7 +41,8 @@ def plan(body):
     if "QUOTE-CHECK" in text:
         return "收到引用：我会针对你引用的那一步解释。", None
     names = {(t.get("function") or t).get("name") for t in body.get("tools") or []}
-    if "MQ-ASK" in text and "mastery_quiz" in names:
+    retest = "MQ-RETEST" in text
+    if ("MQ-ASK" in text or retest) and "mastery_quiz" in names:
         index = max(i for i, m in enumerate(messages) if m is last)
         called = [
             call["function"]["name"]
@@ -54,9 +55,9 @@ def plan(body):
                 "mastery_quiz",
                 {
                     "knowledge_point_id": kp,
-                    "question": "2+2 等于多少？",
+                    "question": "x 的五次方在 x=1 处的导数是多少？" if retest else "x 的四次方在 x=1 处的导数是多少？",
                     "question_type": "choice",
-                    "options": [{"label": "A", "body": "3"}, {"label": "B", "body": "4"}],
+                    "options": [{"label": "A", "body": "3"}, {"label": "B", "body": "5" if retest else "4"}],
                     "expected_answer": "B",
                 },
             )

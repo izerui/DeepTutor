@@ -30,6 +30,7 @@ router = APIRouter()
 class PracticeSummary(BaseModel):
     total: int
     mistakes: int
+    open_mistakes: int
     due: int
     overdue: int
     reviewed_today: int
@@ -117,7 +118,7 @@ async def summary(timezone: str = "UTC", course_id: str = "", all_workspaces: bo
         return {
             **{
                 key: sum(row[key] for row in rows)
-                for key in ("total", "mistakes", "due", "overdue", "reviewed_today")
+                for key in ("total", "mistakes", "open_mistakes", "due", "overdue", "reviewed_today")
             },
             "next_due_at": min(
                 (row["next_due_at"] for row in rows if row["next_due_at"]), default=None

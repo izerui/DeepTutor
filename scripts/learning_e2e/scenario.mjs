@@ -83,6 +83,9 @@ await step("chat quote", async () => {
   await send("请讲解 f(x)=x^3 的极值");
   const passage = page.getByText("第二步：令 f'(x)=0，解得驻点 x=0。").first();
   await passage.waitFor({ timeout: 90000 });
+  await page.waitForURL(/\/chat\/[^/?]+/);
+  await page.reload({ waitUntil: "load" });
+  await passage.waitFor({ timeout: 90000 });
   const box = await passage.boundingBox();
   await page.mouse.move(box.x + 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -118,12 +121,10 @@ await step("mastery question", async () => {
   await page.locator("textarea").first().waitFor({ timeout: 240000 });
   await page.waitForTimeout(4000);
   await send("MQ-ASK 请出一道题");
-  await page.getByText("2+2 等于多少？").first().waitFor({ timeout: 120000 });
+  await page.getByText("x 的四次方在 x=1 处的导数是多少？").first().waitFor({ timeout: 120000 });
   check("tutor poses a question card", true);
   await shot("2-question");
-  await page.getByRole("radio", { name: /3/ }).first().click().catch(async () => {
-    await page.getByText(/^A$/).first().click();
-  });
+  await page.getByRole("button", { name: /^[AB]\s*3$/ }).click();
   await page.getByRole("button", { name: "Submit" }).first().click();
   await page.waitForTimeout(8000);
   await shot("2-answered");
@@ -142,7 +143,7 @@ await step("practice review", async () => {
   check("mistake lands in the question bank with its objective", Boolean(entry));
   const question = await json(await api.get(`${F}/api/question-notebook/practice/questions/${entry.id}`));
   await json(await api.post(`${F}/api/question-notebook/practice/questions/${entry.id}/review`, {
-    data: { request_id: "e2e-practice-review-0001", version: question.state.version, rating: "good", answer: "B" },
+    data: { request_id: "e2e-practice-review-0001", version: question.state.version, rating: "good", answer: entry.correct_answer },
   }));
   const after = (await json(await api.get(`${F}/api/question-notebook/entries?mastery_path_id=${pathId}`)))
     .items.find((item) => item.id === entry.id);
@@ -167,9 +168,49 @@ await step("course next step", async () => {
   await page.waitForTimeout(6000);
   await shot("4-course");
   const top = state.next_steps[0];
-  const expected = top.kind === "continue_path" ? "objectives cleared" : top.kind === "path_review" ? "reviews due" : "";
-  const text = await page.locator("body").innerText();
-  check("course page shows the top ranked step", expected ? text.includes(expected) : true, top.kind);
+  check("course recommends continuing this path", top.kind === "continue_path" && top.path_id === pathId);
+  await page.getByRole("button", { name: "Keep going" }).click();
+  await page.locator("textarea").first().waitFor({ timeout: 120000 });
+  await page.waitForTimeout(4000);
+  await page.locator("textarea").first().fill("");
+  await send("MQ-RETEST 请用一道新题检测幂函数求导");
+  await page.getByText("x 的五次方在 x=1 处的导数是多少？").last().waitFor({ timeout: 120000 });
+  await page.getByRole("button", { name: /^[AB]\s*3$/ }).last().click();
+  await page.getByRole("button", { name: "Submit", exact: true }).last().click();
+
+  const scopedBank = `${F}/api/question-notebook/entries?course_id=${courseId}`;
+  let missed;
+  for (let i = 0; i < 60 && !missed; i++) {
+    const entries = (await json(await api.get(scopedBank))).items;
+    missed = entries.find((item) => item.knowledge_point_id === kpId && !item.resolved);
+    if (!missed) await page.waitForTimeout(500);
+  }
+  if (!missed) throw new Error("New mistake missing from course question bank");
+  const progress = async () => (await json(await api.get(`${F}/api/mastery-paths/progress/${pathId}/objectives/${kpId}`))).objective;
+  const failed = await progress();
+  check("two independent questions produce two graded attempts", failed.attempts.length === 2 && failed.attempts.every(a => a.is_correct === false));
+  const courseState = async () => json(await api.get(`${F}/api/courses/${courseId}/state`));
+  const next = (await courseState()).next_steps[0];
+  check("course prioritises the new mistake", ["practice_review", "open_mistakes"].includes(next.kind));
+  await visit(`${F}/courses/${courseId}`);
+  await page.getByRole("button", { name: next.kind === "practice_review" ? "Start review" : "Work through them" }).first().waitFor();
+  const homePractice = page.getByRole("region", { name: "What needs your attention" }).getByRole("link", { name: /Practice/i });
+  await visit(`${F}/learning`);
+  await homePractice.waitFor();
+  await homePractice.click();
+  const questionUrl = `${F}/api/question-notebook/practice/questions/${missed.id}`;
+  const question = await json(await api.get(questionUrl));
+  const data = { request_id: "e2e-retest-review-0002", version: question.state.version, rating: "good", answer: missed.correct_answer };
+  await json(await api.post(`${questionUrl}/review`, { data }));
+  await json(await api.post(`${questionUrl}/review`, { data }));
+  const reviewed = await progress();
+  check("retrying the review counts once", reviewed.evidence.filter(item => item.evidence_id === `practice:${data.request_id}`).length === 1);
+  check("course clears the new mistake after review", (await courseState()).question_bank.wrong === 0);
+  await visit(`${F}/courses/${courseId}`);
+  await page.getByRole("button", { name: "Keep going" }).waitFor();
+  await visit(`${F}/learning`);
+  await page.locator("#learning-recent").waitFor();
+  check("learning home clears due practice after review", await homePractice.count() === 0);
 });
 
 await browser.close();

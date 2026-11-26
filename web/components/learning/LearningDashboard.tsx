@@ -42,7 +42,7 @@ export function LearningDashboard() {
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
   // Practice mistakes due across every workspace; null until known.
-  const [practiceDue, setPracticeDue] = useState<number | null>(null)
+  const [practiceSummary, setPracticeSummary] = useState<{ due: number; open_mistakes?: number } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -62,11 +62,8 @@ export function LearningDashboard() {
       const { books, mastery, reading, watching } = result
       // Due practice is its own source: a failure keeps the last known count
       // and never blocks the rest of the page.
-      const due = await getPracticeSummary('', '*').then(
-        summary => summary.due,
-        () => null
-      )
-      if (alive && due !== null) setPracticeDue(due)
+      const summary = await getPracticeSummary('', '*').catch(() => null)
+      if (alive && summary !== null) setPracticeSummary(summary)
       if (alive) {
         // Preserve previously loaded content if a refresh fails.
         setSources(previous => ({
@@ -94,7 +91,9 @@ export function LearningDashboard() {
 
   const todos = learningTodos(sources)
   const practice = learningSurface('practice')
-  const showPractice = (practiceDue ?? 0) > 0
+  const practiceDue = practiceSummary?.due ?? 0
+  const openMistakes = practiceSummary?.open_mistakes ?? 0
+  const showPractice = practiceDue > 0 || openMistakes > 0
   const recent = recentLearningActivity(sources)
   return (
     <LearningShell
@@ -131,7 +130,9 @@ export function LearningDashboard() {
                     href={practiceRoute(undefined, '')}
                     title={t(practice.title)}
                     icon={<practice.icon size={19} />}
-                    subtitle={t('{{count}} reviews due', { count: practiceDue ?? 0 })}
+                    subtitle={practiceDue > 0
+                      ? t('{{count}} reviews due', { count: practiceDue })
+                      : t('{{count}} questions still wrong', { count: openMistakes })}
                   />
                 )}
                 {todos.reviews.map(topic => (
