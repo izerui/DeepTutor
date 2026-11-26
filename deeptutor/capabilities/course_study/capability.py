@@ -355,6 +355,13 @@ def _reading_summary(state: dict[str, Any], resolved_position: str = "") -> str:
     return f"Most recent reading position: {_clip(title, 72)} — {position_text}."
 
 
+def _next_steps_summary(state: dict[str, Any]) -> str:
+    from deeptutor.learning.next_steps import describe_next_steps, rank_next_steps
+
+    steps = state.get("next_steps")
+    return describe_next_steps(steps if isinstance(steps, list) else rank_next_steps(state))
+
+
 def summarize_course_state(
     state: dict[str, Any],
     *,
@@ -369,6 +376,7 @@ def summarize_course_state(
         # Before the numbers: the conventions say how this subject is taught,
         # which changes how every fact below should be acted on.
         _conventions_summary(state),
+        _next_steps_summary(state),
         _syllabus_summary(state),
         _resource_summary(list(state.get("resources", []))),
         _mastery_summary(state),

@@ -152,6 +152,10 @@ def _render_course_overview(state: dict[str, Any]) -> str:
     course_id = str(course.get("id") or "")
     name = str(course.get("name") or course_id or "Untitled course")
     lines = [f"Course: {name} (id={course_id or 'unknown'})"]
+    from deeptutor.learning.next_steps import describe_next_steps, rank_next_steps
+
+    steps = state.get("next_steps")
+    lines.append(describe_next_steps(steps if isinstance(steps, list) else rank_next_steps(state)))
 
     description = str(course.get("description") or "").strip()
     if description:

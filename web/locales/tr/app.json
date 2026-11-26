@@ -6236,5 +6236,8 @@
   "This answer was not saved to your question bank.": "Bu yanıt soru bankana kaydedilmedi.",
   "Next in the syllabus: {{title}}": "Müfredatta sıradaki: {{title}}",
   "Study this unit": "Bu üniteyi çalış",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Bu dersin materyallerinden müfredat ünitesi {{title}} konusunu bana öğret, sonra anlayıp anlamadığımı kontrol et."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Bu dersin materyallerinden müfredat ünitesi {{title}} konusunu bana öğret, sonra anlayıp anlamadığımı kontrol et.",
+  "Work through your open mistakes": "Açık hatalarının üzerinden geç",
+  "{{count}} questions still wrong": "{{count}} soru hâlâ yanlış",
+  "Take me through my open mistakes one at a time.": "Çözülmemiş hatalarımı tek tek benimle çalış."
 }

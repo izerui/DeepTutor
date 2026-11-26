@@ -6216,5 +6216,8 @@
   "This answer was not saved to your question bank.": "Câu trả lời này chưa được lưu vào ngân hàng câu hỏi của bạn.",
   "Next in the syllabus: {{title}}": "Tiếp theo trong đề cương: {{title}}",
   "Study this unit": "Học đơn vị này",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Hãy dạy tôi đơn vị {{title}} trong đề cương bằng tài liệu của môn này, rồi kiểm tra xem tôi đã hiểu chưa."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Hãy dạy tôi đơn vị {{title}} trong đề cương bằng tài liệu của môn này, rồi kiểm tra xem tôi đã hiểu chưa.",
+  "Work through your open mistakes": "Ôn lại các lỗi chưa khắc phục",
+  "{{count}} questions still wrong": "Vẫn còn {{count}} câu sai",
+  "Take me through my open mistakes one at a time.": "Hãy cùng tôi xem lại từng lỗi chưa khắc phục."
 }

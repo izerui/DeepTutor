@@ -6236,5 +6236,8 @@
   "This answer was not saved to your question bank.": "Ez a válasz nem került mentésre a kérdésbankodba.",
   "Next in the syllabus: {{title}}": "Következő a tantervben: {{title}}",
   "Study this unit": "Tanuld ezt az egységet",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Tanítsd meg nekem a tanterv {{title}} egységét a tantárgy anyagából, majd ellenőrizd, hogy megértettem-e."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Tanítsd meg nekem a tanterv {{title}} egységét a tantárgy anyagából, majd ellenőrizd, hogy megértettem-e.",
+  "Work through your open mistakes": "Dolgozd fel a nyitott hibáidat",
+  "{{count}} questions still wrong": "Még {{count}} kérdés hibás",
+  "Take me through my open mistakes one at a time.": "Vegyük végig egyenként a még nyitott hibáimat."
 }

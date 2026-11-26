@@ -520,7 +520,7 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
         "units": syllabus_units,
     }
 
-    return {
+    state = {
         "course": course.to_dict(),
         "resources": resources,
         "sessions": sessions,
@@ -529,3 +529,8 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
         "syllabus": syllabus,
         "reading": {"workspaces": reading_workspaces},
     }
+    from deeptutor.learning.next_steps import rank_next_steps
+
+    # The one ranking every surface shows (course page, Course Study).
+    state["next_steps"] = rank_next_steps(state)
+    return state

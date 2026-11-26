@@ -6216,5 +6216,8 @@
   "This answer was not saved to your question bank.": "이 답변이 문제 은행에 저장되지 않았습니다.",
   "Next in the syllabus: {{title}}": "강의 계획의 다음 단원: {{title}}",
   "Study this unit": "이 단원 학습하기",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "이 과목의 자료로 강의 계획 단원 {{title}}을(를) 가르쳐 주고, 이해했는지 확인해 주세요."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "이 과목의 자료로 강의 계획 단원 {{title}}을(를) 가르쳐 주고, 이해했는지 확인해 주세요.",
+  "Work through your open mistakes": "아직 해결하지 못한 오답 풀기",
+  "{{count}} questions still wrong": "아직 {{count}}문제를 틀린 상태입니다",
+  "Take me through my open mistakes one at a time.": "아직 해결하지 못한 오답을 하나씩 설명해 주세요."
 }

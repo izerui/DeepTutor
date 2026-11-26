@@ -6280,5 +6280,8 @@
   "This answer was not saved to your question bank.": "Ta odpowiedź nie została zapisana w Twoim banku pytań.",
   "Next in the syllabus: {{title}}": "Następne w programie: {{title}}",
   "Study this unit": "Ucz się tej jednostki",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Naucz mnie jednostki programu {{title}} na podstawie materiałów tego przedmiotu, a potem sprawdź, czy ją zrozumiałem."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Naucz mnie jednostki programu {{title}} na podstawie materiałów tego przedmiotu, a potem sprawdź, czy ją zrozumiałem.",
+  "Work through your open mistakes": "Przerób otwarte błędy",
+  "{{count}} questions still wrong": "{{count}} pytań nadal błędnych",
+  "Take me through my open mistakes one at a time.": "Przejdź ze mną po kolei przez moje nierozwiązane błędy."
 }

@@ -6236,5 +6236,8 @@
   "This answer was not saved to your question bank.": "Diese Antwort wurde nicht in deiner Fragensammlung gespeichert.",
   "Next in the syllabus: {{title}}": "Als Nächstes im Lehrplan: {{title}}",
   "Study this unit": "Diese Einheit lernen",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Erkläre mir die Lehrplaneinheit {{title}} anhand des Materials dieses Fachs und prüfe danach, ob ich sie verstanden habe."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Erkläre mir die Lehrplaneinheit {{title}} anhand des Materials dieses Fachs und prüfe danach, ob ich sie verstanden habe.",
+  "Work through your open mistakes": "Arbeite deine offenen Fehler durch",
+  "{{count}} questions still wrong": "{{count}} Fragen sind noch falsch",
+  "Take me through my open mistakes one at a time.": "Geh meine offenen Fehler einzeln mit mir durch."
 }

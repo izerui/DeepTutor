@@ -6280,5 +6280,8 @@
   "This answer was not saved to your question bank.": "Цю відповідь не збережено у вашому банку запитань.",
   "Next in the syllabus: {{title}}": "Далі за програмою: {{title}}",
   "Study this unit": "Вивчити цей розділ",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Поясни мені розділ програми {{title}} за матеріалами цього предмета, а потім перевір, чи я його зрозумів."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Поясни мені розділ програми {{title}} за матеріалами цього предмета, а потім перевір, чи я його зрозумів.",
+  "Work through your open mistakes": "Опрацюйте відкриті помилки",
+  "{{count}} questions still wrong": "Ще {{count}} запитань із помилками",
+  "Take me through my open mistakes one at a time.": "Розбери зі мною мої невиправлені помилки по одній."
 }

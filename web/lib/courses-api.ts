@@ -86,6 +86,29 @@ export interface CourseResourceState extends CourseResource {
  * and the assistant must never disagree about how far along the learner is,
  * and two independent aggregations would drift the moment either side changed.
  */
+/** One ranked next step; the server owns the order (``learning/next_steps.py``). */
+export type CourseNextStepData =
+  | { kind: "attach_material" }
+  | { kind: "practice_review"; count: number }
+  | { kind: "path_review"; path_id: string; name: string; count: number }
+  | { kind: "open_mistakes"; name: string; count: number }
+  | {
+      kind: "continue_path";
+      path_id: string;
+      name: string;
+      done: number;
+      total: number;
+      weak_point: string;
+    }
+  | {
+      kind: "syllabus_next";
+      unit: { id: string; title: string; position: number };
+      covered: number;
+      total: number;
+    }
+  | { kind: "continue_reading"; workspace_id: string; title: string; materials: number }
+  | { kind: "plan" };
+
 export interface CourseState {
   course: StudyCourse;
   resources: CourseResourceState[];
@@ -126,6 +149,8 @@ export interface CourseState {
       wrong_questions: number;
     })[];
   };
+  /** Most urgent first; the same ranking Course Study is given. */
+  next_steps?: CourseNextStepData[];
 }
 
 export const DEFAULT_COURSE_COLORS = [

@@ -6236,5 +6236,8 @@
   "This answer was not saved to your question bank.": "This answer was not saved to your question bank.",
   "Next in the syllabus: {{title}}": "Next in the syllabus: {{title}}",
   "Study this unit": "Study this unit",
-  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it."
+  "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.": "Teach me the syllabus unit {{title}} from this subject's material, then check that I understood it.",
+  "Work through your open mistakes": "Work through your open mistakes",
+  "{{count}} questions still wrong": "{{count}} questions still wrong",
+  "Take me through my open mistakes one at a time.": "Take me through my open mistakes one at a time."
 }
