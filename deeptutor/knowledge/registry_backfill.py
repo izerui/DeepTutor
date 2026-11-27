@@ -221,6 +221,7 @@ def _sync_workspaces(*, created_by: str) -> int:
     from deeptutor.services.path_service import get_path_service
     from deeptutor.services.workspace import get_content_workspace_service
     from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.models import WorkspaceDirectoryUnavailable
 
     count = 0
     try:
@@ -236,6 +237,13 @@ def _sync_workspaces(*, created_by: str) -> int:
                 count += _sync_root(
                     get_path_service().get_knowledge_bases_root(), created_by=created_by
                 )
+        except WorkspaceDirectoryUnavailable:
+            logger.warning(
+                "Knowledge-base backfill deferred for workspace %s: folder %s is unavailable; "
+                "registration retained for retry when the folder is restored",
+                row.get("workspace_id"),
+                row.get("path"),
+            )
         except Exception:
             logger.exception(
                 "Skipped knowledge bases of workspace %s during registry backfill",

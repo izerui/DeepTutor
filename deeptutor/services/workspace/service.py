@@ -23,7 +23,12 @@ from deeptutor.multi_user.context import get_current_user
 from deeptutor.multi_user.paths import get_account_path_service as get_path_service
 from deeptutor.services.settings.interface_settings import atomic_update
 from deeptutor.services.workspace.catalog import WorkspaceCatalogMixin
-from deeptutor.services.workspace.models import WorkspaceBinding, WorkspaceError, WorkspaceItem
+from deeptutor.services.workspace.models import (
+    WorkspaceBinding,
+    WorkspaceDirectoryUnavailable,
+    WorkspaceError,
+    WorkspaceItem,
+)
 from deeptutor.utils.secret_files import ensure_private_directory
 
 _SETTINGS_VERSION = 1
@@ -217,7 +222,7 @@ class ContentWorkspaceService(WorkspaceCatalogMixin):
     def _ensure_ready(self, binding: WorkspaceBinding) -> None:
         root = binding.root
         if not root.exists() or not root.is_dir():
-            raise WorkspaceError("The selected workspace folder does not exist.")
+            raise WorkspaceDirectoryUnavailable("The selected workspace folder does not exist.")
         self._assert_allowed_root(root)
         if not os.access(root, os.R_OK):
             raise WorkspaceError("The selected workspace folder is not readable.")

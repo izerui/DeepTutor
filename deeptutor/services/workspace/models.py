@@ -13,6 +13,10 @@ class WorkspaceError(ValueError):
     """A workspace path, binding, or operation is not allowed."""
 
 
+class WorkspaceDirectoryUnavailable(WorkspaceError):
+    """A registered root is missing or no longer a directory; keep its identity."""
+
+
 @dataclass(frozen=True, slots=True)
 class WorkspaceBinding:
     workspace_id: str

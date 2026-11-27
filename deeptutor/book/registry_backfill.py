@@ -374,6 +374,7 @@ def _sync_scope(created_by: str) -> tuple[int, bool]:
 def _sync_workspaces(created_by: str) -> tuple[int, bool]:
     from deeptutor.services.workspace import get_content_workspace_service
     from deeptutor.services.workspace.context import workspace_context
+    from deeptutor.services.workspace.models import WorkspaceDirectoryUnavailable
 
     count, complete = 0, True
     try:
@@ -386,6 +387,14 @@ def _sync_workspaces(created_by: str) -> tuple[int, bool]:
                     found, ready = _sync_scope(created_by)
                     count += found
                     complete = complete and ready
+            except WorkspaceDirectoryUnavailable:
+                complete = False
+                logger.warning(
+                    "Book backfill deferred for workspace %s: folder %s is unavailable; "
+                    "registration retained for retry when the folder is restored",
+                    row.get("workspace_id"),
+                    row.get("path"),
+                )
             except Exception:
                 complete = False
                 logger.exception("Workspace book backfill will retry %s", row.get("workspace_id"))
