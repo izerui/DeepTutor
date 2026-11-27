@@ -296,10 +296,17 @@ async def _session_state(course_id: str) -> tuple[dict[str, Any], set[str]]:
     return {"active": len(matched) - archived, "archived": archived, "recent": recent}, session_ids
 
 
-async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
+async def _question_bank_state(session_ids: set[str], course_id: str = "") -> dict[str, Any]:
     empty = {"total": 0, "wrong": 0, "due": 0, "weak_categories": []}
-    if not session_ids:
+    if not session_ids and not course_id:
         return empty
+    from deeptutor.services.session.sqlite_store import course_scope_token
+
+    # Conversations one by one, then the entries the course owns outright
+    # (its imports), which have no conversation to be found through.
+    scopes: list[dict[str, Any]] = [{"session_id": item} for item in sorted(session_ids)]
+    if course_id:
+        scopes.append({"session_ids": [course_scope_token(course_id)]})
 
     try:
         from deeptutor.services.session import get_sqlite_session_store
@@ -308,8 +315,8 @@ async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
         total = 0
         wrong = 0
         category_counts: dict[str, int] = {}
-        for session_id in sorted(session_ids):
-            all_rows = await store.list_notebook_entries(limit=1, session_id=session_id)
+        for scope in scopes:
+            all_rows = await store.list_notebook_entries(limit=1, **scope)
             total += _as_int(all_rows.get("total"))
 
             offset = 0
@@ -321,7 +328,7 @@ async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
                     resolved=False,
                     limit=500,
                     offset=offset,
-                    session_id=session_id,
+                    **scope,
                 )
                 if offset == 0:
                     wrong += _as_int(wrong_rows.get("total"))
@@ -351,7 +358,9 @@ async def _question_bank_state(session_ids: set[str]) -> dict[str, Any]:
         from deeptutor.services.practice.storage import PracticeStore
 
         overview = await asyncio.to_thread(
-            PracticeStore(store.db_path).overview, "UTC", sorted(session_ids)
+            PracticeStore(store.db_path).overview,
+            "UTC",
+            [*sorted(session_ids), *([course_scope_token(course_id)] if course_id else [])],
         )
         due = _as_int(overview.get("due"))
     except Exception:
@@ -450,7 +459,7 @@ async def build_course_state(course_id: str) -> dict[str, Any]:
         _session_state(course_id),
     )
     sessions, session_ids = session_result
-    question_bank = await _question_bank_state(session_ids)
+    question_bank = await _question_bank_state(session_ids, course_id)
 
     withdrawn = await asyncio.to_thread(withdrawn_kb_reasons, course_id)
     resources: list[dict[str, Any]] = []

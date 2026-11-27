@@ -49,6 +49,31 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
+#: Marks a course inside a session-id scope list. Course scopes are
+#: conversation-derived, plus entries explicitly owned by the course (imports
+#: made from it), which have no conversation of their own.
+COURSE_SCOPE_PREFIX = "\x00course:"
+
+
+def course_scope_token(course_id: str) -> str:
+    return COURSE_SCOPE_PREFIX + course_id
+
+
+def entry_scope_sql(alias: str, scope: Sequence[str]) -> tuple[str, list[str]]:
+    """``session_id IN (...)`` widened to entries a scoped course owns.
+
+    Only placeholders are interpolated; every id stays a bound parameter. An
+    empty scope still means "nothing" (``IN (NULL)``), never "everything".
+    """
+    prefix = f"{alias}." if alias else ""
+    sessions = [item for item in scope if not item.startswith(COURSE_SCOPE_PREFIX)]
+    courses = [item[len(COURSE_SCOPE_PREFIX) :] for item in scope if item.startswith(COURSE_SCOPE_PREFIX)]
+    clause = f"{prefix}session_id IN ({','.join('?' for _ in sessions) or 'NULL'})"
+    if courses:
+        clause = f"({clause} OR {prefix}course_id IN ({','.join('?' for _ in courses)}))"
+    return clause, [*sessions, *courses]
+
+
 def _escape_like(value: str) -> str:
     """Escape LIKE wildcards so a search term matches itself literally."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -828,6 +853,8 @@ class SQLiteSessionStore:
             "confidence": "REAL",
             "response_time": "REAL",
             "quality": "REAL",
+            # Set only for entries a course owns without a conversation (imports).
+            "course_id": "TEXT NOT NULL DEFAULT ''",
         }
         for name, definition in additions.items():
             if name not in cols:
@@ -911,6 +938,7 @@ class SQLiteSessionStore:
             if "origin_ref" in info
             else "COALESCE(NULLIF(session_id, ''), 'legacy:' || id)"
         )
+        course_id = "COALESCE(course_id, '')" if "course_id" in info else "''"
 
         conn.commit()
         conn.execute("PRAGMA foreign_keys = OFF")
@@ -956,6 +984,7 @@ class SQLiteSessionStore:
                     ai_judgment TEXT DEFAULT '',
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
+                    course_id TEXT NOT NULL DEFAULT '',
                     UNIQUE(origin_type, origin_ref, turn_id, question_id)
                 )
                 """
@@ -970,7 +999,7 @@ class SQLiteSessionStore:
                     score_trend, assessment_type, result, mastery_path_id,
                     knowledge_point_id, attempt_count, hints_used, confidence,
                     response_time, quality, is_correct, resolved, bookmarked,
-                    followup_session_id, ai_judgment, created_at, updated_at
+                    followup_session_id, ai_judgment, created_at, updated_at, course_id
                 )
                 SELECT
                     id, NULLIF(session_id, ''), {origin_type}, {origin_ref},
@@ -981,7 +1010,7 @@ class SQLiteSessionStore:
                     assessment_type, result, mastery_path_id, knowledge_point_id,
                     attempt_count, hints_used, confidence, response_time, quality,
                     is_correct, resolved, bookmarked, followup_session_id,
-                    ai_judgment, created_at, updated_at
+                    ai_judgment, created_at, updated_at, {course_id}
                 FROM notebook_entries
                 """  # nosec B608 - expressions depend only on inspected schema columns
             )
@@ -4150,6 +4179,7 @@ class SQLiteSessionStore:
             "knowledge_point_id": (row["knowledge_point_id"] or "")
             if "knowledge_point_id" in keys
             else "",
+            "course_id": (row["course_id"] or "") if "course_id" in keys else "",
             "attempt_count": int(row["attempt_count"]) if "attempt_count" in keys else 1,
             "hints_used": int(row["hints_used"]) if "hints_used" in keys else 0,
             "confidence": SQLiteSessionStore._optional_float(
@@ -4243,9 +4273,9 @@ class SQLiteSessionStore:
         if query.session_ids is not None:
             # Only the placeholder shape is interpolated; session ids remain
             # bound parameters. ``IN (NULL)`` is the explicit empty-set case.
-            placeholders = ",".join("?" for _ in query.session_ids) or "NULL"
-            conditions.append(f"n.session_id IN ({placeholders})")
-            params.extend(query.session_ids)
+            clause, scoped = entry_scope_sql("n", query.session_ids)
+            conditions.append(clause)
+            params.extend(scoped)
         if query.search:
             # ESCAPE so a learner searching for "50%" or "a_b" gets literal
             # matches instead of the wildcards those characters would be.
@@ -4315,7 +4345,7 @@ class SQLiteSessionStore:
                 n.correct_answer, n.explanation, n.difficulty,
                 n.user_answer, n.user_answer_images_json, n.source, n.material_id,
                 n.material_title, n.section_id, n.section_title, n.score_trend,
-                n.assessment_type, n.result, n.mastery_path_id, n.knowledge_point_id,
+                n.assessment_type, n.result, n.mastery_path_id, n.knowledge_point_id, n.course_id,
                 n.attempt_count, n.hints_used, n.confidence, n.response_time, n.quality,
                 n.is_correct, n.resolved, n.bookmarked,
                 n.followup_session_id, n.ai_judgment, n.created_at, n.updated_at
@@ -4405,9 +4435,8 @@ class SQLiteSessionStore:
             where = "WHERE " + _NOT_RECYCLED_ENTRY_SQL.format(entries="notebook_entries")
             params: list[str] = []
             if session_ids is not None:
-                placeholders = ",".join("?" for _ in session_ids) or "NULL"
-                where += f" AND session_id IN ({placeholders})"
-                params = list(session_ids)
+                clause, params = entry_scope_sql("", session_ids)
+                where += f" AND {clause}"
             row = conn.execute(
                 f"""
                 SELECT
@@ -4475,9 +4504,9 @@ class SQLiteSessionStore:
         )
         params: list[str] = []
         if session_ids is not None:
-            placeholders = ",".join("?" for _ in session_ids) or "NULL"
-            where += f" AND session_id IN ({placeholders})"
-            params.extend(session_ids)
+            clause, scoped = entry_scope_sql("", session_ids)
+            where += f" AND {clause}"
+            params.extend(scoped)
         with self._connect() as conn:
             rows = conn.execute(
                 f"""
@@ -4690,9 +4719,8 @@ class SQLiteSessionStore:
         join = f"LEFT JOIN notebook_entries e ON e.id = ec.entry_id AND {not_recycled}"
         params: list[str] = []
         if session_ids is not None:
-            placeholders = ",".join("?" for _ in session_ids) or "NULL"
-            join += f" AND e.session_id IN ({placeholders})"
-            params = list(session_ids)
+            clause, params = entry_scope_sql("e", session_ids)
+            join += f" AND {clause}"
         with self._connect() as conn:
             rows = conn.execute(
                 f"""

@@ -393,7 +393,7 @@ def test_syllabus_wrong_questions_use_bidirectional_substring_matching(
 ) -> None:
     from deeptutor.services import courses_state
 
-    async def question_bank_state(_session_ids: set[str]) -> dict:
+    async def question_bank_state(_session_ids: set[str], _course_id: str = "") -> dict:
         return {
             "total": 12,
             "wrong": 9,

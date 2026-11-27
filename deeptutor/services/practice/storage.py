@@ -120,8 +120,11 @@ class PracticeStore:
         sql = "(n.session_id IS NULL OR s.deleted_at IS NULL)"
         params: list = []
         if session_ids is not None:
-            sql += " AND n.session_id IN (" + (",".join("?" for _ in session_ids) or "NULL") + ")"
-            params.extend(session_ids)
+            from deeptutor.services.session.sqlite_store import entry_scope_sql
+
+            clause, scoped = entry_scope_sql("n", session_ids)
+            sql += f" AND {clause}"
+            params.extend(scoped)
         return sql, params
 
     def overview(
@@ -365,6 +368,7 @@ class PracticeStore:
                 raise ValueError("Import preview expired. Select the file again.")
             payload = json.loads(staged["payload_json"])
             questions = payload if isinstance(payload, list) else payload["questions"]
+            course_id = "" if isinstance(payload, list) else str(payload.get("course_id") or "")
             # All practice-file imports share one durable origin namespace.
             # ``question_id`` is a content hash, so re-importing the same
             # question remains idempotent without tying ownership to an
@@ -405,6 +409,13 @@ class PracticeStore:
                       AND question_id=? AND turn_id=''""",
                     (origin_ref, question["question_id"]),
                 ).fetchone()[0]
+                if course_id:
+                    # Imported from a course: it belongs there. A question
+                    # another course already owns keeps its first owner.
+                    conn.execute(
+                        "UPDATE notebook_entries SET course_id=? WHERE id=? AND course_id=''",
+                        (course_id, entry_id),
+                    )
                 if staged["target"] == "mistakes":
                     conn.execute(
                         "INSERT OR IGNORE INTO practice_review_state(entry_id, first_wrong_at, due_at) VALUES(?, ?, ?)",

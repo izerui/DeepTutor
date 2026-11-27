@@ -465,12 +465,20 @@ def test_course_imports_keep_their_course_and_file_provenance(bank, monkeypatch)
     assert item["origin_ref"] == "practice-import"
     assert item["material_id"].startswith("import:")
     assert repo.overview("UTC")["mistakes"] == 1
-    # Import provenance must not manufacture a conversation or leak into a
-    # conversation-derived course scope.
+    # Import provenance must not manufacture a conversation, but a file
+    # imported from a course belongs to that course and to no other.
     assert asyncio.run(store.list_sessions()) == []
-    assert client.get("/bank/entries?course_id=course-a").json()["total"] == 0
-    assert client.get("/practice/summary?course_id=course-a").json()["mistakes"] == 0
+    assert item["course_id"] == "course-a"
+    assert client.get("/bank/entries?course_id=course-a").json()["total"] == 1
+    assert client.get("/practice/summary?course_id=course-a").json()["mistakes"] == 1
     assert client.get("/bank/entries?course_id=course-b").json()["total"] == 0
+    assert client.get("/practice/summary?course_id=course-b").json()["mistakes"] == 0
+
+    from deeptutor.services import courses_state
+
+    monkeypatch.setattr("deeptutor.services.session.get_sqlite_session_store", lambda: store)
+    bank = asyncio.run(courses_state._question_bank_state(set(), course_id="course-a"))
+    assert bank["total"] == 1 and bank["wrong"] == 1
 
 
 def test_analytics_separates_creation_first_mistake_and_repeat_reviews(bank):

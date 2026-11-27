@@ -71,6 +71,7 @@ class NotebookEntryItem(BaseModel):
     result: AssessmentResult | str = ""
     mastery_path_id: str = ""
     knowledge_point_id: str = ""
+    course_id: str = ""
     attempt_count: int = 1
     hints_used: int = 0
     confidence: float | None = None
@@ -324,9 +325,8 @@ async def upsert_single_entry(payload: UpsertEntryRequest):
 async def _course_session_ids(store: Any, course_id: str) -> list[str] | None:
     """Resolve a course to the sessions whose questions belong to it.
 
-    Course membership remains conversation-derived until Question Bank entries
-    gain an explicit course association. Independent origins are intentionally
-    excluded. Returns ``None`` for no course (do not scope) and ``[]`` for a
+    Course membership is conversation-derived, plus entries explicitly owned by
+    the course (files imported from it), carried as a course scope token. Returns ``None`` for no course (do not scope) and ``[]`` for a
     course with no conversations yet — which must scope to nothing rather than
     quietly fall back to the whole library.
     """
@@ -340,11 +340,17 @@ async def _course_session_ids(store: Any, course_id: str) -> list[str] | None:
     except CourseNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Subject not found") from exc
 
+    from deeptutor.services.session.sqlite_store import course_scope_token
+
     sessions = await list_all_sessions_snapshot(store)
     return [
-        session["session_id"]
-        for session in sessions
-        if str((session.get("preferences") or {}).get("course_id") or "") == course_id
+        *(
+            session["session_id"]
+            for session in sessions
+            if str((session.get("preferences") or {}).get("course_id") or "") == course_id
+        ),
+        # Entries the course owns without a conversation (its imports).
+        course_scope_token(course_id),
     ]
 
 
