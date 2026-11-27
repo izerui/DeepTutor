@@ -1,5 +1,5 @@
 import { apiFetch } from '@/shared/api/client'
-import { scopedUrl } from '@/lib/workspace-scope'
+import { activeWorkspaceId, scopedUrl } from '@/lib/workspace-scope'
 
 export type TaskStatus = 'todo' | 'doing' | 'done'
 export type TaskColors = Record<TaskStatus, string>
@@ -18,6 +18,8 @@ export interface TaskCard {
   created_at: string
   updated_at: string
   workspace_id: string | null
+  /** A plain local calendar day ("YYYY-MM-DD"), never shifted through UTC. */
+  due_date?: string | null
 }
 export interface SessionTaskLinks {
   workspace_id: string
@@ -33,9 +35,13 @@ export interface TaskBoard {
 }
 
 const endpoint = '/api/task-board'
-const listeners = new Set<(board: TaskBoard) => void>()
-export function subscribeTaskBoardChanges(listener: (board: TaskBoard) => void) {
-  listeners.add(listener)
+const listeners = new Map<(board: TaskBoard, workspaceId: string) => void, string | null>()
+/** Omit scope for the current workspace; null subscribes to the full account board. */
+export function subscribeTaskBoardChanges(
+  listener: (board: TaskBoard, workspaceId: string) => void,
+  workspaceId: string | null = activeWorkspaceId()
+) {
+  listeners.set(listener, workspaceId)
   return () => {
     listeners.delete(listener)
   }
@@ -48,33 +54,52 @@ export function normalizeTaskBoard(board: TaskBoard): TaskBoard {
     revision: board.revision ?? 0,
   }
 }
-export function publishTaskBoard(board: TaskBoard) {
-  listeners.forEach(listener => listener(normalizeTaskBoard(board)))
+export function publishTaskBoard(board: TaskBoard, workspaceId = activeWorkspaceId()) {
+  const normalized = normalizeTaskBoard(board)
+  listeners.forEach((scope, listener) =>
+    listener(scope === null ? normalized : workspaceBoard(normalized, scope), scope ?? workspaceId)
+  )
+}
+function workspaceBoard(board: TaskBoard, workspaceId: string): TaskBoard {
+  const cards = board.cards.filter(card => (card.workspace_id ?? '') === workspaceId)
+  const ids = new Set(cards.map(card => card.id))
+  return {
+    ...board,
+    cards,
+    session_links: board.session_links
+      .filter(link => link.workspace_id === workspaceId)
+      .map(link => ({ ...link, task_ids: link.task_ids.filter(id => ids.has(id)) })),
+  }
 }
 export function taskBoardUrl(path = '') {
   return scopedUrl(`${endpoint}${path}`, '')
 }
 
 async function request(path: string, init?: RequestInit): Promise<TaskBoard> {
+  const workspaceId = activeWorkspaceId()
   const response = await apiFetch(taskBoardUrl(path), init)
   if (!response.ok) throw new Error('Task board request failed')
   const board = normalizeTaskBoard(await response.json())
-  if (init?.method) publishTaskBoard(board)
+  if (init?.method) publishTaskBoard(board, workspaceId)
   return board
 }
-export function getTaskBoard(signal?: AbortSignal): Promise<TaskBoard> {
-  return request('', { signal, cache: 'no-store' })
+export async function getTaskBoard(signal?: AbortSignal, workspaceId?: string): Promise<TaskBoard> {
+  const board = await request('', { signal, cache: 'no-store' })
+  return workspaceId === undefined ? board : workspaceBoard(board, workspaceId)
 }
-export function createTaskCard(title: string): Promise<TaskBoard> {
+export function createTaskCard(
+  title: string,
+  options: { due_date?: string | null; workspace_id?: string | null } = {}
+): Promise<TaskBoard> {
   return request('/cards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, ...options }),
   })
 }
 export function updateTaskCard(
   id: string,
-  changes: Partial<Pick<TaskCard, 'title' | 'note' | 'status' | 'archived' | 'workspace_id'>>
+  changes: Partial<Pick<TaskCard, 'title' | 'note' | 'status' | 'archived' | 'workspace_id' | 'due_date'>>
 ): Promise<TaskBoard> {
   return request(`/cards/${encodeURIComponent(id)}`, {
     method: 'PATCH',

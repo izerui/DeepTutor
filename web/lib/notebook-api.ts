@@ -669,3 +669,20 @@ export async function deleteCategory(categoryId: number): Promise<void> {
   );
   await expectJson<{ deleted: boolean }>(response);
 }
+
+/** Resolve a favorite after it has moved to another collection. */
+export async function locateFavoriteRecord(
+  recordId: string,
+  collectionId: string,
+): Promise<string | null> {
+  const response = await apiFetch(
+    apiUrl(
+      `/api/notebooks/records/${encodeURIComponent(recordId)}/location?notebook_id=${encodeURIComponent(collectionId)}`,
+    ),
+    { cache: "no-store" },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  const data = (await response.json()) as { notebook_id: string };
+  return data.notebook_id;
+}

@@ -1,6 +1,7 @@
 import { LEARNING_HUB } from '@/lib/learning-routes'
 import {
   Bot,
+  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   GraduationCap,
@@ -80,11 +81,14 @@ export const PRIMARY_NAV: NavEntry[] = [
     tooltipKey: 'kanban.intro',
   },
   {
+    href: '/calendar',
+    label: 'Calendar',
+    icon: CalendarDays,
+  },
+  {
     href: '/co-writer',
-    label: 'Co-Writer',
+    label: 'Notes',
     icon: PenLine,
-    tooltipKey: 'Co-Writer tooltip',
-    requires: 'llm',
     defaultCollapsed: true,
   },
   {

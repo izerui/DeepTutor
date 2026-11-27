@@ -54,8 +54,8 @@ _CONDITIONAL_MOUNT_FLAGS: dict[str, str] = {
     "read_source": "has_sources",
     "propose_book_edit": "has_book_authoring",
     "read_memory": "has_memory",
-    "list_notebook": "has_notebooks",
-    "write_note": "has_notebooks",
+    "list_favorites": "has_notebooks",
+    "save_favorite": "has_notebooks",
     "question_bank": "has_question_bank",
     "read_skill": "has_skills",
     "load_tools": "has_deferred_tools",
@@ -78,6 +78,8 @@ _ALWAYS_ON_TOOLS: tuple[str, ...] = (
     "github",
     "ask_user",
     "cron",
+    "write_note",
+    "search_notes",
 )
 
 # Built-ins that survive an exclusive knowledge capability when other KBs are
@@ -394,7 +396,7 @@ def user_has_memory() -> bool:
 def user_has_notebooks() -> bool:
     """Whether the active user has at least one notebook.
 
-    Auto-mount gate for ``list_notebook`` + ``write_note``. Same
+    Auto-mount gate for ``list_favorites`` + ``save_favorite``. Same
     fail-closed posture as :func:`user_has_memory`.
     """
     try:

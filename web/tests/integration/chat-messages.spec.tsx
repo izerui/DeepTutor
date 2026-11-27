@@ -8,6 +8,23 @@ import { initI18n } from '@/i18n/init'
 initI18n('en')
 
 describe('chat message feature', () => {
+  it('keeps note actions in a compact companion without read-aloud or delete controls', () => {
+    render(<ChatMessageList
+      messages={[
+        { id: 1, role: 'user', content: 'Explain', parentMessageId: null },
+        { id: 2, role: 'assistant', content: 'A useful explanation.', parentMessageId: 1 },
+      ]}
+      isStreaming={false}
+      compactActions
+      assistantActions={() => <button>Add to page</button>}
+      onDeleteTurn={vi.fn()}
+      onCopyAssistantMessage={vi.fn()}
+      onRegenerateMessage={vi.fn()}
+    />)
+    expect(screen.getByRole('button', { name: 'Add to page' })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: 'Playback speed' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete turn' })).toBeNull()
+  })
   it('shows a persisted quote during editing and restores the original question on cancel', async () => {
     const edit = vi.fn()
     const user = userEvent.setup()

@@ -37,3 +37,8 @@ export function knowledgeBaseRoute(name?: string | null): string {
     ? `/knowledge-bases/${segment(name)}`
     : "/knowledge-bases";
 }
+
+/** Link to a saved record without changing the existing course-scoped route API. */
+export function favoriteRecordRoute(collectionId: string, recordId: string): string {
+  return `${notebookRoute(collectionId)}?record=${segment(recordId)}`;
+}

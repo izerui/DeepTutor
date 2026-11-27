@@ -7,6 +7,7 @@ message:
 * ``QUOTE-CHECK`` — answers in one line.
 * ``MQ-ASK``     — calls ``mastery_quiz`` once with a choice question on the
                    knowledge point written to ``<stage>/kp.txt``.
+* ``NOTE-EDIT``  — reads the bound note and proposes an addition for review.
 * anything else  — a fixed three-step explanation.
 """
 
@@ -41,6 +42,22 @@ def plan(body):
     if "QUOTE-CHECK" in text:
         return "收到引用：我会针对你引用的那一步解释。", None
     names = {(t.get("function") or t).get("name") for t in body.get("tools") or []}
+    if "NOTE-EDIT" in text and "note_read" in names:
+        index = max(i for i, m in enumerate(messages) if m is last)
+        called = [
+            call["function"]["name"]
+            for m in messages[index + 1 :]
+            for call in (m.get("tool_calls") or [])
+        ]
+        if "note_read" not in called:
+            return None, ("note_read", {})
+        if "note_suggest" not in called:
+            return None, ("note_suggest", {
+                "operation": "insert", "block_id": "",
+                "markdown": "An assistant addition, accepted by the learner.",
+                "explanation": "A proposed addition for review.",
+            })
+        return "Review the proposed addition.", None
     retest = "MQ-RETEST" in text
     if ("MQ-ASK" in text or retest) and "mastery_quiz" in names:
         index = max(i for i, m in enumerate(messages) if m is last)

@@ -105,6 +105,8 @@ export interface SessionPreferences {
   mastery_path_id?: string;
   /** "outline" | "study" | "review" — what this mastery conversation is for. */
   mastery_session_mode?: string;
+  /** Note page a notebook companion conversation is held beside. */
+  note_document_id?: string;
   /** Create mode: the artifact kind ("skill" | "persona") every turn of this
    *  conversation authors towards; "" / absent when not in create mode. */
   create_target?: string;

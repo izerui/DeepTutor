@@ -131,6 +131,55 @@ def test_other_accounts_cannot_read_or_modify_cards(client):
     assert client.get("/api/task-board", headers=headers()).json()["cards"] == [card]
 
 
+def test_due_date_round_trip_clear_and_account_isolation(client, as_user):
+    with as_user("alice"):
+        workspace = get_content_workspace_service().create_workspace("Study")["workspace_id"]
+    response = client.post(
+        "/api/task-board/cards",
+        headers=headers(),
+        json={"title": "Leap day", "due_date": "2028-02-29", "workspace_id": workspace},
+    )
+    assert response.status_code == 201, response.text
+    card = response.json()["cards"][0]
+    assert card["due_date"] == "2028-02-29"
+    assert card["workspace_id"] == workspace
+    url = f"/api/task-board/cards/{card['id']}"
+    assert client.patch(url, headers=headers("bob"), json={"due_date": None}).status_code == 404
+    assert client.get("/api/task-board", headers=headers()).json()["cards"][0] == card
+    assert client.patch(url, headers=headers(), json={"due_date": None}).status_code == 200
+    assert client.get("/api/task-board", headers=headers()).json()["cards"][0]["due_date"] is None
+
+
+@pytest.mark.parametrize("due_date", ["2026-02-29", "2026-13-01", "20261127", "2026-11-27T00:00:00Z", ""])
+def test_due_date_rejects_invalid_create_and_update(client, due_date):
+    assert client.post(
+        "/api/task-board/cards", headers=headers(), json={"title": "Bad", "due_date": due_date}
+    ).status_code == 422
+    before = client.post(
+        "/api/task-board/cards", headers=headers(), json={"title": "Keep", "due_date": "2026-11-27"}
+    ).json()
+    assert client.patch(
+        f"/api/task-board/cards/{before['cards'][0]['id']}",
+        headers=headers(), json={"due_date": due_date},
+    ).status_code == 422
+    assert client.get("/api/task-board", headers=headers()).json() == before
+
+
+def test_create_rejects_foreign_and_archived_workspace(client, as_user):
+    with as_user("bob"):
+        foreign = get_content_workspace_service().create_workspace("Private")["workspace_id"]
+    with as_user("alice"):
+        service = get_content_workspace_service()
+        archived = service.create_workspace("Archived")["workspace_id"]
+        service.update_workspace(archived, archived=True)
+    for workspace in (foreign, archived, "missing"):
+        assert client.post(
+            "/api/task-board/cards", headers=headers(),
+            json={"title": "Rejected", "workspace_id": workspace},
+        ).status_code == 404
+    assert client.get("/api/task-board", headers=headers()).json()["cards"] == []
+
+
 def test_independent_board_and_assignment_workspace_guards(client, as_user):
     with as_user("alice"):
         service = get_content_workspace_service()

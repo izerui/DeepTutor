@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from deeptutor.utils.secret_files import ensure_private_directory
 
@@ -18,6 +18,18 @@ TaskStatus = Literal["todo", "doing", "done"]
 TaskTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 TaskNote = Annotated[str, StringConstraints(max_length=2000)]
 TaskColor = Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+
+def _calendar_date(value: str) -> str:
+    date.fromisoformat(value)
+    return value
+
+
+TaskDueDate = Annotated[
+    str,
+    StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    AfterValidator(_calendar_date),
+]
 
 
 class StatusColors(BaseModel):
@@ -31,6 +43,8 @@ class CreateCard(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: TaskTitle
     note: TaskNote = ""
+    due_date: TaskDueDate | None = None
+    workspace_id: str | None = Field(default=None, max_length=200)
 
 
 class UpdateCard(BaseModel):
@@ -41,6 +55,7 @@ class UpdateCard(BaseModel):
     archived: bool | None = None
     # None = unassigned; empty string = the default conversation workspace.
     workspace_id: str | None = Field(default=None, max_length=200)
+    due_date: TaskDueDate | None = None
 
     @field_validator("title", "note", "status", "archived", mode="before")
     @classmethod
@@ -109,7 +124,8 @@ class TaskBoardStore:
                 id TEXT PRIMARY KEY, title TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL CHECK(status IN ('todo','doing','done')),
                 archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
-                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, workspace_id TEXT
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, workspace_id TEXT,
+                due_date TEXT
             );
             CREATE TABLE IF NOT EXISTS board_state (
                 id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
@@ -131,15 +147,16 @@ class TaskBoardStore:
                 PRIMARY KEY(source, legacy_id)
             );
         """)
-        if "workspace_id" not in {row[1] for row in connection.execute("PRAGMA table_info(cards)")}:
-            try:
-                connection.execute("ALTER TABLE cards ADD COLUMN workspace_id TEXT")
-            except sqlite3.OperationalError:
-                if "workspace_id" not in {
-                    row[1] for row in connection.execute("PRAGMA table_info(cards)")
-                }:
-                    connection.close()
-                    raise
+        for column in ("workspace_id", "due_date"):
+            if column not in {row[1] for row in connection.execute("PRAGMA table_info(cards)")}:
+                try:
+                    connection.execute(f"ALTER TABLE cards ADD COLUMN {column} TEXT")
+                except sqlite3.OperationalError:
+                    if column not in {
+                        row[1] for row in connection.execute("PRAGMA table_info(cards)")
+                    }:
+                        connection.close()
+                        raise
         connection.execute(
             "INSERT OR IGNORE INTO board_state VALUES (1,0,?)",
             (StatusColors().model_dump_json(),),
@@ -204,8 +221,8 @@ class TaskBoardStore:
         with closing(self._connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
-                "INSERT INTO cards (id,title,note,status,archived,created_at,updated_at) VALUES (?,?,?,'todo',0,?,?)",
-                (uuid4().hex, payload.title, payload.note, now, now),
+                "INSERT INTO cards (id,title,note,status,archived,created_at,updated_at,workspace_id,due_date) VALUES (?,?,?,'todo',0,?,?,?,?)",
+                (uuid4().hex, payload.title, payload.note, now, now, payload.workspace_id, payload.due_date),
             )
             self._changed(connection)
             return self._snapshot(connection)
@@ -221,13 +238,14 @@ class TaskBoardStore:
                 raise KeyError(card_id)
             updated = TaskCard.model_validate({**dict(row), **changes})
             connection.execute(
-                "UPDATE cards SET title=?,note=?,status=?,archived=?,workspace_id=?,updated_at=? WHERE id=?",
+                "UPDATE cards SET title=?,note=?,status=?,archived=?,workspace_id=?,due_date=?,updated_at=? WHERE id=?",
                 (
                     updated.title,
                     updated.note,
                     updated.status,
                     updated.archived,
                     updated.workspace_id,
+                    updated.due_date,
                     datetime.now(timezone.utc).isoformat(),
                     card_id,
                 ),
@@ -349,7 +367,7 @@ class TaskBoardStore:
                 if connection.execute("SELECT 1 FROM cards WHERE id=?", (task_id,)).fetchone():
                     task_id = uuid5(NAMESPACE_URL, f"{workspace_id}:{task_id}").hex
                 connection.execute(
-                    "INSERT INTO cards VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO cards (id,title,note,status,archived,created_at,updated_at,workspace_id,due_date) VALUES (?,?,?,?,?,?,?,?,?)",
                     (
                         task_id,
                         card.title,
@@ -359,6 +377,7 @@ class TaskBoardStore:
                         card.created_at,
                         card.updated_at,
                         workspace_id,
+                        card.due_date,
                     ),
                 )
                 connection.execute(
@@ -400,6 +419,7 @@ class TaskBoardStore:
                 "status": card.status,
                 "note": card.note[:500],
                 "linked_to_conversation": card.id in linked,
+                **({"due_date": card.due_date} if card.due_date else {}),
             }
             for card in cards[:40]
         ]

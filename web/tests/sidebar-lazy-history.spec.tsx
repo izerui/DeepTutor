@@ -68,9 +68,9 @@ it("loads conversation history while navigation remains usable, then preserves s
     />,
   );
   expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Co-Writer" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /More/ }));
-  expect(screen.getByRole("link", { name: "Co-Writer" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Notes" })).toHaveAttribute(
     "href",
     "/co-writer",
   );

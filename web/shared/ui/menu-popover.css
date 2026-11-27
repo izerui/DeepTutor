@@ -1,0 +1,63 @@
+/* Shared upstream menu primitives, independent of the upstream layout switcher. */
+.dt-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  left: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  transform-origin: top left;
+  animation: dt-pop-in 140ms ease-out;
+}
+.dt-menu-label {
+  padding: 6px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.dt-menu-item,
+.dt-menu-slot :is(a, button) {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--foreground);
+  text-align: left;
+  transition: background-color 120ms;
+}
+.dt-menu-item:hover,
+.dt-menu-item:focus-visible,
+.dt-menu-slot :is(a, button):hover {
+  background: var(--accent);
+  outline: none;
+}
+.dt-menu-item.is-quiet {
+  color: var(--muted-foreground);
+}
+.dt-menu-item > svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.dt-menu-divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+.dt-menu-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+@keyframes dt-pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-popover { animation: none; }
+}

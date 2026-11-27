@@ -60,6 +60,14 @@ async def board_events(request: Request):
 
 @router.post("/cards", response_model=TaskBoard, status_code=201)
 def create_card(payload: CreateCard) -> TaskBoard:
+    if payload.workspace_id is not None:
+        try:
+            with workspace_context(payload.workspace_id) as scope:
+                if scope.archived:
+                    raise WorkspaceError("Restore this workspace before assigning tasks.")
+                payload.workspace_id = scope.workspace_id
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
     return get_task_board_store().create(payload)
 
 

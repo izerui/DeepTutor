@@ -1,4 +1,5 @@
 import TaskBoardRuntime from "@/components/tasks/TaskBoardRuntime";
+import CalendarRuntime from "@/features/calendar/components/CalendarRuntimeBoundary";
 import WorkspaceSidebar from "@/components/sidebar/WorkspaceSidebar";
 import AppShell from "@/components/layout/AppShell";
 import { CapabilityAccessProvider } from "@/components/access/CapabilityAccessContext";
@@ -19,6 +20,7 @@ export default function WorkspaceLayout({
       <CapabilityAccessProvider>
         <Suspense>
           <WorkspaceRuntimeBoundary>
+            <CalendarRuntime>
             <ChatRuntimeProvider>
               {/* Above the page on purpose: sending the first message navigates
             /chat → /chat/<id>, which remounts the page. The open document
@@ -31,6 +33,7 @@ export default function WorkspaceLayout({
                 </ReadingProvider>
               </PageCustomizationProvider>
             </ChatRuntimeProvider>
+            </CalendarRuntime>
           </WorkspaceRuntimeBoundary>
         </Suspense>
       </CapabilityAccessProvider>

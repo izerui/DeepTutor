@@ -22,7 +22,6 @@ export const ROUTE_CAPABILITIES: ReadonlyArray<{
 }> = [
   { prefix: "/chat", capability: "llm" },
   { prefix: "/partners", capability: "llm" },
-  { prefix: "/co-writer", capability: "llm" },
   { prefix: LEARNING_HUB, capability: "llm" },
 ];
 

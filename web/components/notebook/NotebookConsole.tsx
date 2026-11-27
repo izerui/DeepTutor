@@ -1,8 +1,8 @@
-"use client";
+'use client'
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -15,85 +15,152 @@ import {
   Search,
   Trash2,
   X,
-} from "lucide-react";
-import { useTranslation } from "react-i18next";
-import Tooltip from "@/shared/ui/Tooltip";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import NotebookRecordRow from "@/components/notebook/NotebookRecordRow";
-import { useNotebookLibrary } from "@/components/notebook/useNotebookLibrary";
-import { attachCourseResource } from "@/lib/courses-api";
-import { notify } from "@/lib/notifications";
+} from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import Tooltip from '@/shared/ui/Tooltip'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import NotebookRecordRow from '@/components/notebook/NotebookRecordRow'
+import { useNotebookLibrary } from '@/components/notebook/useNotebookLibrary'
+import { attachCourseResource } from '@/lib/courses-api'
+import { notify } from '@/lib/notifications'
 import {
   exportNotebookMarkdown,
+  locateFavoriteRecord,
   type NotebookSummary,
-} from "@/lib/notebook-api";
-import { notebookRoute } from "@/lib/resource-routes";
+} from '@/lib/notebook-api'
+import { notebookRoute } from '@/lib/resource-routes'
+import { scopedUrl } from '@/lib/workspace-scope'
 
-const SWATCHES = [
-  "#6366F1",
-  "#3B82F6",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#8B5CF6",
-  "#64748B",
-];
+const SWATCHES = ['#6366F1', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#64748B']
 
 /** The course this visit is scoped to, resolved by the route. */
 export interface NotebookCourseScope {
-  id: string;
+  id: string
   /** Empty when the course could not be read; the chip then says "this course". */
-  name: string;
+  name: string
   /** Notebooks the course references. Empty means the course has none. */
-  notebookIds: string[];
+  notebookIds: string[]
 }
 
 interface NotebookConsoleProps {
   /** Notebook to open on arrival from `/notebooks/<id>`. */
-  initialNotebookId?: string | null;
+  initialNotebookId?: string | null
+  initialRecordId?: string | null
   /** Present when arriving from a course; narrows the library to its notebooks. */
-  courseScope?: NotebookCourseScope | null;
+  courseScope?: NotebookCourseScope | null
   /** Called after this console attaches something to the course, so the route can re-read it. */
-  onScopeChanged?: () => void;
+  onScopeChanged?: () => void
 }
 
 export default function NotebookConsole({
   initialNotebookId,
+  initialRecordId = null,
   courseScope = null,
   onScopeChanged,
 }: NotebookConsoleProps) {
-  const { t } = useTranslation();
-  const router = useRouter();
-  const library = useNotebookLibrary(
-    initialNotebookId,
-    courseScope?.notebookIds ?? null,
-  );
+  const { t } = useTranslation()
+  const router = useRouter()
+  const library = useNotebookLibrary(initialNotebookId, courseScope?.notebookIds ?? null)
 
-  const [notebookQuery, setNotebookQuery] = useState("");
-  const [recordQuery, setRecordQuery] = useState("");
-  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [editingNotebookId, setEditingNotebookId] = useState<string | null>(
-    null,
-  );
-  const [metaName, setMetaName] = useState("");
-  const [metaDescription, setMetaDescription] = useState("");
-  const [metaColor, setMetaColor] = useState(SWATCHES[0]);
-  const [banner, setBanner] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [notebookQuery, setNotebookQuery] = useState('')
+  const [recordQuery, setRecordQuery] = useState('')
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(initialRecordId)
+  const sourceRedirect = useRef<string | null>(null)
+  useEffect(() => {
+    setExpandedRecordId(initialRecordId)
+    sourceRedirect.current = null
+  }, [initialNotebookId, initialRecordId])
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newDescription, setNewDescription] = useState('')
+  const [editingNotebookId, setEditingNotebookId] = useState<string | null>(null)
+  const [metaName, setMetaName] = useState('')
+  const [metaDescription, setMetaDescription] = useState('')
+  const [metaColor, setMetaColor] = useState(SWATCHES[0])
+  const [banner, setBanner] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [sourceError, setSourceError] = useState<string | null>(null)
+  const sourceRef = useRef<HTMLDivElement>(null)
 
-  const { notebooks, selected, selectedId } = library;
-  const courseId = courseScope?.id ?? null;
+  const { notebooks, selected, selectedId } = library
+  const courseId = courseScope?.id ?? null
 
   // Default selection, scope repair, create, and delete can all change the
   // visible resource without a click. Keep the address bar canonical too.
   useEffect(() => {
-    if (!selectedId || selectedId === initialNotebookId) return;
-    router.replace(notebookRoute(selectedId, courseId));
-  }, [courseId, initialNotebookId, router, selectedId]);
+    if (initialRecordId || !selectedId || selectedId === initialNotebookId) return
+    router.replace(scopedUrl(notebookRoute(selectedId, courseId)))
+  }, [courseId, initialNotebookId, initialRecordId, router, selectedId])
+
+  const sourcePresent = Boolean(
+    initialRecordId &&
+    selected &&
+    selected.id === initialNotebookId &&
+    (!courseScope || courseScope.notebookIds.includes(selected.id)) &&
+    selected.records.some(record => record.id === initialRecordId)
+  )
+  useEffect(() => {
+    let cancelled = false
+    setSourceError(null)
+    if (!initialRecordId || library.loading || library.detailLoading || library.error) return
+    if (sourcePresent) {
+      sourceRef.current?.scrollIntoView?.({ block: 'nearest' })
+      return
+    }
+    // Wait for the requested collection when the library is still switching.
+    if (
+      selectedId !== initialNotebookId &&
+      notebooks.some(notebook => notebook.id === initialNotebookId) &&
+      (!courseScope || courseScope.notebookIds.includes(initialNotebookId ?? ''))
+    )
+      return
+    if (!selected && !library.detailError && selectedId) return
+    void locateFavoriteRecord(initialRecordId, initialNotebookId ?? '')
+      .then(collectionId => {
+        if (cancelled) return
+        if (
+          collectionId &&
+          collectionId !== initialNotebookId &&
+          (!courseScope || courseScope.notebookIds.includes(collectionId))
+        ) {
+          const destination = new URL(
+            scopedUrl(notebookRoute(collectionId, courseId)),
+            window.location.origin
+          )
+          destination.searchParams.set('record', initialRecordId)
+          const href = `${destination.pathname}${destination.search}`
+          if (sourceRedirect.current !== href) {
+            sourceRedirect.current = href
+            router.replace(href)
+          }
+        } else {
+          setSourceError(t('This favorite is no longer available.'))
+        }
+      })
+      .catch(() => {
+        if (!cancelled)
+          setSourceError(t('Could not locate this favorite. Try reopening the source link.'))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    initialNotebookId,
+    initialRecordId,
+    library.loading,
+    library.detailLoading,
+    library.detailError,
+    library.error,
+    notebooks,
+    selected,
+    selectedId,
+    sourcePresent,
+    courseScope,
+    courseId,
+    router,
+    t,
+  ])
 
   // How many notebooks exist *for this visit*. Everything the console counts —
   // the badge, whether a filter box is worth showing, which empty state to use
@@ -102,22 +169,18 @@ export default function NotebookConsole({
   const scopedNotebooks = useMemo(
     () =>
       courseScope
-        ? notebooks.filter((notebook) =>
-            courseScope.notebookIds.includes(notebook.id),
-          )
+        ? notebooks.filter(notebook => courseScope.notebookIds.includes(notebook.id))
         : notebooks,
-    [courseScope, notebooks],
-  );
+    [courseScope, notebooks]
+  )
 
   const visibleNotebooks = useMemo(() => {
-    const needle = notebookQuery.trim().toLowerCase();
-    if (!needle) return scopedNotebooks;
-    return scopedNotebooks.filter((notebook) =>
-      `${notebook.name} ${notebook.description ?? ""}`
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [scopedNotebooks, notebookQuery]);
+    const needle = notebookQuery.trim().toLowerCase()
+    if (!needle) return scopedNotebooks
+    return scopedNotebooks.filter(notebook =>
+      `${notebook.name} ${notebook.description ?? ''}`.toLowerCase().includes(needle)
+    )
+  }, [scopedNotebooks, notebookQuery])
 
   // The library opens the most recent notebook by default, which under a course
   // scope can be one the course does not reference — the list then shows one
@@ -125,127 +188,121 @@ export default function NotebookConsole({
   // inside the scope, and when the scope is empty clear it outright: a course
   // with no notebooks must not leave some other course's notes on screen next
   // to a list that says there are none.
-  const scopedSelect = library.select;
+  const scopedSelect = library.select
   useEffect(() => {
-    if (!courseScope) return;
-    if (selectedId && courseScope.notebookIds.includes(selectedId)) return;
-    scopedSelect(scopedNotebooks.length ? scopedNotebooks[0].id : null);
-  }, [courseScope, scopedNotebooks, scopedSelect, selectedId]);
+    if (!courseScope) return
+    if (selectedId && courseScope.notebookIds.includes(selectedId)) return
+    scopedSelect(scopedNotebooks.length ? scopedNotebooks[0].id : null)
+  }, [courseScope, scopedNotebooks, scopedSelect, selectedId])
 
   const visibleRecords = useMemo(() => {
-    const records = selected?.records ?? [];
-    const needle = recordQuery.trim().toLowerCase();
-    if (!needle) return records;
-    return records.filter((record) =>
-      `${record.title} ${record.summary ?? ""} ${record.output ?? ""}`
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [selected, recordQuery]);
+    const records = selected?.records ?? []
+    const needle = recordQuery.trim().toLowerCase()
+    if (!needle) return records
+    return records.filter(
+      record =>
+        record.id === initialRecordId ||
+        `${record.title} ${record.summary ?? ''} ${record.output ?? ''}`
+          .toLowerCase()
+          .includes(needle)
+    )
+  }, [selected, recordQuery, initialRecordId])
 
   const handleCreate = useCallback(async () => {
-    const name = newName.trim();
-    if (!name) return;
+    const name = newName.trim()
+    if (!name) return
     try {
-      const createdId = await library.create(name, newDescription);
+      const createdId = await library.create(name, newDescription)
       // Made while looking at one course, so it belongs to that course. Asking
       // the learner to go back and attach what they just created inside the
       // course's own view is the busywork the container exists to remove.
       if (createdId && courseScope) {
         await attachCourseResource(courseScope.id, {
-          kind: "notebook",
+          kind: 'notebook',
           ref_id: createdId,
           label: name,
-        });
-        onScopeChanged?.();
+        })
+        onScopeChanged?.()
       }
-      if (createdId) router.push(notebookRoute(createdId, courseId));
-      setNewName("");
-      setNewDescription("");
-      setCreating(false);
+      if (createdId) router.push(scopedUrl(notebookRoute(createdId, courseId)))
+      setNewName('')
+      setNewDescription('')
+      setCreating(false)
     } catch (err) {
-      setBanner(err instanceof Error ? err.message : String(err));
+      setBanner(err instanceof Error ? err.message : String(err))
     }
-  }, [
-    courseId,
-    courseScope,
-    library,
-    newName,
-    newDescription,
-    onScopeChanged,
-    router,
-  ]);
+  }, [courseId, courseScope, library, newName, newDescription, onScopeChanged, router])
 
   const beginNotebookEdit = useCallback((notebook: NotebookSummary) => {
-    setMetaName(notebook.name);
-    setMetaDescription(notebook.description ?? "");
-    setMetaColor(notebook.color ?? SWATCHES[0]);
-    setEditingNotebookId(notebook.id);
-  }, []);
+    setMetaName(notebook.name)
+    setMetaDescription(notebook.description ?? '')
+    setMetaColor(notebook.color ?? SWATCHES[0])
+    setEditingNotebookId(notebook.id)
+  }, [])
 
   const saveMeta = useCallback(async () => {
-    if (!editingNotebookId || !metaName.trim()) return;
+    if (!editingNotebookId || !metaName.trim()) return
     try {
       await library.rename(editingNotebookId, {
         name: metaName.trim(),
         description: metaDescription.trim(),
         color: metaColor,
-      });
-      setEditingNotebookId(null);
+      })
+      setEditingNotebookId(null)
     } catch (err) {
-      setBanner(err instanceof Error ? err.message : String(err));
+      setBanner(err instanceof Error ? err.message : String(err))
     }
-  }, [editingNotebookId, library, metaName, metaDescription, metaColor]);
+  }, [editingNotebookId, library, metaName, metaDescription, metaColor])
 
   const handleDeleteNotebook = useCallback(async () => {
-    if (!selected) return;
-    const name = selected.name;
-    setDeleting(true);
+    if (!selected) return
+    const name = selected.name
+    setDeleting(true)
     try {
-      await library.remove(selected.id);
-      router.replace(notebookRoute(null, courseId));
-      notify(t('Deleted "{{name}}"', { name }), { tone: "success" });
-      setConfirmingDelete(false);
-      setEditingNotebookId(null);
+      await library.remove(selected.id)
+      router.replace(scopedUrl(notebookRoute(null, courseId)))
+      notify(t('Deleted "{{name}}"', { name }), { tone: 'success' })
+      setConfirmingDelete(false)
+      setEditingNotebookId(null)
     } catch (err) {
-      setBanner(err instanceof Error ? err.message : String(err));
+      setBanner(err instanceof Error ? err.message : String(err))
     } finally {
-      setDeleting(false);
+      setDeleting(false)
     }
-  }, [courseId, library, router, selected, t]);
+  }, [courseId, library, router, selected, t])
 
   const handleExport = useCallback(async () => {
-    if (!selected) return;
+    if (!selected) return
     try {
-      const markdown = await exportNotebookMarkdown(selected.id);
+      const markdown = await exportNotebookMarkdown(selected.id)
       const blob = new Blob([markdown], {
-        type: "text/markdown;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${selected.name || selected.id}.md`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      notify(t("Notebook exported"), { tone: "success" });
+        type: 'text/markdown;charset=utf-8',
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${selected.name || selected.id}.md`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      notify(t('Notebook exported'), { tone: 'success' })
     } catch (err) {
-      setBanner(err instanceof Error ? err.message : String(err));
+      setBanner(err instanceof Error ? err.message : String(err))
     }
-  }, [selected, t]);
+  }, [selected, t])
 
   const openSession = useCallback(
     (sessionId: string) => {
-      router.push(`/chat/${encodeURIComponent(sessionId)}`);
+      router.push(scopedUrl(`/chat/${encodeURIComponent(sessionId)}`))
     },
-    [router],
-  );
+    [router]
+  )
 
   if (library.loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
       </div>
-    );
+    )
   }
 
   return (
@@ -254,7 +311,7 @@ export default function NotebookConsole({
       <aside className="flex w-[250px] shrink-0 flex-col border-r border-[var(--border)]">
         <div className="flex flex-col gap-2.5 px-3 pb-2.5 pt-3">
           <Link
-            href="/space"
+            href={scopedUrl('/space')}
             className="group inline-flex w-fit items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
           >
             <ArrowLeft
@@ -262,22 +319,22 @@ export default function NotebookConsole({
               strokeWidth={1.8}
               className="transition-transform group-hover:-translate-x-0.5"
             />
-            {t("Learning Space")}
+            {t('Learning Space')}
           </Link>
 
           <div className="flex items-center justify-between">
             <h1 className="flex items-center gap-1.5 font-serif text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
               <NotebookPen size={14} strokeWidth={1.7} />
-              {t("Notebooks")}
+              {t('Notebooks')}
               <span className="rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-[var(--muted-foreground)]">
                 {scopedNotebooks.length}
               </span>
             </h1>
-            <Tooltip label={t("New notebook")} side="top">
+            <Tooltip label={t('New notebook')} side="top">
               <button
                 type="button"
-                onClick={() => setCreating((v) => !v)}
-                aria-label={t("New notebook")}
+                onClick={() => setCreating(v => !v)}
+                aria-label={t('New notebook')}
                 aria-expanded={creating}
                 className="rounded-md p-1.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
               >
@@ -291,22 +348,22 @@ export default function NotebookConsole({
               <input
                 autoFocus
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleCreate();
-                  if (e.key === "Escape") setCreating(false);
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void handleCreate()
+                  if (e.key === 'Escape') setCreating(false)
                 }}
-                placeholder={t("Notebook name")}
+                placeholder={t('Notebook name')}
                 className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12.5px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
               />
               <input
                 value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleCreate();
-                  if (e.key === "Escape") setCreating(false);
+                onChange={e => setNewDescription(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void handleCreate()
+                  if (e.key === 'Escape') setCreating(false)
                 }}
-                placeholder={t("Description (optional)")}
+                placeholder={t('Description (optional)')}
                 className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
               />
               <div className="flex gap-1.5">
@@ -316,14 +373,14 @@ export default function NotebookConsole({
                   disabled={!newName.trim()}
                   className="flex-1 rounded-md bg-[var(--primary)] px-2 py-1.5 text-[12px] font-medium text-[var(--primary-foreground)] disabled:opacity-40"
                 >
-                  {t("Create")}
+                  {t('Create')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setCreating(false)}
                   className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                 >
-                  {t("Cancel")}
+                  {t('Cancel')}
                 </button>
               </div>
             </div>
@@ -333,14 +390,14 @@ export default function NotebookConsole({
             <div className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] py-1 pl-2 pr-1 text-[11px] text-[var(--muted-foreground)]">
               <School size={11} strokeWidth={1.8} className="shrink-0" />
               <Link
-                href={`/courses/${courseScope.id}`}
+                href={scopedUrl(`/courses/${courseScope.id}`)}
                 className="min-w-0 flex-1 truncate transition-colors hover:text-[var(--foreground)]"
               >
-                {courseScope.name || t("This subject")}
+                {courseScope.name || t('This subject')}
               </Link>
               <Link
-                href="/notebooks"
-                aria-label={t("Show every notebook")}
+                href={scopedUrl('/notebooks')}
+                aria-label={t('Show every notebook')}
                 className="shrink-0 rounded p-0.5 transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
               >
                 <X size={11} />
@@ -356,8 +413,8 @@ export default function NotebookConsole({
               />
               <input
                 value={notebookQuery}
-                onChange={(e) => setNotebookQuery(e.target.value)}
-                placeholder={t("Filter notebooks")}
+                onChange={e => setNotebookQuery(e.target.value)}
+                placeholder={t('Filter notebooks')}
                 className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] py-1.5 pl-7 pr-2 text-[12px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
               />
             </div>
@@ -365,43 +422,43 @@ export default function NotebookConsole({
         </div>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {visibleNotebooks.map((notebook) => {
-            const active = selectedId === notebook.id;
+          {visibleNotebooks.map(notebook => {
+            const active = selectedId === notebook.id
             if (editingNotebookId === notebook.id) {
               return (
                 <form
                   key={notebook.id}
-                  aria-label={t("Edit notebook")}
+                  aria-label={t('Edit notebook')}
                   className="mb-0.5 flex flex-col gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void saveMeta();
+                  onSubmit={event => {
+                    event.preventDefault()
+                    void saveMeta()
                   }}
                 >
                   <input
                     autoFocus
-                    aria-label={t("Notebook name")}
+                    aria-label={t('Notebook name')}
                     value={metaName}
-                    onChange={(e) => setMetaName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") setEditingNotebookId(null);
+                    onChange={e => setMetaName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') setEditingNotebookId(null)
                     }}
-                    placeholder={t("Notebook name")}
+                    placeholder={t('Notebook name')}
                     className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12.5px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
                   />
                   <input
-                    aria-label={t("Description (optional)")}
+                    aria-label={t('Description (optional)')}
                     value={metaDescription}
-                    onChange={(e) => setMetaDescription(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") setEditingNotebookId(null);
+                    onChange={e => setMetaDescription(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') setEditingNotebookId(null)
                     }}
-                    placeholder={t("Description (optional)")}
+                    placeholder={t('Description (optional)')}
                     className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[12px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
                   />
                   <div className="flex items-center gap-1.5">
                     <div className="flex items-center gap-1">
-                      {SWATCHES.map((swatch) => (
+                      {SWATCHES.map(swatch => (
                         <button
                           key={swatch}
                           type="button"
@@ -409,8 +466,8 @@ export default function NotebookConsole({
                           aria-label={swatch}
                           className={`h-3.5 w-3.5 rounded-full transition-transform ${
                             metaColor === swatch
-                              ? "ring-2 ring-[var(--foreground)]/40 ring-offset-1 ring-offset-[var(--card)]"
-                              : "hover:scale-110"
+                              ? 'ring-2 ring-[var(--foreground)]/40 ring-offset-1 ring-offset-[var(--card)]'
+                              : 'hover:scale-110'
                           }`}
                           style={{ backgroundColor: swatch }}
                         />
@@ -421,27 +478,25 @@ export default function NotebookConsole({
                       onClick={() => setEditingNotebookId(null)}
                       className="ml-auto rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
-                      {t("Cancel")}
+                      {t('Cancel')}
                     </button>
                     <button
                       type="submit"
                       disabled={!metaName.trim()}
                       className="rounded-md bg-[var(--primary)] px-2 py-1 text-[11px] font-medium text-[var(--primary-foreground)] disabled:opacity-40"
                     >
-                      {t("Save")}
+                      {t('Save')}
                     </button>
                   </div>
                 </form>
-              );
+              )
             }
 
             return (
               <div
                 key={notebook.id}
                 className={`group/nb relative mb-0.5 flex w-full items-start gap-2 rounded-lg py-2 pl-3 pr-2 text-left transition-[background-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 ${
-                  active
-                    ? "bg-[var(--primary)]/10"
-                    : "hover:bg-[var(--muted)]/50"
+                  active ? 'bg-[var(--primary)]/10' : 'hover:bg-[var(--muted)]/50'
                 }`}
               >
                 {/* A left rail on the active row: the dot alone carries the
@@ -449,35 +504,32 @@ export default function NotebookConsole({
                 <span
                   aria-hidden
                   className={`absolute left-0 top-1/2 w-[2.5px] -translate-y-1/2 rounded-r-full bg-[var(--primary)] transition-all duration-200 ${
-                    active ? "h-[62%] opacity-100" : "h-0 opacity-0"
+                    active ? 'h-[62%] opacity-100' : 'h-0 opacity-0'
                   }`}
                 />
                 <span
                   aria-hidden
                   className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: notebook.color || "#6366F1" }}
+                  style={{ backgroundColor: notebook.color || '#6366F1' }}
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    library.select(notebook.id);
-                    router.push(notebookRoute(notebook.id, courseId));
+                    library.select(notebook.id)
+                    router.push(scopedUrl(notebookRoute(notebook.id, courseId)))
                   }}
-                  aria-current={active ? "true" : undefined}
+                  aria-current={active ? 'true' : undefined}
                   className="flex min-w-0 flex-1 items-start gap-2 text-left focus-visible:outline-none"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span
-                        className={`min-w-0 flex-1 truncate text-[12.5px] ${active ? "font-semibold text-[var(--foreground)]" : "font-medium text-[var(--foreground)]/85"}`}
+                        className={`min-w-0 flex-1 truncate text-[12.5px] ${active ? 'font-semibold text-[var(--foreground)]' : 'font-medium text-[var(--foreground)]/85'}`}
                       >
                         {notebook.name}
                       </span>
                       {notebook.unreadable ? (
-                        <AlertTriangle
-                          size={11}
-                          className="shrink-0 text-[var(--destructive)]"
-                        />
+                        <AlertTriangle size={11} className="shrink-0 text-[var(--destructive)]" />
                       ) : (
                         <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted-foreground)]">
                           {notebook.record_count ?? 0}
@@ -491,10 +543,10 @@ export default function NotebookConsole({
                     )}
                   </span>
                 </button>
-                <Tooltip label={t("Edit notebook")} side="bottom">
+                <Tooltip label={t('Edit notebook')} side="bottom">
                   <button
                     type="button"
-                    aria-label={t("Edit notebook")}
+                    aria-label={t('Edit notebook')}
                     onClick={() => beginNotebookEdit(notebook)}
                     className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] opacity-60 transition-[background-color,color,opacity,transform] duration-150 active:scale-[0.97] hover:bg-[var(--muted)] hover:text-[var(--foreground)] hover:opacity-100 focus-visible:bg-[var(--muted)] focus-visible:text-[var(--foreground)] focus-visible:opacity-100 focus-visible:outline-none"
                   >
@@ -502,7 +554,7 @@ export default function NotebookConsole({
                   </button>
                 </Tooltip>
               </div>
-            );
+            )
           })}
           {!visibleNotebooks.length && (
             <p
@@ -510,8 +562,8 @@ export default function NotebookConsole({
               className="px-2 py-8 text-center text-[12px] text-[var(--muted-foreground)]"
             >
               {scopedNotebooks.length
-                ? t("No notebooks match your filter.")
-                : t("No notebooks yet.")}
+                ? t('No notebooks match your filter.')
+                : t('No notebooks yet.')}
             </p>
           )}
         </nav>
@@ -535,7 +587,7 @@ export default function NotebookConsole({
         {library.error ? (
           <ConsoleNotice
             tone="error"
-            title={t("Could not load your notebooks")}
+            title={t('Could not load your notebooks')}
             detail={library.error}
             action={
               <button
@@ -543,29 +595,35 @@ export default function NotebookConsole({
                 onClick={() => void library.reload()}
                 className="rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--primary-foreground)]"
               >
-                {t("Retry")}
+                {t('Retry')}
               </button>
             }
           />
+        ) : initialRecordId && !sourcePresent ? (
+          sourceError ? (
+            <ConsoleNotice tone="error" title={sourceError} detail="" />
+          ) : (
+            <div className="flex h-full items-center justify-center" aria-busy="true">
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--muted-foreground)]" />
+            </div>
+          )
         ) : !selected && !library.detailLoading ? (
           <ConsoleNotice
             tone="empty"
             title={
               library.detailError
-                ? t("This notebook could not be opened")
+                ? t('This notebook could not be opened')
                 : courseScope && scopedNotebooks.length === 0
-                  ? t("This subject has no notebook yet")
-                  : t("No notebook selected")
+                  ? t('This subject has no notebook yet')
+                  : t('No notebook selected')
             }
             detail={
               library.detailError ??
               (courseScope && scopedNotebooks.length === 0
                 ? t(
-                    "Make one here and it joins this subject — its notes then travel with everything else in it.",
+                    'Make one here and it joins this subject — its notes then travel with everything else in it.'
                   )
-                : t(
-                    "Pick a notebook on the left, or create one to get started.",
-                  ))
+                : t('Pick a notebook on the left, or create one to get started.'))
             }
           />
         ) : (
@@ -575,7 +633,7 @@ export default function NotebookConsole({
                 <span
                   aria-hidden
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: selected?.color || "#6366F1" }}
+                  style={{ backgroundColor: selected?.color || '#6366F1' }}
                 />
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-[14.5px] font-semibold tracking-tight text-[var(--foreground)]">
@@ -588,16 +646,16 @@ export default function NotebookConsole({
                   )}
                 </div>
                 <span className="shrink-0 text-[11px] tabular-nums text-[var(--muted-foreground)]">
-                  {selected?.records.length ?? 0} {t("records")}
+                  {selected?.records.length ?? 0} {t('records')}
                 </span>
                 <div className="flex shrink-0 items-center gap-0.5">
                   <HeaderAction
-                    label={t("Export as Markdown")}
+                    label={t('Export as Markdown')}
                     icon={Download}
                     onClick={() => void handleExport()}
                   />
                   <HeaderAction
-                    label={t("Delete notebook")}
+                    label={t('Delete notebook')}
                     icon={Trash2}
                     tone="danger"
                     onClick={() => setConfirmingDelete(true)}
@@ -613,8 +671,8 @@ export default function NotebookConsole({
                   />
                   <input
                     value={recordQuery}
-                    onChange={(e) => setRecordQuery(e.target.value)}
-                    placeholder={t("Search records in this notebook")}
+                    onChange={e => setRecordQuery(e.target.value)}
+                    placeholder={t('Search records in this notebook')}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] py-1.5 pl-8 pr-2 text-[12px] text-[var(--foreground)] outline-none focus:border-[var(--primary)]/50"
                   />
                 </div>
@@ -628,39 +686,37 @@ export default function NotebookConsole({
                 </div>
               ) : visibleRecords.length ? (
                 <div className="divide-y divide-[var(--border)]/70">
-                  {visibleRecords.map((record) => (
-                    <NotebookRecordRow
+                  {visibleRecords.map(record => (
+                    <div
                       key={record.id}
-                      record={record}
-                      notebooks={notebooks}
-                      currentNotebookId={selected!.id}
-                      expanded={expandedRecordId === record.id}
-                      onToggle={() =>
-                        setExpandedRecordId(
-                          expandedRecordId === record.id ? null : record.id,
-                        )
-                      }
-                      onEdit={library.editRecord}
-                      onDelete={library.removeRecord}
-                      onRelocate={library.relocateRecord}
-                      onOpenSession={openSession}
-                    />
+                      ref={record.id === initialRecordId ? sourceRef : undefined}
+                    >
+                      <NotebookRecordRow
+                        record={record}
+                        notebooks={notebooks}
+                        currentNotebookId={selected!.id}
+                        expanded={expandedRecordId === record.id}
+                        onToggle={() =>
+                          setExpandedRecordId(expandedRecordId === record.id ? null : record.id)
+                        }
+                        onEdit={library.editRecord}
+                        onDelete={library.removeRecord}
+                        onRelocate={library.relocateRecord}
+                        onOpenSession={openSession}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : (
                 <ConsoleNotice
                   tone="empty"
                   title={
-                    recordQuery
-                      ? t("No records match your search")
-                      : t("This notebook is empty")
+                    recordQuery ? t('No records match your search') : t('This notebook is empty')
                   }
                   detail={
                     recordQuery
-                      ? t("Try a different word.")
-                      : t(
-                          "Save something to it from a chat, research run, or Co-Writer document.",
-                        )
+                      ? t('Try a different word.')
+                      : t('Save something to it from a chat, research run, or Co-Writer document.')
                   }
                 />
               )}
@@ -671,8 +727,8 @@ export default function NotebookConsole({
 
       <ConfirmDialog
         open={confirmingDelete && Boolean(selected)}
-        title={t("Delete this notebook?")}
-        confirmLabel={t("Delete")}
+        title={t('Delete this notebook?')}
+        confirmLabel={t('Delete')}
         tone="danger"
         busy={deleting}
         onConfirm={() => void handleDeleteNotebook()}
@@ -680,30 +736,27 @@ export default function NotebookConsole({
       >
         <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)]">
           {(selected?.record_count ?? 0) > 0
-            ? t(
-                '"{{name}}" and its {{count}} records will be deleted. This cannot be undone.',
-                {
-                  name: selected?.name ?? "",
-                  count: selected?.record_count ?? 0,
-                },
-              )
-            : t('"{{name}}" will be deleted.', { name: selected?.name ?? "" })}
+            ? t('"{{name}}" and its {{count}} records will be deleted. This cannot be undone.', {
+                name: selected?.name ?? '',
+                count: selected?.record_count ?? 0,
+              })
+            : t('"{{name}}" will be deleted.', { name: selected?.name ?? '' })}
         </p>
       </ConfirmDialog>
     </div>
-  );
+  )
 }
 
 function HeaderAction({
   label,
   icon: Icon,
   onClick,
-  tone = "default",
+  tone = 'default',
 }: {
-  label: string;
-  icon: typeof Pencil;
-  onClick: () => void;
-  tone?: "default" | "danger";
+  label: string
+  icon: typeof Pencil
+  onClick: () => void
+  tone?: 'default' | 'danger'
 }) {
   return (
     <Tooltip label={label} side="bottom">
@@ -712,15 +765,15 @@ function HeaderAction({
         onClick={onClick}
         aria-label={label}
         className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/40 ${
-          tone === "danger"
-            ? "hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
-            : "hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          tone === 'danger'
+            ? 'hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]'
+            : 'hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
         }`}
       >
         <Icon size={13} />
       </button>
     </Tooltip>
-  );
+  )
 }
 
 function ConsoleNotice({
@@ -729,33 +782,31 @@ function ConsoleNotice({
   detail,
   action,
 }: {
-  tone: "empty" | "error";
-  title: string;
-  detail: string;
-  action?: React.ReactNode;
+  tone: 'empty' | 'error'
+  title: string
+  detail: string
+  action?: React.ReactNode
 }) {
-  const Icon = tone === "error" ? AlertTriangle : NotebookPen;
+  const Icon = tone === 'error' ? AlertTriangle : NotebookPen
   return (
     <div
-      role={tone === "error" ? "alert" : undefined}
+      role={tone === 'error' ? 'alert' : undefined}
       className="flex h-full flex-col items-center justify-center gap-2.5 px-6 py-16 text-center"
     >
       <span
         className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-          tone === "error"
-            ? "bg-[var(--destructive)]/10 text-[var(--destructive)]"
-            : "bg-[var(--muted)] text-[var(--muted-foreground)]"
+          tone === 'error'
+            ? 'bg-[var(--destructive)]/10 text-[var(--destructive)]'
+            : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
         }`}
       >
         <Icon size={16} />
       </span>
-      <p className="text-[13.5px] font-medium text-[var(--foreground)]">
-        {title}
-      </p>
+      <p className="text-[13.5px] font-medium text-[var(--foreground)]">{title}</p>
       <p className="max-w-sm text-[12.5px] leading-relaxed text-[var(--muted-foreground)]">
         {detail}
       </p>
       {action}
     </div>
-  );
+  )
 }

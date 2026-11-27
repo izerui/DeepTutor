@@ -128,6 +128,15 @@ class MasteryCardAnswer(BaseModel):
         return value
 
 
+class NoteGeneration(BaseModel):
+    """The learning block this turn fills, with server-owned instructions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    block_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    kind: str = Field(default="", max_length=32)
+
+
 class MasteryCardSkip(BaseModel):
     """A question the learner dropped instead of answering.
 
@@ -205,6 +214,8 @@ class TurnRequest(BaseModel):
     mastery_path_lease_managed: bool = False
     mastery_answer: MasteryCardAnswer | None = None
     mastery_skip: MasteryCardSkip | None = None
+    note_document_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{8,32}$")
+    note_generation: NoteGeneration | None = None
     reading_material_id: str | None = None
     reading_material_revision: int | None = Field(default=None, ge=1)
     reading_workspace_id: str | None = None
@@ -280,6 +291,7 @@ __all__ = [
     "MasteryCardSkip",
     "MemoryReference",
     "NotebookReference",
+    "NoteGeneration",
     "OutgoingAttachment",
     "ReadingReference",
     "ReadingViewport",

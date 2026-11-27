@@ -2031,6 +2031,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   showModeBadge = true,
   onLoadMessageTrace,
   onReleaseMessageTrace,
+  assistantActions,
+  compactActions = false,
   threadsByMessageId,
   onAskTutor,
   onOpenThread,
@@ -2104,6 +2106,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   showModeBadge?: boolean;
   onLoadMessageTrace?: (messageId: number) => Promise<void>;
   onReleaseMessageTrace?: (messageId: number) => void;
+  /** Extra actions supplied by a surface such as the note companion. */
+  assistantActions?: (message: ChatMessageItem) => ReactNode;
+  compactActions?: boolean;
   /** Little Tutor threads keyed by the message they were opened from. */
   threadsByMessageId?: ReadonlyMap<string, SessionSummary[]>;
   /** Ask the Little Tutor about a whole (persisted) assistant reply. */
@@ -2546,7 +2551,7 @@ export const ChatMessageList = memo(function ChatMessageList({
                         onCopy={onCopyAssistantMessage}
                       />
                     )}
-                    {showActions && (
+                    {showActions && !compactActions && (
                       <>
                         <PlayAudioButton
                           playbackRate={voiceRate}
@@ -2591,14 +2596,15 @@ export const ChatMessageList = memo(function ChatMessageList({
                         onClick={() => onAskTutor(msg.id as number)}
                       />
                     )}
-                    {showDelete && (
+                    {showDelete && !compactActions && (
                       <DeleteTurnButton
                         onDelete={() => onDeleteTurn?.(deletableTurnUserId)}
                       />
                     )}
+                    {showActions && assistantActions?.(msg)}
                   </div>
                 )}
-                {costSummary && (
+                {costSummary && !compactActions && (
                   <div className="ml-auto">
                     <UsageFooter turn={costSummary} session={usageByRow.get(i) ?? costSummary} />
                   </div>

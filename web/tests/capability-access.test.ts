@@ -8,7 +8,6 @@ import { capabilityForPath } from "../lib/capability-routes";
 test("capabilityForPath maps LLM features to llm", () => {
   assert.equal(capabilityForPath("/chat"), "llm");
   assert.equal(capabilityForPath("/partners"), "llm");
-  assert.equal(capabilityForPath("/co-writer"), "llm");
   assert.equal(capabilityForPath("/learning/books"), "llm");
   assert.equal(capabilityForPath("/learning/reading"), "llm");
   assert.equal(capabilityForPath("/learning/mastery"), "llm"); // Mastery Path
@@ -39,4 +38,7 @@ test("capabilityForPath returns null for ungated routes", () => {
   assert.equal(capabilityForPath("/memory"), null);
   assert.equal(capabilityForPath("/space"), null);
   assert.equal(capabilityForPath("/settings"), null);
+  assert.equal(capabilityForPath("/co-writer"), null);
+  assert.equal(capabilityForPath("/co-writer/existing-document"), null);
+  assert.equal(capabilityForPath("/calendar"), null);
 });

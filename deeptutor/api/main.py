@@ -573,6 +573,7 @@ from deeptutor.api.routers import (
     attachments,
     auth,
     book,
+    calendar,
     capabilities,
     capabilities_settings,
     practice_sets,
@@ -708,6 +709,7 @@ app.include_router(
 )
 app.include_router(co_writer.router, prefix="/api", tags=["documents"], dependencies=_auth)
 app.include_router(notebook.router, prefix="/api", tags=["notebooks"], dependencies=_auth)
+app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"], dependencies=_auth)
 app.include_router(
     task_board.router, prefix="/api/task-board", tags=["task-board"], dependencies=_auth
 )

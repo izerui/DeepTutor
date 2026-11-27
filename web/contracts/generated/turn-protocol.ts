@@ -57,6 +57,9 @@ export type Mcp = string[];
 export type MemoryReferences = (
   "recent" | "profile" | "scope" | "preferences" | "summary"
 )[];
+export type NoteDocumentId = string | null;
+export type BlockId = string;
+export type Kind = string;
 export type NotebookId = string;
 export type RecordIds = string[];
 export type NotebookReferences = NotebookReference[];
@@ -306,6 +309,8 @@ export interface StartTurnCommand {
   mastery_skip?: MasteryCardSkip | null;
   mcp?: Mcp;
   memory_references?: MemoryReferences;
+  note_document_id?: NoteDocumentId;
+  note_generation?: NoteGeneration | null;
   notebook_references?: NotebookReferences;
   parent_message_id?: ParentMessageId;
   partner_discussion_group_id?: PartnerDiscussionGroupId;
@@ -397,6 +402,16 @@ export interface MasteryCardAnswer {
  */
 export interface MasteryCardSkip {
   question_id: QuestionId1;
+}
+/**
+ * The learning block this turn fills, with server-owned instructions.
+ *
+ * This interface was referenced by `TurnProtocolDocument`'s JSON-Schema
+ * via the `definition` "NoteGeneration".
+ */
+export interface NoteGeneration {
+  block_id: BlockId;
+  kind?: Kind;
 }
 /**
  * This interface was referenced by `TurnProtocolDocument`'s JSON-Schema

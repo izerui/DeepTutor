@@ -81,6 +81,7 @@ BUILTIN_LOOP_CAPABILITY_SPECS: tuple[LoopCapabilitySpec, ...] = (
         "deeptutor.capabilities.partner_authoring.capability:PartnerAuthoringCapability",
     ),
     LoopCapabilitySpec("creator", "deeptutor.capabilities.creator.capability:CreatorCapability"),
+    LoopCapabilitySpec("notes", "deeptutor.capabilities.notes.capability:NotesCapability"),
     LoopCapabilitySpec(
         "partner_group",
         "deeptutor.capabilities.partner_group.capability:PartnerGroupCapability",

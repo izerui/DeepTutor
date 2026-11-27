@@ -13,6 +13,10 @@ repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 here="$repo/scripts/learning_e2e"
 stage=$(mktemp -d /tmp/deeptutor-learning-e2e.XXXXXX)
 bp=${BP:-18181}; fp=${FP:-13882}; mp=${MP:-18190}
+context_path=${E2E_CONTEXT_PATH:-}
+[[ -z "$context_path" || "$context_path" =~ ^/[a-zA-Z0-9_-]+$ ]] || {
+  echo "E2E_CONTEXT_PATH must be empty or a single path segment." >&2; exit 2
+}
 node=$(command -v node); py="$repo/.venv/bin/python"
 for port in "$bp" "$fp" "$mp"; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -37,7 +41,7 @@ env_run=(/usr/bin/env -i PATH="$(dirname "$node"):/usr/bin:/bin:/usr/sbin:/sbin"
   DEEPTUTOR_HOME="$stage" AUTH_ENABLED=true AUTH_COOKIE_SECURE=false DEEPTUTOR_AUTH_ENABLED=true
   NEXT_PUBLIC_AUTH_ENABLED=true BACKEND_PORT="$bp" FRONTEND_PORT="$fp"
   DEEPTUTOR_API_BASE_URL="http://127.0.0.1:$bp" NEXT_PUBLIC_API_BASE="http://127.0.0.1:$bp"
-  NEXT_PUBLIC_CONTEXT_PATH= CONTEXT_PATH= NEXT_TELEMETRY_DISABLED=1
+  NEXT_PUBLIC_CONTEXT_PATH="$context_path" CONTEXT_PATH="$context_path" NEXT_TELEMETRY_DISABLED=1
   DEEPTUTOR_VERSION_CHECK_ENABLED=false DEEPTUTOR_TURN_COORDINATION_BACKEND=memory NO_PROXY='*')
 pids=()
 cleanup() {
@@ -52,10 +56,10 @@ cd "$stage"
 "${env_run[@]}" "$py" -B -m uvicorn deeptutor.api.main:app --host 127.0.0.1 --port "$bp" --workers 1 > "$stage/backend.log" 2>&1 & pids+=($!)
 "${env_run[@]}" "$node" web/scripts/dev.mjs --webpack --hostname 127.0.0.1 --port "$fp" > "$stage/frontend.log" 2>&1 & pids+=($!)
 for _ in $(seq 1 80); do
-  if curl -fs "http://127.0.0.1:$bp/health/ready" >/dev/null && curl -fs "http://127.0.0.1:$fp/api/auth/is_first_user" | grep -q true; then
+  if curl -fs "http://127.0.0.1:$bp/health/ready" >/dev/null && curl -fs "http://127.0.0.1:$fp$context_path/api/auth/is_first_user" | grep -q true; then
     ready=1; break
   fi
   sleep 3
 done
 [[ "${ready:-}" == 1 ]] || { echo "Stage did not become ready; see $stage/*.log" >&2; exit 1; }
-STAGE="$stage" FRONT="http://127.0.0.1:$fp" "$node" "$here/scenario.mjs"
+STAGE="$stage" FRONT="http://127.0.0.1:$fp$context_path" "$node" "${SCENARIO:-$here/scenario.mjs}"

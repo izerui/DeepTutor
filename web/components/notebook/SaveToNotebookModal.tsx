@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -19,6 +20,11 @@ import {
   listNotebooks,
   type NotebookSummary as RealNotebookSummary,
 } from "@/lib/notebook-api";
+
+const AddToNote = dynamic(
+  () => import("@/features/notes/components/AddToNote"),
+  { ssr: false },
+);
 
 type RecordType =
   | "solve"
@@ -468,6 +474,17 @@ export default function SaveToNotebookModal({
           onClose={onClose}
         />
 
+        <AddToNote
+          title={title}
+          markdown={effectiveOutput}
+          sourceId={String(payload?.metadata?.session_id || payload?.metadata?.material_id || "")}
+          sourceUrl={String(
+            payload?.metadata?.source_url ||
+              (payload?.metadata?.session_id
+                ? `/chat/${encodeURIComponent(String(payload.metadata.session_id))}`
+                : ""),
+          )}
+        />
         <div className="flex-1 space-y-5 overflow-y-auto bg-[var(--background)]/40 px-5 py-5">
           <div>
             <label className="mb-2 block text-sm font-medium text-[var(--foreground)]">

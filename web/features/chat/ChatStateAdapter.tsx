@@ -172,6 +172,8 @@ export interface SendMessageOptions {
    *  engine) without switching the conversation's own mode. Recorded in the
    *  turn's snapshot, so a regenerate runs in it again. */
   capability?: string;
+  /** The note page's learning block this turn fills in (note companion). */
+  noteGeneration?: { block_id: string; kind?: string } | null;
 }
 
 /** Per-conversation narrowing of the workspace's skill and MCP selections.
@@ -210,6 +212,8 @@ export interface QueuedMessage {
 export interface ChatState {
   /** Local identity, available before the backend assigns a session ID. */
   sessionKey: string;
+  /** The draft identity retained when the server assigns a session ID. */
+  boundFromKey?: string | null;
   sessionId: string | null;
   sessionTitle: string;
   enabledTools: string[];
@@ -222,6 +226,8 @@ export interface ChatState {
   llmSelection: LLMSelection | null;
   /** Persistent mastery state associated with this conversation. */
   masteryPathId: string | null;
+  /** Note page this companion conversation belongs to. */
+  noteDocumentId: string | null;
   /** What this mastery conversation is for — "outline" | "study" | "review".
    *  Durable like the path id and decided when the conversation is opened: it
    *  picks the tutor's prompt block and narrows its tool surface, so a session
@@ -279,6 +285,7 @@ export interface SessionConfiguration {
   knowledgeBases?: string[];
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  noteDocumentId?: string | null;
   createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
@@ -364,6 +371,8 @@ export interface MessageRequestSnapshot {
   watchingTurnFields?: { timed_media_id?: string; timed_media_viewport?: { time_seconds: number } };
   /** `capability` ran for this turn only (see SendMessageOptions.capability). */
   capabilityOnce?: boolean;
+  /** The note page's learning block this turn filled in. */
+  noteGeneration?: { block_id: string; kind?: string };
 }
 
 export interface ReadingSelectionSnapshot {
@@ -440,6 +449,7 @@ interface SessionSnapshot {
   llmSelection?: LLMSelection | null;
   masteryPathId?: string | null;
   masterySessionMode?: string | null;
+  noteDocumentId?: string | null;
   createTarget?: string | null;
   workspaceId?: string | null;
   courseId?: string;
@@ -570,6 +580,7 @@ function createSessionEntry(
     llmSelection: null,
     masteryPathId: null,
     masterySessionMode: null,
+    noteDocumentId: null,
     createTarget: null,
     workspaceId: activeWorkspaceId() || null,
     courseId: "",
@@ -736,6 +747,10 @@ function applySessionConfiguration(
       configuration.masterySessionMode !== undefined
         ? configuration.masterySessionMode
         : session.masterySessionMode,
+    noteDocumentId:
+      configuration.noteDocumentId !== undefined
+        ? configuration.noteDocumentId
+        : session.noteDocumentId,
     workspaceId: configuration.workspaceId !== undefined ? configuration.workspaceId : session.workspaceId,
     courseId:
       configuration.courseId !== undefined
@@ -1319,6 +1334,7 @@ function reducer(state: ProviderState, action: Action): ProviderState {
         ...(existing ?? current),
         ...current,
         key: targetKey,
+        boundFromKey: action.key === targetKey ? current.boundFromKey : action.key,
         sessionId: action.sessionId,
         sessionTitle: current.sessionTitle || existing?.sessionTitle || "",
         activeTurnId: action.turnId || current.activeTurnId,
@@ -1396,6 +1412,10 @@ function reducer(state: ProviderState, action: Action): ProviderState {
               action.masterySessionMode !== undefined
                 ? action.masterySessionMode
                 : existing.masterySessionMode,
+            noteDocumentId:
+              action.noteDocumentId !== undefined
+                ? action.noteDocumentId
+                : existing.noteDocumentId,
             createTarget:
               action.createTarget !== undefined
                 ? action.createTarget
@@ -2004,6 +2024,13 @@ function hydrateRequestSnapshot(
   if (memoryReferences.length) snapshot.memoryReferences = memoryReferences;
   if (llmSelection) snapshot.llmSelection = llmSelection;
   if (masteryPathId) snapshot.masteryPathId = masteryPathId;
+  const noteGeneration = asRecord(stored.noteGeneration ?? stored.note_generation);
+  if (typeof noteGeneration?.block_id === "string" && noteGeneration.block_id) {
+    snapshot.noteGeneration = {
+      block_id: noteGeneration.block_id,
+      kind: typeof noteGeneration.kind === "string" ? noteGeneration.kind : "",
+    };
+  }
   const masteryAnswer = asRecord(stored.masteryAnswer);
   if (typeof masteryAnswer?.question_id === "string" &&
       typeof masteryAnswer.text === "string") {
@@ -2867,6 +2894,10 @@ export function ChatStateAdapterProvider({
           typeof session.preferences?.mastery_session_mode === "string"
             ? session.preferences.mastery_session_mode
             : null,
+        noteDocumentId:
+          typeof session.preferences?.note_document_id === "string"
+            ? session.preferences.note_document_id || null
+            : null,
         createTarget:
           typeof session.preferences?.create_target === "string"
             ? session.preferences.create_target || null
@@ -3239,6 +3270,7 @@ export function ChatStateAdapterProvider({
           ? { masterySessionMode: effectiveMasterySessionMode }
           : {}),
         ...(options?.masteryAnswer ? { masteryAnswer: options.masteryAnswer } : {}),
+        ...(options?.noteGeneration ? { noteGeneration: options.noteGeneration } : {}),
         ...(options?.masterySkip ? { masterySkip: options.masterySkip } : {}),
         ...(effectivePersona ? { persona: effectivePersona } : {}),
         ...(effectiveCreateTarget ? { createTarget: effectiveCreateTarget } : {}),
@@ -3403,6 +3435,9 @@ export function ChatStateAdapterProvider({
         readingReferences: effectiveReadingReferences,
         masteryPathId: effectiveMasteryPathId || null,
         masterySessionMode: effectiveMasterySessionMode || null,
+        // The page binding belongs to the conversation, including regenerations.
+        noteDocumentId: session.noteDocumentId || null,
+        noteGeneration: options?.noteGeneration ?? replaySnapshot?.noteGeneration ?? null,
         // Always sent, string or null — the wire contract for create mode.
         createTarget: effectiveCreateTarget,
         masteryAnswer: options?.masteryAnswer ?? replaySnapshot?.masteryAnswer ?? null,
@@ -3785,6 +3820,7 @@ export function ChatStateAdapterProvider({
       tail.failedSubmissionNoLlmAccess === true;
     return {
       sessionKey: current.key,
+      boundFromKey: current.boundFromKey ?? null,
       sessionId: current.sessionId,
       sessionTitle: current.sessionTitle,
       enabledTools: current.enabledTools,
@@ -3795,6 +3831,7 @@ export function ChatStateAdapterProvider({
       llmSelection: current.llmSelection,
       masteryPathId: current.masteryPathId,
       masterySessionMode: current.masterySessionMode,
+      noteDocumentId: current.noteDocumentId,
       createTarget: current.createTarget,
       workspaceId: current.workspaceId,
       courseId: current.courseId,

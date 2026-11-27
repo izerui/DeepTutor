@@ -50,7 +50,7 @@ export async function refreshTaskBoard() {
 /** One account-level connection, owned by the workspace shell, outside its scope reset. */
 export function startTaskBoardSync() {
   if (++owners === 1) {
-    const unsubscribe = subscribeTaskBoardChanges(accept)
+    const unsubscribe = subscribeTaskBoardChanges(accept, null)
     void refreshTaskBoard()
     const source =
       typeof EventSource !== 'undefined'

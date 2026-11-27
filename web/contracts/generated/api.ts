@@ -1446,6 +1446,205 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/calendar/automations/{job_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /** Cancel Automation */
+    readonly delete: operations["cancel_automation_api_calendar_automations__job_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/calendars": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Calendars */
+    readonly get: operations["calendars_api_calendar_calendars_get"];
+    readonly put?: never;
+    /** Create Calendar */
+    readonly post: operations["create_calendar_api_calendar_calendars_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/calendars/{id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /** Delete Calendar */
+    readonly delete: operations["delete_calendar_api_calendar_calendars__id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    /** Update Calendar */
+    readonly patch: operations["update_calendar_api_calendar_calendars__id__patch"];
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/events": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Events */
+    readonly get: operations["events_api_calendar_events_get"];
+    readonly put?: never;
+    /** Create Event */
+    readonly post: operations["create_event_api_calendar_events_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/events/{id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /** Delete Event */
+    readonly delete: operations["delete_event_api_calendar_events__id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    /** Update Event */
+    readonly patch: operations["update_event_api_calendar_events__id__patch"];
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/export.ics": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Export Ics
+     * @description Download stored events as an iCalendar attachment.
+     *
+     *     Args:
+     *         calendar_id: Limit the file to one calendar. Omit to include every
+     *             visible calendar. Unknown ids return 404. Workspace overlay
+     *             layers are not included.
+     */
+    readonly get: operations["export_ics_api_calendar_export_ics_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/layers": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Layers */
+    readonly get: operations["layers_api_calendar_layers_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/search": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Search */
+    readonly get: operations["search_api_calendar_search_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/stream": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Stream */
+    readonly get: operations["stream_api_calendar_stream_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/task-blocks": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Task Blocks */
+    readonly get: operations["task_blocks_api_calendar_task_blocks_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/calendar/undo/{token}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Undo */
+    readonly post: operations["undo_api_calendar_undo__token__post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/capabilities/registered": {
     readonly parameters: {
       readonly query?: never;
@@ -2729,6 +2928,187 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/documents/{doc_id}/assets": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Upload Note Asset */
+    readonly post: operations["upload_note_asset_api_documents__doc_id__assets_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/assets/{name}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Read Note Asset */
+    readonly get: operations["read_note_asset_api_documents__doc_id__assets__name__get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/backlinks": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Note Backlinks */
+    readonly get: operations["note_backlinks_api_documents__doc_id__backlinks_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/clips": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Append Note Clip */
+    readonly post: operations["append_note_clip_api_documents__doc_id__clips_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/flashcards/export": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Export Document Flashcards
+     * @description Download one note's flashcards as Anki import text.
+     */
+    readonly get: operations["export_document_flashcards_api_documents__doc_id__flashcards_export_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/review": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Grade Note Card */
+    readonly post: operations["grade_note_card_api_documents__doc_id__review_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/suggestions": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Note Suggestions */
+    readonly get: operations["note_suggestions_api_documents__doc_id__suggestions_get"];
+    readonly put?: never;
+    /** Create Note Suggestion */
+    readonly post: operations["create_note_suggestion_api_documents__doc_id__suggestions_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/suggestions/{suggestion_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    /** Review Note Suggestion */
+    readonly post: operations["review_note_suggestion_api_documents__doc_id__suggestions__suggestion_id__post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/threads": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Note Threads
+     * @description The page's conversations, each with its anchor and its session's state.
+     */
+    readonly get: operations["note_threads_api_documents__doc_id__threads_get"];
+    readonly put?: never;
+    /** Anchor Note Thread */
+    readonly post: operations["anchor_note_thread_api_documents__doc_id__threads_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/{doc_id}/threads/{session_id}": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    readonly get?: never;
+    readonly put?: never;
+    readonly post?: never;
+    /**
+     * Delete Note Thread
+     * @description Delete a page conversation: the session goes to the recycle bin with it.
+     */
+    readonly delete: operations["delete_note_thread_api_documents__doc_id__threads__session_id__delete"];
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/documents/actions/automark": {
     readonly parameters: {
       readonly query?: never;
@@ -2817,6 +3197,26 @@ export interface paths {
     readonly patch?: never;
     readonly trace?: never;
   };
+  readonly "/api/documents/flashcards/export": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Export All Flashcards
+     * @description Download every notebook flashcard as Anki import text.
+     */
+    readonly get: operations["export_all_flashcards_api_documents_flashcards_export_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
   readonly "/api/documents/history": {
     readonly parameters: {
       readonly query?: never;
@@ -2868,6 +3268,23 @@ export interface paths {
     readonly put?: never;
     /** Import Docx */
     readonly post: operations["import_docx_api_documents_import_docx_post"];
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/documents/review/due": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /** Due Note Cards */
+    readonly get: operations["due_note_cards_api_documents_review_due_get"];
+    readonly put?: never;
+    readonly post?: never;
     readonly delete?: never;
     readonly options?: never;
     readonly head?: never;
@@ -6246,6 +6663,26 @@ export interface paths {
      * @description Health check
      */
     readonly get: operations["health_check_api_notebooks_health_get"];
+    readonly put?: never;
+    readonly post?: never;
+    readonly delete?: never;
+    readonly options?: never;
+    readonly head?: never;
+    readonly patch?: never;
+    readonly trace?: never;
+  };
+  readonly "/api/notebooks/records/{record_id}/location": {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: never;
+      readonly path?: never;
+      readonly cookie?: never;
+    };
+    /**
+     * Locate Record
+     * @description Resolve a source citation after a collection move, within the active workspace.
+     */
+    readonly get: operations["locate_record_api_notebooks_records__record_id__location_get"];
     readonly put?: never;
     readonly post?: never;
     readonly delete?: never;
@@ -13412,6 +13849,24 @@ export interface components {
       /** New Password */
       readonly new_password: string;
     };
+    /** AnchorThreadRequest */
+    readonly AnchorThreadRequest: {
+      /** Block Id */
+      readonly block_id: string;
+      /**
+       * Origin
+       * @default ask
+       * @enum {string}
+       */
+      readonly origin: "ask" | "generate";
+      /**
+       * Quote
+       * @default
+       */
+      readonly quote: string;
+      /** Session Id */
+      readonly session_id: string;
+    };
     /** AnnotationInfo */
     readonly AnnotationInfo: {
       /** Annotation Id */
@@ -13710,6 +14165,35 @@ export interface components {
       /** Operation Id */
       readonly operation_id: string;
     };
+    /** AutomationRun */
+    readonly AutomationRun: {
+      /** At */
+      readonly at: string;
+      /**
+       * Enabled
+       * @default true
+       */
+      readonly enabled: boolean;
+      /** Every Seconds */
+      readonly every_seconds?: number | null;
+      /** Expr */
+      readonly expr?: string | null;
+      /** Id */
+      readonly id: string;
+      /** Job Id */
+      readonly job_id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      readonly kind: "at" | "every" | "cron";
+      /** Message */
+      readonly message: string;
+      /** Name */
+      readonly name: string;
+      /** Session Id */
+      readonly session_id?: string | null;
+    };
     /** BilingualPairingInfo */
     readonly BilingualPairingInfo: {
       /** Pairing Id */
@@ -13895,6 +14379,11 @@ export interface components {
     };
     /** Body_upload_material_api_reading_materials_post */
     readonly Body_upload_material_api_reading_materials_post: {
+      /** File */
+      readonly file: string;
+    };
+    /** Body_upload_note_asset_api_documents__doc_id__assets_post */
+    readonly Body_upload_note_asset_api_documents__doc_id__assets_post: {
       /** File */
       readonly file: string;
     };
@@ -14105,6 +14594,172 @@ export interface components {
        * @default true
        */
       readonly link: boolean;
+    };
+    /** CalendarEntry */
+    readonly CalendarEntry: {
+      /** Color */
+      readonly color: string;
+      /** Created At */
+      readonly created_at: string;
+      /** Id */
+      readonly id: string;
+      /** Is Default */
+      readonly is_default: boolean;
+      /** Name */
+      readonly name: string;
+      /** Position */
+      readonly position: number;
+      /** Updated At */
+      readonly updated_at: string;
+      /** Visible */
+      readonly visible: boolean;
+    };
+    /**
+     * CalendarEvent
+     * @description A stored master or override row.
+     */
+    readonly CalendarEvent: {
+      /** All Day */
+      readonly all_day: boolean;
+      /** Calendar Id */
+      readonly calendar_id: string;
+      /** Color */
+      readonly color: string | null;
+      /** Created At */
+      readonly created_at: string;
+      /** End */
+      readonly end: string;
+      /** Exdates */
+      readonly exdates: readonly string[];
+      /** Id */
+      readonly id: string;
+      /** Location */
+      readonly location: string;
+      /** Notes */
+      readonly notes: string;
+      /** Recurrence Id */
+      readonly recurrence_id: string | null;
+      /** Reminders */
+      readonly reminders: readonly number[];
+      /** Rrule */
+      readonly rrule: string | null;
+      /** Series Id */
+      readonly series_id: string | null;
+      /**
+       * Source
+       * @default user
+       * @enum {string}
+       */
+      readonly source: "user" | "dito" | "import";
+      /** Start */
+      readonly start: string;
+      /** Task Id */
+      readonly task_id: string | null;
+      /** Task Workspace Id */
+      readonly task_workspace_id: string | null;
+      /** Title */
+      readonly title: string;
+      /** Tzid */
+      readonly tzid: string;
+      /** Updated At */
+      readonly updated_at: string;
+    };
+    /** CalendarEventResponse */
+    readonly CalendarEventResponse: {
+      readonly event: components["schemas"]["CalendarEvent"];
+      /** Revision */
+      readonly revision: number;
+    };
+    /** CalendarLayers */
+    readonly CalendarLayers: {
+      /** Automations */
+      readonly automations?: readonly components["schemas"]["AutomationRun"][];
+      /** Footprints */
+      readonly footprints?: readonly components["schemas"]["FootprintDay"][];
+      /** Reviews */
+      readonly reviews?: readonly components["schemas"]["ReviewDay"][];
+      /** Workspace Id */
+      readonly workspace_id: string;
+    };
+    /** CalendarList */
+    readonly CalendarList: {
+      /** Calendars */
+      readonly calendars: readonly components["schemas"]["CalendarEntry"][];
+      /** Revision */
+      readonly revision: number;
+    };
+    /** CalendarOk */
+    readonly CalendarOk: {
+      /**
+       * Ok
+       * @default true
+       */
+      readonly ok: boolean;
+    };
+    /** CalendarResponse */
+    readonly CalendarResponse: {
+      readonly calendar: components["schemas"]["CalendarEntry"];
+      /** Revision */
+      readonly revision: number;
+    };
+    /** CalendarRevision */
+    readonly CalendarRevision: {
+      /** Revision */
+      readonly revision: number;
+    };
+    /** CalendarSearchHit */
+    readonly CalendarSearchHit: {
+      /** All Day */
+      readonly all_day: boolean;
+      /** Calendar Id */
+      readonly calendar_id: string;
+      /** Color */
+      readonly color: string | null;
+      /** Created At */
+      readonly created_at: string;
+      /** End */
+      readonly end: string;
+      /** Exdates */
+      readonly exdates: readonly string[];
+      /** Id */
+      readonly id: string;
+      /** Location */
+      readonly location: string;
+      /** Next Start */
+      readonly next_start?: string | null;
+      /** Notes */
+      readonly notes: string;
+      /** Recurrence Id */
+      readonly recurrence_id: string | null;
+      /** Reminders */
+      readonly reminders: readonly number[];
+      /** Rrule */
+      readonly rrule: string | null;
+      /** Series Id */
+      readonly series_id: string | null;
+      /**
+       * Source
+       * @default user
+       * @enum {string}
+       */
+      readonly source: "user" | "dito" | "import";
+      /** Start */
+      readonly start: string;
+      /** Task Id */
+      readonly task_id: string | null;
+      /** Task Workspace Id */
+      readonly task_workspace_id: string | null;
+      /** Title */
+      readonly title: string;
+      /** Tzid */
+      readonly tzid: string;
+      /** Updated At */
+      readonly updated_at: string;
+    };
+    /** CalendarSearchResponse */
+    readonly CalendarSearchResponse: {
+      /** Events */
+      readonly events: readonly components["schemas"]["CalendarSearchHit"][];
     };
     /** CatalogPayload */
     readonly CatalogPayload: {
@@ -14341,6 +14996,40 @@ export interface components {
       readonly subjects?: readonly string[];
       /** Tags */
       readonly tags?: readonly string[];
+    };
+    /** ClipRequest */
+    readonly ClipRequest: {
+      /** Favorite Metadata */
+      readonly favorite_metadata?: {
+        readonly [key: string]: unknown;
+      };
+      /**
+       * Favorite Type
+       * @default
+       */
+      readonly favorite_type: string;
+      /** Markdown */
+      readonly markdown: string;
+      /**
+       * Source Id
+       * @default
+       */
+      readonly source_id: string;
+      /**
+       * Source Url
+       * @default
+       */
+      readonly source_url: string;
+      /**
+       * Summary
+       * @default
+       */
+      readonly summary: string;
+      /**
+       * Title
+       * @default
+       */
+      readonly title: string;
     };
     /** CodexOAuthCallbackPayload */
     readonly CodexOAuthCallbackPayload: {
@@ -14644,8 +15333,17 @@ export interface components {
        */
       readonly user_intent: string;
     };
+    /** CreateCalendar */
+    readonly CreateCalendar: {
+      /** Color */
+      readonly color: string;
+      /** Name */
+      readonly name: string;
+    };
     /** CreateCard */
     readonly CreateCard: {
+      /** Due Date */
+      readonly due_date?: string | null;
       /**
        * Note
        * @default
@@ -14653,6 +15351,8 @@ export interface components {
       readonly note: string;
       /** Title */
       readonly title: string;
+      /** Workspace Id */
+      readonly workspace_id?: string | null;
     };
     /** CreateCourseRequest */
     readonly CreateCourseRequest: {
@@ -14686,11 +15386,19 @@ export interface components {
     };
     /** CreateDocumentRequest */
     readonly CreateDocumentRequest: {
+      /** Blocks */
+      readonly blocks?:
+        | readonly {
+            readonly [key: string]: unknown;
+          }[]
+        | null;
       /**
        * Content
        * @default
        */
       readonly content: string;
+      /** Parent Id */
+      readonly parent_id?: string | null;
       /** Title */
       readonly title?: string | null;
     };
@@ -14846,6 +15554,44 @@ export interface components {
       readonly name: string;
       /** Tags */
       readonly tags?: readonly string[];
+    };
+    /** CreateSuggestionRequest */
+    readonly CreateSuggestionRequest: {
+      /**
+       * Block Id
+       * @default
+       */
+      readonly block_id: string;
+      /** Blocks */
+      readonly blocks?:
+        | readonly {
+            readonly [key: string]: unknown;
+          }[]
+        | null;
+      /** Expected Original */
+      readonly expected_original?: {
+        readonly [key: string]: unknown;
+      } | null;
+      /**
+       * Explanation
+       * @default
+       */
+      readonly explanation: string;
+      /**
+       * Markdown
+       * @default
+       */
+      readonly markdown: string;
+      /**
+       * Operation
+       * @default insert
+       */
+      readonly operation: string;
+      /**
+       * Source Turn Id
+       * @default
+       */
+      readonly source_turn_id: string;
     };
     /** CreateTagRequest */
     readonly CreateTagRequest: {
@@ -15111,28 +15857,91 @@ export interface components {
     };
     /** DocumentResponse */
     readonly DocumentResponse: {
-      /** Content */
+      /** Applied Suggestion Ids */
+      readonly applied_suggestion_ids?: readonly string[];
+      /** Blocks */
+      readonly blocks?:
+        | readonly {
+            readonly [key: string]: unknown;
+          }[]
+        | null;
+      /**
+       * Content
+       * @default
+       */
       readonly content: string;
+      /**
+       * Cover
+       * @default
+       */
+      readonly cover: string;
       /** Created At */
-      readonly created_at: number;
+      readonly created_at?: number;
+      /**
+       * Icon
+       * @default
+       */
+      readonly icon: string;
       /** Id */
       readonly id: string;
-      /** Title */
+      /** Parent Id */
+      readonly parent_id?: string | null;
+      /**
+       * Pinned
+       * @default false
+       */
+      readonly pinned: boolean;
+      /**
+       * Revision
+       * @default 0
+       */
+      readonly revision: number;
+      /**
+       * Schema Version
+       * @default 1
+       */
+      readonly schema_version: number;
+      /**
+       * Title
+       * @default
+       */
       readonly title: string;
       /** Updated At */
-      readonly updated_at: number;
+      readonly updated_at?: number;
     };
     /** DocumentSummaryResponse */
     readonly DocumentSummaryResponse: {
+      /**
+       * Cover
+       * @default
+       */
+      readonly cover: string;
       /** Created At */
       readonly created_at: number;
+      /**
+       * Icon
+       * @default
+       */
+      readonly icon: string;
       /** Id */
       readonly id: string;
+      /** Parent Id */
+      readonly parent_id?: string | null;
+      /**
+       * Pinned
+       * @default false
+       */
+      readonly pinned: boolean;
       /**
        * Preview
        * @default
        */
       readonly preview: string;
+      /**
+       * Revision
+       * @default 0
+       */
+      readonly revision: number;
       /** Title */
       readonly title: string;
       /** Updated At */
@@ -15258,6 +16067,97 @@ export interface components {
        */
       readonly retryable: boolean;
     };
+    /**
+     * EventInput
+     * @description A new event, or the merged result of a patch before it is stored.
+     */
+    readonly EventInput: {
+      /**
+       * All Day
+       * @default false
+       */
+      readonly all_day: boolean;
+      /** Calendar Id */
+      readonly calendar_id?: string | null;
+      /** Color */
+      readonly color?: string | null;
+      /** End */
+      readonly end: string;
+      /**
+       * Location
+       * @default
+       */
+      readonly location: string;
+      /**
+       * Notes
+       * @default
+       */
+      readonly notes: string;
+      /** Reminders */
+      readonly reminders?: readonly number[];
+      /** Rrule */
+      readonly rrule?: string | null;
+      /** Start */
+      readonly start: string;
+      /** Task Id */
+      readonly task_id?: string | null;
+      /** Task Workspace Id */
+      readonly task_workspace_id?: string | null;
+      /**
+       * Title
+       * @default
+       */
+      readonly title: string;
+      /**
+       * Tzid
+       * @default UTC
+       */
+      readonly tzid: string;
+    };
+    /**
+     * EventPatch
+     * @description Every field optional; explicit null clears rrule/color/task links only.
+     */
+    readonly EventPatch: {
+      /** All Day */
+      readonly all_day?: boolean | null;
+      /** Calendar Id */
+      readonly calendar_id?: string | null;
+      /** Color */
+      readonly color?: string | null;
+      /** End */
+      readonly end?: string | null;
+      /** Location */
+      readonly location?: string | null;
+      /** Notes */
+      readonly notes?: string | null;
+      /** Reminders */
+      readonly reminders?: readonly number[] | null;
+      /** Rrule */
+      readonly rrule?: string | null;
+      /** Start */
+      readonly start?: string | null;
+      /** Task Id */
+      readonly task_id?: string | null;
+      /** Task Workspace Id */
+      readonly task_workspace_id?: string | null;
+      /** Title */
+      readonly title?: string | null;
+      /** Tzid */
+      readonly tzid?: string | null;
+    };
+    /** EventPatchRequest */
+    readonly EventPatchRequest: {
+      readonly changes: components["schemas"]["EventPatch"];
+      /** Occurrence */
+      readonly occurrence?: string | null;
+      /**
+       * Scope
+       * @default all
+       * @enum {string}
+       */
+      readonly scope: "this" | "following" | "all";
+    };
     /** ExportDocxRequest */
     readonly ExportDocxRequest: {
       /**
@@ -15324,6 +16224,35 @@ export interface components {
       readonly note: string;
       /** Reason */
       readonly reason: string;
+    };
+    /** FootprintDay */
+    readonly FootprintDay: {
+      /** Date */
+      readonly date: string;
+      /**
+       * Mastery Evidence
+       * @default 0
+       */
+      readonly mastery_evidence: number;
+      /**
+       * Practice Reviews
+       * @default 0
+       */
+      readonly practice_reviews: number;
+      /**
+       * Session Count
+       * @default 0
+       */
+      readonly session_count: number;
+      /** Sessions */
+      readonly sessions?: readonly components["schemas"]["FootprintSession"][];
+    };
+    /** FootprintSession */
+    readonly FootprintSession: {
+      /** Id */
+      readonly id: string;
+      /** Title */
+      readonly title: string;
     };
     /** FromBankRequest */
     readonly FromBankRequest: {
@@ -16958,6 +17887,11 @@ export interface components {
        * @default
        */
       readonly correct_answer: string;
+      /**
+       * Course Id
+       * @default
+       */
+      readonly course_id: string;
       /** Created At */
       readonly created_at: number;
       /**
@@ -17152,6 +18086,76 @@ export interface components {
       readonly notebook_id: string;
       /** Record Ids */
       readonly record_ids?: readonly string[];
+    };
+    /**
+     * NoteGeneration
+     * @description The learning block this turn fills, with server-owned instructions.
+     */
+    readonly NoteGeneration: {
+      /** Block Id */
+      readonly block_id: string;
+      /**
+       * Kind
+       * @default
+       */
+      readonly kind: string;
+    };
+    /**
+     * Occurrence
+     * @description One rendered instance of a stored event.
+     */
+    readonly Occurrence: {
+      /** All Day */
+      readonly all_day: boolean;
+      /** Calendar Id */
+      readonly calendar_id: string;
+      /** Color */
+      readonly color: string | null;
+      /** End */
+      readonly end: string;
+      /** Event Id */
+      readonly event_id: string;
+      /** Id */
+      readonly id: string;
+      /** Location */
+      readonly location: string;
+      /** Notes */
+      readonly notes: string;
+      /** Occurrence */
+      readonly occurrence: string;
+      /** Recurring */
+      readonly recurring: boolean;
+      /** Reminder Times */
+      readonly reminder_times?: readonly string[];
+      /** Reminders */
+      readonly reminders: readonly number[];
+      /** Rrule */
+      readonly rrule: string | null;
+      /** Series Id */
+      readonly series_id: string | null;
+      /**
+       * Source
+       * @default user
+       * @enum {string}
+       */
+      readonly source: "user" | "dito" | "import";
+      /** Start */
+      readonly start: string;
+      /** Task Id */
+      readonly task_id: string | null;
+      /** Task Workspace Id */
+      readonly task_workspace_id: string | null;
+      /** Title */
+      readonly title: string;
+      /** Tzid */
+      readonly tzid: string;
+    };
+    /** OccurrenceList */
+    readonly OccurrenceList: {
+      /** Occurrences */
+      readonly occurrences: readonly components["schemas"]["Occurrence"][];
+      /** Revision */
+      readonly revision: number;
     };
     /** OrganizeNotesRequest */
     readonly OrganizeNotesRequest: {
@@ -17394,6 +18398,8 @@ export interface components {
       readonly mistakes: number;
       /** Next Due At */
       readonly next_due_at: number | null;
+      /** Open Mistakes */
+      readonly open_mistakes: number;
       /** Overdue */
       readonly overdue: number;
       /** Reviewed Today */
@@ -18044,6 +19050,39 @@ export interface components {
        */
       readonly text: string;
     };
+    /** ReviewCardRequest */
+    readonly ReviewCardRequest: {
+      /** Card Id */
+      readonly card_id: string;
+      /** Remembered */
+      readonly remembered: boolean;
+    };
+    /** ReviewDay */
+    readonly ReviewDay: {
+      /** Date */
+      readonly date: string;
+      /**
+       * Mastery
+       * @default 0
+       */
+      readonly mastery: number;
+      /** Paths */
+      readonly paths?: readonly components["schemas"]["ReviewPathCount"][];
+      /**
+       * Practice
+       * @default 0
+       */
+      readonly practice: number;
+    };
+    /** ReviewPathCount */
+    readonly ReviewPathCount: {
+      /** Count */
+      readonly count: number;
+      /** Id */
+      readonly id: string;
+      /** Title */
+      readonly title: string;
+    };
     /** ReviewRequest */
     readonly ReviewRequest: {
       /**
@@ -18092,6 +19131,17 @@ export interface components {
       };
       /** Name */
       readonly name: string;
+    };
+    /** ReviewSuggestionRequest */
+    readonly ReviewSuggestionRequest: {
+      /** Accept */
+      readonly accept: boolean;
+      /** Blocks */
+      readonly blocks?:
+        | readonly {
+            readonly [key: string]: unknown;
+          }[]
+        | null;
     };
     /** RoundSummaryRequest */
     readonly RoundSummaryRequest: {
@@ -18772,6 +19822,8 @@ export interface components {
       readonly archived: boolean;
       /** Created At */
       readonly created_at: string;
+      /** Due Date */
+      readonly due_date?: string | null;
       /** Id */
       readonly id: string;
       /**
@@ -19178,6 +20230,13 @@ export interface components {
       readonly memory_references?: readonly (
         "recent" | "profile" | "scope" | "preferences" | "summary"
       )[];
+      /**
+       * Note Document Id
+       * @default null
+       */
+      readonly note_document_id: string | null;
+      /** @default null */
+      readonly note_generation: components["schemas"]["NoteGeneration"] | null;
       /** Notebook References */
       readonly notebook_references?: readonly components["schemas"]["NotebookReference"][];
       /**
@@ -19454,10 +20513,23 @@ export interface components {
       /** Title */
       readonly title?: string | null;
     };
+    /** UpdateCalendar */
+    readonly UpdateCalendar: {
+      /** Color */
+      readonly color?: string | null;
+      /** Name */
+      readonly name?: string | null;
+      /** Position */
+      readonly position?: number | null;
+      /** Visible */
+      readonly visible?: boolean | null;
+    };
     /** UpdateCard */
     readonly UpdateCard: {
       /** Archived */
       readonly archived?: boolean | null;
+      /** Due Date */
+      readonly due_date?: string | null;
       /** Note */
       readonly note?: string | null;
       /** Status */
@@ -19497,8 +20569,33 @@ export interface components {
     };
     /** UpdateDocumentRequest */
     readonly UpdateDocumentRequest: {
+      /** Blocks */
+      readonly blocks?:
+        | readonly {
+            readonly [key: string]: unknown;
+          }[]
+        | null;
       /** Content */
       readonly content?: string | null;
+      /**
+       * Cover
+       * @default
+       */
+      readonly cover: string;
+      /** Expected Revision */
+      readonly expected_revision?: number | null;
+      /**
+       * Icon
+       * @default
+       */
+      readonly icon: string;
+      /** Parent Id */
+      readonly parent_id?: string | null;
+      /**
+       * Pinned
+       * @default false
+       */
+      readonly pinned: boolean;
       /** Title */
       readonly title?: string | null;
     };
@@ -20233,6 +21330,8 @@ export type SchemaAdminCreateUserRequest =
   components["schemas"]["AdminCreateUserRequest"];
 export type SchemaAdminPasswordReset =
   components["schemas"]["AdminPasswordReset"];
+export type SchemaAnchorThreadRequest =
+  components["schemas"]["AnchorThreadRequest"];
 export type SchemaAnnotationInfo = components["schemas"]["AnnotationInfo"];
 export type SchemaAnnotationPayload =
   components["schemas"]["AnnotationPayload"];
@@ -20258,6 +21357,7 @@ export type SchemaAuthStatusResponse =
   components["schemas"]["AuthStatusResponse"];
 export type SchemaAutoMarkRequest = components["schemas"]["AutoMarkRequest"];
 export type SchemaAutoMarkResponse = components["schemas"]["AutoMarkResponse"];
+export type SchemaAutomationRun = components["schemas"]["AutomationRun"];
 export type SchemaBilingualPairingInfo =
   components["schemas"]["BilingualPairingInfo"];
 export type SchemaBodyAdminImportUsersApiAuthUsersImportPost =
@@ -20283,6 +21383,8 @@ export type SchemaBodyUploadFilesApiKnowledgeBasesKbNameUploadPost =
   components["schemas"]["Body_upload_files_api_knowledge_bases__kb_name__upload_post"];
 export type SchemaBodyUploadMaterialApiReadingMaterialsPost =
   components["schemas"]["Body_upload_material_api_reading_materials_post"];
+export type SchemaBodyUploadNoteAssetApiDocumentsDocIdAssetsPost =
+  components["schemas"]["Body_upload_note_asset_api_documents__doc_id__assets_post"];
 export type SchemaBookEdit = components["schemas"]["BookEdit"];
 export type SchemaBookmarkInfo = components["schemas"]["BookmarkInfo"];
 export type SchemaBookmarkList = components["schemas"]["BookmarkList"];
@@ -20298,6 +21400,19 @@ export type SchemaBuiltinToolPayload =
   components["schemas"]["BuiltinToolPayload"];
 export type SchemaBulkCategoryRequest =
   components["schemas"]["BulkCategoryRequest"];
+export type SchemaCalendarEntry = components["schemas"]["CalendarEntry"];
+export type SchemaCalendarEvent = components["schemas"]["CalendarEvent"];
+export type SchemaCalendarEventResponse =
+  components["schemas"]["CalendarEventResponse"];
+export type SchemaCalendarLayers = components["schemas"]["CalendarLayers"];
+export type SchemaCalendarList = components["schemas"]["CalendarList"];
+export type SchemaCalendarOk = components["schemas"]["CalendarOk"];
+export type SchemaCalendarResponse = components["schemas"]["CalendarResponse"];
+export type SchemaCalendarRevision = components["schemas"]["CalendarRevision"];
+export type SchemaCalendarSearchHit =
+  components["schemas"]["CalendarSearchHit"];
+export type SchemaCalendarSearchResponse =
+  components["schemas"]["CalendarSearchResponse"];
 export type SchemaCatalogPayload = components["schemas"]["CatalogPayload"];
 export type SchemaCatalogServicePayload =
   components["schemas"]["CatalogServicePayload"];
@@ -20331,6 +21446,7 @@ export type SchemaChatStarterSettingsUpdate =
   components["schemas"]["ChatStarterSettingsUpdate"];
 export type SchemaClassificationBody =
   components["schemas"]["ClassificationBody"];
+export type SchemaClipRequest = components["schemas"]["ClipRequest"];
 export type SchemaCodexOAuthCallbackPayload =
   components["schemas"]["CodexOAuthCallbackPayload"];
 export type SchemaCodexReasoningEffortUpdate =
@@ -20369,6 +21485,7 @@ export type SchemaCoursePracticeSet =
 export type SchemaCourseUpdate = components["schemas"]["CourseUpdate"];
 export type SchemaCreateBookRequest =
   components["schemas"]["CreateBookRequest"];
+export type SchemaCreateCalendar = components["schemas"]["CreateCalendar"];
 export type SchemaCreateCard = components["schemas"]["CreateCard"];
 export type SchemaCreateCourseRequest =
   components["schemas"]["CreateCourseRequest"];
@@ -20388,6 +21505,8 @@ export type SchemaCreatePersonaRequest =
   components["schemas"]["CreatePersonaRequest"];
 export type SchemaCreateSkillRequest =
   components["schemas"]["CreateSkillRequest"];
+export type SchemaCreateSuggestionRequest =
+  components["schemas"]["CreateSuggestionRequest"];
 export type SchemaCreateTagRequest = components["schemas"]["CreateTagRequest"];
 export type SchemaCreateVideoNoteRequest =
   components["schemas"]["CreateVideoNoteRequest"];
@@ -20444,12 +21563,18 @@ export type SchemaEntryUpdateRequest =
 export type SchemaEpubPairingRequest =
   components["schemas"]["EpubPairingRequest"];
 export type SchemaErrorEnvelope = components["schemas"]["ErrorEnvelope"];
+export type SchemaEventInput = components["schemas"]["EventInput"];
+export type SchemaEventPatch = components["schemas"]["EventPatch"];
+export type SchemaEventPatchRequest =
+  components["schemas"]["EventPatchRequest"];
 export type SchemaExportDocxRequest =
   components["schemas"]["ExportDocxRequest"];
 export type SchemaFetchModelsPayload =
   components["schemas"]["FetchModelsPayload"];
 export type SchemaFlagAction = components["schemas"]["FlagAction"];
 export type SchemaFlagBody = components["schemas"]["FlagBody"];
+export type SchemaFootprintDay = components["schemas"]["FootprintDay"];
+export type SchemaFootprintSession = components["schemas"]["FootprintSession"];
 export type SchemaFromBankRequest = components["schemas"]["FromBankRequest"];
 export type SchemaGenerateFromNotebookRequest =
   components["schemas"]["GenerateFromNotebookRequest"];
@@ -20586,6 +21711,9 @@ export type SchemaNotebookRecordInput =
   components["schemas"]["NotebookRecordInput"];
 export type SchemaNotebookReference =
   components["schemas"]["NotebookReference"];
+export type SchemaNoteGeneration = components["schemas"]["NoteGeneration"];
+export type SchemaOccurrence = components["schemas"]["Occurrence"];
+export type SchemaOccurrenceList = components["schemas"]["OccurrenceList"];
 export type SchemaOrganizeNotesRequest =
   components["schemas"]["OrganizeNotesRequest"];
 export type SchemaOutgoingAttachment =
@@ -20688,11 +21816,17 @@ export type SchemaResolveRequest = components["schemas"]["ResolveRequest"];
 export type SchemaResumeBookRequest =
   components["schemas"]["ResumeBookRequest"];
 export type SchemaReviewBody = components["schemas"]["ReviewBody"];
+export type SchemaReviewCardRequest =
+  components["schemas"]["ReviewCardRequest"];
+export type SchemaReviewDay = components["schemas"]["ReviewDay"];
+export type SchemaReviewPathCount = components["schemas"]["ReviewPathCount"];
 export type SchemaReviewRequest = components["schemas"]["ReviewRequest"];
 export type SchemaReviewSettingsRequest =
   components["schemas"]["ReviewSettingsRequest"];
 export type SchemaReviewStrategyRequest =
   components["schemas"]["ReviewStrategyRequest"];
+export type SchemaReviewSuggestionRequest =
+  components["schemas"]["ReviewSuggestionRequest"];
 export type SchemaRoundSummaryRequest =
   components["schemas"]["RoundSummaryRequest"];
 export type SchemaRunStartRequest = components["schemas"]["RunStartRequest"];
@@ -20805,6 +21939,7 @@ export type SchemaUiSettingsUpdate = components["schemas"]["UISettingsUpdate"];
 export type SchemaUnitText = components["schemas"]["UnitText"];
 export type SchemaUpdateBlockRequest =
   components["schemas"]["UpdateBlockRequest"];
+export type SchemaUpdateCalendar = components["schemas"]["UpdateCalendar"];
 export type SchemaUpdateCard = components["schemas"]["UpdateCard"];
 export type SchemaUpdateChapterRequest =
   components["schemas"]["UpdateChapterRequest"];
@@ -23964,6 +25099,547 @@ export interface operations {
           readonly "application/json": {
             readonly [key: string]: unknown;
           };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly cancel_automation_api_calendar_automations__job_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly job_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarOk"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly calendars_api_calendar_calendars_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarList"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly create_calendar_api_calendar_calendars_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["CreateCalendar"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 201: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_calendar_api_calendar_calendars__id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarRevision"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_calendar_api_calendar_calendars__id__patch: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["UpdateCalendar"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly events_api_calendar_events_get: {
+    readonly parameters: {
+      readonly query: {
+        readonly end: string;
+        readonly start: string;
+        readonly tz?: string;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["OccurrenceList"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly create_event_api_calendar_events_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["EventInput"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 201: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarEventResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_event_api_calendar_events__id__delete: {
+    readonly parameters: {
+      readonly query?: {
+        readonly occurrence?: string | null;
+        readonly scope?: "this" | "following" | "all";
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly update_event_api_calendar_events__id__patch: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["EventPatchRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarRevision"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly export_ics_api_calendar_export_ics_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly calendar_id?: string | null;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "text/calendar": string;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly layers_api_calendar_layers_get: {
+    readonly parameters: {
+      readonly query: {
+        readonly end: string;
+        readonly start: string;
+        readonly tz?: string;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarLayers"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly search_api_calendar_search_get: {
+    readonly parameters: {
+      readonly query: {
+        readonly limit?: number;
+        readonly q: string;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarSearchResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly stream_api_calendar_stream_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly task_blocks_api_calendar_task_blocks_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": {
+            readonly [key: string]: number;
+          };
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly undo_api_calendar_undo__token__post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly token: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["CalendarRevision"];
         };
       };
       /** @description Validation Error */
@@ -27217,6 +28893,453 @@ export interface operations {
       };
     };
   };
+  readonly upload_note_asset_api_documents__doc_id__assets_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "multipart/form-data": components["schemas"]["Body_upload_note_asset_api_documents__doc_id__assets_post"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly read_note_asset_api_documents__doc_id__assets__name__get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+        readonly name: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly note_backlinks_api_documents__doc_id__backlinks_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly append_note_clip_api_documents__doc_id__clips_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ClipRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["DocumentResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly export_document_flashcards_api_documents__doc_id__flashcards_export_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly grade_note_card_api_documents__doc_id__review_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReviewCardRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly note_suggestions_api_documents__doc_id__suggestions_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly create_note_suggestion_api_documents__doc_id__suggestions_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["CreateSuggestionRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly review_note_suggestion_api_documents__doc_id__suggestions__suggestion_id__post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+        readonly suggestion_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["ReviewSuggestionRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["DocumentResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly note_threads_api_documents__doc_id__threads_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly anchor_note_thread_api_documents__doc_id__threads_post: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody: {
+      readonly content: {
+        readonly "application/json": components["schemas"]["AnchorThreadRequest"];
+      };
+    };
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly delete_note_thread_api_documents__doc_id__threads__session_id__delete: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly doc_id: string;
+        readonly session_id: string;
+      };
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly auto_mark_text_api_documents_actions_automark_post: {
     readonly parameters: {
       readonly query?: never;
@@ -27402,6 +29525,39 @@ export interface operations {
       };
     };
   };
+  readonly export_all_flashcards_api_documents_flashcards_export_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   readonly get_history_api_documents_history_get: {
     readonly parameters: {
       readonly query?: never;
@@ -27494,6 +29650,39 @@ export interface operations {
         };
         content: {
           readonly "application/json": components["schemas"]["DocumentResponse"];
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly due_note_cards_api_documents_review_due_get: {
+    readonly parameters: {
+      readonly query?: never;
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -34503,6 +36692,43 @@ export interface operations {
         readonly Authorization?: string | null;
       };
       readonly path?: never;
+      readonly cookie?: {
+        readonly dt_token?: string | null;
+      };
+    };
+    readonly requestBody?: never;
+    readonly responses: {
+      /** @description Successful Response */
+      readonly 200: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      readonly 422: {
+        headers: {
+          readonly [name: string]: unknown;
+        };
+        content: {
+          readonly "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  readonly locate_record_api_notebooks_records__record_id__location_get: {
+    readonly parameters: {
+      readonly query?: {
+        readonly notebook_id?: string;
+      };
+      readonly header?: {
+        readonly Authorization?: string | null;
+      };
+      readonly path: {
+        readonly record_id: string;
+      };
       readonly cookie?: {
         readonly dt_token?: string | null;
       };

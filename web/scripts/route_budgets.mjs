@@ -79,6 +79,7 @@ async function startBuildServer() {
       env: {
         ...process.env,
         NEXT_TELEMETRY_DISABLED: "1",
+        DEEPTUTOR_AUTH_ENABLED: "false",
         DEEPTUTOR_API_BASE_URL: "http://127.0.0.1:9",
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -122,9 +123,9 @@ async function assertRootRedirect(baseUrl) {
   if (
     ![307, 308].includes(response.status) ||
     destination?.origin !== baseUrl ||
-    destination.pathname !== "/chat"
+    destination.pathname !== "/start"
   ) {
-    throw new Error(`/ must redirect to /chat, got HTTP ${response.status} to ${location || "(none)"}`);
+    throw new Error(`/ must redirect to /start, got HTTP ${response.status} to ${location || "(none)"}`);
   }
 }
 

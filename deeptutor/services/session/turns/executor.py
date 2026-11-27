@@ -263,6 +263,14 @@ class TurnExecutor:
             from deeptutor.services.workspace import get_content_workspace_service
 
             request_config = dict(payload.get("config", {}) or {})
+            if payload.get("note_document_id") or payload.get("note_generation"):
+                from deeptutor.capabilities.notes.runtime import validate_note_binding
+
+                await asyncio.to_thread(
+                    validate_note_binding,
+                    str(payload.get("note_document_id") or ""),
+                    payload.get("note_generation"),
+                )
             followup_question_context = _extract_followup_question_context(
                 {"followup_question_context": payload.get("followup_question_context")}
             )
@@ -916,6 +924,16 @@ class TurnExecutor:
                         source_manifest_text,
                         mastery_topic_source_index,
                     )
+                elif payload.get("note_document_id") and capability_name != "audio_overview":
+                    from deeptutor.capabilities.notes.capability import note_action_context
+
+                    workspace_context = await asyncio.to_thread(
+                        note_action_context,
+                        str(payload["note_document_id"]),
+                        payload.get("note_generation") or {},
+                        session_id=session_id,
+                        language=str(payload.get("language") or "en"),
+                    )
                 if workspace_context:
                     effective_user_message = (
                         f"[Workspace Context]\n{workspace_context}\n\n"
@@ -1085,6 +1103,8 @@ class TurnExecutor:
                     # string, like every other turn-kind flag here, means
                     # "not active" rather than absent.
                     "create_target": payload.get("create_target") or "",
+                    "note_document_id": payload.get("note_document_id"),
+                    "note_generation": payload.get("note_generation") or {},
                     # Immersive reading: the open material activates the reading
                     # capability and binds its tools; the viewport tells the
                     # model where the user is actually looking.
@@ -1300,6 +1320,36 @@ class TurnExecutor:
             }
             if persisted_ids:
                 pending_done_event.metadata = {**pending_done_event.metadata, **persisted_ids}
+            note_generation = payload.get("note_generation") or {}
+            if (
+                turn_status == "completed"
+                and capability_name != "chat"
+                and note_generation.get("block_id")
+                and payload.get("note_document_id")
+            ):
+                from deeptutor.capabilities.notes.generation import propose_generated_block
+
+                zh = str(payload.get("language") or "en").startswith("zh")
+                try:
+                    await asyncio.to_thread(
+                        propose_generated_block,
+                        note_document_id=str(payload["note_document_id"]),
+                        generation=note_generation,
+                        events=assistant_events,
+                        response=assistant_content,
+                        turn_id=turn_id,
+                        workspace_id=str(payload.get("_content_workspace_id") or ""),
+                        expected_original=payload.get("_note_generation_original"),
+                        explanation=(
+                            "为这个块生成的内容，替换前请先确认。"
+                            if zh
+                            else "Generated for this block. Review before replacing."
+                        ),
+                    )
+                except Exception:
+                    logger.warning(
+                        "Filing the generated note block failed for turn %s", turn_id, exc_info=True
+                    )
             # Commit all non-terminal events and the terminal row before DONE
             # becomes visible. The DONE envelope itself is then appended and
             # synchronously flushed, so a reconnect can never observe a

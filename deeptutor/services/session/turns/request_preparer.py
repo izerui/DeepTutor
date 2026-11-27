@@ -107,6 +107,8 @@ _REPLAY_SNAPSHOT_FIELDS: dict[str, str] = {
     "workspace_mode": "workspaceMode",
     "workspace_id": "workspaceId",
     "course_id": "courseId",
+    "note_document_id": "noteDocumentId",
+    "note_generation": "noteGeneration",
     "mastery_path_id": "masteryPathId",
     "mastery_session_mode": "masterySessionMode",
     "mastery_answer": "masteryAnswer",
@@ -218,6 +220,22 @@ class TurnRequestPreparer:
             raise RuntimeError("Conversation not found in this workspace.")
         session = await self.store.ensure_session(payload.get("session_id"))
         preferences = session.get("preferences") or {}
+        note_document_explicit = "note_document_id" in payload
+        note_document_id = (
+            payload.get("note_document_id")
+            if note_document_explicit
+            else preferences.get("note_document_id")
+        )
+        payload["note_document_id"] = note_document_id or None
+        if note_document_id or payload.get("note_generation"):
+            from deeptutor.capabilities.notes.runtime import validate_note_binding
+
+            try:
+                payload["_note_generation_original"] = await asyncio.to_thread(
+                    validate_note_binding, note_document_id or "", payload.get("note_generation")
+                )
+            except ValueError as exc:
+                raise RuntimeError(str(exc)) from exc
         # A conversation-level choice wins over the account default that the
         # browser sends on every turn. Only the selector's explicit field may
         # change or clear this durable override (#1511).
@@ -667,6 +685,8 @@ class TurnRequestPreparer:
             preference_update["workspace_mode"] = workspace_mode
         if course_id_explicit:
             preference_update["course_id"] = requested_course_id
+        if note_document_explicit:
+            preference_update["note_document_id"] = note_document_id or ""
 
         raw_selection_context = payload.get("selection_tutor_context")
         if isinstance(raw_selection_context, dict):
@@ -1262,6 +1282,16 @@ class TurnRequestPreparer:
             # against the same document. An explicit override wins (the reader
             # may have moved on), and the viewport is deliberately not restored —
             # "where the user was looking" is stale by definition on a retry.
+            "note_document_id": (
+                overrides.get("note_document_id")
+                if "note_document_id" in overrides
+                else snapshot.get("noteDocumentId", preferences.get("note_document_id"))
+            ) or None,
+            "note_generation": (
+                overrides.get("note_generation")
+                if "note_generation" in overrides
+                else snapshot.get("noteGeneration")
+            ),
             "reading_material_id": _reading_material_id(
                 overrides.get("reading_material_id")
                 if "reading_material_id" in overrides

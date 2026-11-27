@@ -1142,7 +1142,7 @@ class AgenticLoopPipeline:
         if not choices:
             return ""
         capped = choices[:30]
-        lines = ["[用户的笔记本列表]" if self.language == "zh" else "[User's notebooks]"]
+        lines = ["[用户的收藏夹列表]" if self.language == "zh" else "[User's favorites collections]"]
         for entry in capped:
             nid = entry.get("id", "")
             name = entry.get("name", nid)
@@ -1150,7 +1150,7 @@ class AgenticLoopPipeline:
             lines.append(f"- `{nid}` - {name} ({count} records)")
         if len(choices) > len(capped):
             lines.append(
-                f"... (+{len(choices) - len(capped)} more; call `list_notebook` to see the rest)"
+                f"... (+{len(choices) - len(capped)} more; call `list_favorites` to see the rest)"
             )
         return "\n".join(lines)
 
@@ -1536,7 +1536,7 @@ class AgenticLoopPipeline:
             kwargs.setdefault("query", context.user_message)
             if task_dir is not None:
                 kwargs.setdefault("output_dir", str(task_dir / "web_search"))
-        elif tool_name == "write_note":
+        elif tool_name == "save_favorite":
             kwargs["conversation_history"] = list(context.conversation_history or [])
             kwargs["current_user_message"] = context.user_message or ""
         elif tool_name == "geogebra_analysis":

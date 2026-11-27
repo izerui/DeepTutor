@@ -942,6 +942,8 @@ def _request_snapshot_metadata(
     for payload_key, snapshot_key in (
         ("workspace_id", "workspaceId"),
         ("course_id", "courseId"),
+        ("note_document_id", "noteDocumentId"),
+        ("note_generation", "noteGeneration"),
         ("mastery_session_mode", "masterySessionMode"),
         ("auto_route", "autoRoute"),
     ):

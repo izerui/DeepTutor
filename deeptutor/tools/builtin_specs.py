@@ -62,12 +62,22 @@ BUILTIN_TOOL_SPECS: tuple[BuiltinToolSpec, ...] = (
             ("load_tools", "LoadToolsTool"),
             ("web_fetch", "WebFetchTool"),
             ("list_notebook", "ListNotebookTool"),
-            ("write_note", "WriteNoteTool"),
+            ("list_favorites", "ListFavoritesTool"),
+            ("save_favorite", "SaveFavoriteTool"),
             ("question_bank", "QuestionBankTool"),
             ("github", "GithubTool"),
             ("ask_user", "AskUserTool"),
             ("cron", "CronTool"),
             ("geogebra_analysis", "GeoGebraAnalysisTool"),
+        ),
+    ),
+    *_specs(
+        "deeptutor.capabilities.notes.tools",
+        (
+            ("write_note", "WriteNoteTool"),
+            ("search_notes", "SearchNotesTool"),
+            ("note_read", "NoteReadTool"),
+            ("note_suggest", "NoteSuggestTool"),
         ),
     ),
     *_specs(
