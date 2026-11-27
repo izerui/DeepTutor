@@ -191,6 +191,24 @@ it('due practice mistakes are part of what needs attention', async () => {
   expect(mock.practice).toHaveBeenCalledWith('', '*')
 })
 
+it('open mistakes appear before their review date', async () => {
+  mock.practice.mockResolvedValue({ total: 1, mistakes: 1, open_mistakes: 1, due: 0, overdue: 0 })
+  render(<LearningDashboard />)
+  const heading = await screen.findByText('What needs your attention')
+  const section = heading.closest('section') as HTMLElement
+  const card = within(section).getByText('Practice').closest('a')
+  expect(card?.getAttribute('href')).toContain('/practice')
+  expect(card?.textContent).toContain('{{count}} questions still wrong')
+  expect(card?.textContent).not.toContain('{{count}} reviews due')
+})
+
+it('resolved historical mistakes do not create a new attention item', async () => {
+  mock.practice.mockResolvedValue({ total: 1, mistakes: 1, open_mistakes: 0, due: 0, overdue: 0 })
+  render(<LearningDashboard />)
+  expect(await screen.findByText('Recent activity')).toBeInTheDocument()
+  expect(screen.queryByText('What needs your attention')).toBeNull()
+})
+
 it('a practice summary failure leaves the rest of the page alone', async () => {
   mock.practice.mockRejectedValue(new Error('offline'))
   render(<LearningDashboard />)

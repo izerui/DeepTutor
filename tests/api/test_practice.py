@@ -95,11 +95,13 @@ def test_mastering_a_mistake_in_practice_resolves_it_everywhere(bank, monkeypatc
     the course page; practising it again reopens it."""
     from deeptutor.services import courses_state
 
-    store, repo, _ = bank
+    store, repo, client = bank
     entry = seed(store)
     monkeypatch.setattr("deeptutor.services.session.get_sqlite_session_store", lambda: store)
     state = lambda: asyncio.run(courses_state._question_bank_state({"lesson"}))
     assert state()["wrong"] == 1
+    assert client.get("/practice/summary").json()["open_mistakes"] == 1
+    assert client.get("/practice/summary").json()["due"] == 0
 
     repo.review(entry["id"], "review_good", 0, "good", "B")
     reviewed = asyncio.run(store.get_notebook_entry(entry["id"]))
@@ -109,9 +111,11 @@ def test_mastering_a_mistake_in_practice_resolves_it_everywhere(bank, monkeypatc
     assert state()["wrong"] == 0
     # The mistakes book still remembers it was once wrong.
     assert repo.overview("UTC")["mistakes"] == 1
+    assert client.get("/practice/summary").json()["open_mistakes"] == 0
 
     repo.review(entry["id"], "review_again", repo.state(entry["id"])["version"], "again", "A")
     assert state()["wrong"] == 1
+    assert client.get("/practice/summary").json()["open_mistakes"] == 1
 
 
 @pytest.mark.parametrize("source", ["mastery_path", "book"])
