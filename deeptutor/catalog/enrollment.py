@@ -96,6 +96,8 @@ def joined_counts(keys: list[tuple[str, str]] | None = None) -> dict[tuple[str, 
     The same people as :func:`members` and the learning reports count; a
     course an administrator took down brings nobody.
     """
+    if keys == []:
+        return {}
     where = (
         "e.left_at IS NULL AND NOT (e.via LIKE 'course:%' AND EXISTS (SELECT 1 FROM listings l "
         "WHERE l.kind = 'course' AND l.item_id = substr(e.via, 8) AND l.blocked = 1))"

@@ -614,6 +614,14 @@ def catalog_http(teaching_users, monkeypatch):
     return call
 
 
+def test_my_listings_is_empty_when_only_other_authors_have_listings(as_account, catalog_http):
+    set_id = _market_set(as_account)
+    _list(as_account, "practice_set", set_id)
+    response = catalog_http("GET", "sara", "/api/catalog/listings/mine")
+    assert response.status_code == 200
+    assert response.json() == {"listings": []}
+
+
 def test_routes_from_listing_to_joining(as_account, catalog_http):
     set_id = _market_set(as_account)
     base = f"/api/catalog/listings/practice_set/{set_id}"
